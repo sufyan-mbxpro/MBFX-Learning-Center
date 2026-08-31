@@ -1,0 +1,7 @@
+.turbo/
+.next/
+dist/
+build/
+coverage/
+packages/db/src/generated/
+pnpm-lock.yaml

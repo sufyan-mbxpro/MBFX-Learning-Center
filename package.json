@@ -1,0 +1,36 @@
+{
+  "name": "mbfx-learning-center",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "packageManager": "pnpm@11.24.0",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
+    "test": "turbo test",
+    "format": "prettier --write \"**/*.{ts,tsx,md,json,mdx,css}\" --ignore-unknown",
+    "format:check": "prettier --check \"**/*.{ts,tsx,md,json,mdx,css}\" --ignore-unknown",
+    "governance:check": "node scripts/governance-check.mjs",
+    "check:phantom-deps": "node scripts/check-phantom-deps.mjs",
+    "test:governance": "vitest run scripts",
+    "db:generate": "pnpm --filter @repo/db generate",
+    "db:migrate": "pnpm --filter @repo/db migrate:dev",
+    "db:deploy": "pnpm --filter @repo/db migrate:deploy",
+    "db:seed": "pnpm --filter @repo/db seed",
+    "db:studio": "pnpm --filter @repo/db studio",
+    "db:reset": "pnpm --filter @repo/db reset",
+    "ui:add": "pnpm --filter @repo/ui shadcn:add"
+  },
+  "devDependencies": {
+    "@repo/typescript-config": "workspace:*",
+    "prettier": "^3.9.6",
+    "turbo": "^2.10.12",
+    "typescript": "6.0.3",
+    "vitest": "^4.1.11"
+  }
+}

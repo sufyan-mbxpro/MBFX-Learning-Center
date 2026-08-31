@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Turbo remote cache: set TURBO_TOKEN secret + TURBO_TEAM variable once a
+# cache provider is linked (turbo login && turbo link). Harmless when unset.
+env:
+  TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+  TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # governance:check diffs against origin/main
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        # version comes from packageManager in package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Governance
+        run: pnpm governance:check
+
+      - name: Governance rules self-test (includes the negative test)
+        run: pnpm test:governance
+
+      - name: Phantom dependencies
+        run: pnpm check:phantom-deps
+
+      - name: Format check
+        run: pnpm format:check
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+  # E2E job lands with Module 04 (Playwright + Testcontainers services).

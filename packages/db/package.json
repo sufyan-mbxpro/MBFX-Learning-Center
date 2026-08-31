@@ -1,0 +1,22 @@
+{
+  "name": "@repo/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint src",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "generate": "echo '@repo/db#generate: no-op until Module 01 adds Prisma' && exit 0"
+  },
+  "devDependencies": {
+    "@repo/eslint-config": "workspace:*",
+    "@repo/typescript-config": "workspace:*",
+    "eslint": "^9.39.5",
+    "typescript": "6.0.3",
+    "vitest": "^4.1.11"
+  }
+}

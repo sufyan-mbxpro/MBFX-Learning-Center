@@ -1,0 +1,28 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+  - "tooling/*"
+
+# pnpm's default node-linker (isolated, no root hoisting) already means every
+# package must declare what it imports. See scripts/check-phantom-deps.mjs
+# and the workspace fixture test in Module 00 for the enforced version of
+# that rule.
+
+# pnpm 11 moved lifecycle-script trust here from package.json's "pnpm" field.
+# These packages ship native/postinstall build steps we intentionally trust.
+onlyBuiltDependencies:
+  - "@prisma/client"
+  - "@prisma/engines"
+  - "prisma"
+  - "@node-rs/argon2"
+  - "esbuild"
+  - "sharp"
+
+# pnpm 11 default: block install scripts on packages not in the list above,
+# per supply-chain hardening — see .claude/rules/security.md.
+minimumReleaseAge: 1440
+
+# unrs-resolver: napi-rs binary used by eslint-plugin-import-x's resolver —
+# same trust class as the entries above.
+allowBuilds:
+  unrs-resolver: true

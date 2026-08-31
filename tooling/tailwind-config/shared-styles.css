@@ -1,0 +1,10 @@
+/*
+ * Shared Tailwind v4 preset, consumed by @repo/ui and both apps.
+ *
+ * Tailwind v4 has no JS config file — the preset lives in CSS via @theme.
+ * This file is a placeholder; Module 02 (@repo/theme) and Module 07
+ * (@repo/ui + globals.css) fill it in with the real token mapping, applying
+ * review fixes A5.2/A5.3 (full-hex values, --brand-font-sans naming, no
+ * circular --font-sans reference). See plan.md Part D and
+ * docs/memory/decisions/ for the ADRs governing this file's contents.
+ */

@@ -1,0 +1,811 @@
+// packages/db/prisma/schema.prisma
+//
+// MariaDB schema — Forex Learning Portal
+// Covers: auth, RBAC, employees, settings, theming, i18n, navigation, content.
+//
+// Conventions
+//   - Every table has createdAt / updatedAt.
+//   - Anything user-visible and text-based is translated via a *Translation table.
+//   - Slugs live on translation rows, never on base rows (per-locale URLs).
+//   - Soft delete via deletedAt only where recovery matters (content, users).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+  relationMode = "prisma"
+}
+
+// ─────────────────────────────────────────────────────────────
+// IDENTITY & AUTH
+// ─────────────────────────────────────────────────────────────
+
+enum UserType {
+  LEARNER
+  STAFF
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING_VERIFICATION
+}
+
+enum ThemeMode {
+  LIGHT
+  DARK
+  SYSTEM
+}
+
+model User {
+  id                String     @id @default(cuid())
+  email             String     @unique
+  emailVerifiedAt   DateTime?
+  passwordHash      String?    @db.VarChar(255) // null for OAuth-only accounts
+  firstName         String     @db.VarChar(100)
+  lastName          String     @db.VarChar(100)
+  avatarUrl         String?    @db.VarChar(500)
+  phone             String?    @db.VarChar(32)
+
+  userType          UserType   @default(LEARNER)
+  status            UserStatus @default(PENDING_VERIFICATION)
+
+  // Preferences
+  locale            String     @default("en") @db.VarChar(10)
+  timezone          String     @default("UTC") @db.VarChar(64)
+  themeMode         ThemeMode  @default(SYSTEM)
+
+  // Security
+  lastLoginAt       DateTime?
+  lastLoginIp       String?    @db.VarChar(45)
+  failedLoginCount  Int        @default(0)
+  lockedUntil       DateTime?
+  mfaEnabled        Boolean    @default(false)
+  mfaSecret         String?    @db.VarChar(255)
+
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  deletedAt         DateTime?
+
+  accounts          Account[]
+  sessions          Session[]
+  roles             UserRole[]
+  permissions       UserPermission[]
+  employee          Employee?
+  auditLogs         AuditLog[]
+  verificationTokens VerificationToken[]
+
+  @@index([userType, status])
+  @@index([email])
+  @@index([deletedAt])
+  @@map("users")
+}
+
+// OAuth provider links (Auth.js compatible)
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  provider          String  @db.VarChar(50)
+  providerAccountId String  @db.VarChar(255)
+  type              String  @db.VarChar(50)
+  refreshToken      String? @db.Text
+  accessToken       String? @db.Text
+  expiresAt         Int?
+  tokenType         String? @db.VarChar(50)
+  scope             String? @db.VarChar(500)
+  idToken           String? @db.Text
+
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("accounts")
+}
+
+// DB-backed sessions so revocation is immediate
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique @db.VarChar(255)
+  userId       String
+  expiresAt    DateTime
+  ipAddress    String?  @db.VarChar(45)
+  userAgent    String?  @db.Text
+  revokedAt    DateTime?
+  createdAt    DateTime @default(now())
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+enum TokenPurpose {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+  EMAIL_CHANGE
+  INVITATION
+}
+
+model VerificationToken {
+  id        String       @id @default(cuid())
+  userId    String?
+  email     String       @db.VarChar(255)
+  token     String       @unique @db.VarChar(255)
+  purpose   TokenPurpose
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime     @default(now())
+
+  user      User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+  @@map("verification_tokens")
+}
+
+// ─────────────────────────────────────────────────────────────
+// RBAC
+// ─────────────────────────────────────────────────────────────
+
+model Permission {
+  id          String   @id @default(cuid())
+  key         String   @unique @db.VarChar(100) // "lessons.publish"
+  groupName   String   @db.VarChar(50)          // "content", "users", "settings"
+  label       String   @db.VarChar(150)
+  description String?  @db.VarChar(500)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  roles       RolePermission[]
+  users       UserPermission[]
+
+  @@index([groupName])
+  @@map("permissions")
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  key         String   @unique @db.VarChar(50)  // "content_manager"
+  name        String   @db.VarChar(100)
+  description String?  @db.VarChar(500)
+  isSystem    Boolean  @default(false)          // cannot be deleted
+  level       Int      @default(0)              // higher = more senior; guards escalation
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  permissions RolePermission[]
+  users       UserRole[]
+
+  @@map("roles")
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  createdAt    DateTime   @default(now())
+
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  userId     String
+  roleId     String
+  assignedBy String?
+  assignedAt DateTime @default(now())
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role       Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@index([roleId])
+  @@map("user_roles")
+}
+
+// Per-user override. DENY always wins over any role grant.
+model UserPermission {
+  userId       String
+  permissionId String
+  effect       PermissionEffect @default(ALLOW)
+  reason       String?          @db.VarChar(500)
+  assignedBy   String?
+  assignedAt   DateTime         @default(now())
+
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([userId, permissionId])
+  @@index([permissionId])
+  @@map("user_permissions")
+}
+
+enum PermissionEffect {
+  ALLOW
+  DENY
+}
+
+// ─────────────────────────────────────────────────────────────
+// EMPLOYEES (HR context, distinct from auth identity)
+// ─────────────────────────────────────────────────────────────
+
+enum EmploymentStatus {
+  ACTIVE
+  ON_LEAVE
+  NOTICE_PERIOD
+  TERMINATED
+  RESIGNED
+}
+
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  INTERN
+  FREELANCE
+}
+
+model Department {
+  id          String     @id @default(cuid())
+  key         String     @unique @db.VarChar(50)
+  name        String     @db.VarChar(100)
+  description String?    @db.VarChar(500)
+  headId      String?
+  isActive    Boolean    @default(true)
+  sortOrder   Int        @default(0)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  employees   Employee[]
+
+  @@map("departments")
+}
+
+model Designation {
+  id           String     @id @default(cuid())
+  key          String     @unique @db.VarChar(50)
+  title        String     @db.VarChar(100)
+  level        Int        @default(0)
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  employees    Employee[]
+
+  @@map("designations")
+}
+
+model Employee {
+  id               String           @id @default(cuid())
+  // Nullable: an employee may exist before their login is provisioned.
+  userId           String?          @unique
+  employeeCode     String           @unique @db.VarChar(30)
+
+  firstName        String           @db.VarChar(100)
+  lastName         String           @db.VarChar(100)
+  workEmail        String           @unique @db.VarChar(255)
+  personalEmail    String?          @db.VarChar(255)
+  phone            String?          @db.VarChar(32)
+  photoUrl         String?          @db.VarChar(500)
+
+  departmentId     String?
+  designationId    String?
+  reportingToId    String?
+
+  employmentType   EmploymentType   @default(FULL_TIME)
+  status           EmploymentStatus @default(ACTIVE)
+  joinedAt         DateTime
+  confirmedAt      DateTime?
+  exitedAt         DateTime?
+
+  location         String?          @db.VarChar(150)
+  emergencyName    String?          @db.VarChar(150)
+  emergencyPhone   String?          @db.VarChar(32)
+  notes            String?          @db.Text
+
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  deletedAt        DateTime?
+
+  user             User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  department       Department?      @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  designation      Designation?     @relation(fields: [designationId], references: [id], onDelete: SetNull)
+  reportingTo      Employee?        @relation("EmployeeHierarchy", fields: [reportingToId], references: [id], onDelete: SetNull)
+  directReports    Employee[]       @relation("EmployeeHierarchy")
+
+  @@index([departmentId])
+  @@index([status])
+  @@index([reportingToId])
+  @@map("employees")
+}
+
+// ─────────────────────────────────────────────────────────────
+// SETTINGS, FEATURE FLAGS, SOCIAL LINKS
+// ─────────────────────────────────────────────────────────────
+
+enum SettingType {
+  STRING
+  TEXT
+  NUMBER
+  BOOLEAN
+  JSON
+  IMAGE
+  COLOR
+  SELECT
+}
+
+model Setting {
+  id             String      @id @default(cuid())
+  groupName      String      @db.VarChar(50)   // general | seo | social | layout | legal
+  key            String      @unique @db.VarChar(120)
+  value          Json?
+  type           SettingType @default(STRING)
+  label          String      @db.VarChar(150)
+  description    String?     @db.VarChar(500)
+  // Public settings are safe to ship to the browser bundle.
+  isPublic       Boolean     @default(false)
+  isTranslatable Boolean     @default(false)
+  sortOrder      Int         @default(0)
+  updatedBy      String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@index([groupName])
+  @@map("settings")
+}
+
+enum FeatureVisibility {
+  PUBLIC
+  AUTHENTICATED
+  PREMIUM
+  ADMIN
+}
+
+model FeatureFlag {
+  id          String            @id @default(cuid())
+  key         String            @unique @db.VarChar(80) // "courses", "forums"
+  label       String            @db.VarChar(150)
+  description String?           @db.VarChar(500)
+  isEnabled   Boolean           @default(false)
+  visibility  FeatureVisibility @default(PUBLIC)
+  groupName   String            @db.VarChar(50)
+  sortOrder   Int               @default(0)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@map("feature_flags")
+}
+
+model SocialLink {
+  id           String   @id @default(cuid())
+  platform     String   @unique @db.VarChar(50)  // instagram | facebook | youtube | linkedin | x
+  label        String   @db.VarChar(100)
+  url          String   @db.VarChar(500)
+  icon         String   @db.VarChar(80)          // lucide name or uploaded asset key
+  handle       String?  @db.VarChar(100)         // "@mbxproofficial"
+  sortOrder    Int      @default(0)
+  isActive     Boolean  @default(true)
+  openInNewTab Boolean  @default(true)
+  showInHeader Boolean  @default(false)
+  showInFooter Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([isActive, sortOrder])
+  @@map("social_links")
+}
+
+// ─────────────────────────────────────────────────────────────
+// THEMING
+// ─────────────────────────────────────────────────────────────
+
+model Theme {
+  id                 String   @id @default(cuid())
+  key                String   @unique @db.VarChar(50)
+  name               String   @db.VarChar(100)
+  description        String?  @db.VarChar(500)
+
+  // Tab 1 — Colors & Branding. Seven brand colours, shared across modes.
+  brandColors        Json
+
+  // Tab 3 — Theme Modes. Surfaces, text, and borders authored per mode.
+  lightSurface       Json
+  darkSurface        Json
+  // Only the brand keys that fail validation in dark mode. Usually two.
+  darkBrandOverrides Json?
+
+  // Tab 2 — Layout & Display. Radius, container width, font stacks.
+  layoutTokens       Json
+
+  defaultMode        ThemeMode @default(SYSTEM)
+  allowUserToggle    Boolean   @default(true)
+
+  isActive           Boolean  @default(false)
+  isSystem           Boolean  @default(false)
+  scope              String   @default("both") @db.VarChar(20) // web | admin | both
+
+  createdBy          String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([isActive, scope])
+  @@map("themes")
+}
+
+model BrandAsset {
+  id        String   @id @default(cuid())
+  key       String   @unique @db.VarChar(50) // logo_light | logo_dark | favicon | og_image
+  url       String   @db.VarChar(500)
+  altText   String?  @db.VarChar(255)
+  width     Int?
+  height    Int?
+  mimeType  String?  @db.VarChar(100)
+  updatedBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("brand_assets")
+}
+
+// ─────────────────────────────────────────────────────────────
+// LOCALES & NAVIGATION
+// ─────────────────────────────────────────────────────────────
+
+enum TextDirection {
+  LTR
+  RTL
+}
+
+model Locale {
+  id           String        @id @default(cuid())
+  code         String        @unique @db.VarChar(10)  // en, es, ar, ur
+  name         String        @db.VarChar(100)         // English
+  nativeName   String        @db.VarChar(100)         // English / العربية
+  direction    TextDirection @default(LTR)
+  flagEmoji    String?       @db.VarChar(10)
+  isDefault    Boolean       @default(false)
+  isActive     Boolean       @default(true)
+  fallbackCode String?       @db.VarChar(10)
+  sortOrder    Int           @default(0)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([isActive, sortOrder])
+  @@map("locales")
+}
+
+model Menu {
+  id        String     @id @default(cuid())
+  key       String     @unique @db.VarChar(50) // main | footer_learn | mobile
+  name      String     @db.VarChar(100)
+  location  String     @db.VarChar(50)         // header | footer | sidebar
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  items     MenuItem[]
+
+  @@map("menus")
+}
+
+model MenuItem {
+  id            String            @id @default(cuid())
+  menuId        String
+  parentId      String?
+
+  // Either an internal route or an external URL — not both.
+  url           String?           @db.VarChar(500)
+  routeKey      String?           @db.VarChar(100)
+  icon          String?           @db.VarChar(80)
+  badge         String?           @db.VarChar(30)
+
+  sortOrder     Int               @default(0)
+  isActive      Boolean           @default(true)
+  openInNewTab  Boolean           @default(false)
+  visibility    FeatureVisibility @default(PUBLIC)
+  // Hidden entirely when the named feature flag is off.
+  requiresFeature String?         @db.VarChar(80)
+  requiresPermission String?      @db.VarChar(100)
+
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  menu          Menu              @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  parent        MenuItem?         @relation("MenuTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children      MenuItem[]        @relation("MenuTree")
+  translations  MenuItemTranslation[]
+
+  @@index([menuId, sortOrder])
+  @@index([parentId])
+  @@map("menu_items")
+}
+
+model MenuItemTranslation {
+  id         String   @id @default(cuid())
+  menuItemId String
+  locale     String   @db.VarChar(10)
+  label      String   @db.VarChar(150)
+  title      String?  @db.VarChar(255)
+
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+
+  @@unique([menuItemId, locale])
+  @@map("menu_item_translations")
+}
+
+// ─────────────────────────────────────────────────────────────
+// CONTENT — base + translation pattern
+// Shown for Course/Lesson/Glossary. Articles, tools, pages follow identically.
+// ─────────────────────────────────────────────────────────────
+
+enum Difficulty {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum ContentStatus {
+  DRAFT
+  IN_REVIEW
+  SEO_REVIEW
+  APPROVED
+  SCHEDULED
+  PUBLISHED
+  ARCHIVED
+}
+
+enum TranslationStatus {
+  DRAFT
+  TRANSLATED
+  NEEDS_REVIEW
+  OUTDATED // source changed after this translation was written
+}
+
+model Course {
+  id              String        @id @default(cuid())
+  difficulty      Difficulty    @default(BEGINNER)
+  estimatedHours  Int?
+  coverImageUrl   String?       @db.VarChar(500)
+  status          ContentStatus @default(DRAFT)
+  visibility      FeatureVisibility @default(PUBLIC)
+  sortOrder       Int           @default(0)
+  authorId        String?
+  publishedAt     DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  deletedAt       DateTime?
+
+  translations    CourseTranslation[]
+  modules         Module[]
+
+  @@index([status, publishedAt])
+  @@map("courses")
+}
+
+model CourseTranslation {
+  id                String            @id @default(cuid())
+  courseId          String
+  locale            String            @db.VarChar(10)
+
+  title             String            @db.VarChar(255)
+  slug              String            @db.VarChar(255)
+  summary           String?           @db.Text
+  description       String?           @db.LongText
+
+  seoTitle          String?           @db.VarChar(70)
+  seoDescription    String?           @db.VarChar(180)
+  seoFocusKeyword   String?           @db.VarChar(100)
+  ogImageUrl        String?           @db.VarChar(500)
+
+  translationStatus TranslationStatus @default(DRAFT)
+  translatedBy      String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  course            Course            @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([courseId, locale])
+  @@unique([locale, slug])
+  @@index([slug])
+  @@map("course_translations")
+}
+
+model Module {
+  id           String   @id @default(cuid())
+  courseId     String
+  sortOrder    Int      @default(0)
+  isPublished  Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  course       Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons      Lesson[]
+  translations ModuleTranslation[]
+
+  @@index([courseId, sortOrder])
+  @@map("modules")
+}
+
+model ModuleTranslation {
+  id          String   @id @default(cuid())
+  moduleId    String
+  locale      String   @db.VarChar(10)
+  title       String   @db.VarChar(255)
+  description String?  @db.Text
+
+  module      Module   @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@unique([moduleId, locale])
+  @@map("module_translations")
+}
+
+model Lesson {
+  id                   String        @id @default(cuid())
+  moduleId             String
+  difficulty           Difficulty    @default(BEGINNER)
+  estimatedMinutes     Int?
+  videoUrl             String?       @db.VarChar(500)
+  coverImageUrl        String?       @db.VarChar(500)
+  prerequisiteLessonId String?
+  sortOrder            Int           @default(0)
+  status               ContentStatus @default(DRAFT)
+  visibility           FeatureVisibility @default(PUBLIC)
+  authorId             String?
+  publishedAt          DateTime?
+  lastReviewedAt       DateTime?
+  viewCount            Int           @default(0)
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+  deletedAt            DateTime?
+
+  module               Module        @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  translations         LessonTranslation[]
+
+  @@index([moduleId, sortOrder])
+  @@index([status, publishedAt])
+  @@map("lessons")
+}
+
+model LessonTranslation {
+  id                 String            @id @default(cuid())
+  lessonId           String
+  locale             String            @db.VarChar(10)
+
+  title              String            @db.VarChar(255)
+  slug               String            @db.VarChar(255)
+  summary            String?           @db.Text
+  content            String?           @db.LongText
+  learningObjectives Json?
+
+  seoTitle           String?           @db.VarChar(70)
+  seoDescription     String?           @db.VarChar(180)
+  seoFocusKeyword    String?           @db.VarChar(100)
+
+  translationStatus  TranslationStatus @default(DRAFT)
+  // Hash of the source-locale content at translation time. When the source
+  // changes, the hash mismatch flips this row to OUTDATED automatically.
+  sourceHash         String?           @db.VarChar(64)
+  translatedBy       String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  lesson             Lesson            @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([lessonId, locale])
+  @@unique([locale, slug])
+  @@index([translationStatus])
+  @@map("lesson_translations")
+}
+
+model GlossaryTerm {
+  id            String        @id @default(cuid())
+  category      String?       @db.VarChar(80)
+  difficulty    Difficulty    @default(BEGINNER)
+  formula       String?       @db.Text
+  imageUrl      String?       @db.VarChar(500)
+  status        ContentStatus @default(DRAFT)
+  viewCount     Int           @default(0)
+  authorId      String?
+  publishedAt   DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  deletedAt     DateTime?
+
+  translations  GlossaryTermTranslation[]
+
+  @@index([category])
+  @@index([status])
+  @@map("glossary_terms")
+}
+
+model GlossaryTermTranslation {
+  id                  String            @id @default(cuid())
+  termId              String
+  locale              String            @db.VarChar(10)
+
+  term                String            @db.VarChar(150)
+  slug                String            @db.VarChar(150)
+  simpleExplanation   String            @db.Text
+  detailedExplanation String?           @db.LongText
+  advancedExplanation String?           @db.LongText
+  exampleScenario     String?           @db.Text
+  faq                 Json?
+
+  seoTitle            String?           @db.VarChar(70)
+  seoDescription      String?           @db.VarChar(180)
+
+  translationStatus   TranslationStatus @default(DRAFT)
+  sourceHash          String?           @db.VarChar(64)
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  glossaryTerm        GlossaryTerm      @relation(fields: [termId], references: [id], onDelete: Cascade)
+
+  @@unique([termId, locale])
+  @@unique([locale, slug])
+  @@index([slug])
+  @@map("glossary_term_translations")
+}
+
+// Generic cross-entity linking (lesson → glossary → tool → analysis)
+model ContentRelation {
+  id           String   @id @default(cuid())
+  sourceType   String   @db.VarChar(50)
+  sourceId     String
+  targetType   String   @db.VarChar(50)
+  targetId     String
+  relationType String   @default("related") @db.VarChar(50)
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  @@unique([sourceType, sourceId, targetType, targetId, relationType], name: "uniq_relation")
+  @@index([sourceType, sourceId])
+  @@index([targetType, targetId])
+  @@map("content_relations")
+}
+
+// ─────────────────────────────────────────────────────────────
+// AUDIT
+// ─────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  action     String   @db.VarChar(100) // "theme.update", "user.role.assign"
+  entityType String?  @db.VarChar(50)
+  entityId   String?
+  changes    Json?    // { before: {...}, after: {...} }
+  ipAddress  String?  @db.VarChar(45)
+  userAgent  String?  @db.Text
+  createdAt  DateTime @default(now())
+
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model Redirect {
+  id         String   @id @default(cuid())
+  fromPath   String   @unique @db.VarChar(500)
+  toPath     String   @db.VarChar(500)
+  statusCode Int      @default(301)
+  isActive   Boolean  @default(true)
+  hitCount   Int      @default(0)
+  createdBy  String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([fromPath])
+  @@map("redirects")
+}
