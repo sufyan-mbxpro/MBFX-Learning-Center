@@ -8,21 +8,37 @@ packages:
 # and the workspace fixture test in Module 00 for the enforced version of
 # that rule.
 
-# pnpm 11 moved lifecycle-script trust here from package.json's "pnpm" field.
-# These packages ship native/postinstall build steps we intentionally trust.
-onlyBuiltDependencies:
-  - "@prisma/client"
-  - "@prisma/engines"
-  - "prisma"
-  - "@node-rs/argon2"
-  - "esbuild"
-  - "sharp"
-
-# pnpm 11 default: block install scripts on packages not in the list above,
+# pnpm 11 default: block install scripts on packages not in the list below,
 # per supply-chain hardening — see .claude/rules/security.md.
 minimumReleaseAge: 1440
 
-# unrs-resolver: napi-rs binary used by eslint-plugin-import-x's resolver —
-# same trust class as the entries above.
+# Packages we trust to run install/postinstall scripts. `@prisma/client` and
+# `@node-rs/argon2` don't need an entry — Prisma 7's client has no
+# postinstall (schema generation is CLI-only, ADR-002) and argon2 ships
+# prebuilt per-platform binaries (`@node-rs/argon2-<platform>`), not a build
+# step. `sharp` is pre-approved for Module 07/11 even though nothing depends
+# on it yet. `cpu-features`/`protobufjs`/`ssh2` are testcontainers' (Module
+# 01) transitive deps for its optional SSH-tunneled Docker host support —
+# unused locally (plain Docker Desktop), and `cpu-features`/`ssh2`'s native
+# builds fail harmlessly without a C++ toolchain/Python, falling back to
+# pure JS.
 allowBuilds:
+  '@prisma/engines': true
+  prisma: true
+  esbuild: true
+  sharp: true
+  cpu-features: true
+  protobufjs: true
+  ssh2: true
+  # unrs-resolver: napi-rs binary used by eslint-plugin-import-x's resolver —
+  # same trust class as the entries above.
   unrs-resolver: true
+  # Module 06 (next-intl): @swc/core is the same Rust compiler infra Next.js
+  # itself bundles (native binary, no arbitrary script); @parcel/watcher is
+  # next-intl's optional file-watcher for its (unused here) CLI extraction
+  # tooling. Both well-known, widely-depended-on native addons.
+  '@parcel/watcher': true
+  '@swc/core': true
+  # Module 13: msw's postinstall only prints its support message — the
+  # package itself is the testing.md-mandated network-edge mock.
+  msw: true

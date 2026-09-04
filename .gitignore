@@ -52,3 +52,6 @@ pnpm-debug.log*
 *.sqlite
 *.sqlite3
 *.db
+
+# Uploaded media (ADR-017) — local-disk storage driver root, git-ignored
+storage/

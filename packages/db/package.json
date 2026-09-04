@@ -7,15 +7,32 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "lint": "eslint src",
+    "lint": "eslint src prisma prisma.config.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "generate": "echo '@repo/db#generate: no-op until Module 01 adds Prisma' && exit 0"
+    "generate": "prisma generate",
+    "migrate:dev": "prisma migrate dev",
+    "migrate:deploy": "prisma migrate deploy",
+    "seed": "prisma db seed",
+    "studio": "prisma studio",
+    "reset": "prisma migrate reset"
+  },
+  "dependencies": {
+    "@node-rs/argon2": "2.2.0",
+    "@prisma/adapter-mariadb": "7.10.0",
+    "@prisma/client": "7.10.0"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
+    "@prisma/config": "7.10.0",
+    "@testcontainers/mariadb": "^12.1.0",
+    "@types/node": "^24.13.3",
+    "dotenv": "^16.4.7",
     "eslint": "^9.39.5",
+    "prisma": "7.10.0",
+    "testcontainers": "^12.1.0",
+    "tsx": "^4.19.2",
     "typescript": "6.0.3",
     "vitest": "^4.1.11"
   }

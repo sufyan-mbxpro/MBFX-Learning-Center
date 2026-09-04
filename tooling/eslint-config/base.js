@@ -47,6 +47,19 @@ export const baseConfig = [
       ],
       "import-x/no-cycle": "error",
       "no-restricted-syntax": ["error", noColorLiteralRule],
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "next/cache",
+              importNames: ["unstable_cache"],
+              message:
+                "unstable_cache is the legacy caching path (ADR-004). Use \"use cache\" + cacheTag()/cacheLife(), invalidated with revalidateTag()/updateTag().",
+            },
+          ],
+        },
+      ],
     },
   },
   {

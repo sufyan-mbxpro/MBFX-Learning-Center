@@ -30,15 +30,15 @@ names numbers. If a bump changes behavior, it gets an ADR.
 
 ## Data & auth (installed in their modules, pinned now)
 
-| Package                 | Pin                    | Module | Notes                                                                                                              |
-| ----------------------- | ---------------------- | ------ | ------------------------------------------------------------------------------------------------------------------ |
-| prisma / @prisma/client | **7.10.x**             | 01     | Prisma 8 is still RC (`8.0.0-rc.12`); CLI `latest` tag points at the RC — never install unpinned. See **ADR-002**. |
-| @prisma/adapter-mariadb | match 7.10.x           | 01     | Driver-adapter path.                                                                                               |
-| better-auth             | latest stable at spike | 04     | ADR-001 after the 2-day spike; fallback Auth.js v5.                                                                |
-| @node-rs/argon2         | ^2.2.0                 | 01/04  | Argon2id hasher; in `onlyBuiltDependencies`.                                                                       |
-| zod                     | ^4.5.4                 | 05+    | v4 error APIs — no v3 snippets.                                                                                    |
-| next-intl               | ^4.14.1                | 06     | Verify Next 16 peer range at module start.                                                                         |
-| next-themes             | ^0.4.6                 | 08/12  | User-controlled mode (ADR-008).                                                                                    |
+| Package                 | Pin                                               | Module | Notes                                                                                                                                           |
+| ----------------------- | ------------------------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| prisma / @prisma/client | **7.10.x**                                        | 01     | Prisma 8 is still RC (`8.0.0-rc.12`); CLI `latest` tag points at the RC — never install unpinned. See **ADR-002**.                              |
+| @prisma/adapter-mariadb | match 7.10.x                                      | 01     | Driver-adapter path.                                                                                                                            |
+| better-auth             | **1.7.2** (+ `@better-auth/prisma-adapter@1.7.2`) | 04     | ADR-001 locked 2026-09-01; fallback Auth.js v5 not needed. **Do not add `@better-auth/cli`** — deprecated, folded into `better-auth`'s own bin. |
+| @node-rs/argon2         | ^2.2.0                                            | 01/04  | Argon2id hasher; in `onlyBuiltDependencies`.                                                                                                    |
+| zod                     | ^4.5.4                                            | 05+    | v4 error APIs — no v3 snippets.                                                                                                                 |
+| next-intl               | ^4.14.1                                           | 06     | Verify Next 16 peer range at module start.                                                                                                      |
+| next-themes             | ^0.4.6                                            | 08/12  | User-controlled mode (ADR-008).                                                                                                                 |
 
 ## Testing
 
@@ -54,11 +54,20 @@ names numbers. If a bump changes behavior, it gets an ADR.
 
 ## UI toolchain (Module 07)
 
-| Package      | Pin                                | Notes                                                                         |
-| ------------ | ---------------------------------- | ----------------------------------------------------------------------------- |
-| shadcn CLI   | 4.x (`shadcn@latest` at init)      | Native monorepo support. Plan said "CLI 3.x"; 4.x is current — same approach. |
-| lucide-react | ^1.38.0                            | Icon library.                                                                 |
-| Tiptap       | pin at Module 11 kickoff (ADR-009) | MIT core only.                                                                |
+| Package                                          | Pin                                | Notes                                                                                                                                                                                               |
+| ------------------------------------------------ | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| shadcn CLI                                       | 4.x (`shadcn@latest` at init)      | Native monorepo support. Plan said "CLI 3.x"; 4.x is current — same approach. Style `base-nova`, `rtl: true` in both components.json files.                                                         |
+| @base-ui/react                                   | ^1.7.0                             | Headless primitive layer — see **ADR-013** (chosen over Radix/React Aria). No Radix packages alongside it.                                                                                          |
+| lucide-react                                     | ^1.38.0                            | Icon library. (1.39.0 was <24h old at Module 07 install — held back by `minimumReleaseAge`, same as typescript-eslint on Day 1.)                                                                    |
+| @tanstack/react-table                            | **8.21.3 — exact**                 | Plan names v8; v9 (9.2.x) is current but a breaking rewrite with no repo benefit yet — staying on the plan's line is the deliberate choice here, unlike the CLI 3→4 case.                           |
+| react-hook-form / @hookform/resolvers            | ^7.87.0 / ^5.9.1                   | Form state + Zod v4 resolver.                                                                                                                                                                       |
+| sonner                                           | ^2.0.8                             | Toasts.                                                                                                                                                                                             |
+| class-variance-authority / clsx / tailwind-merge | ^0.7.1 / ^2.1.1 / ^3.6.0           | shadcn's styling utilities (`cn()`).                                                                                                                                                                |
+| tw-animate-css                                   | ^1.4.0                             | Animation utilities the base-nova components reference.                                                                                                                                             |
+| @fontsource[-variable]/*                         | **5.3.0 — exact**                  | Real OFL-1.1 font binaries for ADR-005's curated families, pulled through the registry (supply-chain-guarded) instead of hand-vendored woff2 files; `next/font/local` reads them from node_modules. |
+| jsdom                                            | ^30.0.1                            | @repo/ui component tests.                                                                                                                                                                           |
+| Tiptap                                           | **3.31.0 — exact** (`@tiptap/react`, `@tiptap/pm`, `@tiptap/starter-kit`, `@tiptap/extension-image`, `@tiptap/extensions`) | MIT core only (ADR-009, landed changes-02 in apps/web — admin-only dependency, architecture.md #5). 3.31.1/.2 were <24h old at install — held back by `minimumReleaseAge`. Placeholder lives in `@tiptap/extensions` in v3; StarterKit bundles Link + Underline. |
+| recharts                                         | **3.10.1 — exact**                 | Admin dashboard charts (Module 09). React 19-compatible peer range. Installed only in `apps/web` — admin-only dependency per architecture.md #5, never imported under `app/(public)`.               |
 
 ## Standing follow-ups
 
@@ -67,4 +76,6 @@ names numbers. If a bump changes behavior, it gets an ADR.
 - **Prisma 8 GA** → revisit ADR-002 (contained to `packages/db`).
 - **ESLint 10** → bump when `eslint-config-next`'s plugin tree declares ^10
   peers (`pnpm peers check` clean is the test).
-- Better Auth exact pin lands here with ADR-001 (Module 04 spike).
+- **`better-auth generate`'s missing `Account.issuer` column** (ADR-001
+  finding #2) → re-check on every `better-auth` bump; drop the manual patch
+  once upstream emits it.

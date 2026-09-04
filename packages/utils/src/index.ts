@@ -1,4 +1,5 @@
-// @repo/utils — formatting, slugs, dates, currency, colors.
-// Implementation lands alongside the modules that need it, e.g. pure
-// calculators in Module 13 (see plan.md Part D, docs/logs/DEVLOG.md).
-export {};
+// @repo/utils — pure helpers. Calculators land with Module 13; slugs/dates
+// arrive with the modules that need them.
+export * from "./calculators.ts";
+export * from "./video-embeds.ts";
+export * from "./reading-time.ts";

@@ -1,12 +1,27 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+import { AlertTriangle } from "lucide-react";
+import { Button } from "@repo/ui/components/button";
+import { Empty, EmptyContent, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
+
+// Renders inside the admin shell's <main>, so a plain div — a second <main>
+// here would nest landmarks.
 export default function AdminError({ reset }: { error: Error; reset: () => void }) {
+  const t = useTranslations("error");
   return (
-    <main className="flex min-h-full flex-col items-center justify-center gap-4 p-8">
-      <h1 className="text-lg font-semibold">Something went wrong</h1>
-      <button type="button" onClick={reset} className="text-sm underline underline-offset-4">
-        Try again
-      </button>
-    </main>
+    <div className="flex min-h-[50vh] flex-col items-center justify-center p-8">
+      <Empty className="w-full max-w-md border-none">
+        <EmptyMedia>
+          <AlertTriangle aria-hidden />
+        </EmptyMedia>
+        <EmptyTitle className="text-lg">{t("title")}</EmptyTitle>
+        <EmptyContent>
+          <Button variant="outline" onClick={reset}>
+            {t("retry")}
+          </Button>
+        </EmptyContent>
+      </Empty>
+    </div>
   );
 }

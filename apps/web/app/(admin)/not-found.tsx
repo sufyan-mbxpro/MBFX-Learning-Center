@@ -1,12 +1,26 @@
 import Link from "next/link";
+import { getTranslations } from "next-intl/server";
+import { SearchX } from "lucide-react";
+import { Button } from "@repo/ui/components/button";
+import { Empty, EmptyContent, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
 
-export default function AdminNotFound() {
+// Renders inside the admin shell's <main>, so a plain div — a second <main>
+// here would nest landmarks.
+export default async function AdminNotFound() {
+  const [t, tAdmin] = await Promise.all([getTranslations("notFound"), getTranslations("admin")]);
   return (
-    <main className="flex min-h-full flex-col items-center justify-center gap-4 p-8">
-      <h1 className="text-lg font-semibold">Page not found</h1>
-      <Link href="/admin" className="text-sm underline underline-offset-4">
-        Back to dashboard
-      </Link>
-    </main>
+    <div className="flex min-h-[50vh] flex-col items-center justify-center p-8">
+      <Empty className="w-full max-w-md border-none">
+        <EmptyMedia>
+          <SearchX aria-hidden />
+        </EmptyMedia>
+        <EmptyTitle className="text-lg">{t("title")}</EmptyTitle>
+        <EmptyContent>
+          <Button variant="outline" render={<Link href="/admin" />}>
+            {tAdmin("dashboard")}
+          </Button>
+        </EmptyContent>
+      </Empty>
+    </div>
   );
 }

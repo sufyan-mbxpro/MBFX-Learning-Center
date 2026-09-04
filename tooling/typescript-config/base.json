@@ -7,6 +7,15 @@
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "moduleDetection": "force",
+    // Prisma 7's generated client (packages/db/src/generated/) uses .ts
+    // extensions in its own internal imports — baked into codegen, not
+    // something a consumer can fix. Any package that transitively
+    // typechecks through @repo/db's raw source (no build step, no .d.ts
+    // boundary — see packages/db/SKILL.md) needs this, which in practice
+    // is every package that imports @repo/db. Centralized here rather than
+    // rediscovered per package.
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "isolatedModules": true,

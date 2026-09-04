@@ -17,6 +17,9 @@
     "format:check": "prettier --check \"**/*.{ts,tsx,md,json,mdx,css}\" --ignore-unknown",
     "governance:check": "node scripts/governance-check.mjs",
     "check:phantom-deps": "node scripts/check-phantom-deps.mjs",
+    "check:permission-keys": "node scripts/check-permission-keys.mjs",
+    "check:catalog-completeness": "node scripts/check-catalog-completeness.mjs",
+    "check:home-sections": "node scripts/check-home-sections.mjs",
     "test:governance": "vitest run scripts",
     "db:generate": "pnpm --filter @repo/db generate",
     "db:migrate": "pnpm --filter @repo/db migrate:dev",
@@ -28,6 +31,7 @@
   },
   "devDependencies": {
     "@repo/typescript-config": "workspace:*",
+    "@vitest/coverage-v8": "^4.1.11",
     "prettier": "^3.9.6",
     "turbo": "^2.10.12",
     "typescript": "6.0.3",

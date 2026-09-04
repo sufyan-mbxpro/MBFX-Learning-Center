@@ -11,10 +11,23 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
+  "dependencies": {
+    "@better-auth/prisma-adapter": "1.7.2",
+    "@node-rs/argon2": "2.2.0",
+    "@repo/db": "workspace:*",
+    "better-auth": "1.7.2",
+    "ioredis": "^5.4.1",
+    "next": "16.3.3"
+  },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
+    "@testcontainers/mariadb": "^12.1.0",
+    "@types/node": "^24.13.3",
+    "@vitest/coverage-v8": "^4.1.11",
+    "dotenv": "^16.4.7",
     "eslint": "^9.39.5",
+    "testcontainers": "^12.1.0",
     "typescript": "6.0.3",
     "vitest": "^4.1.11"
   }

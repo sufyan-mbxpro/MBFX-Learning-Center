@@ -41,6 +41,18 @@ jobs:
       - name: Phantom dependencies
         run: pnpm check:phantom-deps
 
+      - name: Permission-key cross-check
+        run: pnpm check:permission-keys
+
+      - name: Catalog completeness (warnings only unless default catalog broken)
+        run: pnpm check:catalog-completeness
+
+      - name: Homepage section registries agree (changes-03-plan.md §12.6)
+        run: pnpm check:home-sections
+
+      - name: Dependency audit (Module 14 — security.md #15)
+        run: pnpm audit --audit-level high
+
       - name: Format check
         run: pnpm format:check
 

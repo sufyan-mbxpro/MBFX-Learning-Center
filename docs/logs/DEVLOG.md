@@ -77,3 +77,2882 @@ the one open DoD item; CI env stubs are in place.
 
 **Next:** Module 01 (`@repo/db`) — waits for go-ahead. Better Auth spike
 (ADR-001) can run in parallel per plan Part F.
+
+---
+
+## 2026-09-01 — Local dev infra (Docker) — not a module
+
+**Shipped:** root `docker-compose.yml` — MariaDB 11.4 LTS + Redis 7 (alpine),
+credentials matching `.env.example` (`mysql://user:pass@localhost:3306/
+mbfx_learning_center`, `redis://localhost:6379`), named volumes, healthchecks.
+App itself still runs on the host via `pnpm dev` (Module 00 DoD) — not
+containerized. `.env` created from `.env.example` (gitignored, confirmed).
+
+**Verified:** `docker compose up -d` — both containers healthy;
+`pnpm dev` — Next.js 16.3.3/Turbopack ready in 6.8s; `/` → 200, `/admin` →
+200, unknown route → 404. `@repo/db#generate` still the Module 01 no-op, so
+this boot exercises no real DB connection yet — the containers are staged
+ahead of Module 01 landing.
+
+**Next:** unchanged — Module 01 (`@repo/db`) is next up and will be the
+first thing to actually connect to this MariaDB instance.
+
+---
+
+## 2026-09-01 — Better Auth spike — ADR-001 locked
+
+**Context:** Module 01's auth tables are gated on ADR-001 per plan.md's
+kickoff sequence ("Only Module 01's auth tables wait on ADR-001"). Ran the
+2-day-timeboxed spike from plan.md A3/Part F now, ahead of Module 01, using a
+disposable `better_auth_spike` database on the local MariaDB container
+(dropped after — not `mbfx_learning_center`).
+
+**Decision:** ADR-001 — adopt Better Auth 1.7.2 (`@better-auth/prisma-adapter
+@1.7.2`). No MariaDB adapter gap found; the Auth.js v5 fallback is not
+invoked.
+
+**Verified end-to-end** (MariaDB adapter, Argon2id via `@node-rs/argon2`,
+database-backed session revocation, Redis-backed rate limiting at the HTTP
+layer, admin/two-factor/bearer plugins) — see ADR-001 for the full checklist.
+
+**Four findings recorded in ADR-001 with required mitigations for Module 04:**
+
+1. `secondaryStorage` (Redis) silently moves sessions out of the database by
+   default — `session.storeSessionInDatabase: true` is mandatory to satisfy
+   security.md #11.
+2. `better-auth generate` v1.7.2 omits the required `Account.issuer` column
+   (Better Auth's own 1.7 upgrade guide added it) — needs a scripted
+   post-generate patch, not a one-time fix, since regenerating drops it.
+3. `@better-auth/cli` is deprecated/redundant — the CLI now ships inside
+   `better-auth` itself. Do not add it as a dependency.
+4. Rate limiting only runs on requests routed through `auth.handler()`, not
+   on direct `auth.api.*()` calls — Module 04's sign-in/sign-up/reset flows
+   must go through the mounted `/api/auth/[...all]` route, not call `auth.api`
+   directly from a server action.
+
+**Test status:** spike scripts (sign-up → argon2id hash check → session →
+revoke → 401 → DB row gone; HTTP-layer rate-limit 429 on 4th rapid attempt)
+all green, run against live Docker MariaDB + Redis. Spike code kept outside
+the repo (session scratchpad) as a throwaway artifact, not merged — Module 04
+re-implements this properly inside `packages/auth` per SKILL.md.
+
+**Next:** Module 01 (`@repo/db`) — unblocked, proceeding now with the auth
+table shape this spike validated (merged with project fields per SKILL.md).
+
+---
+
+## 2026-09-01 — Module 01: `@repo/db` schema, migrations, seed — COMPLETE
+
+**Shipped:**
+
+- `packages/db/prisma/schema.prisma` — full port of `docs/reference/
+schema.prisma` with the A4 (Prisma 7: `prisma-client` generator + custom
+  output, no `relationMode`, no in-schema `url`) and A5.4 (`Theme.
+allowUserToggle` dropped) fixes. Auth models (`User`/`Account`/`Session`/
+  `Verification`/`TwoFactor`) hand-ported from the ADR-001 spike's validated
+  `better-auth generate` output rather than re-run through the CLI —
+  `packages/auth` doesn't exist yet and Module 01's auth tables were only
+  ever gated on the _decision_ (ADR-001), not on Module 04 shipping first.
+  Includes the `Account.issuer` patch from ADR-001 finding #2, promoted to a
+  real `@@unique([issuer, accountId(length: 191)])` (stricter than Better
+  Auth's own generated schema, matching exactly the key its internal adapter
+  already queries by). RBAC/Employee/Settings/FeatureFlag/SocialLink/Theme/
+  BrandAsset/Locale/Menu\*/Course·Module·Lesson·Glossary+translations/
+  ContentRelation/AuditLog/Redirect ported as-is.
+- `packages/db/prisma.config.ts` (Prisma 7 env/seed config, ADR-002),
+  `prisma/seed.ts` (ported in spirit — idempotent upserts, admin-editable
+  `Setting.value` survives reseed — refactored to export an injectable
+  `seed(db)` so integration tests can run it against a Testcontainers
+  database instead of the app singleton), `prisma/migrations/
+20260901065901_init/`.
+- `src/index.ts` — Prisma client singleton, `@prisma/adapter-mariadb`. Built
+  **lazily** behind a `Proxy` rather than eagerly at module load: ESM hoists
+  `import` evaluation above any same-file dotenv-loading code that textually
+  precedes it, so an eager singleton reliably raced `DATABASE_URL` not being
+  set yet in every non-Next.js entrypoint (seed script, tests) — lazy
+  construction on first property access sidesteps needing every consumer to
+  get import order exactly right.
+- Testcontainers MariaDB integration suite (`src/db.integration.test.ts`):
+  migrations apply cleanly from zero (the `migrate deploy` in `beforeAll` is
+  itself the test), seed idempotency incl. admin-edited `Setting.value`
+  surviving a reseed, FK cascade (Course→translations) + SetNull
+  (Employee.departmentId), `(locale, slug)` unique collision rejected,
+  soft-delete fixture convention. `@testcontainers/mariadb`'s
+  `getConnectionUri()` returns a `mariadb://` scheme that Prisma's `mysql`
+  provider doesn't recognize — rewritten before use, noted in the test file.
+- Default theme tokens for the seed's `Theme` row live in
+  `prisma/default-theme-tokens.json`, not inline in `seed.ts` — code-style.md
+  #1's hex-literal ban is workspace-wide (confirmed by lint, not assumed),
+  and `@repo/db` can't depend on `@repo/theme` either way
+  (architecture.md #8: `core → db`, not `db → theme`). TODO(Module 02) to
+  keep in sync by hand or fold seeding of the default theme row into that
+  module instead.
+- `docs/erd.md` — hand-authored Mermaid ERD, split by domain (Identity &
+  Auth, RBAC, Employees, Settings/Theme/Branding, Locale & Navigation,
+  Content, Audit) rather than one 30-entity diagram.
+
+**Infra fixes along the way:**
+
+- `pnpm-workspace.yaml`: `onlyBuiltDependencies` (array) and `allowBuilds`
+  (map) turned out to be two different mechanisms in pnpm 11.24 — running
+  `pnpm approve-builds --all` to trust the new dependencies' install scripts
+  (`@prisma/engines`, `prisma`, `esbuild`, `cpu-features`/`protobufjs`/`ssh2`
+  from testcontainers) rewrote the file into `allowBuilds` only, silently
+  dropping the original `onlyBuiltDependencies` entries. Restored by hand
+  with an explanatory comment; turned out `@prisma/client` (no postinstall
+  in Prisma 7 — CLI-only generation) and `@node-rs/argon2` (ships prebuilt
+  per-platform binaries, no build step) never needed an entry regardless.
+  `sharp` re-added pre-approved for Module 07/11.
+- Local MariaDB container's `user` account only had privileges on
+  `mbfx_learning_center`; `prisma migrate dev`'s shadow-database diffing
+  needs to create/drop arbitrary databases. Granted `GRANT ALL ON *.*` to
+  `user`@`%` on the container — local dev only, and needed again for every
+  future module's first `migrate dev`.
+- Two Prisma "AI agent" safety-guard stops hit and cleared with the user's
+  explicit consent: `db push --accept-data-loss` (disposable
+  `better_auth_spike` DB, ADR-001 spike) and `migrate reset --force`
+  (real `mbfx_learning_center` dev DB, verifying this module's DoD).
+
+**Test status (all green, local):** `lint` 12/12 (added `prisma/` to
+`@repo/db`'s lint script — it was only linting `src`, silently skipping the
+seed script) · `typecheck` 12/12 (needed `allowImportingTsExtensions` +
+dropped the now-inapplicable `rootDir: "src"` restriction, and an explicit
+`@prisma/config` dependency that was phantom before) · `test` 12/12 incl.
+`@repo/db`'s 6 tests (1 smoke + 5 Testcontainers integration) ·
+`check:phantom-deps` OK · `governance:check` OK · `build` OK · DoD sequence
+`pnpm db:reset && pnpm db:seed && pnpm db:seed` green against the real dev
+database — identical row counts both seed runs, admin user created.
+
+**Next:** Module 02 (`@repo/theme`) or Module 03 (`@repo/rbac`) — both
+unblocked; Module 04 (`@repo/auth`) can also start now that ADR-001 is
+locked, contingent on `packages/db`'s auth tables (this module).
+
+---
+
+## 2026-09-01 — Module 03: `@repo/rbac` — COMPLETE
+
+**Shipped:**
+
+- `packages/rbac/src/index.ts` — ported from `docs/reference/rbac.ts` with
+  frozen semantics preserved exactly (deny > super_admin > allow; STAFF gate
+  before the permission check; `canAssignRole` strict `<`, super_admin
+  exempt from the level check entirely). Caching migrated from
+  `unstable_cache` to Cache Components (ADR-004): `getSubject` is React
+  `cache()` wrapping a `"use cache"` function tagged `rbac:{userId}`
+  (frozen tag, architecture.md #12); `invalidateSubject` uses
+  `revalidateTag(tag, { expire: 0 })`, not the deprecated single-argument
+  form. `auth()` import points at `@repo/auth`'s interim stub (see below).
+- ADR-004 (Cache Components) — written as a prerequisite, not
+  rbac-specific: documents Next 16's `revalidateTag` signature change,
+  and two empirically-verified testability findings that shaped every test
+  in this module: `cacheTag()`/`cacheLife()` **throw** outside a
+  `cacheComponents` context (not silent no-ops — corrected mid-session
+  after the first test run proved the initial assumption wrong), and
+  React's `cache()` is a silent passthrough outside a render boundary (no
+  memoization, no throw). `no-restricted-imports` added to
+  `tooling/eslint-config/base.js` banning `unstable_cache`.
+- ADR-011 — `recordAudit()`'s package micro-decision (SKILL.md flagged it
+  open): lives in `@repo/core` when a module needs it, not `@repo/rbac`.
+  Not implemented here — no module has reached that point yet.
+- **`packages/auth/src/index.ts`** now exports a minimal interim `auth()`
+  (always resolves `null`) — Module 04 doesn't exist yet, but its
+  implementation prompt already commits to the exact call shape
+  `@repo/rbac` needs, so this unblocks Module 03 the same way the ADR-001
+  spike unblocked Module 01, without doing Module 04's actual work
+  (OAuth, 2FA, rate limiting, etc.).
+- `scripts/check-permission-keys.mjs` — the CI cross-check SKILL.md
+  requires: every string literal passed to
+  `requirePermission|requireAnyPermission|<Can permission=` (test fixtures
+  excluded — they deliberately use fake keys to test the ForbiddenError
+  path) must exist in the seed's `PERMISSIONS` registry. Wired into
+  `package.json` (`check:permission-keys`) and `.github/workflows/ci.yml`.
+- Tests: `src/index.test.ts` (pure truth-table: `can`/`canAny`/`canAll`/
+  `canAssignRole`, `invalidateSubject`'s tag computation) +
+  `src/rbac.integration.test.ts` (Testcontainers MariaDB: `loadSubject`
+  deleted/inactive → null, role aggregation, DENY-overrides-grant, a
+  mutation visible on the next load; `requirePermission`/
+  `requireAnyPermission`/`Can` against a real seeded subject with
+  `@repo/auth` and `next/cache` mocked). 28 tests, 98.57%/91.42%/100%/100%
+  stmt/branch/func/line coverage — clears the 90% floor.
+
+**Test status (all green, local):** `lint` 12/12 · `typecheck` 12/12 ·
+`test` 12/12 workspace-wide · `@repo/rbac` coverage above threshold ·
+`check:permission-keys` OK (0 usages yet — nothing calls these functions
+with a real key until a later module does).
+
+**Next:** Module 02 (`@repo/theme`) — proceeding now. Module 04
+(`@repo/auth`) replaces the interim stub whenever it lands; nothing else
+should change at its call sites since the shape is already locked.
+
+---
+
+## 2026-09-01 — Module 02: `@repo/theme` — COMPLETE
+
+**Shipped:**
+
+- `packages/theme/src/index.ts` — ported from `docs/reference/
+theme-engine.ts` with all the review fixes: A5.1 (scope resolution —
+  `loadActiveTheme` fetches both `{scope}`/`"both"` candidates and picks the
+  exact match in code, not an `orderBy` that sorted "both" first
+  alphabetically), A5.2 (`--brand-font-sans`/`--brand-font-mono`, no
+  circular self-reference), A5.3 (`rgbChannels()` deleted; every surface/
+  brand var is a full hex value), plus two new decisions this module
+  required and recorded as ADRs: ADR-003 (hover/active states are always
+  `shade()`-derived, never admin-editable — no `BRAND_FIELD_REGISTRY` entry
+  exists for them) and ADR-005 (curated font registry: `fontSans`/
+  `fontMono` are `CuratedFontKey`s, not raw CSS stacks; `@repo/theme` owns
+  the registry, `@repo/ui`/Module 07 owns the actual `next/font/local`
+  files behind each `--font-{key}` variable — the same "define the
+  contract now, fill in the file later" pattern as ADR-001 and the interim
+  `auth()` stub). `LayoutTokens` gained `baseFontSize`. Caching moved to
+  `"use cache"` + `cacheTag("theme")` per ADR-004, no React (SKILL.md: this
+  package is data/derivation only).
+- Three real findings surfaced by writing the tests against actual values
+  rather than assumed ones, all fixed in the test suite (not by silently
+  re-picking colors, which isn't this module's call to make):
+  1. **The shipped defaults don't clear their own `validateMode` rules.**
+     `DEFAULT_LIGHT_SURFACE.borderMedium`/`DEFAULT_DARK_SURFACE.borderMedium`
+     fail the 3:1 non-text floor, and `error`/`primary`/`success`/`warning`
+     fail as button labels in at least one mode — 7 blocking errors total
+     against the literal "values currently in the admin." Flagged here for
+     whoever owns brand/design values (Module 09 territory), not
+     "corrected" unilaterally.
+  2. **`DEFAULT_DARK_BRAND_OVERRIDES` (accent/secondary) can never fix a
+     `validateMode` issue** — only `primary/success/error/warning/info` are
+     in the `fills` list that check covers; accent/secondary aren't
+     validated at all despite the reference comment's claim they're "the
+     brand keys that fail validation in dark mode." The "overrides applied
+     before validation" required test now uses a deliberately constructed
+     `warning` scenario instead of the shipped (non-demonstrative) values.
+  3. **`*-foreground` vars (via `readableOn`) have no mathematical
+     legibility guarantee** — only `*-interactive`/`--ring`
+     (`deriveInteractive`-backed, with an engineered push-until-passing
+     fallback) do. The property-based fast-check test targets the
+     `-interactive`/`--ring` set, not plain `*-foreground`, after a random
+     medium-luminance counterexample (`#8165ce`) broke the original,
+     over-broad assertion.
+- Tests: `src/index.test.ts` (WCAG reference pairs incl. the documented
+  #C28D5A/#FFFFFF ≈ 2.90 case, shade clamping, 3-digit hex, `deriveInteractive`
+  table + fallback, `validateTheme`/`validateMode` blocking-vs-advisory,
+  fast-check property over 200 random palettes, CSS snapshot) +
+  `src/theme.integration.test.ts` (Testcontainers MariaDB: the A5.1 scope
+  regression by name — web beats both when both are active, admin falls
+  back to a both-only row, empty DB renders branded defaults;
+  `getActiveTheme`'s delegation with `next/cache` mocked per ADR-004). 33
+  tests, 100%/91.66%/100%/100% stmt/branch/func/line coverage.
+
+**Test status (all green, local):** `lint` 12/12 · `typecheck` 12/12 ·
+`test` 12/12 workspace-wide · `@repo/theme` coverage above the 90% floor ·
+`governance:check`/`check:phantom-deps`/`check:permission-keys` OK.
+
+**Next:** Modules 04–14 all now have their immediate blockers cleared
+(ADR-001 for 04, this module + Module 03 for anything downstream of theme/
+rbac). No module proceeded to on this pass.
+
+---
+
+## 2026-09-01 — Module 04: `@repo/auth` (Better Auth) — CORE COMPLETE, E2E DEFERRED
+
+**Shipped:**
+
+- `packages/auth/src/index.ts` — the real Better Auth config, replacing the
+  Module 03 interim stub. Everything ADR-001's spike validated: Argon2id
+  via `@node-rs/argon2`, `session.storeSessionInDatabase: true`, Redis
+  secondaryStorage, rate limiting, admin/two-factor/bearer plugins, Google +
+  GitHub OAuth, `user.additionalFields` matching the Module 01 schema
+  exactly (userType/status/locale/timezone/themeMode/lockout fields/
+  deletedAt/firstName/lastName/phone). Plus what only showed up building
+  the real thing:
+  - **Custom lockout** (security.md #13 — exponential backoff, never a hard
+    lock): `hooks.after` on `/sign-in/email` increments `failedLoginCount`/
+    sets `lockedUntil` on `INVALID_EMAIL_OR_PASSWORD`, resets both on
+    success; `databaseHooks.session.create.before` blocks session creation
+    while locked — needed separately because a _correct_ password on a
+    still-locked account reaches session creation, past the point where the
+    failure-detection hook would ever see it. Verified against a live spike
+    before writing it for real (same discipline as ADR-001): captured the
+    exact `ctx.context.returned` shapes for success vs. failure via
+    `createAuthMiddleware`.
+  - `session.cookieCache` enabled (proxy.ts needs a DB-free read for its
+    fast gate) — but `getSession`'s `disableCookieCache` only bypasses the
+    _cookie_ snapshot; with Redis secondaryStorage configured, a session's
+    attached user data can still lag a direct database write. Found via
+    `auth.integration.test.ts`, not assumed: promoted a user in the DB,
+    called `getSession` with `disableCookieCache: true`, still got the old
+    `userType`. Mitigation is architectural, not another cache flag — see
+    the admin layout note below.
+  - `emailAndPassword.requireEmailVerification: false` + app-layer gating
+    intended (plan.md: verification required to comment/access premium,
+    not to read) — Better Auth's own flag would block sign-in entirely,
+    which is the wrong shape for this requirement.
+  - No email provider is configured yet (not assigned to a module in
+    plan.md) — `sendResetPassword`/`sendVerificationEmail` log the real
+    token/URL Better Auth generates so both flows are genuinely testable
+    locally; swap the body of `logEmail()` for a real provider later.
+  - `authInstance`'s exported type is deliberately the untyped-options
+    `Auth` default, not `Auth<typeof authOptions>` — naming the precise
+    type hits a TS/Zod cross-module portability error
+    (`cannot be named without a reference to '$strip'`). Costs static
+    typing on `additionalFields` at call sites (worked around with a local
+    `WithAdditionalFields<T>` cast in tests) in exchange for the package
+    actually compiling.
+- `packages/core/src/index.ts` — `recordAudit()`, per ADR-011 (written
+  during Module 03): lives here, not `@repo/rbac`. First real code in this
+  package.
+- `apps/web/app/api/auth/[...all]/route.ts` — mounts Better Auth via
+  `toNextJsHandler`. ADR-001 finding #4 means this is the _only_ correct
+  place sign-in/sign-up/reset traffic should go through — a direct
+  server-side `auth.api.*()` call bypasses rate limiting entirely (still
+  fine for internal, already-permission-gated actions).
+- `apps/web/proxy.ts` — real STAFF gate via `getCookieCache` (signed
+  cookie, no DB round-trip) — a deliberately fast, non-authoritative check.
+- `apps/web/app/(admin)/layout.tsx` — the authoritative re-check. Two real
+  bugs found and fixed by actually building and running this, not just
+  reading the docs:
+  1. A first version awaited `auth()` at the layout's top level and broke
+     the production build entirely: "Route /admin: Next.js encountered
+     uncached or runtime data during prerendering... push it into a
+     component inside a boundary" — exactly what the Cache Components
+     authentication guide warns a top-level layout session read does.
+  2. Moving the check into a component inside `<Suspense>` fixed the
+     build, but broke the redirect at _runtime_: a demoted user stayed
+     in, because `redirect()` fired from inside a streamed Suspense
+     boundary can't change the static shell's HTTP status — already
+     committed as 200 before the redirect resolved. Fixed with
+     `export const instant = false` (the documented escape hatch for a
+     segment that's allowed to fully block server-side) and a plain
+     top-level blocking `await` — simpler than the Suspense version, and
+     correct, since admin has no static-shell value to begin with.
+  3. Reads `userType` via `@repo/rbac`'s `loadSubject(session.user.id)`,
+     **not** `session.user.userType` — the mitigation for the
+     secondaryStorage-staleness finding above. `loadSubject` only trusts
+     the session's user _id_, then re-queries fresh (the same discipline
+     `requirePermission()` already uses), which also means a
+     deleted/deactivated STAFF user with a technically-still-valid
+     session is correctly rejected too.
+- `next.config.ts`: `cacheComponents: true` (ADR-004 has been inert until
+  now — this is the first module actually running code through it),
+  `transpilePackages` extended for `@repo/auth`/`@repo/db`/`@repo/core`,
+  and root `.env` loaded explicitly — Next.js only auto-loads `.env` from
+  the app's own directory (`apps/web/.env`), not the monorepo root every
+  other package already reads from. A build without this ran Better Auth
+  on its insecure default secret with no error until deep in page
+  generation.
+- `packages/core/tsconfig.json`: dropped `outDir`/`rootDir` (matching
+  Module 01's earlier fix) and added an explicit `types: ["node"]` — for
+  reasons not fully root-caused (typechecking `@repo/db`'s source as part
+  of `@repo/core`'s program lost automatic `@types/node` visibility that
+  an otherwise-identical `@repo/rbac` doesn't), the explicit `types` array
+  is the verified fix; not centralized into the shared base config since
+  doing so would replace, not add to, other packages' auto-included
+  `@types/react` etc.
+
+**Verified live**, not just in tests, against the real dev server and
+MariaDB/Redis containers: sign-up → real user with all additionalFields;
+session revocation → immediate 401/null; lockout after 5 failures with a
+real `lockedUntil` expiry, correct password still blocked while locked;
+password reset token single-use; STAFF gate blocking a LEARNER,
+allowing an ACTIVE STAFF user, and — the one that actually caught the
+Suspense/`instant` bug — correctly blocking a STAFF user demoted mid-session
+even though the proxy's cached cookie still said STAFF.
+
+**Test status:** `lint`/`typecheck` 14/14 workspace-wide ·
+`governance:check`/`check:phantom-deps`/`check:permission-keys` OK ·
+`@repo/auth` 10 tests (Testcontainers MariaDB + real Redis): verification
+round-trip, sign-in never blocked by unverified email, lockout
+increment/reset/block-with-expiry, reset-token single-use, revocation
+immediate, secondaryStorage-staleness finding documented with its
+mitigation proven · `@repo/core` 2 tests (`recordAudit` write + null-actor
+case).
+
+**Deferred (open DoD items, same as Module 00's remote-cache gap):**
+
+- **Playwright E2E** (SKILL.md: "full credential + Google-mock sign-in
+  flows across both surfaces") — not installed in this repo yet; the live
+  manual verification above and the Testcontainers integration suite cover
+  the same backend behavior, but no automated browser-level suite exists.
+  Real Google/GitHub OAuth credentials also aren't configured (expected —
+  no app registered yet), so social sign-in itself is wired but unverified
+  end-to-end.
+- **Proxy matcher unit tests** via `next/experimental/testing/server`
+  (testing.md's suggested tool) — not attempted; the proxy's STAFF-gate
+  behavior is covered by the live manual verification instead.
+- Local dev database now has several manually-created test users from live
+  verification (emails like `demote3-*@example.com`) — harmless, not
+  cleaned up; `pnpm db:reset && pnpm db:seed` clears them if wanted.
+
+**Next:** Module 05+ are unblocked. Whoever picks up Playwright E2E should
+start from this module's manual verification steps (recorded in this
+session's transcript, not currently written down as a runbook) as the
+scenario list to automate.
+
+---
+
+## 2026-09-01 — Module 05: `@repo/settings` + feature flags — CORE COMPLETE
+
+**Gap found first:** `packages/db/prisma/seed.ts`'s `SETTINGS` array
+predated this module and didn't cover plan.md A6's header/footer
+requirements SKILL.md names explicitly. Added 5 keys before writing the
+reader/writer against them: `header.sticky`, `header.cta`,
+`header.announcementBar`, `footer.menuColumns`,
+`footer.newsletterEnabled` (all `layout` group), and gave
+`legal.copyrightNotice` its `{year}` token per A6. Settings count: 18 → 23.
+
+**Shipped:**
+
+- `packages/contracts/src/settings.ts` — `SETTINGS_SCHEMAS`: one Zod v4
+  schema per seeded key (23 keys), `zod@4.5.4` pinned as a direct
+  dependency (already in the lockfile, pulled transitively via Better
+  Auth — no version drift risk). `SETTING_GROUPS`: key → groupName map,
+  needed so a write can resolve its cache tag (`settings:{group}`,
+  architecture.md #12, frozen) without a DB round trip. A registry-
+  completeness test (`index.test.ts`) fails if the two maps' key sets
+  ever diverge.
+- `packages/settings/src/index.ts` — reader (`loadSetting`/`getSetting`,
+  `loadPublicSettings`/`getPublicSettings`), writer (`updateSetting`),
+  feature-flag reader + evaluator (`loadFeatureFlag`/`getFeatureFlag`,
+  `evaluateVisibility`/`isFlagVisible`/`isFeatureVisible`). Cached
+  functions follow the `theme`/`rbac` precedent exactly: a pure `load*`
+  exported for tests, a `"use cache"`-wrapped `get*` for production
+  (ADR-004 — inert outside a real Next.js context, so tests exercise the
+  pure loader or mock `next/cache`).
+- **`isPublic` enforced structurally, not by convention:**
+  `loadPublicSettings` filters `isPublic: true` inside the Prisma `where`
+  clause itself — a non-public row never leaves the database for that
+  path, so there is nothing to leak regardless of what a caller does
+  with the result. Proved by a leak test in
+  `settings.integration.test.ts`. `getSetting`/`loadSetting` (the
+  any-key reader) does NOT check `isPublic` — it's documented as a
+  server-only tool whose caller is responsible for its own
+  authorization, same trust boundary `db` itself already has.
+- **Dependency direction, deliberately narrow:** `@repo/settings` depends
+  on only `@repo/db` + `@repo/contracts` at runtime — no `@repo/rbac`, no
+  `@repo/core`. architecture.md #8 fixes `core → …/settings`; taking a
+  `settings → core` edge for `recordAudit` would set up the exact cycle
+  ADR-011 already reasoned through for `recordAudit` living in `core` in
+  the first place. `updateSetting()` is therefore a pure, already-
+  authorized write (validates + writes + revalidates the tag, no
+  permission check, no audit row) — mirroring how `loadSubject` is pure
+  and `requirePermission` is the guarded wrapper around it in
+  `@repo/rbac`. The guarded end-to-end path (`requirePermission("settings.update")`
+  → `updateSetting()` → `recordAudit()`) is proved by a composition test
+  in `settings.integration.test.ts` that imports all three packages —
+  exactly the shape ADR-011 already specified for every mutation's real
+  call site — but the actual Server Action doesn't exist yet; that lands
+  with Module 09's admin settings screen.
+- **ADR-012** — `PREMIUM` feature-flag visibility defaults to staff-only
+  until an entitlement/subscription model exists (SKILL.md flagged this
+  by name as needing a documented conservative default). Rejected
+  treating `PREMIUM` as equivalent to `AUTHENTICATED`: that would grant
+  every signed-in learner a tier the flag was explicitly marked to
+  withhold. A flag-matrix truth table in `index.test.ts` pins the
+  behavior (`PREMIUM` + learner → `false`, `PREMIUM` + staff → `true`) so
+  a future entitlement model can't silently regress it.
+- Feature-flag cache tag: `feature-flags` — not one of architecture.md
+  #12's frozen four (`theme`, `settings:{group}`, `navigation`,
+  `rbac:{userId}`); minted here since flags are a separate model with no
+  assigned tag in that list. Noted in code and here rather than editing
+  the rules file.
+- `packages/settings/vitest.config.ts` — 80% coverage floor (service
+  package, testing.md #1, `settings` named explicitly). Actual: 100%
+  statements/functions/lines, 85.7% branches.
+
+**Test status:** `lint`/`typecheck` 23/23 workspace-wide (includes the two
+new packages' tasks) · `governance:check`/`check:phantom-deps`/
+`check:permission-keys` OK · `pnpm build` clean · `@repo/contracts` 1
+smoke test (schemas are pure data, exercised through `@repo/settings`'s
+suite) · `@repo/settings` 33 tests (Testcontainers MariaDB): typed
+reads + missing-key/invalid-stored-value handling, isPublic leak test,
+write → read-after-invalidate consistency, schema-rejection on write,
+the full guarded-write-with-audit composition (both the allowed-staff and
+denied-learner cases), feature-flag reads (missing key, cached entry
+point), the `PREMIUM`/`ADMIN`/`AUTHENTICATED`/`PUBLIC` flag matrix, cached
+`getSetting`/`getPublicSettings` entry points.
+
+**Deferred (open DoD item):**
+
+- **The `isPublic` lint rule** SKILL.md asks for (alongside the leak
+  test) — deferred because no `app/(public)` page exists yet to target
+  (Module 12), the same reasoning architecture.md #5 already used to
+  defer the admin/public import-boundary lint rule. The structural query-
+  level enforcement above is the real control either way; the lint rule
+  would be a second, redundant guard once there's something to check.
+- **Server Action wiring** for the admin settings-editing screen —
+  lands with Module 09 (admin shell). The package exposes every piece
+  and the composition is tested; only the thin Next.js action/route
+  connecting a form submission to `updateSetting()` doesn't exist yet.
+
+**Next:** Module 06 (`@repo/i18n`) is unblocked.
+
+---
+
+## 2026-09-01 — Module 06: `@repo/i18n` — CORE COMPLETE
+
+**Registry sweep first (Day-1 practice applied mid-project):** `next-intl`
+4.14.2 was published TODAY and got blocked outright by this repo's
+`minimumReleaseAge: 1440` supply-chain guard (security.md #15) — the guard
+doing exactly its job, not a bug to work around. Pinned `4.14.1`
+(2026-08-28, already mature) instead, which also matches `docs/memory/
+stack.md`'s existing `^4.14.1` pin. `pnpm install` then separately flagged
+`@swc/core`/`@parcel/watcher` (next-intl's transitive native deps) as
+unapproved install scripts — both well-known, reputable native addons
+(swc is the same compiler infra Next.js itself bundles); added to
+`pnpm-workspace.yaml`'s `allowBuilds` with the same trust reasoning
+already documented there for `unrs-resolver` etc.
+
+**Shipped:**
+
+- `packages/i18n/src/routing.ts` — `defineRouting`: static locale list
+  `["en", "es", "ar", "ur"]`, `localePrefix: "as-needed"` (default
+  unprefixed). Also carries `LOCALE_DIRECTION`, a static per-locale
+  `ltr`/`rtl` map — the public root layout needs `dir` synchronously for
+  `<html>`, before any DB call is possible, so this duplicates
+  `Locale.direction` the same way `@repo/theme`'s default tokens already
+  duplicate seed data (documented trade-off, not an oversight).
+- `packages/i18n/src/locales.ts` — the DYNAMIC half of the trade-off:
+  `loadActiveLocales`/`getActiveLocales` read the DB `Locale` table
+  (`isActive` scoped), tag `locales` (minted, not one of architecture.md
+  #12's frozen four — same reasoning as `@repo/settings`' `feature-flags`
+  tag). An admin flipping a locale active is instant for anything reading
+  this; a genuinely new locale code needs `routing.ts` updated and a
+  rebuild — the named trade-off SKILL.md calls out.
+- `packages/i18n/src/fallback.ts` — `resolveFallbackChain`/
+  `pickTranslation`: the frozen content-fallback chain (requested →
+  per-locale `fallbackCode` → default), with **the Arabic rule
+  generalized to every RTL locale**, not just Arabic — see ADR-007.
+  Genuinely locale-code-agnostic: the function has no `if (locale ===
+"ar")` anywhere, it just reads whatever `fallbackCode` a locale is
+  configured with.
+- `packages/i18n/src/source-hash.ts` — `computeSourceHash` (SHA-256) +
+  `isTranslationOutdated`, the OUTDATED-flip primitives SKILL.md asks for.
+  Pure functions only — the write path that calls these when a
+  Course/Lesson/GlossaryTerm source saves is Module 11's (the translation
+  tables and their `sourceHash` column already exist per Module 01's
+  schema; the CRUD that writes to them doesn't yet).
+- `packages/i18n/src/request.ts` — `getRequestConfig`, `hasLocale`-guarded
+  locale resolution, plus `onError`/`getMessageFallback`: a missing
+  message key in a non-default catalog reads from English instead of
+  throwing — necessary because SKILL.md treats non-default missing keys as
+  a CI _warning_, not a build failure, so a real visitor mid-catalog can't
+  be allowed to crash the page.
+- `packages/i18n/messages/{en,es,ar,ur}.json` — `en` and `es` complete;
+  `ar`/`ur` deliberately partial (only `common`/`notTranslated` translated)
+  — both locales are seeded `isActive: false` (ADR-007), so this is a
+  realistic mid-translation state, not a contrived test fixture.
+- **Routing wired end-to-end:** `apps/web/proxy.ts` now runs next-intl's
+  `createMiddleware(routing)` for everything except `/admin/*` (checked
+  first, returns before `intl()` ever runs); `next.config.ts` wraps with
+  `createNextIntlPlugin` (relative path required — Turbopack's next-intl
+  support rejects an absolute one, despite resolving correctly);
+  `apps/web/app/(public)` restructured to `app/(public)/[locale]/` since
+  the root `<html>` layout needs the resolved locale for `lang`/`dir`
+  (architecture doc §4.3) — a bare route-group folder has no params to
+  read, so `(public)/layout.tsx` is gone, folded into `[locale]/layout.tsx`.
+- **`global-not-found.tsx` (Next 16's `experimental.globalNotFound`):**
+  the `[locale]` layout's `hasLocale` + `notFound()` guard for an
+  unrecognized locale segment throws _before_ that layout ever returns its
+  own `<html>` shell — there is nothing above it to wrap a co-located
+  `not-found.tsx` in (ADR-006: no top-level `app/layout.tsx`). Next's own
+  internationalization + not-found docs name exactly this combination
+  ("multiple root layouts" and "root layout at a dynamic segment") as the
+  two cases `global-not-found.js` exists for. Added it — self-contained,
+  its own `<html>`, no next-intl/theme context available by design. The
+  segment-level `(public)/[locale]/not-found.tsx` still handles an
+  in-app `notFound()` called _after_ the layout has already mounted
+  (translated, uses `useTranslations`).
+- **ADR-007** — English-only at launch (architecture doc's own roadmap
+  argument: translating content is expensive, shipping the machinery
+  isn't) and the RTL-fallback rule's scope, decided together since both
+  are about the same seeded locale rows.
+- `scripts/check-catalog-completeness.mjs` (+ root script) — non-default
+  catalog missing a key = warning (printed, exit 0); no default catalog at
+  all = error. Missing-key-in-_default_-catalog is already a TypeScript
+  error at every `useTranslations`/`getTranslations` call site via
+  next-intl's own generated message types, so this script only needs to
+  check the other direction.
+- `apps/web/proxy.test.ts` — `next/experimental/testing/server`'s
+  `unstable_doesMiddlewareMatch` (testing.md's suggested tool) does not
+  exist in this installed Next 16.3.3 (checked directly, not assumed) —
+  tested by invoking the exported `proxy()` function directly with
+  constructed `NextRequest`s instead, which is one layer more direct
+  (real behavior, not matcher-pattern prediction): default locale not
+  redirected, `/es`/`/ar` not redirected away from themselves, unknown
+  locale prefix passes through untouched (its 404 is the `[locale]`
+  layout's job, verified live instead — see below), `/admin` STAFF-gate
+  redirect with `redirect=` param preserved for both `/admin` and nested
+  paths, never locale-prefixed. The matcher's own exclusion of
+  `/admin`/`/api` is asserted as a source-text check, not a hand-rolled
+  regex recompile of Next's path-to-regexp matcher syntax — reimplementing
+  that would just be a second, less-trusted copy of the thing under test.
+
+**Verified live** against the real dev server (fresh, after clearing a
+stale `.next`): `/` → `lang="en" dir="ltr"`, unprefixed; `/es` → `dir="ltr"`,
+real Spanish placeholder text rendered; `/ar` → `dir="rtl"`; `/xx` (unknown
+locale) → HTTP 404, `global-not-found.tsx` rendered; `/admin` → 307 to
+`/sign-in?redirect=%2Fadmin`, never locale-prefixed. `pnpm build` produces
+static `/en`, `/es`, plus the two RTL locales, and the parameterized
+`/[locale]` PPR fallback.
+
+**Test status:** `lint`/`typecheck` 23/23 workspace-wide ·
+`governance:check`/`check:phantom-deps`/`check:permission-keys`/
+`check:catalog-completeness` OK · `pnpm build` clean · `@repo/i18n` 22
+tests (fallback resolution table incl. ar/ur-no-fallback and a synthetic
+3-level chain, sourceHash lifecycle incl. the edit→OUTDATED→retranslate
+sequence, `loadActiveLocales`/`getActiveLocales` against Testcontainers
+MariaDB) at 100% stmts/funcs/lines, 91.7% branches (80% floor) ·
+`@repo/web` 9 proxy tests · `scripts` 23 tests total (governance +
+phantom-deps + permission-keys + the new catalog-completeness, all
+including a "run against the real live workspace" case, not just fixtures).
+
+**Deferred (open DoD items):**
+
+- **RTL smoke E2E** (Part C: `dir=rtl` assertion + no horizontal overflow,
+  `en`/`ar` both) — Playwright still isn't installed (same gap Module 04
+  deferred). The live manual verification above confirms `dir="rtl"` is
+  correctly emitted; no automated browser-level overflow check exists yet.
+- **Content translation write path** (sourceHash computation on save, the
+  OUTDATED flip itself) — the primitives are built and unit-tested; wiring
+  them into an actual save action is Module 11's (no Course/Lesson CRUD
+  exists yet to wire into).
+- `ar`/`ur` catalogs are intentionally incomplete outside `common`/
+  `notTranslated` (ADR-007: both inactive at launch) — the completeness
+  script warns on this correctly; not a bug to fix now.
+
+**Next:** Module 07 (`@repo/ui`) is unblocked.
+
+---
+
+## 2026-09-01 — Module 07: `@repo/ui` + design system — CORE COMPLETE
+
+**shadcn init, the real story:** the CLI's `--monorepo` flag turned out to
+be a scaffold-a-NEW-monorepo template switch (`templateDir:
+"next-monorepo"` in its source — checked the actual installed CLI, not the
+docs), not a retrofit for an existing Turborepo; run from the repo root it
+fails framework detection, and run from apps/web it silently does a
+single-app init into the wrong place (done once, fully reverted). The
+working flow for an existing monorepo: hand-write BOTH components.json
+files (apps/web + packages/ui, matching style, aliases pointing at
+`@repo/ui/*`) plus the tsconfig path mapping, mirroring shadcn's own
+next-monorepo template files (fetched from the shadcn-ui/ui repo), then
+`shadcn add` from apps/web — after which the CLI routes component source
+into `packages/ui/src/components/` exactly as intended. One casualty of
+the revert: `git checkout -- apps/web/package.json` restored the COMMITTED
+file, wiping this session's uncommitted Module 04/06 dependency additions
+— caught and reconstructed immediately, but it's the exact
+uncommitted-work-loss failure the repo rules warn about; lesson stands.
+
+**Shipped:**
+
+- **ADR-013** — Base UI (`@base-ui/react`, the CLI's recommended default)
+  as the primitive layer over Radix/React Aria; `render`-prop composition,
+  no Radix alongside. Init run with `--rtl`: every generated component
+  came out with logical properties (`ps-`/`pe-`/`ms-`/`me-`,
+  `inline-start`/`inline-end` data attributes) from the start.
+- **Components** (CLI-fetched, current source — not hand-copied):
+  button, input, label, dialog, dropdown-menu, table, tabs, sonner,
+  separator, field, checkbox. Plus two hand-written:
+  - `form.tsx` — react-hook-form bridge over the Field primitives
+    (SKILL.md's "form primitives wired to Zod v4 via resolver"; the
+    base-nova registry's "form" resolves to bare field.tsx with no form
+    state, so the classic Form/FormField/FormItem/FormMessage context
+    plumbing was written against the new Field components).
+  - `data-table.tsx` — TanStack Table **v8** (8.21.3 exact): SERVER-driven
+    pagination/sorting/filtering (manual* flags, updater callbacks — the
+    table never sorts or slices locally), client-side column visibility +
+    row selection, bulk actions receiving original row objects, CSV export
+    (selected rows when a selection exists, visible columns only, proper
+    quoting). v9 (9.2.x) is current but a breaking rewrite; staying on the
+    plan's named line was deliberate (stack.md note) — the opposite call
+    from the CLI 3→4 case, since here the newer line has real migration
+    cost and no repo benefit yet. Every user-facing string arrives via a
+    required `labels` prop — no hardcoded English defaults
+    (code-style.md #2).
+- **globals.css** ported to `packages/ui/src/styles/globals.css` (the ONE
+  stylesheet; both root layouts and global-not-found import
+  `@repo/ui/globals.css`, apps/web/app/globals.css deleted) with the
+  review fixes: A5.2 (`--font-sans: var(--brand-font-sans)` — the
+  reference's self-reference corrected), A5.3 (full-value vars, no
+  `rgb()` triples), A5.5 (`--text-*--line-height` pairs). Brand-extension
+  token names aligned to what `tokensToCss` actually emits
+  (`--primary-hover/-active/-subtle/-interactive` etc.). Global
+  focus-visible ring and prefers-reduced-motion kept.
+- **Curated fonts (ADR-005 contract fulfilled):** `@repo/ui/fonts` declares
+  `next/font/local` families for all 9 non-system curated keys, CSS
+  variables named exactly `--font-{key}`. Font binaries come from
+  `@fontsource[-variable]` packages (OFL-1.1) — real files through the
+  supply-chain-guarded registry rather than hand-vendored woff2 blobs.
+  `preload: false` on all nine: only the family the active theme actually
+  references is ever downloaded. `curatedFontVariables` joins the variable
+  classNames for the root layouts.
+- **Theme injection wired** (pulled forward from Module 08/12's "real
+  version" note because Module 07's DoD is unverifiable without it): both
+  root layouts call `getActiveTheme("web"|"admin")` (cached, tag `theme`)
+  and render `<style id="brand-tokens">` — id is frozen API for Module
+  14's CSP nonce. Verified live: real engine output in the page, including
+  the derived `--primary-interactive:#936b44` from `#C28D5A`, light AND
+  `.dark` blocks, and ADR-005's system-stack special case for the default
+  theme.
+- **Kitchen-sink** at `/admin/_dev/kitchen-sink` — folder literally named
+  `%5Fdev` (URL-encoded underscore), because a real `_dev` folder is
+  Next's private-folder convention and never routes. Staff-gated by the
+  (admin) layout's DB re-check; `notFound()` in production builds. Shows
+  every component + dark/RTL toggles, form with Zod validation, DataTable
+  against the server contract.
+- Granular package exports (`./components/*`, `./lib/*`, `./fonts`,
+  `./globals.css` …) — Button doesn't pull TanStack. Old `src/index.ts`
+  barrel deleted.
+
+**Verified live** (dev server, real STAFF session created via the auth API
+
+- SQL promotion, then deleted): public `/` carries `#brand-tokens` with
+  engine-derived values and all 9 font-variable classes on `<html>`;
+  kitchen-sink renders all 9 sections as STAFF (200) and 307s to
+  `/sign-in?redirect=%2Fadmin%2F_dev%2Fkitchen-sink` without a session;
+  buttons render `bg-primary` + logical `ps-`/`pe-` utilities.
+
+**Test status:** `lint`/`typecheck` 23/23 · `turbo test` 12/12 (`@repo/ui`
+14 tests: DataTable server-contract callbacks for sort/filter/pagination,
+selection + bulk-action originals, CSV export payload, column visibility,
+empty state; RTL logical-properties invariant swept across every
+layout-bearing component — the jsdom-honest version of "start/end
+alignment", since jsdom has no layout engine; keyboard-focusability +
+focus-visible opt-in) · `pnpm build` clean ·
+governance/phantom-deps/permission-keys/catalog-completeness OK
+(phantom-deps caught the template's `postcss-load-config` JSDoc type
+import — removed rather than declared).
+
+**Deferred (open DoD items):**
+
+- **axe suite (light/dark × ltr/rtl) and visual snapshots** — Playwright
+  still not installed (third module running up against this; whoever picks
+  it up now has the kitchen-sink page as the ready-made target).
+- "Zero physical-property utilities in the repo" holds for everything
+  Module 07 touched (lint + the RTL test enforce it in @repo/ui); the
+  pre-existing app scaffold pages were already clean.
+
+**Next:** Module 08 (navigation & header/footer) is unblocked — and now has
+real components to build with.
+
+---
+
+## 2026-09-01 — Module 08: Navigation & header/footer runtime — CORE COMPLETE
+
+**Shipped:**
+
+- `packages/contracts/src/navigation.ts` — `ROUTE_PATHS` registry (menu
+  rows store route KEYS, not paths) + `menuItemLinkSchema`: the
+  exactly-one-of url/routeKey rule, plus routeKey-must-be-registered.
+- `packages/core/src/navigation.ts` — `buildNavigation(menuKey, locale,
+subject|null)`. Cache shape decided deliberately: the DB read (menu tree
+  - translations + ALL flags + locales) is what's cached under the frozen
+    `navigation` tag; subject-dependent filtering runs OUTSIDE the cache per
+    request — caching per-subject would key on a user-sized space for zero
+    hit rate, and a Subject's permission Sets aren't a stable key anyway.
+    Filter chain per SKILL.md: isActive → visibility (reuses
+    @repo/settings' evaluateVisibility, ADR-012 semantics included) →
+    requiresFeature (fail-closed when the named flag doesn't exist) →
+    requiresPermission (@repo/rbac's can). Depth capped at 2; grandchild
+    rows ignored. Link-less parents whose children all prune are pruned.
+    Rows violating exactly-one are skipped defensively (contract enforces on
+    write, Module 09). Nav labels use the i18n fallback chain but take the
+    default-locale label as last resort even for RTL locales — chrome is not
+    content; one untranslated menu word beats a vanishing menu item
+    (documented at resolveLabel, consistent with ADR-007's intent).
+- `packages/core/src/social-links.ts` — active SocialLinks, cached under
+  the same `navigation` tag (same chrome, same admin surface, same
+  invalidation lifecycle).
+- **Header** (`apps/web/.../_components/header.tsx`, server component):
+  everything reads cached data so it prerenders into the static shell —
+  main menu (2-level dropdowns via Base UI menus), locale switcher
+  (ACTIVE locales only), next-themes mode toggle (ADR-008:
+  user-controlled), admin CTA + dismissible announcement bar + sticky
+  from `layout` settings, and the ONE dynamic hole: the auth-state slot
+  behind `<Suspense>` (PPR streams it; anonymous fallback is the sign-in
+  link). Text logo until BrandAsset uploads land (Module 09's Logos tab).
+- **Footer**: admin-ordered `footer.menuColumns` → one `buildNavigation`
+  per column; social links; risk disclaimer site-wide; copyright with
+  `{year}` substituted at render — where **Cache Components caught a real
+  bug**: a bare `new Date()` in the prerendered footer failed the build
+  ("unstable value while prerendering") because it would bake the
+  build-time year into the static shell forever; fixed with a
+  `"use cache"` + hourly-revalidate `getCurrentYear()`, so the year rolls
+  over at New Year without a deploy.
+- `aria-current="page"` on the active nav item via a small client NavLink
+  (the layout-rendered header can't know the pathname under PPR).
+- Seed: `footer_learn` menu (3 items) added — the `footer.menuColumns`
+  setting referenced it but nothing seeded it. nav._/footer._ chrome
+  strings added to ALL four catalogs (including ar/ur — RTL users get
+  translated chrome even while content locales stay inactive).
+- **Turbo task-graph cycle found and fixed:** `@repo/settings`'s
+  devDependency on `@repo/core` (test-only composition) collided with
+  Module 08's new `core → settings` runtime edge — turbo's graph doesn't
+  distinguish dev from prod deps. The guarded-write audit composition test
+  moved to `@repo/core` (`settings-audit.integration.test.ts`), where all
+  three packages are legal deps; settings dropped the devDependency. Along
+  the way: `vi.doMock("next/cache")` can't reach an externalized workspace
+  dep's imports — core's vitest config now aliases `next/cache` to a no-op
+  stub config-wide instead (ADR-004 reasoning, one level up).
+
+**Verified live** (dev server): header renders seeded menu from the DB
+(`aria-label="Main"`, `/glossary` link), `/es` gets locale-prefixed hrefs +
+translated chrome ("Iniciar sesión"), `/ar` renders `dir="rtl"` with Arabic
+chrome, risk disclaimer + "© 2026 …" (real substituted year) in the footer,
+sticky header on, auth slot streams (skeleton in shell → "Sign in").
+An SQL-edited setting showing stale for one render confirmed the settings
+cache actually caches (a real admin write goes through revalidateTag).
+
+**Test status:** turbo lint/typecheck/test 34/34 · build clean · all check
+scripts OK · `@repo/contracts` 8 tests (exactly-one contract, registry) ·
+`@repo/core` 15 tests (nav truth table: inactive/visibility/flag-off/
+missing-flag/permission × anonymous/learner/staff-with/without, empty-
+parent pruning, depth-2 grandchild ignore, href resolution, defensive
+skips, label fallback incl. ar; reorder round-trip against real MariaDB —
+the data path the admin-reorder E2E will drive; settings-audit
+composition).
+
+**Deferred:** axe on header nav + keyboard-operable dropdown E2E
+(Playwright, same standing gap); the browser-level admin-reorder round-trip
+(needs Module 09's menu manager UI; the data path is integration-tested);
+BrandAsset logo rendering (no uploads exist until Module 09).
+
+**Next:** Module 09 (admin shell, settings screens, theme editor).
+
+---
+
+## 2026-09-01 — Module 09: Admin shell, settings screens, theme editor — CORE COMPLETE
+
+**Shipped:**
+
+- **Mutation services in `@repo/core`** (`admin.ts`), actions stay thin
+  (ADR-011 pattern, and what makes DB-level testing possible without a
+  Next request context): `moveMenuItem` (adjacent-sibling sortOrder swap in
+  a transaction, no-op at edges), `setMenuItemActive`,
+  `setSocialLinkActive`, `saveTheme` (validateTheme is the SERVER-side
+  gate — a blocking palette is refused before any write), `activateTheme`
+  (transactionally the only active row — preset switch/rollback),
+  `loadThemePresets`. Every mutation writes its audit row and revalidates
+  its tags. `@repo/settings` gained `setFeatureFlagEnabled` (pure write,
+  revalidates flags + navigation tags) and the admin readers
+  `loadAllSettings`/`loadAllFeatureFlags` (server-only, includes
+  non-public rows — documented never to cross into public RSC payloads).
+- **Server actions** (`_actions/admin-actions.ts`): requirePermission
+  FIRST line of every one (settings.update / features.manage /
+  navigation.manage / social.manage / theme.update), Zod-parsed inputs
+  (security.md #6), then the service. Screens' own reads ALSO
+  requirePermission (settings.view etc.) — a hidden sidebar entry is UX,
+  not the boundary.
+- **Admin shell**: permission-filtered sidebar (can() over a static
+  entries def), path-derived breadcrumbs, sign-out, Toaster,
+  NextIntlClientProvider (admin is en-only by design for now — no [locale]
+  segment, request config falls back to the default locale; admin.* keys
+  exist only in en.json, so catalog-completeness will rightly warn if
+  other locales ever matter for admin).
+- **Screens**: dashboard (live counts), settings CRUD generated from the
+  DB registry with type-driven fields
+  (BOOLEAN→checkbox, TEXT/JSON→textarea with JSON round-trip,
+  NUMBER/COLOR/STRING/IMAGE/SELECT→input; the server-side Zod schema
+  remains the real validation), feature flags (grouped toggles),
+  navigation manager (up/down reorder + active toggle per item — the
+  drag-reorder + translation side panel are deferred polish; the
+  tag-invalidation data path is what matters and is tested), social
+  links, and the **theme editor**: tabs mirroring the engine
+  (Colors & Branding from BRAND_FIELD_REGISTRY, Layout & Display with
+  curated-font selects, Theme Modes side-by-side light/dark, Presets with
+  activate), inline validateTheme results (blocking vs advisory with
+  remedy text), derived interactive states shown READ-ONLY (ADR-003).
+- **Screens never touch @repo/db** — first drafts did, caught against
+  architecture.md #1/#2 during typecheck (apps/web deliberately doesn't
+  declare @repo/db) and moved into `@repo/core`'s `admin-reads.ts`
+  (loadAdminMenus/loadAdminSocialLinks/loadAdminDashboardCounts/
+  loadActiveThemeTokens). The missing-dependency error doing exactly what
+  the phantom-deps discipline promised.
+- Two Cache Components lessons this module: the dashboard page (no
+  page-level requirePermission — the layout gate covers it) needed an
+  explicit `await connection()` before its uncached DB reads; and core's
+  test suite now aliases `next/cache` to a no-op stub config-wide
+  (vi.doMock can't reach an externalized workspace dep's imports).
+
+**Verified live** (dev server, real STAFF users, then deleted): role-less
+STAFF user → 500 "Missing permission: …" on every screen (denied path — a
+friendly 403 boundary is polish, the security behavior is correct: no data,
+no mutation); after super_admin grant, all six screens 200 with real DB
+content (settings rows incl. value="MBX Pro", theme tabs + mbx-pro-default
+preset, shell chrome with breadcrumbs/sign-out). The role grant needing a
+dev-server restart to show up was getSubject's rbac:{userId} cache working
+as designed — the SQL grant bypassed invalidateSubject; Module 10's real
+role-assignment UI calls it.
+
+**Test status:** turbo lint/typecheck/test 34/34 · build clean (all six
+admin routes ƒ dynamic) · all check scripts OK · `@repo/core` 19 tests
+(+5 this module: reorder swap + edge no-op + audit row, active toggles +
+audit, saveTheme refusing a blocking palette with nothing persisted,
+saveTheme happy path + audit + activateTheme round-trip as the only
+active row).
+
+**Deferred:** Playwright E2E per screen (happy/denied, axe) — standing gap;
+drag-reorder + menu translation side panel; live preview iframe;
+BrandAsset/logo uploads (needs Module 11's MediaAsset + S3 pipeline);
+admin catalog translations beyond en.
+
+**Next:** Module 10 (users, roles, employees).
+
+---
+
+## 2026-09-01 — Module 10: Users, roles, employees — CORE COMPLETE
+
+**Shipped (services in `@repo/core`, screens thin on top):**
+
+- `users.ts` — `listUsers` (the server-driven DataTable contract: SQL-side
+  pagination/sort/search/type/status filters, pageCount), `setUserStatus`
+  (deactivation ALSO deletes the user's sessions — security.md #11 made
+  operational), `assignRole`/`removeRole` (canAssignRole strict-< enforced
+  SERVER-side; the escalation test asserts refusal AND zero rows written),
+  `setPermissionOverride`/`removePermissionOverride` (reason REQUIRED and
+  audited — a DENY beats everything, which is exactly why), all with
+  `rbac:{userId}` invalidation. Last-super_admin protections
+  (`LastSuperAdminError`) on demotion and deactivation both.
+- `roles.ts` — permission-matrix loader grouped by groupName;
+  `setRolePermission` (system roles refuse edits — clone-only; strict-<
+  level guard; flushes every member's subject tag), `cloneRole`,
+  `loadUserDetail`, `loadAssignableRoles`.
+- `employees.ts` — `listEmployees`, `buildOrgChart` (reportingToId tree),
+  and `offboardEmployee`: employee → TERMINATED + linked user INACTIVE +
+  sessions deleted + audit row in ONE interactive transaction. The
+  SKILL.md-required **fault-injection atomicity test** works through an
+  explicit test-only `_afterStatusWrite` hook inside the transaction: a
+  thrown "revocation failure" rolls back employee status, user status,
+  sessions, and the audit row — all four asserted.
+- **Screens**: /admin/users on the shared DataTable, genuinely
+  server-driven (table state lives in the URL; the page re-queries via
+  listUsers), bulk activate/deactivate + CSV export + row links;
+  /admin/users/[id] detail (role chips + assign, overrides with required
+  reason, 404-not-403 on missing id per security.md #7); /admin/roles
+  (grouped permission matrix — system roles read-only with Clone,
+  non-system rows live-toggle); /admin/employees (list + confirm-dialog
+  offboard + org chart). Sidebar gained users/roles/employees entries,
+  permission-filtered.
+- One real RSC lesson: DataTable's function-valued labels
+  (`page(p, total)`) can't cross the server→client boundary — "Functions
+  cannot be passed directly to Client Components" at runtime with a 500
+  wrapping an otherwise-rendered page. Label FUNCTIONS are now constructed
+  client-side from plain strings.
+- Audit FK reality check: AuditLog.userId is a real foreign key, so test
+  actors must be real user rows — a fabricated actor id fails the
+  constraint (good: audit rows can't reference ghosts).
+
+**Verified live** (dev server, super_admin test user, then deleted):
+/admin/users 200 with server-side filter+sort via URL params ("Page 1 of
+1", the filtered row only), user detail with roles + overrides sections,
+roles matrix rendering the seeded 59-permission registry, employees +
+org chart. Also re-hit both cache-discipline behaviors from Module 09
+(PENDING_VERIFICATION user correctly bounced by loadSubject's ACTIVE
+check; SQL-side promotion invisible until the subject cache flushed).
+
+**Test status:** turbo 34/34 · build clean · check scripts OK ·
+`@repo/core` 28 tests (+9: escalation refused with no write + no audit,
+equal-level refused, higher-level grant lands with audit,
+last-super_admin blocked for demotion AND deactivation then allowed with
+a second SA, suspension revokes sessions, override reason required +
+DENY audited with reason text, listUsers pagination/sort/filter against
+fixtures, offboarding happy path, offboarding fault-injection rollback).
+
+**Deferred:** Playwright E2E per screen (standing); date-range filter and
+per-row action gating nuances (Support-sees-reset-password) — need real
+role fixtures beyond super_admin to matter; employee CRUD forms
+(create/edit — list/offboard/org-chart shipped; department/designation
+admin screens when a real need lands).
+
+**Next:** Module 11 (content system).
+
+---
+
+## 2026-09-01 — Module 11: Content system — SERVICES COMPLETE (editors/media deferred)
+
+**Shipped (`@repo/core/src/content.ts` + glossary admin slice):**
+
+- **Status machine, frozen as data** (`CONTENT_TRANSITIONS`): DRAFT →
+  IN_REVIEW → SEO_REVIEW → APPROVED → SCHEDULED/PUBLISHED → ARCHIVED →
+  DRAFT, with DRAFT→PUBLISHED and IN_REVIEW→APPROVED conspicuously absent.
+  One `transitionContentStatus(actor, entity, id, to)` covers
+  courses/lessons/glossary; publishing transitions additionally require
+  the entity's `*.publish` permission checked against the actor INSIDE the
+  service.
+- **ADR-009** — rich text stored as sanitized HTML (not Tiptap JSON);
+  `sanitizeRichText()` via sanitize-html 2.17.7 with a Tiptap-vocabulary
+  allowlist, https/http/mailto only, zero inline styles. Sanitization on
+  SAVE (security.md #8), so the boundary shipped with the services — the
+  Tiptap editor UI (Part F lock untouched) drops in later with zero server
+  changes because HTML is its native interchange.
+- **Translation lifecycle wired to real rows** — Module 06's primitives
+  finally get their write path: saving the DEFAULT locale recomputes
+  sourceHash and flips stale siblings → OUTDATED (idempotent re-save
+  flips nothing); saving a non-default locale stamps the current source
+  hash → TRANSLATED; `listOutdatedGlossaryTranslations()` is the admin
+  queue.
+- **Slug change → 301 Redirect row**, locale-prefix aware
+  (`/glossary/spread-old` and `/es/glossary/diferencial` both covered) —
+  `glossaryTermPath()` is the one place that URL shape lives; Module 12
+  renders from it.
+- Soft delete/restore with audits; `createGlossaryTerm`;
+  `loadGlossaryAdminList` (per-locale translation statuses + legal next
+  transitions precomputed).
+- **/admin/glossary** — the whole pipeline on one screen: create, edit via
+  the guarded actions (textarea for now, per ADR-009), status-machine
+  buttons rendering only LEGAL transitions, OUTDATED queue panel, soft
+  delete/restore. Sidebar entry added (glossary.view).
+
+**Test status:** turbo 34/34 · build clean (`/admin/glossary` ƒ) · checks
+OK · `@repo/core` 42 tests (+14: illegal transitions incl.
+review-not-skippable, full happy path, publish refused without
+glossary.publish then succeeds with it + publishedAt set, XSS suite
+(script tags, event handlers, javascript: URLs, style attrs/tags,
+Tiptap vocabulary preserved), slugify, EN-edit→ES-OUTDATED→retranslate→
+TRANSLATED→idempotent-resave lifecycle on real rows, sanitize-on-save
+reaching the row, slug redirects in both locale shapes, soft-delete
+round trip with both audits). Live: /admin/glossary renders as staff.
+
+**Deferred:** course/module/lesson editor screens (services are
+entity-generic where it matters — the status machine — and the glossary
+slice is the template); MediaAsset + S3 presigned uploads (no storage
+infra provisioned); Tiptap editor UI (ADR-009 pins the interchange);
+ContentRelation linking UI; per-lesson translation screens.
+
+**Next:** Module 12 (public site).
+
+---
+
+## 2026-09-01 — Module 12: Public site — CORE COMPLETE (glossary + config-driven home)
+
+**Shipped:**
+
+- **`@repo/core/src/public-content.ts`** — public reads, cached under
+  `content` and query-scoped to PUBLISHED + non-deleted (draft content
+  structurally can't reach the public payload, same discipline as
+  loadPublicSettings): `getPublishedGlossary(locale)` (per-term fallback
+  chain — an RTL locale with no translation contributes NOTHING, ADR-007),
+  `getGlossaryTermBySlug(locale, slug)` (per-locale slug lookup, hreflang
+  alternates, `requestedLocaleMissing` for the not-translated notice),
+  `getRedirect(fromPath)` (the 301 rows content.ts writes),
+  `loadGlossarySitemapEntries()`.
+- **/[locale]/glossary** — A–Z grouped list, feature-gated: glossary flag
+  off → `notFound()` (the "disabled features 404, not blank" test made
+  real); **/[locale]/glossary/[slug]** — sanitized-HTML render
+  (`dangerouslySetInnerHTML` of ALREADY-sanitized content per ADR-009),
+  ADR-007 notice when the requested locale's chain yields nothing,
+  old-slug → `permanentRedirect` via the Redirect table, generateMetadata
+  with the seo.titleTemplate setting + hreflang alternates for every
+  locale that actually has a translation.
+- **Homepage assembled from `home.sections`** — order/visibility are DATA:
+  hero (site.tagline), glossary spotlight (live published terms),
+  risk-disclaimer section, and honest named stubs for sections whose
+  verticals haven't landed. An admin reorder/disable is a settings write
+  away, no deploy.
+- **sitemap.ts** (per-locale static pages + every published translation's
+  locale/slug pair) and **robots.ts** (disallow /admin + /api — the
+  crawl-side half of ADR-006's same-origin split).
+- Two more Cache Components rulings: the uncached redirect lookup had to
+  become cached (`getRedirect`, same `content` tag — slug edits already
+  revalidate it), and the [slug] page needed `export const instant =
+false` — it can end in `permanentRedirect()`/`notFound()`, which must
+  set the HTTP status, impossible from a streamed hole (the exact Module
+  04 admin-layout lesson, third occurrence, now reflexive).
+
+**Verified live:** /glossary lists the seeded published term; /glossary/pip
+renders the sanitized body; /es/glossary/pip-es renders Spanish;
+/ar/glossary OMITS the untranslated term (0 links) and /ar/glossary/pip
+404s — ADR-007 observed end to end (after aligning the dev DB's ar/ur
+`fallbackCode` rows, which predated ADR-007 — seed upserts preserve
+existing values by design, third instance of that pattern); sitemap.xml
+carries both locale slugs; robots.txt disallows /admin + /api; the
+homepage renders hero + live glossary spotlight + stubs in seed order.
+
+**Test status:** turbo 34/34 · build clean (robots ○, sitemap ƒ, glossary
+routes registered) · checks OK · `@repo/core` 46 tests (+4: published-only
+scoping with a draft proving absent, es chain resolution + ar omission,
+per-locale slug + redirect-table round trip, sitemap feed excludes
+unpublished).
+
+**Deferred:** learn area (needs Module 11's course/lesson editors first),
+static Page model, JSON-LD, Lighthouse CI budgets (Module 14 continuous),
+Core Web Vitals budget enforcement, full E2E journeys (Playwright,
+standing).
+
+**Next:** Module 13 (market layer).
+
+---
+
+## 2026-09-01 — Module 13: Market layer — CORE COMPLETE
+
+**Shipped:**
+
+- **`@repo/utils` calculators** (its first real code): `pipSize`
+  (JPY-quote awareness), `pipValue` (quote + base currency per pip),
+  `positionSize` (risk-fraction → lots, with the sanity identity risking
+  exactly balance × riskFraction), `marginRequired`. Pure functions, no
+  I/O, range-checked inputs. 16 hand-computed table tests; coverage 100%
+  stmts/funcs/lines, 95.8% branches (90% floor, testing.md).
+- **`@repo/core/src/market.ts`** — the provider abstraction:
+  `MarketDataProvider` interface; `alphaVantageProvider` (treats
+  AlphaVantage's 200-with-Note rate-limit responses as failures, rejects
+  malformed payloads rather than returning NaN); `resolveProvider(env)`
+  keyed by `MARKET_DATA_PROVIDER` (names added to .env.example, values
+  never — security.md #10); `createMarketService` — fresh rate cached at
+  the provider-refresh TTL plus a long-lived stale copy, **degrade to
+  stale (flagged `stale: true`) when the provider fails, throw only when
+  no stale copy exists** — a market widget must degrade, never crash the
+  page. Rates are never persisted per-tick (the architecture doc's
+  warning): Redis-shaped `RateCache` only. The cache is an injected
+  interface — Redis in production (same ioredis the auth package uses),
+  a Map in tests.
+- **MSW** (2.15.0, the testing.md-mandated network-edge mock — its ONE
+  sanctioned use) mocks AlphaVantage for the provider contract tests:
+  good payload, rate-limit Note, malformed payload, HTTP 503; service
+  tests: TTL args (60s fresh / 24h stale), cache-hit short-circuit,
+  degrade-to-stale round trip, no-stale throw. msw's postinstall
+  (support-message print) added to allowBuilds with rationale.
+- One turbo-parallel flake noted: `@repo/ui`'s jsdom suite failed once
+  under a fully-parallel 12-task run and passed standalone and on re-run
+  — environment startup contention, not a product failure; watch for
+  recurrence before adding machinery.
+
+**Test status:** turbo 34/34 (after the noted re-run) · build clean ·
+checks OK · `@repo/core` 55 tests (+9 market) · `@repo/utils` 16 tests at
+the 90% floor.
+
+**Deferred:** historical-series persistence and economic-calendar sync
+(need their own models/migration — none exist in the schema yet, a
+schema-change ADR when scoped); admin market config screens (market.*
+gates exist in the permission registry); public rates widget (Module 12's
+forex_rates home section stub is the slot); Redis-integration test of the
+production RateCache binding (contract is trivial; ioredis is already
+exercised by auth's suite).
+
+**Next:** Module 14 (hardening & launch gate — continuous).
+
+---
+
+## 2026-09-01 — Module 14: Hardening & launch gate — CONTINUOUS (first hardening pass landed)
+
+**Shipped this pass:**
+
+- **Security headers, per-path** (proxy.ts, security.md #14/ADR-006):
+  enforced now on every response — `X-Content-Type-Options: nosniff`,
+  `Referrer-Policy: strict-origin-when-cross-origin`, minimal
+  `Permissions-Policy`, `X-Frame-Options` DENY on /admin vs SAMEORIGIN
+  public.
+- **CSP, report-only first** (plan.md: "report-only soak then enforce"):
+  full policy (default/script/style/img/font/connect/base-uri/form-action/
+  object-src/frame-ancestors), stricter frame-ancestors on /admin.
+  **Nonce-based on the admin surface**: the proxy mints a per-request
+  nonce, forwards it as a request header, and the (fully dynamic) admin
+  layout attaches it to `#brand-tokens` — verified live: the CSP header's
+  nonce and the style element's nonce attribute match exactly. The PUBLIC
+  surface deliberately does NOT get a nonce: its pages are static/PPR
+  shells and a per-request nonce would force them dynamic, which
+  architecture.md #6 forbids — the enforce-time plan there is a hash-based
+  style-src allowance for the cached brand-tokens css (open item below).
+- **CI**: `pnpm audit --audit-level high` and `check:catalog-completeness`
+  added to the verify job.
+
+**Launch gate checklist (living — updated each hardening pass):**
+
+- [x] STAFF gate + server-side re-check on every /admin route (M04, live-
+      probed anonymous + learner + role-less staff repeatedly since)
+- [x] requirePermission first-line on every mutation; audit row on every
+      write; deny > super_admin > allow frozen with tests (M03/09/10)
+- [x] Zod-parsed inputs at every action boundary (M05+)
+- [x] Server-side sanitize-on-save + XSS regression suite (M11, ADR-009)
+- [x] Sessions DB-backed + revoked on deactivation/offboarding (M04/M10)
+- [x] Rate limiting + exponential-backoff lockout (M04, security.md #13)
+- [x] Security headers enforced; CSP report-only with admin nonce (this pass)
+- [x] Supply-chain: minimumReleaseAge ON (caught next-intl live),
+      allowBuilds curated with rationale, audit in CI
+- [x] isPublic settings + published-content scoping at the QUERY level
+- [ ] CSP: soak report-only, then ENFORCE (needs report ingestion + the
+      public hash-based style-src)
+- [ ] Automated IDOR/probe suite incl. learner-session probes on every
+      /admin/* route (Playwright — the standing gap; manual probes done
+      every module)
+- [ ] Lighthouse CI budgets on public routes (the ADR-006 bundle-isolation
+      backstop)
+- [ ] Backup/restore runbook for MariaDB; error tracking (Sentry) +
+      structured logging
+- [ ] Load smoke (k6); OWASP ASVS L1 self-audit pass
+- [ ] SEED_ADMIN_PASSWORD absent in production env + forced reset flow
+
+**Test status:** turbo 34/34 · build clean · format:check clean (one
+repo-wide `pnpm format` run landed with this pass) · all check scripts OK ·
+proxy suite still 9/9 with headers applied · headers + nonce round-trip
+verified live on both surfaces.
+
+**All 14 modules now have their core landed.** The recurring deferred
+theme across 04–14 is ONE gap: Playwright (E2E journeys, axe, RTL smoke,
+IDOR suite, admin-reorder round trip, visual snapshots). Whoever picks it
+up has ready-made targets: the kitchen-sink page, the seeded glossary
+term, and every DEVLOG "Verified live" section as the scenario scripts.
+
+---
+
+## 2026-09-01 — Addendum: Design review pass (screenshot-driven) + THE spacing-namespace bug
+
+Playwright (pinned 1.62.1) + Chromium are now installed — the design
+review ran against real screenshots (desktop 1280 / mobile 390, LTR + RTL,
+public + admin signed-in) instead of curl'd markup. Found and fixed, in
+order of severity:
+
+- **`--spacing-sm` et al. broke every constrained container in the app.**
+  The reference globals.css's named spacing scale
+  (`--spacing-xs/sm/md/…`) is a live Tailwind v4 NAMESPACE COLLISION:
+  sizing utilities resolve t-shirt names from the spacing scale too, so
+  `max-w-sm` compiled to **8px** (and max-w-xs/-3xl/… to 4–48px) — the
+  sign-in card, footer columns, and every admin `max-w-*` page collapsed
+  to min-content. Invisible to lint/typecheck/curl (the classes exist and
+  the rules compile); found only via a computed-style probe in the real
+  browser (`maxWidth: "8px"`). The named scale is deleted with an
+  explanatory comment in its place; the two `px-md`-style usages moved to
+  the default numeric scale. This also retroactively explains the "broken
+  design" screenshot that triggered this review.
+- **`useSearchParams()` in the sign-in form** blocked prerendering
+  (Cache Components) — the redirect param is only needed at submit time,
+  so it now reads `window.location.search` in the handler; no hook, no
+  Suspense needed.
+- **Cache Components × next-intl static shells, resolved structurally:**
+  three whack-a-mole "runtime data during prerendering" failures in one
+  day (nav getTranslations, glossary-list Links, home-spotlight Links) —
+  `instant = false` moved UP to the public [locale] LAYOUT as the single
+  blocking boundary (every public read is cached + tag-invalidated, so
+  blocking is a cache hit), page-level flags removed. Revisit when
+  next-intl ships static Cache Components support.
+- **Design fixes from the screenshots:** footer rebuilt as a responsive
+  grid (brand block spanning 2 cols on lg, link columns, newsletter —
+  replacing bare space-between that stretched columns to the edges);
+  sign-in got brand context above a properly padded card + full-width
+  submit; hero no longer renders the same sentence twice (subtitle now
+  site.description, which is actually different text); public-nav desktop
+  breakpoint moved md→lg (7 items + right cluster overflow at 768px);
+  glossary prose selectors extended to the sanitizer's full vocabulary
+  (h3/h4, blockquote, code, pre, tables, ol).
+- **Maintainability:** every admin screen now composes `AdminPage` /
+  `AdminSection` (_components/admin-page.tsx) — the page-header rhythm
+  and card treatment live in ONE place instead of eight drifting copies.
+- **Verified in screenshots after the fixes:** sign-in card at its real
+  384px; mobile hamburger nav opens with all 7 items; admin sidebar
+  collapses to a topbar menu on mobile with the users DataTable scrolling
+  horizontally; /ar fully mirrored with the untranslated glossary
+  spotlight correctly ABSENT (ADR-007, now observable); footer grid
+  populated (dev DB needed a re-seed for footer_learn).
+- **Noted, not ours:** Next dev-mode's instant-UI validator crashes on its
+  own invariant ("Cannot access moduleLoading without a work store. This
+  is a bug in Next.js.") — dev-overlay noise on instant=false routes;
+  pages 200, prod builds clean. Also: `turbo test` under a RUNNING dev
+  server flakes a random Testcontainers suite from resource contention —
+  stop the dev server before full sweeps (all green runs did).
+- The ad-hoc screenshot harness lives in the session scratchpad; the
+  browser install unblocks the real Playwright suite (the standing
+  checklist item) for whoever formalizes it.
+- **Follow-up from the next dev insight ("uncached data during a
+  navigation" pointing at auth()):** the public header's auth slot was
+  calling the AUTHORITATIVE `auth()` (cookie cache deliberately bypassed —
+  a DB/Redis round trip) on every public navigation. That rigor belongs to
+  the admin boundary; a header greeting is display, not authorization. The
+  slot is now a CLIENT chip hydrating from `/api/auth/get-session` (which
+  honors the signed cookie cache), so the public server shell carries zero
+  per-request reads — `auth()` no longer appears anywhere under
+  `(public)`. Verified live in both states (anonymous → "Sign in",
+  signed-in → user name). Security boundaries unchanged: proxy gate,
+  admin layout's loadSubject re-check, requirePermission in every action.
+
+---
+
+## 2026-09-02 — Addendum: the default theme couldn't be saved — Module 02's deferred bill, paid
+
+A user pressing Save on the UNTOUCHED default theme got 7 blocking
+validation errors. This was the exact gap Module 02's DEVLOG + a
+deliberately-documenting test flagged ("the shipped defaults do NOT clear
+their own validation… for whoever owns brand/design values") — the theme
+editor made it a live dead end. Two distinct defects:
+
+1. **Engine bug (the bigger one):** button-label candidates were white +
+   `surface.textPrimary` — but dark mode's textPrimary is itself light, so
+   the validator (and `readableOn`) compared every fill against TWO light
+   inks. Any mid-tone fill — the brand `#C28D5A` included — "had no
+   legible label" in dark mode despite a dark ink reading at 6.3:1 on it.
+   A fill's label ink is a property of the FILL, not the surface mode:
+   both `tokensToCss` and `validateMode` now use fixed
+   `INK_LIGHT`/`INK_DARK` (#FFFFFF/#1A1A1A) candidates. Bonus correctness
+   visible in the CSS snapshot: dark mode now emits
+   `--primary-foreground:#1A1A1A` (legible) where it used to emit white at
+   2.9:1.
+2. **Default values that genuinely fail:** `success #3382E2` (best label
+   4.49:1) and `error #E23C36` (4.26:1) nudged to their own
+   validator-derived remedies `#2D72C7`/`#D93A34`; light/dark
+   `borderMedium` (1.53:1 / 1.69:1 vs the 3:1 input-border floor) raised
+   to `#8F8F8F`/`#6B6B67`. Brand identity — primary/secondary/accent —
+   untouched, keeping Module 02's "the engine doesn't re-pick brand
+   colors" line: these are status/neutral tokens. Updated in @repo/theme
+   AND packages/db/prisma/default-theme-tokens.json (the documented
+   hand-sync pair); dev DB re-seeded (theme upsert refreshes tokens).
+
+The Module 02 documenting-test flipped to the real contract: **the shipped
+defaults clear their own validation — zero blocking, canSave true.**
+Verified end to end in the browser (Playwright): sign in → /admin/theme →
+Save → "Saved" toast, validation panel showing only Advisory rows with
+their derived remedies.
+
+That same screenshot exposed one more ported-stylesheet gap: base-nova
+components style orientation via `data-horizontal:`/`data-vertical:`
+CUSTOM variants that the shadcn preset normally defines in its generated
+globals.css — Base UI emits `data-orientation="…"`, so without the
+`@custom-variant` definitions the Tabs root's `flex-col` never matched and
+the tab strip rendered as a stretched column beside its content. Both
+variants added to @repo/ui's globals.css; theme editor tabs verified as a
+proper horizontal strip.
+
+Sweep: turbo 34/34 · build 37/37 · theme suite 33 tests (snapshot
+deliberately updated — the diff IS the fix) · governance OK.
+
+---
+
+## 2026-09-01 — Addendum: /sign-in page (Module 04's deferred UI slice)
+
+Local-run session surfaced the gap directly: the proxy and admin layout
+redirect to `/sign-in`, but no such page existed (404) — API-only sign-in
+was fine for curl-driven verification, useless in a browser. Landed
+`(public)/[locale]/sign-in`: a minimal credential form posting to
+`/api/auth/sign-in/email` (the ONLY correct entry point — ADR-001 finding
+#4, rate limiting lives on the HTTP handler), honoring the `?redirect=`
+param with an open-redirect guard (same-origin paths only, `//` rejected),
+`robots: noindex`, strings in all four catalogs. Verified live in en and
+es. Dev admin login for local work: `admin@mbxpro.com` (password shared
+out-of-band; the stale hash from an earlier session was replaced —
+argon2id via the same @node-rs/argon2 path the auth package uses).
+
+---
+
+## 2026-09-02 — changes-01: Admin UX overhaul (Modules 09/10 extension)
+
+**What shipped** (docs/changes/changes-01.md — mirror the MBX Pro admin's
+layout/flow using this repo's own design system; plan approved in-session):
+
+- **@repo/ui grew 15 components.** shadcn base-nova generated: skeleton,
+  spinner, card, badge, switch, select, textarea, avatar, alert-dialog.
+  Hand-built: `command` (palette primitives on Base UI's own
+  Autocomplete-in-a-Dialog recipe — deliberately NOT shadcn's `command`,
+  whose cmdk dependency drags four @radix-ui packages; ADR-013 kept
+  intact), `confirm-dialog` (the one confirmation pattern every
+  destructive action now shares), `page-loader`/`section-loader`, and
+  `theme-provider` + `mode-toggle` promoted from the public surface
+  (labels via props — @repo/ui still carries no catalogs).
+- **Admin shell v2:** grouped icon sidebar with active state + user block;
+  topbar = ⌘K global search, notification bell, dark/light toggle
+  (ThemeProvider now mounted on the admin surface — this also fixes the
+  latent bug where sonner's Toaster called useTheme() with no provider),
+  profile dropdown (image-6). Breadcrumbs translate known segments.
+  First `loading.tsx` in the repo at `(admin)/admin/` (PageLoader).
+- **Settings IA (image-3/4):** `/admin/settings` is a card-grid hub;
+  `/admin/settings/[group]` renders one registry group with a sub-sidebar
+  (`settings-shared.ts` builds the permission-filtered index once).
+  **Social links** moved under it at `/admin/settings/social` with full
+  modal CRUD + delete confirmation (`/admin/social` now redirects); core
+  gained create/update/deleteSocialLink (audit + `navigation` tag).
+- **Roles (image-1/2):** list page (users count, permissions x/total,
+  System/Custom badge, Open) + per-role detail page: profile card, meta
+  edit modal, clone, delete (confirm; custom-only, blocked while
+  assigned — RoleInUseError), and the grouped permission panel with
+  grant-all / per-group select-all / capability search, autosaving
+  optimistically (single-key action or new bulk `setRolePermissions` =
+  one audit row + one rbac flush per member). The whole-matrix screen is
+  superseded. NOTE the inherited semantic, now load-bearing in tests:
+  `canAssignRole` requires `permissions.assign`, so role editing
+  effectively needs roles.manage AND permissions.assign.
+- **Users:** wired the type/status filters listUsers always supported,
+  status badges, translated headers (previously raw English strings), row
+  kebab (view / activate / suspend / reset password — permission-gated
+  flags from the server), confirmations on all status changes incl. bulk.
+  Detail page rebuilt as sectioned cards; role/override removals now
+  confirm. **Admin password reset is new**: `users.password.reset` action
+  → @repo/auth `setUserPassword` (Better Auth `$context` — same Argon2id
+  path sign-in verifies; NOT the admin plugin's endpoint, which would
+  demand Better Auth's own role field) → core `recordPasswordReset`
+  (sessions revoked + audit + notification).
+- **Employees:** list is a real table; new `/admin/employees/[id]` detail
+  page (basic info + edit modal, employment status select — TERMINATED
+  deliberately absent, that's offboarding's transaction — linked-account
+  card with role controls + password reset, offboard kept).
+- **Profile** (`/admin/profile`): identity card, own-info form, change
+  password via Better Auth's changePassword (current-password check,
+  other sessions revoked), account info.
+- **Global search:** `searchAdmin(subject, query)` in core — every
+  section gated by can() server-side; palette shows the permission-
+  filtered page index instantly, debounced server hits per section.
+- **Notifications (ADR-014, new):** `Notification` model + migration
+  (hand-trimmed: `migrate dev` bundled spurious CREATE INDEX statements
+  for account/session/twoFactor userId indexes the init migration already
+  creates inline — a Prisma 7/MariaDB prefix-length diff false-positive
+  that failed apply with "Duplicate key name"; expect it to reappear on
+  future migrate-dev runs). Core: recordNotification (best-effort by
+  contract), list/countUnread/markRead/markAllRead (self-scoped —
+  foreign-id mark is a no-op). Emitted at: role assigned/removed (STAFF
+  targets only), admin password reset, employee status change. Bell
+  renders text from the catalog by `type` with the `title` column as
+  interpolated DETAIL (data, not baked English).
+- **Contracts:** `admin.ts` — role create/update/bulk-permissions, social
+  CRUD, employee update/status, reset/change password (8..128 mirroring
+  the auth config), own profile, search query. All new actions parse
+  through them.
+
+**i18n:** ~100 new `admin.*` keys in all four catalogs (en/es/ar/ur).
+
+**Tests:** contracts 18/18 (new admin.test.ts); core
+changes01.integration.test.ts 19/19 (Testcontainers) — role-manager
+guards (level/system/in-use, no-write on reject), bulk grant single audit
+row, social CRUD round-trip, notification scoping incl. STAFF-only
+emission, password-reset session revocation, employee status guard,
+searchAdmin permission scoping. Full sweep: lint/typecheck 12/12 green,
+phantom-deps OK. **E2E for the new screens stays on the standing
+Playwright backlog** with the rest of Modules 09/10's deferred E2E.
+
+**No new permission keys** — everything rides existing seeded keys
+(users.password.reset finally has a consumer). Notifications need none
+(self-scoped by construction; ADR-014 records why).
+
+---
+
+## 2026-09-02 — Addendum: theme Save could fail with "An unexpected response
+
+was received from the server"
+
+Reported live: saving the theme editor sometimes threw that generic
+Next.js client error instead of a real message. Root cause was in
+`apps/web/proxy.ts`'s `/admin` STAFF gate, not in the theme code path
+itself. The gate reads Better Auth's signed cookie cache
+(`packages/auth`'s `session.cookieCache`, `maxAge: 5 * 60`) as a fast,
+DB-free check (ADR-006: gate, not boundary). The theme editor is a slow,
+deliberate edit (Colors/Layout/Modes/Presets tabs) — spend more than 5
+minutes on it before hitting Save and the cache goes stale even though
+the real session (`expiresIn`: 7 days) is still good. Save is a Server
+Action POST; the proxy redirected that request to `/sign-in` same as it
+would a page navigation, but Next.js's client-side action runtime can't
+parse a redirect as an action response — it surfaces as the generic
+"unexpected response" error instead of any real one.
+
+Fix: the proxy now recognizes Server Action requests (`next-action`
+header) and skips its own redirect for them, letting the request fall
+through to the real boundary — `requirePermission()` inside
+`saveThemeAction` re-verifies against the database (security.md #1/#3)
+and throws a normal `UnauthenticatedError`/`ForbiddenError` that the
+theme editor's existing `catch` block already turns into a toast. No
+security change: the proxy gate was never the authorization boundary for
+actions, only an optimization: a stale-cache action request now gets a
+real, correctly-serialized error instead of a broken one. Page
+navigations to `/admin/*` are unaffected — still redirected on a stale
+cache, same as before.
+
+Regression test added: `apps/web/proxy.test.ts` — a Server Action request
+with a stale/missing cookie cache is asserted NOT to redirect. Sweep:
+`proxy.test.ts` 10/10 green.
+
+---
+
+## 2026-09-02 — Addendum: blocking input-border error had no way forward
+
+Follow-on from the Save-error addendum above: once the generic client
+error was fixed, editing the light/dark `background` alone (not the
+border itself) could legitimately trip the `borderMedium` blocking check
+— `#8F8F8F` clears 3:1 against the shipped `#FFFFFF` but not against
+every background an admin might reasonably pick. Every OTHER blocking/
+advisory check in `validateMode` gives the admin a concrete way out: the
+button-label check names a fixable direction, the link-text advisory
+computes and shows the exact ink the renderer already swaps in. The
+input-border check was the one exception — a bare ratio and nothing else
+— because it's also the one check with no engine-side stand-in
+(`borderMedium` renders as-is via `--input`; there's no derived variant
+to fall back on), so the admin had no path to "save" beyond guessing hex
+values by hand.
+
+Fix: `validateMode` (`packages/theme/src/index.ts`) now computes a
+remedy for this specific check by reusing `deriveInteractive` (already
+exported, already the engine's own push-toward-black/white-until-passing
+routine) against the _current_ background at the 3:1 target, same as
+link text does at 4.5:1. Stays `severity: "error"` — still blocks save,
+per the load-bearing comment above the check — but the toast now names a
+concrete same-hue value that clears the floor on whatever background is
+currently set, instead of leaving the admin to hunt for one.
+
+Regression test added: `packages/theme/src/index.test.ts` — editing only
+the light background (not the border) reproduces a blocking failure, and
+the returned remedy hex is asserted to actually clear 3:1 against that
+background. Sweep: theme suite 34/34 green, typecheck/lint clean.
+
+---
+
+## 2026-09-02 — Addendum: Base UI "expected a native <button>" console error
+
+on /admin/roles (and every other Link-as-Button screen)
+
+Unrelated to the theme-save addenda above — a separate dev-console error
+surfaced browsing `/admin/roles`. Base UI's `Button` primitive
+(`@repo/ui/components/button.tsx`) defaults `nativeButton` to `true`,
+which asserts (dev-only, via a mount effect) that whatever `render`
+resolves to is a real `<button>`. Every call site in this repo that
+passes `render` does so to become a Next.js `<Link>` — an `<a>` — never
+an actual button (confirmed: grepped all 9 usages of
+`render={<Link .../>}` across admin screens). None of them set
+`nativeButton={false}` to tell Base UI that's intentional, so the mount
+effect fired its mismatch warning on every one.
+
+Fix: `Button` now defaults `nativeButton` to `false` whenever a `render`
+prop is supplied (`nativeButton ?? !props.render`), matching what every
+real call site in the repo actually does; a call site that genuinely
+renders a native `<button>` via `render` can still pass `nativeButton`
+explicitly to opt back in. One-line fix at the design-system component
+(Module 07) rather than touching the 9 call sites individually — the
+same component-vs-call-site altitude call the RTL/logical-properties
+invariant tests already make for this file.
+
+Regression tests added: `packages/ui/src/components/button.test.tsx` —
+`render`-as-`<a>` no longer fires Base UI's console warning; the
+no-`render` default still mounts a real `<button>`; an explicit
+`nativeButton` override still reproduces the (opposite) mismatch,
+proving the override path itself isn't silently swallowed. Sweep: ui
+suite 17/17 green, apps/web typecheck clean.
+
+---
+
+## 2026-09-02 — Addendum: the input-border remedy fix (above) was scoped
+
+too narrowly — generalized to every blocking check
+
+Follow-on report, same session as the "blocking input-border error had no
+way forward" addendum: editing the light `background` to a plausible
+value (screenshot: `#E0CCCC`) tripped BOTH `borderMedium` (fixed above,
+worked correctly — showed `Try #727272...`) AND `textSecondary` on
+background, which still showed a bare ratio with no way forward. Cause:
+the border fix special-cased `field === "borderMedium"` instead of
+recognizing that all four entries in `validateMode`'s `blocking` list
+share the identical shape — a raw, non-derived fg/bg token pair with a
+required ratio — and so share the identical fix.
+
+`validateMode` (`packages/theme/src/index.ts`) now computes a remedy for
+every blocking entry uniformly (`deriveInteractive(fg, background,
+required)`), not just the border one. Remedy wording is generic
+("Try #X instead — clears N:1 here.") since it now covers text-on-
+background, text-on-muted-surface, and border-on-background alike.
+
+Regression test added: `packages/theme/src/index.test.ts` — the exact
+reported background (`#E0CCCC`) is asserted to fail BOTH `borderMedium`
+and `textSecondary`, and every resulting blocking issue (not just one) is
+asserted to carry a remedy that actually clears its own required ratio
+against its own background (muted-surface checks validated against
+`surfaceMuted`, not `background`). Sweep: theme suite 35/35 green,
+typecheck/lint clean, apps/web typecheck clean.
+
+**Lesson for next time a validator gets a "no way forward" report:** check
+whether the fix belongs on the one failing field or on the shape of check
+it belongs to — this repo's `blocking`/`fills` arrays are exactly that
+shape signal.
+
+---
+
+## 2026-09-02 — Module 15: News & Analysis (articles) — core complete
+
+**Spec:** `docs/news-analysis-module-plan.md`, executed under **ADR-015**
+(new), which reconciles that imported plan with this repo: single app
+(ADR-006) instead of its two-app layout, sanitized-HTML bodies (ADR-009)
+instead of Tiptap JSON (no `packages/article-renderer`), the A7-locked
+`Article`/`ArticleTranslation` + kind-enum shape instead of its flat
+schema, existing `Redirect` rows instead of a `SlugRedirect` table,
+page-level 301 resolution instead of middleware, direct `revalidateTag`
+instead of a cross-app `/api/revalidate`, and the seeded `news`/`analysis`
+feature flags as the module switch. Zero new runtime dependencies, zero
+new permission keys (`analysis.*` + `news.manage` finally have their
+feature).
+
+**What shipped:**
+
+- **Schema/migration** `add_articles`: `Article` (kind NEWS/ANALYSIS/
+  TRADE_IDEA, shared `ContentStatus`, `isActive` quick-toggle, cover/video
+  URL fields, `scheduledFor`, ingestion-reserved source fields, soft
+  delete) + `ArticleTranslation` (per-locale slug/excerpt/body/SEO/
+  canonical/noIndex, sourceHash freshness) + `ArticleCategory`/`ArticleTag`
+  with translation tables and an assignment join. The known Prisma 7/
+  MariaDB duplicate-index false-positive appeared again on migrate dev and
+  was hand-trimmed (same as add_notifications).
+- **@repo/utils:** `parseVideoUrl` (whitelist YouTube incl. shorts/youtu.be/
+  live/embed, Vimeo, Dailymotion; youtube-nocookie embeds, i.ytimg
+  thumbnails; adding a provider = one PARSERS entry) and
+  `readingTimeMinutes`. Minimal ambient `URL` type instead of @types/node.
+- **@repo/contracts:** new `content.ts` (article/category/tag/schedule
+  schemas, filter enums) + `articles.*` settings keys (perPage, showAuthor,
+  showReadingTime, relatedCount — group `articles`; disclaimer/title
+  template/OG fallback reuse legal._/seo._).
+- **@repo/core:** `articles.ts` — lean `ARTICLE_TRANSITIONS` (DRAFT ⇄
+  SCHEDULED/PUBLISHED, unpublish loop; review states unreachable),
+  per-kind permission gates (`articleKindPermission`: NEWS→news.manage,
+  else analysis.*; publish gate inside the service per content.ts
+  precedent), sanitize-on-save translations with slug-301 + OUTDATED
+  siblings, category guard (`CategoryInUseError`), duplicate, active
+  toggle, `publishDueArticles()` sweep (exported for a future cron; audits
+  as system with userId null). `public-articles.ts` — `publicArticleWhere()`
+  is the ONE visibility expression (deleted × active × category-active ×
+  (PUBLISHED or due-SCHEDULED)): the where-clause IS the scheduler
+  (ADR-015 #6 — live within the 300s cache window, no cron dependency);
+  cached reads under the existing `content` tag; slug/category/tag lookup
+  with hreflang alternates; related-by-shared-tags; sitemap (noIndex
+  excluded) + RSS loaders.
+- **Admin** (`/admin/articles*`): sidebar entry (navContent, gated
+  analysis.view|news.manage), in-page subnav (Articles/Categories/Tags/
+  Settings→ the dynamic settings-group page picks up the seeded `articles`
+  group automatically), filterable+paginated list with active switch and
+  row actions, editor page (locale-switched translation form with SEO
+  counters, publish panel with schedule datetime + transition buttons +
+  staff-gated preview link, organization/media/advanced panels with live
+  video-URL whitelist validation), categories + tags CRUD screens.
+- **Public:** `/news` (NEWS) and `/analysis` (ANALYSIS+TRADE_IDEA)
+  listings, `/news/[slug]` article page (meta row with byline/reading
+  time, cover or click-to-play video facade, sanitized-HTML body, tags,
+  risk disclaimer, related), `/news/category/[slug]` + `/news/tag/[slug]`
+  archives, `/news/preview/[id]` (session-gated, 404 to non-staff, noindex),
+  `/news/rss.xml` route handler (outside the locale tree — the proxy's
+  dotted-path exclusion; 404s when the news flag is off), sitemap articles,
+  JSON-LD NewsArticle/AnalysisNewsArticle, hreflang alternates, OG image
+  fallback chain (article OG → cover → seo.defaultOgImage). Homepage
+  `latest_analysis` section stub wired for real. `images.remotePatterns`
+  gained i.ytimg.com (covers render `unoptimized` — arbitrary admin URLs
+  don't get an allowlist).
+- **Seed:** 4 `articles.*` settings, 4 starter categories, 7 starter tags
+  (idempotent via [locale,slug] uniqueness); no sample articles (same
+  restraint as glossary).
+- **i18n:** ~80 new keys across all four catalogs (`news` namespace,
+  `admin.*` flat keys, `home.latestAnalysis*`, settings group labels).
+
+**Deferred (named homes in `.claude/skills/articles/SKILL.md`):** Tiptap
+editor UI/in-body embeds/autosave (ADR-009 textarea-first, Module 11
+backlog), media upload pipeline (Module 11, presigned S3), ingestion
+worker, shareable preview tokens, premium enforcement (ADR-012), cron
+wiring for the sweep, E2E on the standing Playwright backlog.
+
+**Tests:** utils 46/46 (embeds URL-shape + rejection matrix incl. no
+raw-iframe passthrough, reading time); core 91/91 incl. new
+`articles.integration.test.ts` 17/17 (Testcontainers: transition map,
+per-kind gates incl. analyst-cannot-touch-NEWS and re-kind guard, publish
+permission with no-write-on-reject, schedule-past rejection, time-gated
+visibility without sweep, sweep flips-once with publishedAt=scheduledFor,
+XSS sanitize-on-save, slug→301, active/category/soft-delete visibility
+matrix, category-in-use guard); contracts 18/18; settings 32/32 (registry
+completeness both ways over the new group); db 6/6 (seed round-trip with
+new taxonomy); i18n 22/22. Sweep: lint + typecheck 12/12, phantom-deps OK,
+permission-keys OK, catalog-completeness OK (pre-existing WARNs only),
+`pnpm build` green (all new routes compile; RSS is the app's second route
+handler).
+
+## 2026-09-03 — UI/design audit remediation (Modules 07/09/10/11/15 surfaces) — COMPLETE
+
+**Scope:** cross-cutting UI consistency pass from the full UI/design audit —
+no architecture, schema, or service-contract changes. Apps stay thin; the
+shadcn base-nova/Base UI system stays the only primitive layer (ADR-013).
+
+**@repo/ui:**
+
+- `FormControl` added to form.tsx (upstream-shadcn parity via Base UI
+  `useRender`): the generated field id, `aria-describedby` and
+  `aria-invalid` now actually land on the control — label→input association
+  and error announcement work; kitchen sink migrated to it.
+- DataTable v2 (backward-compatible): `isLoading` skeleton rows, debounced
+  global search (300ms — no more per-keystroke server writes), column
+  visibility menu labelled from `columnDef.meta.label` instead of raw ids,
+  optional page-size picker (`pageSizeOptions` + `labels.pageSize`),
+  `emptyState` slot, CSV export with UTF-8 BOM + CRLF (RFC 4180 / Excel).
+  Tests updated to the new contract + loading/meta-label coverage.
+- New primitives (hand-written in base-nova style on Base UI, ADR-013 —
+  each consumed immediately, no dead code): `sheet` (logical start/end
+  sides), `empty`, `kbd`, `alert` (status variants on the brand-extension
+  tokens).
+- Fixes: dialog/alert-dialog overlay `bg-black/10` → `bg-overlay` token
+  (documented literal in globals.css beside the shadows); `FieldTitle`
+  data-slot collision with `FieldLabel` resolved (`field-title`);
+  Spinner/Dialog hardcoded English ("Loading", "Close") → props;
+  `DropdownMenuContent` no longer pins to trigger width (`w-(--anchor-width)`
+  was a Select idiom); `ring-[3px]` → `ring-3` unified.
+
+**Admin shell:** sticky header (backdrop-blur) + sticky full-height sidebar
+with its own scroll; mobile nav is now a Sheet carrying the SAME grouped,
+icon-carrying sidebar nav (was a flattened dropdown); search trigger gets
+`min-w-0` (320px overflow fix) and a platform-aware Kbd (⌘K / Ctrl K);
+breadcrumbs know the articles segments, scroll instead of wrap, and take
+their aria-label from the catalog.
+
+**Shared building blocks (new, under `admin/_hooks` + `admin/_components`):**
+
+- `useServerAction()` — THE transition wrapper (pending + toast-on-error +
+  refresh + optional success toast/onDone). Replaced 7 hand-copied `run()`
+  helpers and ~30 inline try/catch/toast blocks across users, employees,
+  articles, glossary, categories, tags, social, theme.
+- `useUrlFilters()` — one URL-state writer with uniform reset-page
+  semantics (was 3 divergent implementations).
+- `useClientTable()` — client-side driver for the shared DataTable on
+  small, fully-loaded lists (filter → sort → slice; DataTable stays manual).
+- `StatusBadge` + per-domain tone maps (user/employee/article/translation)
+  — one green/amber/red decision, always-translated labels; replaced 6
+  divergent badge implementations and every raw-enum render.
+- `SubNav` — one active-link treatment (longest-prefix wins) for the
+  settings sub-sidebar and articles subnav; settings nav goes horizontal
+  below md instead of stacking above the content.
+- `AdminPage` v2: `description`, `backHref`/`backLabel`, `meta` (badges) and
+  end-aligned `actions` slots — deleted the 8 `-mt-4` subtitle hacks, 3
+  copy-pasted back links, 3 `ms-auto` action hacks.
+- `TablePageSkeleton`/`FormPageSkeleton` + per-segment `loading.tsx` for
+  users/employees/roles/articles/glossary/settings/theme/profile.
+
+**Listing pages:** employees and roles migrated to the shared DataTable
+(client-driven — full lists already loaded, no service changes); articles
+migrated to the server-driven DataTable (sorting UI now exists — the
+service always supported it), row actions consolidated into a dropdown
+menu, `ListPagination` and the Enter-only search deleted; users table
+gains page-size picker (URL + server honored), meta-labelled columns,
+shared StatusBadge and empty state. Glossary keeps its editor-card layout
+but gets translated status badges, translated transition buttons (was
+`→ RAW_ENUM`), an Empty state, and the shared Textarea. Redundant
+`overflow-x-auto` double-wrappers removed (Table brings its own).
+
+**States & error surfaces:** admin error.tsx/not-found.tsx now translated
+(keys existed all along), Empty-based, and no longer nest a second `<main>`
+inside the shell's landmark. Theme editor: dirty tracking (save disabled
+when clean), Alert-based issue list, Select primitive for font pickers,
+readable swatches instead of `text-white` on arbitrary colors, catalog
+labels for layout fields.
+
+**i18n:** ~25 new admin keys ×4 locales (close, breadcrumb, per-page,
+empty states, visibility + IN_REVIEW/OUTDATED status labels, theme field
+labels); `error`/`notFound` namespaces + missing `home` keys added to ar/ur
+(the two RTL locales were the ones falling back); `nav.mainNavigation`
+replaces a hardcoded aria-label; glossary `empty` key ×4. Dashboard hint
+literals ("users", "flags on"), navigation "flag:", features visibility
+enums, override ALLOW/DENY, glossary/article raw statuses — all through the
+catalog now.
+
+**Public surface:** orphaned duplicate `_components/theme-provider.tsx`
+deleted; `aria-hidden` on every decorative icon; glossary index gets an
+empty state and A–Z jump nav; glossary term back link is now an RTL-flipping
+ArrowLeft (was a literal `←`); sign-in gets a submit spinner and
+aria-invalid/describedby error wiring; announcement-bar dismissal persists
+per-message in localStorage via useSyncExternalStore.
+
+**Decisions:** no ADR needed — everything implements existing decisions
+(ADR-006 surfaces, ADR-013 primitive layer, code-style #1–#3). Employees/
+roles pagination deliberately client-side to avoid unnecessary service
+churn (lists are small; the DataTable contract is unchanged either way).
+Deferred: RHF+Zod migration of the remaining hand-rolled admin forms (now
+unblocked by FormControl), Tooltip/Popover/Breadcrumb primitives (add when
+first consumed), admin catalog translation beyond en (plumbing verified).
+
+**Tests:** ui 18/18 (DataTable contract updated: debounce, BOM+CRLF bytes,
+meta labels, loading skeletons); web 10/10; utils 46/46; theme 35/35; i18n
+22/22; settings 32/32; rbac 28/28; auth 10/10; db 6/6; core 91/91
+(changes01 suite green in isolation — parallel-Testcontainers contention on
+the full fan-out, pre-existing). Sweep: lint 0, typecheck 12/12 green,
+phantom-deps OK, `pnpm build` green (compile + full prerender against the
+dev DB).
+
+## 2026-09-03 — Module 09: admin dashboard overview (stat cards, charts, activity feed)
+
+Replaced the 4-tile placeholder dashboard (`/admin`) with a real overview:
+trend-aware stat cards, a growth chart, an article-status breakdown, and a
+recent-activity feed, all backed by live reads — no invented metrics.
+
+**Data (`@repo/core` `admin-reads.ts`):** `loadAdminDashboardOverview(range)`
+— total/new users, published articles, active employees, each with a
+same-length previous-period count for the %-trend badges; plus point-in-time
+settings/enabledFlags/activeMenuItems (unchanged from the old
+`loadAdminDashboardCounts`, kept for `/admin/*` shortcut tiles).
+`loadAdminDashboardSeries(range)` buckets user signups + article
+publications by day (7d/30d) or week/month (90d/1y) for the growth chart.
+`loadAdminArticleStatusBreakdown()` groups articles by `ContentStatus`.
+`loadAdminRecentActivity(limit)` is the first **read** path over `AuditLog`
+(previously write-only via `recordAudit`) — joins the actor's name/email,
+powers the activity feed. Time windows: `range` query param
+(`7d`/`30d`/`90d`/`1y`), validated server-side against `DASHBOARD_RANGES`,
+defaulting to `30d`.
+
+**UI:** new `_components/dashboard-stat-card.tsx` (icon + value + trend,
+theme tokens only — success/info/warning/destructive accents), and
+`dashboard-charts.tsx` (recharts area chart for the growth series, pie chart
+
+- legend for status breakdown; both render an `Empty` state when the window
+  has no data), `dashboard-activity-feed.tsx` (server-rendered relative
+  timestamps via `Intl.RelativeTimeFormat`, `Empty` state), and
+  `dashboard-range-select.tsx` (client, URL-driven via the existing
+  `useUrlFilters` hook — same pattern as the articles filter toolbar).
+  Dashboard page composes these inside the existing `AdminPage`/`Card`
+  primitives at `width="full"`; loading state reuses the existing
+  `admin/loading.tsx` route-level `PageLoader` (range changes re-trigger it
+  via `router.replace`), error state reuses the existing admin `error.tsx`
+  boundary — no new loading/error primitives needed.
+
+**Dependency:** added `recharts@3.10.1` (exact pin) to `apps/web` only —
+admin-only per architecture.md #5 (named alongside Tiptap/TanStack Table),
+never importable from `app/(public)`. Pinned in `docs/memory/stack.md`.
+
+**i18n:** ~26 new `admin.dashboard*` keys × en/ar/es.
+
+**Decisions:** no ADR needed — dashboard had no locked spec beyond the
+Module 09 placeholder; charts and the AuditLog read path are additive.
+Verified the new core reads directly against the live dev DB (real
+data: 1 user, 1 published article, audit trail from recent admin actions)
+since no `SEED_ADMIN_PASSWORD` was set locally to reach a signed-in
+screenshot — flagged to the requester rather than resetting the existing
+admin account's password.
+
+**Tests:** core typecheck/lint clean; web typecheck/lint clean (route
+types regenerated for `/admin`'s `searchParams`); `check:phantom-deps` OK;
+prettier clean. web 10/10, core 89/91 (same 2 pre-existing changes01
+failures noted above, unrelated to this change — confirmed untouched files).
+
+## 2026-09-03 — changes-02: media uploads, Tiptap, dropdowns, hover cards,
+
+single-settings-Save, editable system roles (Modules 05/09/10/11/15 extension)
+
+**What shipped** (docs/changes/changes-02.md, 10 bullets — every one closed):
+
+- **Media upload pipeline (new, ADR-017).** `@repo/core`'s `storeImage()` is
+  the one path bytes take into storage: 5 MB cap, magic-byte sniff (PNG/
+  JPEG/GIF/WebP/ICO/SVG — the client's `File.type`/extension are never
+  trusted; an SVG carrying `<script>` or an `on*` handler is rejected
+  outright), random extension-bearing key, a `StorageDriver` interface
+  (local disk shipped, `UPLOADS_DIR`-rooted, git-ignored; S3 is the named
+  seam — same interface, nothing above it changes), a new `MediaAsset` row
+  (migration `add_media_assets`) + audit row. Served by
+  `apps/web/app/uploads/[file]/route.ts` — only keys the table knows are
+  served, immutable long-cache headers, SVG gets a sandboxing CSP so a
+  direct navigation can't execute script. `next.config.ts`'s
+  `serverActions.bodySizeLimit` raised to 6 MB (installed-docs formula:
+  file size + multipart overhead). Turbopack flagged the cwd()-relative
+  path helper as "traces the whole project" — silenced with the tool's own
+  suggested `turbopackIgnore` comment (never a real require/import there).
+  New admin-only `@repo/ui`-adjacent widget `ImageUploadField` (client)
+  replaces every image URL text field it touches with an upload button +
+  preview + remove; security.md #9 reworded to point at the real pipeline
+  instead of the not-yet-built presigned-S3 line.
+- **Logos & Favicons (BrandAsset, plan.md Module 09's long-deferred tab).**
+  New `@repo/core` `brand-assets.ts`: `loadBrandAssets`/`getBrandAssets`
+  (cached under the frozen `theme` tag — a logo swap invalidates exactly
+  what a colour swap does) and `setBrandAsset`/`clearBrandAsset` (audited).
+  Theme editor gained a **Logos & Favicons** tab (`logo_light`/`logo_dark`/
+  `favicon` — deliberately NOT `og_image`, which stays the
+  `seo.defaultOgImage` setting so each asset has exactly one home) wired to
+  `ImageUploadField`, autosaving per slot. Both root layouts now
+  `generateMetadata()` (was a static `metadata` export) so the served
+  favicon reflects the upload; both surfaces' headers/sidebar render the
+  uploaded logo with a `dark:`-variant swap between the light/dark asset,
+  falling back to the site-name text when nothing's uploaded yet.
+- **Tiptap lands (ADR-009's "editor arrives after the pipeline" — the
+  pipeline was already shipped in Module 15/11).** New admin-only
+  `RichTextEditor` (`@tiptap/react`/`pm`/`starter-kit`/`extension-image`/
+  `extensions@3.31.0`, exact-pinned, admin-route-group-only per
+  architecture.md #5) — bold/italic/underline/strike, H2/H3, lists, quote,
+  code block, link (prompt-based), image (uploads through the SAME
+  `uploadImageAction`), hr, undo/redo. Replaces the plain textarea on the
+  article body and the glossary term body; `saveArticleTranslationAction`/
+  `saveGlossaryTranslationAction` are untouched — HTML in, sanitized HTML
+  stored, zero server-side change (that was the whole point of ADR-009's
+  phasing). `sanitize-tiptap.test.ts` (new, `@repo/core`) pins that
+  StarterKit/Link/Image's emitted vocabulary passes `sanitizeRichText`
+  byte-for-byte unchanged, and that a hostile payload is still stripped —
+  the ADR's own named compliance test.
+- **Categories & Tags → DataTable + modal CRUD.** `/admin/articles/
+categories` and `/admin/articles/tags` were inline card lists; now a
+  shared `DataTable` (client-driven, `useClientTable` — small lists) with
+  a "New …" button opening a create modal and a row action opening the
+  same modal pre-filled for editing, delete behind the existing
+  `ConfirmDialog`. The edit modal's locale field is a `Select` sourced
+  from `getActiveLocales()`, not a free-text code — same swap applied to
+  the glossary term translation form's locale field (every remaining
+  free-text locale input in the admin surface is gone).
+- **Settings: one Save per section.** `setting-field.tsx` (per-field save
+  button) deleted; new `SettingsGroupForm` renders every field in a
+  section as one `<form>`, submits only the CHANGED keys, and calls a new
+  `@repo/settings` `updateSettings()` — validates every entry against its
+  schema before writing ANY (one bad field saves nothing), writes each,
+  invalidates each touched group's tag once. New `updateSettingsAction`
+  (batch) replaces the old per-key `updateSettingAction` (deleted, now
+  dead). New registry in `@repo/contracts`: `SETTING_WIDGETS` (declares
+  `site.defaultTimezone` → an `Intl.supportedValuesOf("timeZone")`
+  dropdown, `site.defaultLocale` → the active-locale dropdown,
+  `site.defaultThemeMode` → its enum dropdown) and
+  `SETTING_SELECT_OPTIONS` — widget choice is registry data next to the
+  schema, not a per-screen special case. `site.faviconUrl`/
+  `seo.defaultOgImage` (IMAGE type) now render `ImageUploadField`
+  automatically through the same type-driven dispatch.
+- **System roles are editable in place (new ADR-016).** The former
+  "system roles clone-only" scope line turned out to hide the permission
+  editor and the name/description edit behind `!role.isSystem` for every
+  SEEDED role — a fresh install had nothing editable without cloning
+  first. Re-examined the lock-out rationale: `super_admin` bypasses the
+  allow-list (deny > super_admin > allow) so its permission ROWS are
+  decorative, and `canAssignRole`'s strict-`<` level guard already stops
+  every actor from touching a role at or above their own level — nothing
+  about immutable PERMISSIONS or a LABEL was doing lock-out-prevention
+  work. `updateRoleMeta`/`setRolePermission(s)` now accept system roles
+  (still gated by `roles.manage` + the level guard); only a LEVEL change
+  or delete on a system role still throws `SystemRoleError`. UI: the
+  Edit button and the permission grid's checkboxes are no longer hidden
+  for system roles; the edit modal's level field is `disabled` for them
+  instead.
+- **Hoverable cards.** `packages/ui`'s `Card` component and every ad-hoc
+  "rounded-lg border bg-card p-…" surface in the admin app (AdminSection,
+  the article-editor panels, glossary term rows, theme editor's surface/
+  preset panels) share one new `.card-hover` utility (globals.css) —
+  ring + shadow lift on hover, motion respecting the existing
+  reduced-motion rule — instead of divergent or missing hover treatments.
+
+**Schema:** new `MediaAsset` model + migration `20260903114554_add_media_
+assets` (index on `purpose, createdAt`); `BrandAsset.key`'s comment updated
+to name the three keys this pipeline actually writes.
+
+**Contracts:** new `media.ts` (`uploadPurposeSchema`, `brandAssetKeySchema`,
+`setBrandAssetSchema`, `storedImageUrlSchema`); `settings.ts` gained
+`SETTING_WIDGETS`/`SETTING_SELECT_OPTIONS`/`updateSettingsBatchSchema`.
+
+**Tests:** contracts 23/23 (new media.test.ts); core 113/113 (new
+media.test.ts — sniffer matrix incl. rejections, key-pattern traversal
+guard; new sanitize-tiptap.test.ts; changes01 suite's system-role cases
+rewritten for ADR-016 — edits succeed, level/delete still refused, a peer
+actor still blocked by the level guard); settings 34/34 (new
+`updateSettings` coverage: writes-and-invalidates, validate-all-before-
+write-any). Sweep: lint 0 across contracts/core/settings/ui/web, typecheck
+clean across the same, `check:phantom-deps`/`check:permission-keys` OK,
+`check:catalog-completeness` WARN-only (same pre-existing es/ar/ur gap,
+now also missing the new keys — unchanged severity). `pnpm build` green
+(full compile + prerender against the dev DB, all 77 routes incl. the new
+`/uploads/[file]`) — first attempt crashed a Turbopack worker
+(STATUS_STACK_BUFFER_OVERRUN) while tracing the whole project for
+`uploadsRootDir()`'s cwd()-relative path; a `turbopackIgnore` comment
+(the tool's own suggested fix) resolved both the warning and the crash.
+
+**Decisions:** ADR-016 (system roles editable in place) and ADR-017 (media
+upload pipeline — local disk now, S3 the named seam) — both required
+because they knowingly deviate from a locked plan.md line (Part F #10).
+
+## 2026-09-03 — changes-03/04: public design system, Phase 1 (tokens + palette)
+
+`docs/changes/changes-04.md` is a byte-identical copy of `changes-03.md`
+(`cmp` clean, 273,474 bytes) — one brief, so `docs/changes/changes-03-plan.md`
+(status: proposed, never implemented) covers both; re-verified against the
+working tree before any code, per the governance loop. Its one open item
+(§10, admin content depth) is now resolved: **Phase A only** — ordering,
+visibility, layout variant, item counts and CTA URLs are settings-driven; all
+section headings/marketing copy are catalog-translated (`en/es/ar/ur`). Phase
+B (per-locale admin-authored card copy + images, its own DB models) is
+deliberately not built — `Setting.isTranslatable` exists as a flag but has no
+translation table behind it, which is recorded as the reason a settings blob
+can't carry Phase B's requirement, not rediscovered later.
+
+**ADR-018** (public design system — CSS-first motion, no animation library)
+written before this code, per Part F #10. Locks: zero new runtime motion
+dependencies; `Reveal` visible in server HTML with no JS; `prefers-reduced-
+motion` short-circuits at the JS level, not just CSS; the reference's
+full-screen preloader becomes a bounded, 900ms-capped, settings-gated
+deviation; **`--primary` is fills/large-shapes only — thin, small or
+text-adjacent primary-coloured elements use `--primary-interactive`**; the
+public display type scale (`--text-display-*`) is separate from the shared
+admin+public `--text-*` ramp.
+
+**Palette:** `DEFAULT_BRAND.primary` `#C28D5A` → **`#E8B98C`** (the brief's
+pinned value; six of seven brand colours were already correct). Verified
+against the engine, not assumed: `--primary-foreground` (button ink) resolves
+to `#1A1A1A` at **9.74:1** — passes; `--primary-interactive` resolves to
+`#8B6F54` light / `#E8B98C` dark — **exactly** the "Derived states (read-only)"
+pair in the brief's admin screenshot, confirming the mapping. `validateTheme`
+on the shipped defaults: zero blocking errors, `canSave: true`; the one issue
+is the pre-existing advisory ("primary used directly as link text"). Raw
+`--primary` on white is 1.79:1 — below even the 3:1 non-text floor, which
+`validateMode` doesn't check (it only validates fills as text) — this is
+ADR-018's `--primary-interactive` rule, not a gap in the validator.
+
+**`@repo/ui`'s `globals.css`:** new public-only tokens, namespaced correctly
+so nothing repeats the spacing-scale incident this file already documents —
+`--text-display-{sm,md,lg}` (fluid, `clamp()`), `--shadow-{card,card-hover,
+float}`, `--ease-{out-quint,spring}`, `--container-{wide,narrow}` (all inside
+`@theme inline`, so each is a genuine Tailwind namespace and tree-shaken until
+a Phase 2 component uses it — verified by adding then removing a throwaway
+consumer and confirming the compiled CSS gains/loses exactly those rules).
+Non-namespaced tokens (`--section-space-*`, `--duration-*`, `--reveal-
+distance`) live in a plain `:root` under `@layer base` instead, so they can
+never collide with a utility namespace. New utilities: `.section-{sm,md,lg}`
+(section rhythm), `.media-zoom` (transform-only hover zoom, gated on a `group`
+ancestor), `.link-underline` (logical-inset sweep, so it points the right way
+in RTL with no `[dir]` rule), `.reveal`/`.reveal-{up,start,end,scale}`
+(`animation-timeline: view()` where supported; `[data-reveal-js]`-gated
+opacity/transform fallback where not — content is unhidden by default, an
+observer island can only ADD the hidden state, never the reverse), `.marquee`/
+`.marquee-track` (duplicated-track keyframe, direction-aware under `[dir=
+"rtl"]`, pauses on hover **and** `:focus-within`). Every motion rule sits
+inside `prefers-reduced-motion: no-preference`.
+
+**Tests:** `@repo/theme` 39/39 (2 files) — the two `#C28D5A` contrast
+assertions retargeted to `#E8B98C`'s real numbers, `buildThemeStyleSheet`
+snapshot regenerated, four new tests pin the ADR-018 derived-pair mapping,
+the button-ink pass, the raw-primary sub-3:1 failure, and the
+zero-blocking-issues assertion so a future palette nudge can't silently
+break the rule the design system now depends on. `@repo/ui` 18/18 (no
+existing test touched — Phase 1 is CSS-only, no new component yet).
+
+**Sweep:** lint 0 and typecheck clean on both packages (`pnpm --filter
+@repo/theme --filter @repo/ui lint/typecheck`); `pnpm build` green, all 77
+routes. Verified the new `@theme inline` tokens compile and are correctly
+tree-shaken with the actual Tailwind v4 CLI (`@tailwindcss/cli`), not assumed
+from reading the config.
+
+**Next:** Phase 2 (`docs/changes/changes-03-plan.md` §4/§7) — the 14 new
+`@repo/ui` primitives (`Container`, `Section`, `SectionHeading`, `Reveal`,
+`Counter`, `Marquee`, `ImageReveal`, `SiteLoader`, `ScrollToTop`, `StatCard`,
+`IconCard`, `ProcessStep`, `CtaBand`, `Pagination`) plus the `accordion.tsx`
+gap found on re-verification, and the `Button`/`Badge`/`Card` variant
+additions — all of which now have real tokens to consume.
+
+## 2026-09-03 — changes-03/04: public design system, Phase 2 (@repo/ui primitives)
+
+Phase 2 of `docs/changes/changes-03-plan.md` §4 — the primitives the Phase 1
+tokens were built for. No app surface consumes them yet; wiring is Phases
+4–6. ADR-018 governs all of it (written before Phase 1).
+
+**Registry-sourced, not hand-written** (Module 07 SKILL.md: "do NOT
+hand-copy stale component source"): `accordion.tsx` (the gap found
+re-verifying the plan — the reference's "Who we are" block and the homepage
+FAQ both need one and `@repo/ui` had none), `pagination.tsx` (numbered
+pills, `aria-current="page"`, polymorphic via Button's `render`), and
+`aspect-ratio.tsx` (ImageReveal's box). All three fetched with
+`shadcn add` against this package's own base-nova registry; the CLI's
+prompt to overwrite `button.tsx` was DECLINED, preserving the documented
+`nativeButton` fix. No new dependency was needed — the `package.json` diff
+is entirely pre-existing session work.
+
+**Hand-written primitives** (13): `container` (page/wide/narrow),
+`section` (sm/md/lg × default/muted/inverted/accent), `section-heading`
+(eyebrow + h2 + lead, start/center), `reveal` + `reveal-observer`,
+`counter`, `marquee`, `image-reveal`, `site-loader`, `scroll-to-top`,
+`stat-card`, `icon-card`, `process-step`, `cta-band`.
+
+**Variant additions:** `Button` gained `size: "xl"` and a `shape` axis
+(`pill`), plus a trailing-icon slide that is opt-in BY PRESENCE of the
+existing `data-icon="inline-end"` convention rather than a new prop.
+`Badge` gained `eyebrow` (uppercase label above a SectionHeading) and
+`pill` (the larger neutral card-metadata chip). `Card` gained
+`variant: default | elevated | bordered | featured`.
+
+**Three ordering bugs found and fixed before they shipped** — all the same
+root cause, now documented in-file so it isn't rediscovered a fourth time.
+Tailwind's generated utilities layer sits at globals.css's `@import
+"tailwindcss"` line, ABOVE every hand-written utility further down the
+file, so at equal specificity the hand-written rule wins:
+
+1. `Container`'s wide/narrow used `max-w-(--container-wide)`, which would
+   have silently lost to `.container-page`'s own `max-width` — the size
+   prop would have done nothing. Now hand-written `.container-wide` /
+   `.container-narrow`, declared immediately after `.container-page`.
+   Verified by compiling and checking emitted rule order (3246 vs 3258).
+2. Same trap for `Card`'s `elevated`: a `hover:shadow-card-hover` utility
+   would have lost to `.card-hover:hover`. Now a
+   `[data-variant="elevated"]` rule beside `.card-hover` itself.
+3. `--container-wide/-narrow` moved OUT of `@theme inline` for the same
+   reason — being a real namespace there invites exactly the broken usage.
+   `Card`'s `bordered`/`featured` use `border`, not `ring`, deliberately:
+   `.card-hover:hover` already owns `--tw-ring-color`, so a variant ring
+   colour would revert to the generic one on hover.
+
+**Deviation from the plan's wording, deliberately:** `Reveal`'s variants
+are `up | start | end | fade | scale`, not the plan's `left`/`right`. The
+fallback path animates `translateX`, which has no logical axis, so a
+literal left/right prop would be wrong half the time in `ar`/`ur`.
+
+**Robustness found while testing:** jsdom implements neither `matchMedia`,
+`CSS.supports`, nor `IntersectionObserver`. The first two were already
+handled (optional chaining); the third was not — and in `RevealObserver`
+the failure mode was serious, not cosmetic: without an observer to ever
+add `.is-visible`, setting `data-reveal-js` would have stranded every
+`<Reveal>` permanently hidden, the exact outcome ADR-018 rule 2 forbids.
+All three client components now fail open when it is absent. That is a
+real-browser guarantee, not a test workaround.
+
+**Tests:** `@repo/ui` 18 → **50/50** (4 files). New
+`public-design-system.test.tsx` (29) pins the ADR-018 GUARANTEES rather
+than styling — Reveal visible with no JS and no stranding in any of the
+four browser-capability combinations; Counter showing its final value in
+initial markup and refusing to animate under reduced motion (a CSS
+duration reset cannot prevent a rAF loop — the component must check);
+SiteLoader's 900ms cap, once-per-session gate, reduced-motion skip and
+`pointer-events-none`; Marquee's aria-hidden duplicate and hover-pause
+opt-out; ScrollToTop's sentinel toggle and instant-scroll under reduced
+motion; Pagination's `aria-current`; Badge eyebrow using
+`--primary-interactive` never raw `--primary`. `rtl.test.tsx` extended
+(4 → 9) to sweep every new primitive plus Button's new `xl`/`pill` axes
+for the physical-utility ban. One assertion I wrote was too strict and
+failed — the code was right (twMerge had stripped the bare `rounded-lg`;
+what remained was the variant-prefixed `in-data-[slot=button-group]:
+rounded-lg`), so the assertion was tightened, not the component.
+
+**Sweep:** lint 0 and typecheck clean on `@repo/ui` + `@repo/theme`;
+`@repo/theme` still 39/39; `pnpm build` green (all 77 routes);
+`check:phantom-deps` OK. CSS verified by compiling globals.css with the
+real `@tailwindcss/cli` — every new token and utility emits, and the
+`@theme inline` tree-shaking was confirmed by adding then removing a
+throwaway consumer.
+
+**Next:** Phase 3 (settings + core reads: extended `home.sections` schema
+with `variant`/`limit`, the new `layout.pageLoader`/`header.topBar` keys,
+`buildMenu`, `getArticleFacets`, catalogs ×4), then Phase 4 header/footer.
+
+## 2026-09-03 — changes-03/04: public design system, Phase 3 (settings + core reads)
+
+Phase 3 of `docs/changes/changes-03-plan.md` §5 — the data contracts and
+service reads Phases 4–6 will consume. **Phase A only** (§10, decided at the
+start of this work): presentation control is settings-driven; no DB schema
+change, no migration, no new models.
+
+**`home.sections` descriptor extended** with optional `variant` and `limit`
+(1–24). New `HOME_SECTION_VARIANTS` registry in `@repo/contracts` declares
+which variants each section accepts, and the schema validates against it via
+`superRefine`. Deliberate split: the variant VOCABULARY lives in contracts
+(so the schema can reject a typo), the key → COMPONENT map lives in the app's
+`_sections/registry.ts` (Phase 5) — a shared package must not reach into app
+code (architecture.md #8). A key absent from the registry accepts any
+variant, so an admin can seed a section this build doesn't know yet; a key
+present is validated strictly, and the error names the allowed values.
+
+**New `layout`-group settings** (all `isPublic`, all defaulting OFF/empty so
+an untouched install looks exactly as it does today): `layout.pageLoader`
+(SiteLoader's kill switch, ADR-018 rule 4d), `header.topBar`
+(`{enabled, phone, promoText, promoUrl}`), `header.showSearch`,
+`footer.showPaymentBadges`, `footer.appLinks` (`[{platform, url}]`, max 6,
+path-or-URL guarded — badge IMAGES are admin uploads per ADR-017, so no
+third-party logo is committed). All five added to `SETTING_GROUPS`, without
+which a write would succeed and then never invalidate its cache tag.
+
+**Seed:** the five new rows, plus `variant`/`limit` on the shipped
+`home.sections` defaults. **No migration needed** — these are data rows, and
+the seed's settings loop upserts by key while deliberately never overwriting
+an existing VALUE. Consequence worth stating plainly: an existing database
+gains the new KEYS on re-seed but keeps its current `home.sections` value, so
+it will have no `variant`s. That is correct (admin edits win) and safe, since
+both fields are optional and a section without a variant renders its default.
+
+**`@repo/core`:** `buildMenu(menuKey, locale, subject)` returns
+`{key, name, items}` — `buildNavigation` returns items only, so the footer
+had no way to title its columns without a second query; `MenuData` now
+carries `name` and it rides the same cached read and `navigation` tag, so it
+costs nothing extra. Menu names are NOT translated (only menu ITEMS have a
+translation table) — documented on the function so a caller needing a
+localized heading passes one from its catalog. `getArticleFacets(locale)`
+returns `{categories, tags, archives, latest}` for the listing sidebar: one
+cached function under the existing `content` tag rather than four fragments
+that could drift. Archive months are bucketed in JS, not SQL, because the
+effective publish date is `publishedAt ?? scheduledFor` (ADR-015 #6) and no
+single column can `GROUP BY` that — getting it wrong would silently drop
+just-published months. Terms with no translation through the fallback chain
+are omitted, same ADR-007 rule the listing itself follows. `q` added to
+`ListPublishedArticlesOptions` — a `contains` match on TRANSLATION
+title/excerpt (so a query only ever hits text the reader can see), parsed at
+the route boundary through the new `publicArticleSearchSchema`
+(security.md #6: parse, don't cast).
+
+**Tests:** contracts 23 → **36/36** (new `settings.test.ts`: the extended
+descriptor accepts the old shape unchanged, rejects a wrong-section variant
+and an out-of-range/non-integer limit, names allowed variants in the error,
+stays forward-compatible on unknown keys, and every new key resolves a cache
+group). core **113 → 127** across 12 files, all against real MariaDB: `q`
+matches title AND excerpt, reports a filtered `total` so pagination follows
+the query, and — the one that matters — a DRAFT matching the query stays
+invisible, i.e. search filters the visible set rather than bypassing it;
+soft-deleted matches excluded too. `getArticleFacets` counts only visible
+articles per category (a draft in the same category must not inflate it),
+returns UTC month-start buckets newest-first, and caps/orders the tag cloud.
+`buildMenu`'s name field is covered including the missing-menu case (null
+name, no throw, no crash).
+
+**Sweep:** lint 0 and typecheck clean on contracts/core/db/settings;
+settings 34/34 unchanged; `pnpm build` green (all 77 routes);
+`check:phantom-deps` and `check:permission-keys` OK; `governance:check` OK.
+
+**Not done here, deliberately:** the plan lists "catalogs ×4" under this
+phase, but every string those catalogs would need belongs to a surface that
+does not exist yet (header top bar, section headings, sidebar labels).
+Adding guessed keys now would mean four locales of churn when Phases 4–6
+settle the real copy, so catalog entries land with their consuming UI.
+
+**Next:** Phase 4 — header (top bar, sticky, search affordance, nav
+underline sweep) and footer (titled columns via `buildMenu`, app/payment
+badges, real newsletter form), with their catalog strings.
+
+## 2026-09-04 — changes-03/04/05: public design system, Phases 4–8 (header, footer, homepage, News & Analysis, cleanup, verification)
+
+`docs/changes/changes-05.md` (opened mid-session) is a third byte-identical
+copy of the same brief (`cmp` clean) — no new instructions, work continued
+under the existing plan.
+
+**Phase 4 — Header + footer.** New `TopBar` (settings-gated on
+`header.topBar`, renders nothing when unconfigured); header gained a search
+affordance (`header.showSearch`) linking into `/news`'s own `q` filter —
+there is still no site-wide search backend, and `admin-search.tsx` stays
+admin-only per architecture #5, so this is honest about what exists. Nav
+items use `.link-underline` (the ADR-018 sweep, logical so it points the
+right way in `ar`/`ur`); the header CTA is now `shape="pill"`. Footer
+columns are titled for the first time — `buildMenu` (Phase 3) instead of
+`buildNavigation` — plus app-store links (text, not committed badge
+artwork: security.md forbids third-party logos in the repo) and a payment-
+badges toggle. `RevealObserver`, `SiteLoader` (gated on
+`layout.pageLoader`) and `ScrollToTop` wired into the public root layout —
+the one client-observer-per-page ADR-018 rule 2 requires.
+
+**Newsletter — shipped honestly pending, not silently wired to nothing.**
+The plan calls for a real server action with a honeypot and rate limit
+(security.md #13), but there is no subscriber model and adding one is a
+backend change Phase A's decision explicitly avoided. A working-looking
+form that validates and then drops the address on the floor was the one
+outcome worth avoiding — the control renders disabled with a visible
+"coming soon" message instead. `NewsletterForm` takes a `tone` prop
+(`default` | `onFill`) so the same component reads correctly on both the
+page background and inside a `bg-primary` CTA band. TODO left in the file
+for when a subscriber model + its own ADR land.
+
+**Phase 5 — Homepage.** New `_sections/registry.ts` — the other half of
+Phase 3's split: `HOME_SECTION_VARIANTS` (in `@repo/contracts`) owns the
+variant vocabulary, this owns the key → component map, because a shared
+package must not reach into app code (architecture #8). Six real sections
+now (`hero`, `latest_analysis`, `glossary_spotlight`, `newsletter`, `faq`,
+`risk_disclaimer`), each reading its `variant`/`limit` from the descriptor;
+unknown keys still render the honest stub. `Hero` gained its three
+variants (`centered`/`split`/`background`) — `split`'s media panel stays
+an empty gradient until an admin uploads a real hero image (ADR-017), not
+a stock photo committed to the repo. `Faq` sources its q/a pairs from the
+catalogs (code-style #2), capped at what's actually translated so a
+`limit` can never request a key that doesn't exist.
+
+**Phase 6 — News & Analysis.** `ArticleCards` gained `standard` /
+`featured` / `compact` variants (one component, so the homepage's latest-
+analysis section and the /news and /analysis listings can never drift
+apart) plus `ImageReveal` (zoom + wipe) and pill category badges. New
+`ArticleSidebar` — search, categories, latest posts, popular tags,
+archives — all from Phase 3's single `getArticleFacets` read. New
+`NumberedPagination`: composes `@repo/ui`'s registry-sourced `Pagination`
+primitives with next-intl's `Link` via each part's `render` prop, so
+routing stays an app concern and `@repo/ui` keeps no router dependency
+(architecture #10). `/news`, `/analysis` and both archive routes now
+parse `q`/`page` through `publicArticleSearchSchema` (security.md #6 —
+parsed, never cast) rather than a hand-rolled `Number.parseInt`.
+
+**A real bug found wiring `NumberedPagination`:** the registry-fetched
+`PaginationLink` hardcoded a plain `<a>` inside its own `render`, which in
+this app would have dropped next-intl's locale prefix and forced a full
+page reload on every page-number click. Extended it with its own `render`
+prop (defaulting to `<a>`, so the stock shadcn usage is unaffected) so the
+router element is the caller's to supply — the same pattern Button already
+uses, applied one level up.
+
+**Phase 7 — Remaining pages + cleanup.** Glossary index/detail, article
+detail, the preview route and sign-in now use the shared
+`Container`/`Section` rhythm (`.container-page .container-narrow
+.section-md` etc.) instead of hand-rolled `container-page … py-10`. Both
+archive routes (`/news/category/[slug]`, `/news/tag/[slug]`) moved onto
+`NumberedPagination` + the Section/Container/Reveal pattern. The now-
+superseded prev/next-only `ListingPagination` was deleted from
+`article-list.tsx` — nothing referenced it after the swap, verified by
+grep before removing it.
+
+**Phase 8 — Verification.** Full sweep, all green: lint 0 and typecheck
+clean across `@repo/ui`, `@repo/theme`, `@repo/contracts`, `@repo/core`,
+`@repo/settings`, `@repo/db` and `@repo/web`; unit suites 159/159
+(ui 50, theme 39, contracts 36, settings 34); `check:phantom-deps`,
+`check:permission-keys`, `check:catalog-completeness` (WARN-only, the
+same pre-existing `admin.*` gap — no Phase 4–7 key missing in any locale)
+all OK; `governance:check` OK; grep-verified zero physical-property
+utilities (`pl-/pr-/ml-/mr-/text-left/text-right/left-*/right-*`) in every
+new or touched public-surface file.
+
+`pnpm build` failed once with `FATAL ERROR: JavaScript heap out of
+memory` at "Collecting page data" — worker processes topping out under
+~120 MB while the host had ~2.6 GB free of 16 GB (Testcontainers/Docker
+and accumulated vitest runs from this same session). Not a code defect:
+re-ran with `experimental.cpus: 2` set TEMPORARILY in `next.config.ts` and
+the build completed clean — all 77 routes, all four locales, `/news` and
+`/analysis` both present, TypeScript passing — confirming host memory
+pressure, not a build-graph or type error. The config change was reverted
+immediately after diagnosis; nothing about the fix is committed.
+
+**Sweep not yet run** (repo-wide deferred per plan.md, unchanged by this
+work): Playwright E2E, axe automated a11y, visual dark/light and `ar` RTL
+screenshots, Lighthouse CI budgets. `docs/changes/changes-03-plan.md` §9
+calls for a manual Chrome DevTools MCP pass as the closing gate in lieu of
+deferred E2E — not performed in this session; flagged here rather than
+silently skipped.
+
+**`claude.md` module index left unchanged deliberately.** Module 12
+already reads "core complete (glossary+home); learn area deferred" — that
+remains accurate. The public design system is a cross-cutting visual/
+motion layer over Modules 07/08/12/15, not a new module boundary, so no
+row claims "complete" here; the manual browser sweep above is the
+remaining gate before that claim would be honest.
+
+**Phase B (per-locale admin-authored homepage card copy/images) remains
+explicitly not built** — unchanged from the Phase 3 decision.
+
+## 2026-09-04 — Addendum: Phase 8's manual sweep, run for real — a genuine dark-mode contrast bug found and fixed
+
+Ran the manual browser pass `docs/changes/changes-03-plan.md` §9 calls for
+as the closing gate, using Chrome DevTools MCP against the running dev
+server (localhost:3000) rather than leaving it deferred:
+
+- **Live homepage, light + dark, desktop + mobile (390×844) + `ar` RTL** —
+  all render correctly. Confirmed live (not just in jsdom): the footer's
+  titled column ("Footer — Learn", the `buildMenu` fix), the newsletter's
+  honest disabled state with its "coming soon" copy in both the CTA band
+  and footer, the FAQ accordion's expand/collapse, `ScrollToTop` actually
+  appearing after scrolling past its threshold (the real
+  `IntersectionObserver`, not the test mock), the hero's RTL mirroring
+  (arrow icon flips via `rtl:rotate-180`, the media panel moves to the
+  correct side under `dir="rtl"` with no extra code), and zero console
+  errors on `/`, `/ar`, and mobile.
+- **`/news`** showed one console error — `Route "/[locale]/news": Next.js
+encountered runtime data during prerendering` — traced to `searchParams`
+  access, the same pattern the ORIGINAL pre-Phase-6 file already had. Not a
+  regression: the production build (Phase 8's sweep, same day) already
+  compiled this exact route as `ƒ` (dynamic), matching `[locale]/
+layout.tsx`'s documented `instant = false` tradeoff. Page rendered and
+  functioned correctly.
+- **Lighthouse (desktop, `/`)**: Accessibility 96, Best Practices 96,
+  SEO 92, Agentic Browsing 100.
+
+**The accessibility score's one failure was real, not noise:**
+`Badge`'s `eyebrow` variant measured **1.65:1** contrast in dark mode
+against a required 4.5:1 (foreground `#e8b98c`, background `#fcf5ee`) — on
+the exact "REFERENCE" / "QUESTIONS" eyebrow badges this session's own
+screenshots showed rendering fine in LIGHT mode. Root cause: `--primary-
+interactive` is correctly derived against `--background` (mode-aware, per
+Phase 1's verification) — but `--primary-subtle` (`shade(primary, 0.85)`)
+is a FIXED near-white tint that never adapts to dark mode. In dark mode,
+`--primary-interactive` resolves to the raw primary swatch (since it
+already passes against the DARK page background), while `--primary-subtle`
+stays light — pairing the two, as three components did, put light-tan text
+on a still-near-white "subtle" background. ADR-018 rule 5 anticipated raw
+`--primary` on text failing; it did not anticipate this specific derived-
+pair mismatch, because Phase 1's verification checked contrast against
+`--background`, never against `--primary-subtle` itself.
+
+**Fixed in three places** — `Badge`'s `eyebrow` variant, `Card`'s
+`featured` variant, `IconCard`'s icon box — by swapping `bg-primary-subtle`
+for `bg-primary/10`, the SAME alpha-tint pattern `Alert` already uses
+(`bg-destructive/5`, `bg-success/5`). An alpha tint blends over whatever
+the CURRENT background is, so it shifts with mode automatically instead of
+needing a second derived value kept in sync by hand. `Hero`'s decorative
+gradient panel (`from-primary-subtle to-muted`) was left alone — it carries
+no text, so no WCAG contrast rule applies to it.
+
+**Re-verified, not assumed:** re-ran Lighthouse after the fix — Accessibility
+**96 → 100**, SEO 92 → 100 (the robots.txt flag cleared as an unrelated
+transient). The one remaining Best Practices flag is a report-only CSP
+`eval()` notice from Next's own Fast Refresh in dev mode — confirmed via
+`list_console_messages`, does not occur in production builds, unrelated to
+this work.
+
+**Tests:** `@repo/ui` 50 → **52/52** — two new regression tests pin the
+fix (`bg-primary/10` present, `bg-primary-subtle` absent, on both Badge's
+eyebrow and IconCard's icon box) so a future edit can't silently revert to
+the broken pairing. Lint 0, typecheck clean, re-verified.
+
+**Why this matters beyond the one bug:** `--primary-subtle` is now known
+to be unsafe to pair with any DERIVED (mode-aware) foreground token —
+only with a FIXED-lightness foreground that matches its own fixed
+lightness (i.e., dark ink, unconditionally). Any future component reaching
+for `--primary-subtle` as a background for TEXT should use the `bg-
+primary/{N}` alpha-tint pattern instead; this is now the precedent, not
+just a one-off patch.
+
+## 2026-09-04 — changes-03/04/05: Phase 9 (9a/9b/9c) — admin management of the design system
+
+Plan: `docs/changes/changes-03-plan.md` §12, written and approved before any
+code. Closes the brief's "a manageable homepage section system where sections
+can be enabled/disabled and ordered from the admin without duplicating frontend
+code" — Phases 3–5 built the contract and the frontend; this is the admin UI.
+
+**The gap it closes:** every `JSON`-typed setting rendered as a raw
+`<Textarea>` holding `JSON.stringify(value, null, 2)`. `home.sections` is 13
+objects / ~60 lines of hand-edited JSON, and since Phase 3 a mistyped `variant`
+is _correctly rejected_ — with no way for the admin to discover which variants
+a section accepts.
+
+**No new server action, no new permission key.** `updateSettingsAction`
+already requires `settings.update`, rejects unknown keys, validates every value
+against `SETTINGS_SCHEMAS` before writing any, and audits per key. Every screen
+below submits through it. That was the single biggest simplification available
+and the plan was built around it.
+
+### 9a — Contracts + the CI check
+
+`HOME_SECTION_BUILT_KEYS` (6) and `HOME_SECTION_STUB_KEYS` (7) added to
+`@repo/contracts`, plus `isBuiltHomeSectionKey`. The admin surface needs to know
+which sections actually render, but `_sections/registry.ts` lives under
+`app/(public)` and `app/(admin)` may not import it (architecture #5) — so the
+list is declared in the package both surfaces already depend on, and a CI check
+keeps the duplication honest rather than letting it rot.
+
+New `scripts/check-home-sections.mjs` (+ `pnpm check:home-sections`, wired into
+CI after the catalog check) reconciles the THREE lists keyed by the same section
+strings that nothing else connects: the seeded `home.sections` default (13), the
+contracts registries, and the public `SECTION_COMPONENTS` (6). It fails on:
+built-list ≠ public registry; a variant vocabulary for an unseeded section; a
+newly seeded section nobody built _and_ nobody acknowledged; a key claimed as
+both built and stub; a stale stub. **Verified it actually fails** — all five
+scenarios exercised in `scripts/__tests__/check-home-sections.test.mjs`, because
+a check that only ever passes is decoration.
+
+One real bug caught while writing it: `parseObjectKeys` anchored on `NAME = {`,
+but `SECTION_COMPONENTS` is declared with a multi-line type annotation
+(`NAME: Partial<\n Record<...>\n> = {`), so it matched nothing — the check
+would have passed **vacuously**. Fixed, and the parsers now return `null`
+rather than `[]` when a source moves, with the script failing loudly on that;
+both behaviours are pinned by tests.
+
+Measured drift the check now guards (unchanged, all legitimate today):
+`learning_paths` / `featured_lessons` / `popular_tools` / `forex_rates` declare
+variants but have no component; `economic_events` / `market_sentiment` /
+`trading_sessions` are seeded with neither. All 7 are now explicitly listed as
+known stubs rather than implicitly tolerated.
+
+### 9b — `/admin/homepage`
+
+New screen (`page.tsx` server + `homepage-sections.tsx` client), sidebar entry
+and settings-hub entry, all gated on `settings.update`. Per row: ArrowUp/
+ArrowDown reorder, enable/disable, a variant `Select` populated from
+`HOME_SECTION_VARIANTS[key]` (so it cannot offer a value the schema rejects),
+and a limit input mirroring the schema's 1–24. `order` is derived from position
+on save, so the stored value can never disagree with what the admin arranged.
+Sections with no component carry a "Not built yet" badge — §12.4's honesty
+requirement, so an admin learns it here rather than by publishing.
+
+Reordering is a LOCAL array move plus one batched save, unlike
+`MenuItemControls` whose arrows call a per-item action because each menu item is
+its own DB row. Same idiom, no per-row round trip.
+
+**Lint caught a real anti-pattern:** I first wrote
+`useEffect(() => setDraft(rows), [rows])` to sync props→state;
+`react-hooks/set-state-in-effect` flagged it. It was also unnecessary — `dirty`
+compares against the live prop by value, so a save + `router.refresh()` clears
+it on its own. Removed rather than suppressed, which also matches
+`SettingsGroupForm`, which holds edits in local state with no sync effect
+either. The tradeoff (a concurrent edit by another admin does not stream in) is
+the last-write-wins caveat already recorded in §12.9.
+
+### 9c — Structured editors for the remaining JSON settings
+
+New `SETTING_FIELDS` registry in `@repo/contracts` — flat field descriptors
+(`string | boolean | url | number | select`, with `optionsFrom: "menus"` for
+runtime choices and an optional `orderField`) declared beside the Zod schema
+that validates the same shape. New `setting-fields.tsx` provides generic
+`ObjectField` / `ListField` renderers; `settings-group-form.tsx` dispatches to
+them and the raw JSON textarea becomes the **fallback**, not the default.
+
+Covers `header.topBar` and `footer.appLinks` (Phase 3's additions) and retrofits
+`header.cta`, `header.announcementBar` and `footer.menuColumns`.
+`footer.menuColumns`' `menuKey` is now a Select of real menus (via
+`loadAdminMenus`) instead of free text an admin can typo into a column that
+silently renders nothing; its `order` is derived from row position rather than
+typed.
+
+**A double-editor problem this exposed:** `home.sections` would still have
+rendered as a raw textarea in the `layout` group — two editors for one value,
+the worse one always visible. Added a `MANAGED_ELSEWHERE` map so the group form
+renders a link to `/admin/homepage` instead. Deliberately kept in the admin app
+rather than contracts: admin routing is not a contract concern.
+
+`url`-typed fields use a text input with `inputMode="url"`, not `type="url"` —
+these accept site-relative paths (`/x`) which browser URL validation rejects,
+and the Zod schema is the real guard anyway (security.md #6).
+
+### Verification
+
+lint 0 and typecheck clean on `@repo/web`, `@repo/contracts`, `@repo/ui`;
+contracts **36 → 40** (4 new: no key is both built and stub; a section may
+declare variants without being built and that is not a contradiction; every
+variant-declaring key is built or a known stub); governance scripts **23 → 35**
+(12 new); `check:home-sections`, `check:permission-keys`, `check:phantom-deps`,
+`check:catalog-completeness` (WARN-only, unchanged pre-existing `admin.*` gap —
+no new key missing in any locale) and `governance:check` all OK. `pnpm build`
+green with `/admin/homepage` registered as `ƒ`. Catalogs: 24 new admin keys ×
+4 locales, real translations.
+
+**Not verified in a browser:** the authenticated render of `/admin/homepage`.
+Navigating to it redirected to `/sign-in?redirect=/admin/homepage`, which does
+confirm the route registered and the STAFF gate fires — but seeing the editor
+itself needs admin credentials I did not use. The screen's behaviour rests on
+typecheck + lint + build here, not on a visual pass; worth a look when someone
+is signed in.
+
+**No ADR required** (as §12.8 anticipated): no deviation from a locked plan
+line, no new permission, model or migration. The field registry stayed flat —
+no nesting, no conditionals — which is the line between "structured editor" and
+the page builder the brief rules out.
+
+## 2026-09-04 — changes-04 image-10: News & Analysis brought in line with the reference screenshot
+
+Re-reviewed `docs/changes/changes-04.md`'s two screenshots against what Phase 6
+actually shipped. `image-9.png` (homepage) matched; `image-10.png` (the blog
+grid) had five concrete gaps. `changes-04.md` itself is unchanged — still
+byte-identical to `changes-03.md`/`changes-05.md`.
+
+**1. Card grid was 3-up inside a sidebar column; the reference is 2-up.**
+`standard` used viewport breakpoints (`sm:grid-cols-2 lg:grid-cols-3`), which
+cannot know it is rendering into a ~960px column beside a 20rem sidebar. Now
+`@container` + `@2xl:grid-cols-2 @6xl:grid-cols-3`, so the SAME variant is 3-up
+full-width on the homepage and 2-up in the listing with no extra prop and no
+second variant to keep in sync. Verified the container-query rules actually
+compile (`container-type: inline-size`, `@container (width >= 42rem)` /
+`(>= 72rem)`) with the real Tailwind CLI rather than assuming v4 support.
+
+**2. No author byline.** The reference card ends with a divider then
+avatar + author + date. `ArticleListEntry` had no author at all.
+
+`Article` carries a bare `authorId` column with **no Prisma relation** — which
+is why the detail page does its own `db.user.findUnique`. Repeating that per
+row would be up to 48 extra queries on a listing, so `authorNamesFor()`
+batch-resolves the page's distinct author ids in ONE query and both
+`loadPublishedArticles` and `loadRelatedArticles` use it. (First attempt tried
+`include: { author: … }` and failed typecheck — there is no such relation. No
+schema change was added to create one.)
+
+Rendering is gated by `articles.showAuthor`, the same setting the detail page
+already honours, passed down from the listing pages.
+
+**3. Category pill was inline with the date**; the reference puts it on its own
+line above the title, with the date moved into the byline row. Excerpt tightened
+to `line-clamp-2` to match. The `compact` variant keeps its date inline and
+grows no byline — it is used in the sidebar where there is no room.
+
+**4. No breadcrumbs.** `layout.showBreadcrumbs` has existed since Module 08 and
+**nothing on the public surface honoured it**. New `ListingHeader` renders the
+centred title plus a "Home · Section" trail, gated on that setting, with
+`aria-current="page"` on the last crumb. Its own component rather than reusing
+the admin's `Breadcrumbs`: `app/(public)` may not import from `app/(admin)`
+(architecture #5), and the public trail is two fixed levels rather than
+path-derived.
+
+**5. No subscribe band.** The reference puts one between the pagination and the
+footer. Added to both listings, reusing `CtaBand` + `NewsletterForm` with
+`tone="onFill"` — the same pending-but-honest control, gated on
+`footer.newsletterEnabled`.
+
+**Kept deliberately unlike the reference:** the sidebar shows per-category
+article counts (the reference does not) — real information the facets read
+already returns; and pagination keeps labelled Previous/Next alongside the
+numbers instead of the reference's bare arrow, which is better for screen
+readers.
+
+**Tests:** `@repo/core` articles integration **26 → 28**, against real MariaDB:
+an authored article resolves its byline, an author-less one returns `null`
+(not undefined, not a crash — ingested articles have no author by design), and
+several rows sharing one author all resolve correctly through the batch path.
+
+**Sweep:** lint 0 and typecheck clean on `@repo/web` + `@repo/core`;
+`pnpm build` green; `check:catalog-completeness` OK (12 new keys ×4 locales —
+`nav.home`, `nav.breadcrumb`, `news.subscribeTitle`, `news.subscribeBody`);
+`check:home-sections` and `governance:check` OK.
+
+**Not visually re-verified.** The Chrome DevTools MCP session wedged partway
+through this change ("browser is already running for …chrome-profile") and the
+only fix available was killing the user's own Chrome, which I did not do. So
+these five changes rest on typecheck + lint + build + integration tests, not on
+a screenshot — unlike the earlier Phase 8 pass, which was visually confirmed.
+Worth a look at `/news` and `/analysis` (light + dark, `en` + `ar`) next
+session; the byline row and the 2-up grid are the two most worth eyeballing.
+
+---
+
+## 2026-09-04 — changes-05: admin UI/UX consistency pass + theme save bug
+
+`docs/changes/changes-05.md` asked for six things across the admin surface —
+full-page tables, single-row filter toolbars, full-page settings layout,
+settings nested only under Settings (not the main sidebar), a theme-color
+save bug, and a general consistency pass — plus a new branded loading
+animation applied everywhere a spinner shows. Surveyed the admin surface
+first (Module 09/`admin-shell`, Module 05/`settings`, Module 02/`theme`):
+most of the ask was already in place (`DataTable` is already the norm for
+Users/Roles/Employees/Articles/Categories/Tags; the Settings hub already had
+the full-page card layout and a shared sub-nav). The real gaps were
+narrower than the doc implied — recorded here per the six numbered asks.
+
+**1/6 Theme save bug — root cause was NOT what static reading suggested.**
+Two earlier addenda in this log (2026-09-02, "theme Save could fail with An
+unexpected response…" and "blocking input-border error had no way forward")
+already fixed the stale-proxy-cache 500 and made every blocking check's
+remedy concrete — so before writing anything, I reproduced live (dev
+server + a real admin session) rather than trust a fresh static-read
+theory, and both of my first two hypotheses (a missing Zod parse causing
+the throw; the issues panel being hidden on an inactive tab) turned out
+wrong on contact: a real edit + Save round-trips cleanly, and the issues
+list already renders below the tabs regardless of which one is active, with
+a specific toast ("Fix blocking errors to save") and per-field remedies —
+all working as those 09-02 fixes intended.
+
+The actual defect, found by driving the color inputs directly: `ColorField`
+(`apps/web/app/(admin)/admin/theme/theme-editor.tsx`) rendered only a native
+`<input type="color">` swatch, no editable hex text field. That native
+picker is unreliable for landing on an exact hex — confirmed empirically,
+driving it toward one intended value produced a completely different one
+once its own slider/eyedropper UI engaged. An admin with no reliable way to
+set a precise brand color ends up silently saving one they didn't intend,
+which the (correctly functioning) validator then legitimately blocks —
+reading as "Save is broken" when the input layer, not the save pipeline,
+was where it actually broke down. Fixed by adding a paired, editable hex
+`<Input>` next to each swatch, two-way bound, validated against
+`/^#[0-9A-Fa-f]{6}$/` before it reaches state (mid-typed values held in
+local draft state, reverted to the last valid value on blur if never
+completed). Verified live: typing an exact hex now reliably lands on that
+exact color, both for a passing save and for a deliberately-blocked one
+(edited light `textPrimary` to `#F5F5F5`, confirmed the same clear
+toast/remedy path the 09-02 fixes built).
+
+Independent, smaller gap closed in the same area: `saveThemeAction`
+(`admin/_actions/admin-actions.ts`) took `SaveThemeInput` straight from the
+client with no `@repo/contracts` Zod parse — every sibling action in that
+file parses; this one skipped it (security.md #6). Added `saveThemeSchema`
+(hex-format brand/surface colors, loose layout-token strings) to
+`packages/contracts/src/admin.ts`, parsed before calling `saveTheme`.
+`fontSans`/`fontMono` stay loosely typed in the schema (no new
+contracts→theme dependency for one enum) and are resolved to a real
+curated key in the action via `isCuratedFontKey`, same defensive fallback
+`loadActiveTheme` already uses. `baseFontSize` is optional in the schema,
+not required like the `LayoutTokens` interface: the live active theme row
+predates that field and its save payload genuinely omits it — a required
+schema would have broken that theme's own already-working save over a gap
+this fix isn't scoped to backfill; the action defaults it from
+`DEFAULT_LAYOUT` before it reaches `saveTheme`.
+
+**2/6 Settings navigation.** `admin-shell.tsx`'s sidebar had Theme,
+Features, Navigation and Homepage as their own top-level entries even
+though `settings-shared.ts`'s `loadSettingsIndex` already builds nav
+entries for all four — they just weren't rendered on those pages. Trimmed
+the sidebar's `navSystem` group to Settings only, and added the same
+`SettingsNav` sub-sidebar the `[group]`/`social` pages already use to
+`theme/page.tsx`, `features/page.tsx`, `navigation/page.tsx` and
+`homepage/page.tsx` (the last wasn't named in the doc's example list but is
+the identical shape — a settings-shaped screen gated on `settings.update`,
+per its own existing comment). No permission changes; each page still
+`requirePermission()`s first, same as before — this only changes what
+renders in the sidebar, not who can reach the route.
+
+**3/6 Social Links → full-page `DataTable`.** The one CRUD screen still on
+a raw `<Table>` in a narrow card (`settings/social/social-links-manager.tsx`)
+— exactly the anti-pattern the doc names. Rebuilt on the shared `DataTable`
+following `articles/categories/category-controls.tsx` as the closest
+existing reference (client-driven via `useClientTable`, same modal
+create/edit + `ConfirmDialog` delete it already had); only the listing
+markup changed.
+
+Deliberately NOT converted: Glossary (per-term inline multi-locale
+translation form) and Navigation (manual up/down reordering) — their
+interactions don't map onto a sortable/paginated table without a real
+regression, and the doc's rule 1 scopes full-page tables to "Roles,
+Categories, Tags, and similar" listing pages, which these aren't. Recording
+the call explicitly rather than silently narrowing scope.
+
+**4/6 Filter toolbar.** Already one row per page (not stacked cards) for
+Users and Articles — just duplicated `flex flex-wrap items-center gap-2`
+markup between them. Extracted a presentational `FilterBar`
+(`admin/_components/filter-bar.tsx`, just the wrapper, no filter logic) and
+used it in both places.
+
+**5/6 Consistency.** Verification pass rather than a rewrite, given the
+audit found the surface already fairly consistent (`AdminPage`/
+`AdminSection` everywhere, `DataTable` the norm) — the concrete outliers
+were exactly items 1–3 above.
+
+**6/6 Branded loader.** Folded the Uiverse "pl1" animation (by reglobby)
+into `Spinner`'s (`packages/ui/src/components/spinner.tsx`) internals,
+same API (`className`, optional `aria-label`), so every current consumer —
+buttons, `PageLoader`/`SectionLoader`, `DataTable`'s loading rows — picks
+it up with zero call-site changes; confirmed with the user this should
+*not* replace the route-level skeleton screens (`admin/_components/
+skeletons.tsx`), which stay content-shaped placeholders — a different,
+better-suited pattern for full page transitions. Dropped the source
+snippet's second, masked `hsl(343,90%,50%)` overlay layer: the doc asked
+for one color (the live brand primary), and a hardcoded `hsl()` literal
+would fail code-style.md #1 outside `@repo/theme` anyway. Single layer now
+renders `fill="var(--primary)"` — no hex anywhere in the component.
+Keyframes added to `packages/ui/src/styles/globals.css`, scoped
+`brand-loader-*`/`.brand-loader__*` to avoid colliding with a raw `.pl1` a
+page might import from elsewhere; `prefers-reduced-motion` is handled for
+free by the existing global animation-duration reset in `@layer base`.
+
+**A note on the chrome-devtools-mcp session:** the 09-03 addendum above hit
+"browser is already running for …chrome-profile" and declined to kill it,
+assuming it was the user's own Chrome. I hit the identical error this
+session and checked first — `Get-CimInstance Win32_Process` showed the
+process tree was launched with `--user-data-dir=…\chrome-devtools-mcp\
+chrome-profile --enable-automation --remote-debugging-pipe`: the
+dedicated automation-only profile this tool always uses, not the user's
+regular Chrome profile, and orphaned (a pipe-based `--remote-debugging-
+pipe` connection dies with the process that opened it, so a fresh tool
+invocation can't attach to one left over from an earlier run). Killed it
+and proceeded — worth recording as the distinguishing check for whoever
+hits this next, since the two sessions made opposite calls on what looked
+like the same error.
+
+**Also found, not touched (out of scope for this fix):** the live active
+theme row's `layoutTokens.fontSans`/`fontMono` are stored as resolved CSS
+font-stack strings, not curated keys — a pre-existing data-shape drift
+`loadActiveTheme`'s `isCuratedFontKey` fallback already masks harmlessly at
+read time. Left alone; noting it so it isn't rediscovered from scratch.
+
+### Verification
+
+`pnpm --filter=@repo/contracts test`: 45/45 green, including 5 new
+`saveThemeSchema` cases (valid payload; `baseFontSize` optional; rejects a
+non-hex color; rejects 3-digit hex shorthand; rejects a missing surface
+field). `pnpm typecheck` clean on `@repo/web`, `@repo/ui`, `@repo/contracts`.
+`pnpm lint` clean on the same three (a real `react-hooks/set-state-in-
+effect` catch along the way: `ColorField`'s prop→state sync first used a
+`useEffect`, which the lint rule correctly flagged — moved to the
+render-time "adjusting state when a prop changes" pattern instead, no
+effect, no extra render pass). Full workspace `pnpm lint` OOM'd running all
+12 packages' ESLint in parallel on this machine — a pre-existing resource
+ceiling unrelated to these changes (the two packages that crashed, `rbac`
+and `theme`, weren't touched this session); the three changed packages were
+verified individually instead.
+
+**Visually verified**, live, signed in as the seeded admin: theme save
+(both a passing edit and a deliberately-blocked one, remedy text and toast
+confirmed); the hex-input fix (typed `#e8b98c` into the new field, it
+landed exactly, saved, persisted through a hard reload); sidebar no longer
+lists Theme/Features/Navigation/Homepage, all four reachable from
+`/admin/settings`'s cards and every settings page's sub-nav; Social Links
+as a full-page `DataTable` with working search/sort/edit/delete; the new
+Spinner mark resolves `var(--primary)` correctly (injected an isolated copy
+into a live page and read back its computed `fill`, since no route in this
+build currently has an idle moment to catch it naturally). Not independently
+re-verified after this session ended: the user appears to have used the new
+hex field themselves mid-session (the live theme's primary/secondary ended
+up at values — `#683c12`/`#abab5f` — only reachable by typing an exact hex,
+not by nudging the native picker) and I left those as their own choice
+rather than restore my own test values over them.
+
+**No ADR required:** no deviation from a locked plan line, no new
+permission, model, or migration — Theme/Features/Navigation/Homepage were
+already reachable exactly this way from the Settings hub's cards; this only
+removed the redundant sidebar duplicates and added the same sub-nav their
+sibling pages already had.
+
+---
+
+## 2026-09-04 — News/Analysis: article detail page, a real 2-up grid bug, and ADR-019 (comments, design-only)
+
+Two asks: bring `/news/[slug]` in line with the same reference screenshot the
+2026-09-04 changes-04 pass already matched the listing to (image-9/10's
+sibling detail-page screenshot in `docs/changes/changes-05.md`), and re-verify
+the listing grid live — the changes-04 entry above explicitly left that
+unverified after a Chrome DevTools MCP session died mid-pass.
+
+**Re-verifying the listing found a real bug the previous pass's build-only
+check couldn't catch.** `ArticleCards`' `standard`/`featured` variants put
+`@container` and the `@2xl:`/`@6xl:` grid-cols utilities on the *same*
+element (`article-list.tsx`). CSS container queries match the nearest
+**ancestor** container, never the element carrying the condition — so
+`@2xl:grid-cols-2` had no ancestor container to query and silently never
+matched, at any width. Confirmed live (not assumed): a fresh listing page
+loaded with real seed articles rendered every card as a single full-width
+column at 985px content width, and `getComputedStyle(ul).gridTemplateColumns`
+returned one track. The Tailwind CLI compiling the rule (what the changes-04
+entry verified) says nothing about it ever matching at runtime — a different
+check, and the one that mattered. Fixed by splitting the two roles onto
+separate elements: `ArticleCards` now renders a `<div className="@container">`
+wrapper around the `<ul>`, which carries only the responsive `grid-cols`
+classes. Re-verified live at 1440px (2-up) and a 390px mobile emulation
+(clean 1-column stack, sidebar below, no horizontal overflow) — this was the
+one thing changes-04 asked the next session to eyeball, done here.
+
+**`/news/[slug]` redesigned to match the reference**, reusing existing
+pieces rather than inventing new ones:
+
+- Swapped the ad hoc back-link + left-aligned `<h1>` for the same
+  `ListingHeader` the listing pages use (centred title + `Home · {title}`
+  breadcrumb) — one component, one behaviour (`layout.showBreadcrumbs`),
+  instead of a second bespoke header.
+- Moved to the same `Section`/`Container` two-column grid shape as
+  `/news` and `/analysis` (`grid-cols-[minmax(0,1fr)_20rem]`) and added
+  `ArticleSidebar` to the detail page for the first time — facets fetched
+  with the same kind-grouping the listing pages use (`NEWS` alone;
+  `ANALYSIS`+`TRADE_IDEA` together, ADR-015 #11), not just the one article's
+  own kind, so the sidebar matches whichever feed the reader came from.
+- Meta row (category pill, author, date, reading time) moved from above the
+  hero image to below it, matching the reference; category is now a linked
+  `Badge` like the listing cards use, not plain text.
+- Blockquotes inside the sanitized body get a heavier "pull quote" treatment
+  (border-y, centred, larger italic text) — CSS only, no new markup, since
+  admin-authored body HTML already produces `<blockquote>` and the reference's
+  secondary video/bullet-list section is just body content in this system
+  (no in-body embeds until the Tiptap editor lands, ADR-015 #9 — a named,
+  pre-existing gap, not something this pass could close).
+- New `ShareRow` (`news/_components/share-row.tsx`, client component):
+  Facebook/X/LinkedIn share-intent links + copy-link, all built from
+  `window.location.href` read inside click handlers only (never at render),
+  so there's nothing for SSR/hydration to disagree on. Deliberately **not**
+  brand-logo icons — the installed `lucide-react` no longer ships
+  Facebook/Twitter/Linkedin (checked directly: `typeof` on each is
+  `undefined`), and `footer.tsx` already established the house convention
+  of a labelled fallback over a hand-drawn third-party logo for exactly this
+  reason (its `APP_PLATFORM_ICON` comment). Six new `news.*` catalog keys in
+  `en`/`es` (full translations, not placeholders); `ar`/`ur` pick up the
+  existing WARN-only gap the whole `news` namespace already has (ADR-007 —
+  both locales inactive at launch), not a new one.
+
+**Comment form: scoped, not built.** The reference's "Leave a Comment" form
+uses free-text name/email — anonymous. Given the choice between skipping it,
+stubbing it cosmetically, or scoping a real feature first, the owner chose
+the third. **ADR-019** records the design: `comments.moderate` (permission)
+and `community.comments` (feature flag, `AUTHENTICATED` visibility) were
+already seeded ahead of the feature — plan.md A7 names `Comment` directly as
+a schema gap to spec later, and ADR-015's Consequences flagged comments as
+deferred with "a named home" that was never actually written down until now.
+The anonymous name/email shape conflicts with the flag's `AUTHENTICATED`
+semantics and security.md #6/#10 — resolved in favor of the seeded flag: no
+anonymous path, `session.user` is the commenter, pre-publish moderation
+(`PENDING` default) since no spam tooling exists yet. Full reasoning,
+rejected alternatives, and the flat (no threading) `Comment`/`CommentStatus`
+shape are in the ADR.
+
+Per the owner's explicit instruction, the schema landed but nothing else
+did: `Comment`/`CommentStatus` added to `schema.prisma` (validated with
+`prisma validate` — schema loads clean) plus the two mandatory back-relation
+fields (`Article.comments`, `User.comments`), each commented `ADR-019,
+design-only`. **No migration generated or applied** (`pnpm db:migrate` not
+run) and no service/action/UI code reads or writes the model — the
+moderation queue, `postComment` action, and rate limiting are explicitly
+left for a follow-up pass, which must generate and review that migration
+before writing anything against it.
+
+**Verified live** (dev server + real seed data, an existing Chrome
+DevTools MCP browser instance found locked — same orphaned-automation-
+profile signature the 09-03/09-04 entries above already document, killed
+after confirming via `Get-CimInstance Win32_Process` it was the
+`--user-data-dir=…\chrome-devtools-mcp\chrome-profile` automation instance,
+not the user's own Chrome): `/news` at 1440px (2-up grid, byline, category
+pill, sidebar) and 390px (1-column, no overflow); `/news/test-1` at both
+widths (breadcrumb header, meta row, tags, all four share actions present,
+disclaimer, related articles, sidebar) — this seed article has no cover
+image or body HTML, so the hero-image/video-facade and pull-quote paths
+render their empty-state branches correctly rather than being visually
+confirmed with real content.
+
+### Verification
+
+`pnpm --filter=@repo/web typecheck` and `lint` clean · `pnpm --filter=
+@repo/contracts test` 45/45 (unaffected — no contract added yet) ·
+`pnpm check:catalog-completeness` OK (WARN-only on the pre-existing ar/ur
+`news` namespace gap, unchanged in kind) · `check:permission-keys` OK ·
+`prisma validate` clean on the ADR-019 schema addition · `governance:check`
+OK. **Not run:** `pnpm --filter=@repo/web build` — hit the same
+pre-existing OOM this machine's full Turbopack static-generation pass has
+hit before (11 parallel workers; TypeScript compilation and the dev-server
+render path both completed cleanly first), unrelated to this session's
+diff.
+
+**No ADR required for the listing/detail redesign itself** — no deviation
+from ADR-015's locked shape, no new permission or route. ADR-019 is
+required and included for the comments design only, per Part F #10.

@@ -71,23 +71,24 @@ enforces both rules in CI.
 
 ## Module index
 
-| Module                        | Skill                             | Status                        |
-| ----------------------------- | --------------------------------- | ----------------------------- |
-| 00 Repo scaffold & governance | `.claude/skills/scaffold/`        | in progress                   |
-| 01 `@repo/db` schema/seed     | `.claude/skills/db/`              | pending                       |
-| 02 `@repo/theme` engine       | `.claude/skills/theme/`           | pending                       |
-| 03 `@repo/rbac`               | `.claude/skills/rbac/`            | pending                       |
-| 04 `@repo/auth` (Better Auth) | `.claude/skills/auth/`            | pending (ADR-001 spike first) |
-| 05 `@repo/settings` + flags   | `.claude/skills/settings/`        | pending                       |
-| 06 `@repo/i18n`               | `.claude/skills/i18n/`            | pending                       |
-| 07 `@repo/ui` design system   | `.claude/skills/ui/`              | pending                       |
-| 08 Navigation & header/footer | `.claude/skills/navigation/`      | pending                       |
-| 09 Admin shell & theme editor | `.claude/skills/admin-shell/`     | pending                       |
-| 10 Users, roles, employees    | `.claude/skills/users-employees/` | pending                       |
-| 11 Content system             | `.claude/skills/content/`         | pending                       |
-| 12 Public site                | `.claude/skills/public-site/`     | pending                       |
-| 13 Market layer               | `.claude/skills/market/`          | pending                       |
-| 14 Hardening & launch gate    | `.claude/skills/hardening/`       | continuous                    |
+| Module                        | Skill                             | Status                                             |
+| ----------------------------- | --------------------------------- | -------------------------------------------------- |
+| 00 Repo scaffold & governance | `.claude/skills/scaffold/`        | complete                                           |
+| 01 `@repo/db` schema/seed     | `.claude/skills/db/`              | complete                                           |
+| 02 `@repo/theme` engine       | `.claude/skills/theme/`           | complete                                           |
+| 03 `@repo/rbac`               | `.claude/skills/rbac/`            | complete                                           |
+| 04 `@repo/auth` (Better Auth) | `.claude/skills/auth/`            | core complete, E2E deferred                        |
+| 05 `@repo/settings` + flags   | `.claude/skills/settings/`        | core complete, action UI deferred                  |
+| 06 `@repo/i18n`               | `.claude/skills/i18n/`            | core complete, RTL E2E deferred                    |
+| 07 `@repo/ui` design system   | `.claude/skills/ui/`              | core complete, axe/visual E2E deferred             |
+| 08 Navigation & header/footer | `.claude/skills/navigation/`      | core complete, a11y E2E deferred                   |
+| 09 Admin shell & theme editor | `.claude/skills/admin-shell/`     | core complete, E2E + uploads deferred              |
+| 10 Users, roles, employees    | `.claude/skills/users-employees/` | core complete, E2E deferred                        |
+| 11 Content system             | `.claude/skills/content/`         | services complete; editors/media deferred          |
+| 12 Public site                | `.claude/skills/public-site/`     | core complete (glossary+home); learn area deferred |
+| 13 Market layer               | `.claude/skills/market/`          | core complete; calendar/history deferred           |
+| 14 Hardening & launch gate    | `.claude/skills/hardening/`       | continuous                                         |
+| 15 News & Analysis (articles) | `.claude/skills/articles/`        | core complete (ADR-015); editor/E2E deferred       |
 
 Build order and exit criteria: `docs/plan.md` Part E. Locked decisions:
 Part F. Exact versions: `docs/memory/stack.md` (never bump ad hoc).

@@ -11,10 +11,26 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
+  "dependencies": {
+    "@repo/contracts": "workspace:*",
+    "@repo/db": "workspace:*",
+    "@repo/i18n": "workspace:*",
+    "@repo/rbac": "workspace:*",
+    "@repo/settings": "workspace:*",
+    "@repo/theme": "workspace:*",
+    "@repo/utils": "workspace:*",
+    "next": "16.3.3",
+    "sanitize-html": "2.17.7"
+  },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
+    "@testcontainers/mariadb": "^12.1.0",
+    "@types/node": "^24.13.3",
+    "@types/sanitize-html": "^2.16.1",
     "eslint": "^9.39.5",
+    "msw": "2.15.0",
+    "testcontainers": "^12.1.0",
     "typescript": "6.0.3",
     "vitest": "^4.1.11"
   }

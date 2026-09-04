@@ -1,0 +1,40 @@
+# Local dev infra only — MariaDB + Redis (docs/reference/MONOREPO_ARCHITECTURE.md).
+# App itself runs on the host via `pnpm dev` (Module 00 DoD), not in a container.
+# Credentials here match .env.example; override in .env, not here.
+services:
+  mariadb:
+    image: mariadb:11.4
+    container_name: mbfx-mariadb
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: rootpass
+      MARIADB_DATABASE: mbfx_learning_center
+      MARIADB_USER: user
+      MARIADB_PASSWORD: pass
+    ports:
+      - "3306:3306"
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: mbfx-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  mariadb_data:
+  redis_data:

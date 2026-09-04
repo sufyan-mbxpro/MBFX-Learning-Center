@@ -1,0 +1,686 @@
+/* @repo/ui — the ONE stylesheet for the whole app (both surfaces import it).
+ *
+ * Tailwind v4 (config lives in CSS). No colour literals live here — every
+ * value points at a CSS variable the @repo/theme engine writes at request
+ * time (the injected <style id="brand-tokens"> element). That indirection
+ * is the whole reason an admin can rebrand the site without a deploy.
+ *
+ * Ported from docs/reference/globals.css with the review fixes:
+ *   A5.2 — --font-sans references --brand-font-sans (the engine's output
+ *          var), not itself; the reference's --font-sans: var(--font-sans)
+ *          was a circular self-reference.
+ *   A5.3 — full-value vars (--color-x: var(--x)), not rgb(var(--x))
+ *          channel triples; the engine emits full hex, and Tailwind v4
+ *          handles opacity via color-mix.
+ *   A5.5 — every --text-* size carries a --text-*--line-height pair.
+ */
+
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* The single app has one dependency graph (ADR-006) — scan both surfaces'
+   app code and this package's own components for class usage. */
+@source "../../../../apps/web/app/**/*.{ts,tsx}";
+@source "../../../../apps/web/components/**/*.{ts,tsx}";
+@source "../**/*.{ts,tsx}";
+
+/* Dark mode is class-driven, not media-driven, so a user's explicit choice
+   beats their OS setting (ADR-008: the USER controls mode, never admins). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Base UI emits data-orientation="horizontal|vertical"; the base-nova
+   component styles address it through these shorthand variants, which the
+   shadcn preset normally defines in ITS generated globals.css. Our
+   hand-ported stylesheet has to carry them too, or (e.g.) the Tabs root's
+   data-horizontal:flex-col never matches and the tab strip renders as a
+   stretched column beside its content. */
+@custom-variant data-horizontal (&[data-orientation="horizontal"]);
+@custom-variant data-vertical (&[data-orientation="vertical"]);
+
+@theme inline {
+  /* Surface */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+
+  /* Interactive */
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* Brand extensions beyond stock shadcn — names match exactly what
+     @repo/theme's tokensToCss emits (packages/theme/src/index.ts). */
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-active: var(--primary-active);
+  --color-primary-subtle: var(--primary-subtle);
+  --color-primary-interactive: var(--primary-interactive);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-success-interactive: var(--success-interactive);
+  --color-destructive-interactive: var(--destructive-interactive);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-interactive: var(--warning-interactive);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-info-interactive: var(--info-interactive);
+  --color-text-muted: var(--text-muted);
+
+  /* Type — families come from the theme record (A5.2). The engine emits
+     --brand-font-sans/--brand-font-mono as either a literal system stack
+     or var(--font-{key}) into the curated families @repo/ui/fonts
+     preloads (ADR-005). */
+  --font-sans: var(--brand-font-sans);
+  --font-mono: var(--brand-font-mono);
+
+  /* A5.5 — size/line-height pairs. */
+  --text-xs: 11px;
+  --text-xs--line-height: 16px;
+  --text-sm: 12px;
+  --text-sm--line-height: 18px;
+  --text-md: 13px;
+  --text-md--line-height: 20px;
+  --text-base: 14px;
+  --text-base--line-height: 22px;
+  --text-lg: 16px;
+  --text-lg--line-height: 24px;
+  --text-xl: 18px;
+  --text-xl--line-height: 26px;
+  --text-2xl: 20px;
+  --text-2xl--line-height: 28px;
+  --text-3xl: 24px;
+  --text-3xl--line-height: 32px;
+  --text-4xl: 28px;
+  --text-4xl--line-height: 36px;
+  --text-5xl: 32px;
+  --text-5xl--line-height: 40px;
+
+  /* NO named spacing scale (--spacing-sm etc.), deliberately — the
+     reference globals.css defined one, and it's a live Tailwind v4
+     namespace collision: sizing utilities resolve t-shirt names from the
+     spacing scale too, so `max-w-sm` silently became 8px and every
+     constrained container in the app collapsed to min-content (found via
+     computed-style probe, not lint — nothing errors). The default 4px
+     numeric scale (`p-4` = 16px) is the review convention instead. */
+
+  /* Shape — all derived from one admin-set radius */
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-pill: 9999px;
+
+  /* Overlay scrim behind dialogs/sheets — same literal-value exception as
+     the shadows below: a neutral scrim is not brandable and is mode-
+     independent by design (a light wash over dark UI looks broken). */
+  --color-overlay: rgb(0 0 0 / 0.1);
+
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px rgb(0 0 0 / 0.1);
+  --shadow-xl: 0 20px 25px rgb(0 0 0 / 0.15);
+
+  /* Layout constants from the design system */
+  --height-header: 64px;
+  --height-input: 36px;
+  --width-sidebar: 240px;
+
+  /* == Public design system (ADR-018) ==========================
+   *
+   * Everything below is added for the public surface. A note on WHICH of
+   * these generate utilities, because the spacing-namespace incident
+   * documented above was caused by exactly this being non-obvious:
+   *
+   *   --text-*      IS a Tailwind v4 namespace  -> text-display-lg etc.
+   *   --shadow-*    IS a namespace              -> shadow-card etc.
+   *   --ease-*      IS a namespace              -> ease-out-quint etc.
+   *
+   * --container-wide/-narrow deliberately do NOT live here even though
+   * --container-* is technically a namespace (it drives max-w-*): Tailwind's
+   * generated utilities layer sits at this file's `@import "tailwindcss"`
+   * line, ABOVE .container-page's hand-written rule further down — so at
+   * equal specificity .container-page's own max-width would always win
+   * over a generated `max-w-(--container-wide)`, silently no-op-ing the
+   * override. They live in :root under @layer base instead, next to
+   * .container-page's own wide/narrow utilities, which win by source order
+   * on purpose (see the comment there).
+   *
+   * Section rhythm, durations and reveal distance are NOT here for the
+   * ordinary reason: they aren't a namespace at all, so a name here could
+   * only ever collide with one, never usefully extend it.
+   */
+
+  /* Display type — PUBLIC ONLY (ADR-018 rule 6). The shared --text-xs..5xl
+     ramp above is untouched: it belongs to the admin surface too, where the
+     14px base is deliberate. Fluid, so the hero scales without breakpoints. */
+  --text-display-sm: clamp(1.75rem, 1.35rem + 2vw, 2.5rem);
+  --text-display-sm--line-height: 1.2;
+  --text-display-md: clamp(2.25rem, 1.6rem + 3.2vw, 3.5rem);
+  --text-display-md--line-height: 1.15;
+  --text-display-lg: clamp(2.75rem, 1.8rem + 4.8vw, 4.5rem);
+  --text-display-lg--line-height: 1.08;
+
+  /* Elevation tiers for public cards and floating affordances. Same
+     neutral-literal exception the --shadow-* block above already documents:
+     a drop shadow is not brandable and is mode-independent. */
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.04), 0 2px 8px rgb(0 0 0 / 0.04);
+  --shadow-card-hover: 0 2px 4px rgb(0 0 0 / 0.06), 0 12px 28px rgb(0 0 0 / 0.1);
+  --shadow-float: 0 8px 16px rgb(0 0 0 / 0.08), 0 24px 48px rgb(0 0 0 / 0.12);
+
+  /* Named easings, so no component hand-picks a cubic-bezier. */
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@layer base {
+  /* Public design-system tokens that are NOT Tailwind namespaces (ADR-018).
+     Kept out of @theme so they cannot collide with a utility namespace —
+     the spacing-scale incident documented above is the precedent. */
+  :root {
+    /* Section rhythm — one scale, used by every public section, so nothing
+       hand-rolls its own py-N. Fluid: the low end is the mobile value. */
+    --section-space-sm: clamp(2rem, 4vw, 3rem);
+    --section-space-md: clamp(3rem, 6vw, 5rem);
+    --section-space-lg: clamp(4rem, 8vw, 7rem);
+    --section-gap: clamp(1.5rem, 3vw, 2.5rem);
+
+    /* Motion durations. Tailwind v4 has no --duration-* namespace, so these
+       are consumed by the utilities below (or as duration-(--duration-base)
+       in a class string) rather than generating utilities of their own. */
+    --duration-fast: 150ms;
+    --duration-base: 250ms;
+    --duration-slow: 450ms;
+
+    /* How far a Reveal travels before settling. */
+    --reveal-distance: 1.5rem;
+
+    /* Container's fixed hero/prose siblings. --container-width stays the
+       admin-set value the theme engine emits and .container-page consumes;
+       these two are constants — not namespaced here for the reason above. */
+    --container-wide: 1600px;
+    --container-narrow: 768px;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground text-base;
+    font-size: var(--brand-base-font-size, 14px);
+    font-feature-settings:
+      "rlig" 1,
+      "calt" 1;
+  }
+
+  /* Every interactive element gets the same visible focus treatment.
+     Applied globally rather than per-component so it cannot be forgotten. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+
+  /* Respect the OS setting rather than overriding it with brand animation. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer utilities {
+  /* Logical properties are the default in components so RTL locales work
+     without a per-component audit later. */
+  .container-page {
+    @apply mx-auto w-full px-4 md:px-6 lg:px-10;
+    max-width: var(--container-width, 1400px);
+  }
+
+  /* Container's `wide`/`narrow` size variants (ADR-018). Hand-written
+     rather than Tailwind's generated `max-w-(--container-wide)` arbitrary
+     utility: that utility compiles EARLIER in the stylesheet than
+     .container-page (Tailwind's generated layer sits where `@import
+     "tailwindcss"` is written, near the top of this file), so at equal
+     specificity .container-page's own max-width would silently win and the
+     override would never take effect. These two live in the same
+     hand-authored block, immediately after .container-page, so source
+     order guarantees they win instead. */
+  .container-wide {
+    max-width: var(--container-wide);
+  }
+  .container-narrow {
+    max-width: var(--container-narrow);
+  }
+
+  /* THE hover treatment for every card-like surface (changes-02): Card,
+     AdminSection, editor panels and settings-hub tiles all use this one
+     utility, so the effect stays identical and changes in one place. Ring
+     colour lifts and a soft shadow appears; motion respects the reduced-
+     motion rule in @layer base above. */
+  .card-hover {
+    @apply transition-[box-shadow,--tw-ring-color,border-color] duration-200 ease-out;
+  }
+  .card-hover:hover {
+    @apply shadow-md ring-foreground/20;
+    border-color: color-mix(in oklab, var(--foreground) 20%, transparent);
+  }
+
+  /* Card's `elevated` variant (Phase 2) — a resting shadow that grows on
+     hover, layered onto .card-hover rather than a `hover:shadow-card-hover`
+     utility class in the component (see Card's own comment for why that
+     would silently lose to the rule above). */
+  .card-hover[data-variant="elevated"] {
+    box-shadow: var(--shadow-card);
+  }
+  .card-hover[data-variant="elevated"]:hover {
+    box-shadow: var(--shadow-card-hover);
+  }
+
+  /* == Public design system: section rhythm (ADR-018) ============ */
+
+  .section-sm {
+    padding-block: var(--section-space-sm);
+  }
+  .section-md {
+    padding-block: var(--section-space-md);
+  }
+  .section-lg {
+    padding-block: var(--section-space-lg);
+  }
+
+  /* == Public design system: hover effects ======================= */
+
+  /* Image zoom on hover of an ancestor marked `group`. Transform only —
+     never width/height — so it composites without layout work. The parent
+     supplies overflow-hidden; ImageReveal (Phase 2) does that. */
+  .media-zoom {
+    transition: transform var(--duration-slow) var(--ease-out-quint);
+  }
+  .group:hover .media-zoom,
+  .group:focus-visible .media-zoom {
+    transform: scale(1.06);
+  }
+
+  /* Underline sweeping out from the inline START. A pseudo-element with a
+     logical inset, so it runs the correct way in RTL with no [dir] rule. */
+  .link-underline {
+    position: relative;
+  }
+  .link-underline::after {
+    content: "";
+    position: absolute;
+    inset-block-end: -2px;
+    inset-inline-start: 0;
+    block-size: 1.5px;
+    inline-size: 0;
+    background-color: currentcolor;
+    transition: inline-size var(--duration-base) var(--ease-out-quint);
+  }
+  .link-underline:hover::after,
+  .link-underline:focus-visible::after,
+  .link-underline[aria-current="page"]::after {
+    inline-size: 100%;
+  }
+
+  /* == Public design system: scroll reveal (ADR-018 rule 2) =======
+   *
+   * The load-bearing guarantee: content is VISIBLE in the server HTML and
+   * STAYS visible when JS never runs. Two paths, neither of which can
+   * strand it:
+   *
+   *   1. Scroll-driven CSS (animation-timeline: view()) needs no JS at
+   *      all — the animation IS the progressive enhancement.
+   *   2. Browsers without it hide the element ONLY under [data-reveal-js],
+   *      an attribute the observer island sets on mount. No JS, no
+   *      attribute, no hiding.
+   *
+   * Both paths sit inside prefers-reduced-motion: no-preference, so a
+   * reduced-motion visitor gets the finished state immediately. This is
+   * why the global duration reset in @layer base is NOT sufficient on its
+   * own: an observer that never fires would otherwise leave content at
+   * opacity 0 forever. */
+
+  @media (prefers-reduced-motion: no-preference) {
+    @supports (animation-timeline: view()) {
+      .reveal {
+        animation: reveal-fade auto both;
+        animation-timeline: view();
+        animation-range: entry 0% cover 28%;
+      }
+      .reveal-up {
+        animation-name: reveal-fade, reveal-up;
+      }
+      .reveal-start {
+        animation-name: reveal-fade, reveal-start;
+      }
+      .reveal-end {
+        animation-name: reveal-fade, reveal-end;
+      }
+      .reveal-scale {
+        animation-name: reveal-fade, reveal-scale;
+      }
+    }
+
+    @supports not (animation-timeline: view()) {
+      [data-reveal-js] .reveal {
+        opacity: 0;
+        transition:
+          opacity var(--duration-slow) var(--ease-out-quint),
+          transform var(--duration-slow) var(--ease-out-quint);
+      }
+      [data-reveal-js] .reveal-up {
+        transform: translateY(var(--reveal-distance));
+      }
+      [data-reveal-js] .reveal-start {
+        transform: translateX(calc(-1 * var(--reveal-distance)));
+      }
+      [data-reveal-js] .reveal-end {
+        transform: translateX(var(--reveal-distance));
+      }
+      /* translateX has no logical equivalent, so start/end swap by hand
+         in RTL — the one place direction is explicit rather than implied. */
+      [dir="rtl"] [data-reveal-js] .reveal-start {
+        transform: translateX(var(--reveal-distance));
+      }
+      [dir="rtl"] [data-reveal-js] .reveal-end {
+        transform: translateX(calc(-1 * var(--reveal-distance)));
+      }
+      [data-reveal-js] .reveal-scale {
+        transform: scale(0.96);
+      }
+      [data-reveal-js] .reveal.is-visible {
+        opacity: 1;
+        transform: none;
+      }
+    }
+  }
+
+  /* == Public design system: marquee / ticker =====================
+   *
+   * CSS-only (ADR-018 rule 1): a duplicated track translated by exactly
+   * -50%, so the seam is invisible. Static under reduced motion, and
+   * pausable on hover AND keyboard focus — a marquee that only pauses on
+   * hover is unusable for a keyboard visitor. */
+  .marquee {
+    overflow: hidden;
+    mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
+  }
+  .marquee-track {
+    display: flex;
+    inline-size: max-content;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .marquee-track {
+      animation: marquee-scroll var(--marquee-duration, 40s) linear infinite;
+      will-change: transform;
+    }
+    /* RTL reads the other way, so the track must too. */
+    [dir="rtl"] .marquee-track {
+      animation-direction: reverse;
+    }
+    /* Marquee's <Marquee pauseOnHover={false}> escape hatch (Phase 2) sets
+       this data attribute rather than a second untested code path. */
+    .marquee:not([data-pause-on-hover="false"]):hover .marquee-track,
+    .marquee:not([data-pause-on-hover="false"]):focus-within .marquee-track {
+      animation-play-state: paused;
+    }
+  }
+
+  /* == Public design system: premium header/footer chrome ==========
+   *
+   * Additions for the header/footer redesign. Same rules as the rest of
+   * this file: no color literals (color-mix over existing tokens only),
+   * large-fill use of --primary only (rule 5 — these are soft washes
+   * behind an entire header/footer band, never a thin/text element). */
+
+  /* Faint dot pattern for header/footer decorative depth. Built from
+     currentcolor rather than a fixed token, so it reads correctly on an
+     inverted surface (e.g. the footer's --secondary band) as well as the
+     default background — a caller sets its own opacity/mask on the
+     element and inherits whatever text color its container establishes. */
+  .bg-dot-grid {
+    background-image: radial-gradient(
+      color-mix(in oklab, currentcolor 14%, transparent) 1px,
+      transparent 1px
+    );
+    background-size: 20px 20px;
+  }
+
+  /* Soft ambient glow behind the header/CTA bands — a large-area brand
+     wash, not a thin border (ADR-018 rule 5 stays satisfied). */
+  .bg-glow-primary {
+    background-image:
+      radial-gradient(
+        60% 100% at 12% 0%,
+        color-mix(in oklab, var(--primary) 10%, transparent),
+        transparent
+      ),
+      radial-gradient(
+        50% 100% at 88% 0%,
+        color-mix(in oklab, var(--primary-interactive) 8%, transparent),
+        transparent
+      );
+  }
+
+  /* Hover glow for large filled CTAs (pill buttons on brand-tinted
+     backgrounds) — a shadow tinted with the fill color already used on the
+     element, never a new hue. */
+  .glow-on-hover {
+    transition:
+      box-shadow var(--duration-base) var(--ease-out-quint),
+      transform var(--duration-base) var(--ease-out-quint);
+  }
+  .glow-on-hover:hover,
+  .glow-on-hover:focus-visible {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 24px -8px color-mix(in oklab, var(--primary) 55%, transparent);
+  }
+
+  /* == Public design system: image wipe (ADR-018 rule 2) ===========
+   *
+   * ImageReveal's entrance effect — a directional clip-path wipe, distinct
+   * from .media-zoom (which is hover-only, on the image itself). Same two-
+   * path guarantee as .reveal above: native view-timeline where supported,
+   * [data-reveal-js]-gated fallback where not, both content-visible by
+   * default. clip-path has no logical inset() axis, so direction is
+   * flipped by hand under [dir="rtl"] — the same technique .reveal-start/
+   * .reveal-end already use for translateX. */
+  @media (prefers-reduced-motion: no-preference) {
+    @supports (animation-timeline: view()) {
+      .image-wipe {
+        animation: image-wipe-ltr auto both;
+        animation-timeline: view();
+        animation-range: entry 0% cover 30%;
+      }
+      [dir="rtl"] .image-wipe {
+        animation-name: image-wipe-rtl;
+      }
+    }
+
+    @supports not (animation-timeline: view()) {
+      [data-reveal-js] .image-wipe {
+        clip-path: inset(0 0 0 100%);
+        transition: clip-path var(--duration-slow) var(--ease-out-quint);
+      }
+      [dir="rtl"] [data-reveal-js] .image-wipe {
+        clip-path: inset(0 100% 0 0);
+      }
+      [data-reveal-js] .image-wipe.is-visible {
+        clip-path: inset(0);
+      }
+    }
+  }
+}
+
+/* Keyframes for the reveal and marquee utilities above. Deliberately at top
+   level, not inside @layer — @keyframes is not layered, and nesting it in
+   one reads as though it were. Transform and opacity only: nothing here
+   triggers layout. */
+@keyframes reveal-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes reveal-up {
+  from {
+    transform: translateY(var(--reveal-distance));
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes reveal-start {
+  from {
+    transform: translateX(calc(-1 * var(--reveal-distance)));
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes reveal-end {
+  from {
+    transform: translateX(var(--reveal-distance));
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes reveal-scale {
+  from {
+    transform: scale(0.96);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes image-wipe-ltr {
+  from {
+    clip-path: inset(0 0 0 100%);
+  }
+  to {
+    clip-path: inset(0);
+  }
+}
+@keyframes image-wipe-rtl {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0);
+  }
+}
+@keyframes marquee-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/* Branded loading mark (changes-05): Spinner's SVG animation — four rounded
+   squares that morph and rotate as one loop. Ported from the Uiverse "pl1"
+   loader (by reglobby), recolored to var(--primary) (the source's second,
+   masked hsl(343,90%,50%) overlay layer is dropped — the doc asked for one
+   brand color, and a hardcoded hsl() would fail code-style.md #1 anyway).
+   Class names are scoped to brand-loader-* to avoid colliding with a raw
+   .pl1 a page might import from elsewhere. Respects prefers-reduced-motion
+   for free via the global animation-duration reset in @layer base above. */
+.brand-loader__g,
+.brand-loader__rect {
+  animation: brand-loader-a 1.5s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+.brand-loader__g {
+  transform-origin: 64px 64px;
+}
+.brand-loader__rect:first-child {
+  animation-name: brand-loader-b;
+}
+.brand-loader__rect:nth-child(2) {
+  animation-name: brand-loader-c;
+}
+@keyframes brand-loader-a {
+  from {
+    transform: rotate(0);
+  }
+  80%,
+  to {
+    animation-timing-function: steps(1, start);
+    transform: rotate(90deg);
+  }
+}
+@keyframes brand-loader-b {
+  from {
+    animation-timing-function: cubic-bezier(0.33, 0, 0.67, 0);
+    width: 40px;
+    height: 40px;
+  }
+  20% {
+    animation-timing-function: steps(1, start);
+    width: 40px;
+    height: 0;
+  }
+  60% {
+    animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
+    width: 0;
+    height: 40px;
+  }
+  80%,
+  to {
+    width: 40px;
+    height: 40px;
+  }
+}
+@keyframes brand-loader-c {
+  from {
+    animation-timing-function: cubic-bezier(0.33, 0, 0.67, 0);
+    width: 40px;
+    height: 40px;
+    transform: translate(0, 48px);
+  }
+  20% {
+    animation-timing-function: cubic-bezier(0.33, 1, 0.67, 1);
+    width: 40px;
+    height: 88px;
+    transform: translate(0, 0);
+  }
+  40% {
+    animation-timing-function: cubic-bezier(0.33, 0, 0.67, 0);
+    width: 40px;
+    height: 40px;
+    transform: translate(0, 0);
+  }
+  60% {
+    animation-timing-function: cubic-bezier(0.33, 1, 0.67, 1);
+    width: 88px;
+    height: 40px;
+    transform: translate(0, 0);
+  }
+  80%,
+  to {
+    width: 40px;
+    height: 40px;
+    transform: translate(48px, 0);
+  }
+}

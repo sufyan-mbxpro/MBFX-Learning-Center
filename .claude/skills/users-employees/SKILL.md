@@ -8,9 +8,11 @@ employees = HR context. Separate tables, nullable `userId` link.
 - **Users list/detail** on the shared DataTable: filters (type, status,
   role, date range), bulk activate/deactivate/assign-role/export. Row
   actions permission-gated — Support sees reset-password, not delete.
-- **Role manager:** system roles clone-only (never delete — lockout risk);
-  `canAssignRole` strict-`<` level guard enforced SERVER-side; permission
-  matrix editor grouped by `groupName`.
+- **Role manager:** system roles are editable in place — name, description
+  and permissions (ADR-016); their key and level are locked and they are
+  never deleted (lockout risk). `canAssignRole` strict-`<` level guard
+  enforced SERVER-side (this alone keeps `super_admin` untouchable);
+  permission panel grouped by `groupName`, autosaving.
 - **Per-user overrides:** grant or DENY with a required reason field —
   audited. DENY beats everything (frozen rbac semantics).
 - **Employees:** CRUD, department/designation admin, org chart from

@@ -33,8 +33,12 @@ Non-negotiable. A PR violating any numbered rule here does not merge.
    probes against every `/admin/*` route (ADR-006).
 8. Rich text is sanitized **server-side on save**, regardless of editor
    behavior. XSS regression suite required (Module 11).
-9. Uploads: validate MIME + size server-side, presigned S3 URLs only, never
-   proxy arbitrary URLs (SSRF).
+9. Uploads: validate MIME (magic bytes, never the client's `File.type`) +
+   size server-side; bytes enter storage only through `@repo/core`'s
+   `storeImage()` and its storage driver (ADR-017: local disk now, S3 as
+   the seam — presigned direct-to-S3 replaces the transport, not the
+   validation). Never proxy or fetch arbitrary URLs (SSRF); image "URL"
+   text fields are replaced by the upload widget, not supplemented.
 
 ## Secrets & sessions
 

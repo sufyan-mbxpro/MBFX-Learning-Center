@@ -35,7 +35,8 @@
       "dependsOn": ["^build", "@repo/db#generate"]
     },
     "test": {
-      "dependsOn": ["^build", "@repo/db#generate"]
+      "dependsOn": ["^build", "@repo/db#generate"],
+      "env": ["DATABASE_URL"]
     },
     "test:e2e": {
       "dependsOn": ["^build"],
