@@ -127,7 +127,8 @@ function CategoryEditDialog({
   const defaultLocale = locales[0]?.code ?? "en";
   const [locale, setLocale] = useState(defaultLocale);
   const [form, setForm] = useState<CategoryTranslationRow>(
-    category?.translations.find((t) => t.locale === defaultLocale) ?? EMPTY_TRANSLATION(defaultLocale),
+    category?.translations.find((t) => t.locale === defaultLocale) ??
+      EMPTY_TRANSLATION(defaultLocale),
   );
 
   const switchLocale = (next: string) => {
@@ -297,7 +298,7 @@ export function CategoriesManager({
           <div className="flex flex-col">
             <span className="font-medium">{row.original.name}</span>
             {row.original.slug && (
-              <code className="text-xs text-muted-foreground">/{row.original.slug}</code>
+              <span className="text-xs text-muted-foreground">/{row.original.slug}</span>
             )}
           </div>
         ),

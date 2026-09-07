@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" width="1600" height="900" role="presentation" aria-hidden="true"><defs>
+<linearGradient id="g-support-hero" x1="0" y1="0" x2="1" y2="1">
+<stop offset="0" stop-color="#2E251C"/>
+<stop offset=".55" stop-color="#221C16"/>
+<stop offset="1" stop-color="#14110E"/>
+</linearGradient>
+<radialGradient id="warm-support-hero" cx=".5" cy=".5" r=".5">
+<stop offset="0" stop-color="#E8B98C" stop-opacity=".55"/>
+<stop offset="1" stop-color="#E8B98C" stop-opacity="0"/>
+</radialGradient>
+<radialGradient id="cool-support-hero" cx=".5" cy=".5" r=".5">
+<stop offset="0" stop-color="#7FA3C4" stop-opacity=".38"/>
+<stop offset="1" stop-color="#7FA3C4" stop-opacity="0"/>
+</radialGradient>
+<linearGradient id="fade-support-hero" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#E8B98C" stop-opacity=".5"/>
+<stop offset="1" stop-color="#E8B98C" stop-opacity="0"/>
+</linearGradient>
+<pattern id="grid-support-hero" width="64" height="64" patternUnits="userSpaceOnUse">
+<path d="M64 0H0V64" fill="none" stroke="#F5EFE8" stroke-opacity=".05" stroke-width="1"/>
+</pattern>
+<radialGradient id="vig-support-hero" cx=".5" cy=".45" r=".75">
+<stop offset=".55" stop-color="#14110E" stop-opacity="0"/>
+<stop offset="1" stop-color="#14110E" stop-opacity=".42"/>
+</radialGradient>
+</defs><rect width="1600" height="900" fill="url(#g-support-hero)"/><ellipse cx="1164.91" cy="709.32" rx="532.37" ry="415.25" fill="url(#warm-support-hero)"/><ellipse cx="398.77" cy="121.01" rx="524.94" ry="409.45" fill="url(#cool-support-hero)"/><ellipse cx="858.61" cy="208.22" rx="505.62" ry="394.38" fill="url(#warm-support-hero)"/><rect width="1600" height="900" fill="url(#grid-support-hero)"/><circle cx="800" cy="450" r="216" fill="none" stroke="#F5EFE8" stroke-opacity=".13" stroke-width="2"/><circle cx="800" cy="450" r="324" fill="none" stroke="#F5EFE8" stroke-opacity=".13" stroke-width="2"/><circle cx="800" cy="450" r="432" fill="none" stroke="#F5EFE8" stroke-opacity=".13" stroke-width="2"/><circle cx="800" cy="450" r="52" fill="#E8B98C" fill-opacity=".18"/><circle cx="800" cy="440" r="17" fill="#E8B98C"/><path d="M773 484 a27 27 0 0 1 54 0" fill="#E8B98C"/><circle cx="690.62" cy="636.26" r="26" fill="#7FA3C4" fill-opacity=".14"/><circle cx="690.62" cy="631.26" r="9" fill="#7FA3C4" fill-opacity=".9"/><path d="M676.62 654.26 a14 14 0 0 1 28 0" fill="#7FA3C4" fill-opacity=".9"/><circle cx="914.51" cy="753.09" r="26" fill="#E8B98C" fill-opacity=".14"/><circle cx="914.51" cy="748.09" r="9" fill="#E8B98C" fill-opacity=".9"/><path d="M900.51 771.09 a14 14 0 0 1 28 0" fill="#E8B98C" fill-opacity=".9"/><circle cx="368.27" cy="434.68" r="26" fill="#E8B98C" fill-opacity=".14"/><circle cx="368.27" cy="429.68" r="9" fill="#E8B98C" fill-opacity=".9"/><path d="M354.27 452.68 a14 14 0 0 1 28 0" fill="#E8B98C" fill-opacity=".9"/><circle cx="592.22" cy="390.97" r="26" fill="#7FA3C4" fill-opacity=".14"/><circle cx="592.22" cy="385.97" r="9" fill="#7FA3C4" fill-opacity=".9"/><path d="M578.22 408.97 a14 14 0 0 1 28 0" fill="#7FA3C4" fill-opacity=".9"/><circle cx="530.82" cy="269.67" r="26" fill="#E8B98C" fill-opacity=".14"/><circle cx="530.82" cy="264.67" r="9" fill="#E8B98C" fill-opacity=".9"/><path d="M516.82 287.67 a14 14 0 0 1 28 0" fill="#E8B98C" fill-opacity=".9"/><circle cx="1205.72" cy="598.36" r="26" fill="#E8B98C" fill-opacity=".14"/><circle cx="1205.72" cy="593.36" r="9" fill="#E8B98C" fill-opacity=".9"/><path d="M1191.72 616.36 a14 14 0 0 1 28 0" fill="#E8B98C" fill-opacity=".9"/><circle cx="1015.49" cy="435.19" r="26" fill="#7FA3C4" fill-opacity=".14"/><circle cx="1015.49" cy="430.19" r="9" fill="#7FA3C4" fill-opacity=".9"/><path d="M1001.49 453.19 a14 14 0 0 1 28 0" fill="#7FA3C4" fill-opacity=".9"/><circle cx="765.05" cy="127.89" r="26" fill="#E8B98C" fill-opacity=".14"/><circle cx="765.05" cy="122.89" r="9" fill="#E8B98C" fill-opacity=".9"/><path d="M751.05 145.89 a14 14 0 0 1 28 0" fill="#E8B98C" fill-opacity=".9"/><circle cx="589.67" cy="72.66" r="26" fill="#E8B98C" fill-opacity=".14"/><circle cx="589.67" cy="67.66" r="9" fill="#E8B98C" fill-opacity=".9"/><path d="M575.67 90.66 a14 14 0 0 1 28 0" fill="#E8B98C" fill-opacity=".9"/><rect width="1600" height="900" fill="url(#vig-support-hero)"/></svg>

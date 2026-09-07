@@ -68,7 +68,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function AdminRootLayout({ children }: LayoutProps<"/">) {
   const session = await auth();
   const subject = session?.user?.id ? await loadSubject(session.user.id) : null;
-  if (subject?.userType !== "STAFF") redirect("/sign-in");
+  if (subject?.userType !== "STAFF") redirect("/admin/sign-in");
 
   // Cached read (tag "theme", ADR-004) — an admin theme save invalidates
   // it; nothing polls. The style element id is frozen API: Module 14's CSP

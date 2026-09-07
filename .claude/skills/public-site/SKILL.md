@@ -1,5 +1,11 @@
 # SKILL — Module 12: Public site
 
+> **Homepage admin UI paused (ADR-038, 2026-09-06).** `/admin/homepage`
+> (the section order/enable/variant editor) is hidden pending the owner's
+> move to module-by-module/static site design. The homepage still renders
+> from the current `home.sections` value — read ADR-038 before resuming
+> the admin screen.
+
 plan.md Module 12. Everything lives under `app/(public)/[locale]/` (ADR-006).
 This is the surface judged on Core Web Vitals — the bundle-boundary and
 Lighthouse rules exist for it.

@@ -23,6 +23,18 @@ wired to Zod v4 via react-hook-form resolver; `DataTable` on TanStack Table
 v8 (server pagination/sort/filter, column visibility, selection, bulk
 actions, CSV export).
 
+## Admin-surface conventions the primitives carry (ADR-044/045)
+
+- `Badge` centres its own text (`leading-none` + flex centring).
+- `Table`'s header band is its own surface (`bg-muted/60`), with the row
+  hover tint cancelled inside it — a header must never read as a row.
+- `DataTable` takes a `filters` slot rendered in its own toolbar beside
+  the search box. Screens pass their Selects there rather than stacking a
+  filter bar above the table.
+- `SocialGlyph` owns the brand marks. `lucide-react` v1 removed every
+  brand icon, so looking one up by name silently rendered nothing —
+  an unresolvable name here draws the generic link mark instead (ADR-045).
+
 ## A11y + RTL checklist (every component)
 
 - Semantic tokens only — hex literal here fails lint.

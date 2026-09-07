@@ -43,7 +43,7 @@ export default async function RolesPage() {
     <AdminPage
       title={t("roles")}
       description={t("rolesSubtitle")}
-      width="lg"
+
       actions={
         canManage ? (
           <CreateRoleDialog

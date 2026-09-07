@@ -5,41 +5,54 @@ import { Button } from "@repo/ui/components/button";
 import { Input } from "@repo/ui/components/input";
 import { Label } from "@repo/ui/components/label";
 import { Spinner } from "@repo/ui/components/spinner";
+import {
+  isAdminPath,
+  resolveRedirect,
+  signInWithPassword,
+  signOutSilently,
+} from "../../../_lib/credentials.ts";
+
+type Failure = "credentials" | "learnersOnly";
 
 export function SignInForm({
   labels,
+  homeHref,
 }: {
-  labels: { email: string; password: string; submit: string; failed: string };
+  labels: { email: string; password: string; submit: string; failed: string; learnersOnly: string };
+  /** Localized "/" for this render's locale — where a learner lands by default. */
+  homeHref: string;
 }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState(false);
+  const [failure, setFailure] = useState<Failure | null>(null);
   const [pending, startTransition] = useTransition();
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
-    setError(false);
+    setFailure(null);
     startTransition(async () => {
-      const response = await fetch("/api/auth/sign-in/email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-      if (!response.ok) {
-        setError(true);
+      const result = await signInWithPassword(email, password);
+      if (result.status === "failed") {
+        setFailure("credentials");
         return;
       }
-      // The ?redirect= param is only needed HERE, at submit time — read it
-      // from the live URL instead of useSearchParams(), which would block
-      // prerendering of the static page shell (Cache Components requires a
-      // Suspense boundary around that hook; this needs neither).
-      // Open-redirect guard: only same-origin paths, never full URLs.
-      const target = new URLSearchParams(window.location.search).get("redirect");
-      const safeTarget =
-        target && target.startsWith("/") && !target.startsWith("//") ? target : "/admin";
-      window.location.assign(safeTarget);
+
+      // This is the LEARNER form (ADR-052). A staff credential is signed
+      // straight back out so the public site never doubles as the portal's
+      // way in — display logic, not a boundary, and worded without naming
+      // the admin surface it deliberately doesn't advertise.
+      if (result.userType === "STAFF") {
+        await signOutSilently();
+        setFailure("learnersOnly");
+        return;
+      }
+
+      // Never into /admin, whatever `?redirect=` says.
+      window.location.assign(resolveRedirect(homeHref, (path) => !isAdminPath(path)));
     });
   };
+
+  const errorId = failure ? "signin-error" : undefined;
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-4">
@@ -51,8 +64,8 @@ export function SignInForm({
           autoComplete="email"
           required
           value={email}
-          aria-invalid={error || undefined}
-          aria-describedby={error ? "signin-error" : undefined}
+          aria-invalid={failure !== null || undefined}
+          aria-describedby={errorId}
           onChange={(e) => setEmail(e.target.value)}
         />
       </div>
@@ -64,14 +77,14 @@ export function SignInForm({
           autoComplete="current-password"
           required
           value={password}
-          aria-invalid={error || undefined}
-          aria-describedby={error ? "signin-error" : undefined}
+          aria-invalid={failure !== null || undefined}
+          aria-describedby={errorId}
           onChange={(e) => setPassword(e.target.value)}
         />
       </div>
-      {error && (
+      {failure && (
         <p id="signin-error" role="alert" className="text-sm text-destructive">
-          {labels.failed}
+          {failure === "learnersOnly" ? labels.learnersOnly : labels.failed}
         </p>
       )}
       <Button type="submit" disabled={pending} className="w-full">

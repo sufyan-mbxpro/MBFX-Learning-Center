@@ -1,6 +1,7 @@
 {
   "common": {
-    "siteName": "MBFX Learning Center"
+    "siteName": "MBFX Learning Center",
+    "siteDescription": "Free forex education, tools, and analysis."
   },
   "home": {
     "placeholder": "Public surface — scaffold placeholder. See docs/logs/DEVLOG.md for module status.",
@@ -27,7 +28,39 @@
     "faqQ3": "Is this financial advice?",
     "faqA3": "No. Everything here is educational. Nothing on this site is a recommendation to buy or sell any instrument.",
     "faqQ4": "How often is new analysis published?",
-    "faqA4": "New articles and analysis are published regularly; the latest always appear on this page and in the News section."
+    "faqA4": "New articles and analysis are published regularly; the latest always appear on this page and in the News section.",
+    "exploreEyebrow": "The platform",
+    "exploreTitle": "Everything a trader needs, in one place",
+    "exploreLead": "Lessons, calculators, live market context and daily analysis — each one useful on its own, and considerably better together.",
+    "exploreCta": "Explore",
+    "exploreSoon": "Coming soon",
+    "exploreCarouselLabel": "Platform sections",
+    "exploreCarouselPrevious": "Previous sections",
+    "exploreCarouselNext": "Next sections",
+    "exploreLearnTag": "Courses",
+    "exploreLearnTitle": "Learning paths",
+    "exploreLearnBody": "Structured courses that start at first principles and build towards a repeatable trading process.",
+    "exploreToolsTag": "Calculators",
+    "exploreToolsTitle": "Trading calculators",
+    "exploreToolsBody": "Position size, pip value, margin and profit — worked out before the trade rather than after it.",
+    "exploreCalendarTag": "Calendar",
+    "exploreCalendarTitle": "Economic calendar",
+    "exploreCalendarBody": "Every release that moves a pair, with its impact rating and the numbers as they land.",
+    "exploreNewsTag": "News",
+    "exploreNewsTitle": "Market news",
+    "exploreNewsBody": "What happened, why it mattered and what it changes — written for people who trade, not for headline readers.",
+    "exploreAnalysisTag": "Analysis",
+    "exploreAnalysisTitle": "Daily analysis",
+    "exploreAnalysisBody": "Chart-led breakdowns and trade ideas from the desk, published as the session develops.",
+    "exploreGlossaryTag": "Reference",
+    "exploreGlossaryTitle": "Trading glossary",
+    "exploreGlossaryBody": "Plain-language definitions for every term you will meet on a chart, cross-linked as you read.",
+    "exploreMarketsTag": "Markets",
+    "exploreMarketsTitle": "Live markets",
+    "exploreMarketsBody": "Rates, trading sessions and currency strength, so you know what the market is doing before you open a chart.",
+    "exploreAboutTag": "Company",
+    "exploreAboutTitle": "Who we are",
+    "exploreAboutBody": "Who writes this material, how the site is funded, and what we will never do with your attention."
   },
   "error": {
     "title": "Something went wrong",
@@ -41,6 +74,9 @@
     "title": "Not yet translated",
     "body": "This page isn't available in this language yet."
   },
+  "public": {
+    "pagePlaceholder": "This page is being designed. Check back soon."
+  },
   "nav": {
     "signIn": "Sign in",
     "toggleTheme": "Toggle theme",
@@ -51,10 +87,20 @@
     "search": "Search articles",
     "backToTop": "Back to top",
     "home": "Home",
-    "breadcrumb": "Breadcrumb"
+    "breadcrumb": "Breadcrumb",
+    "mega": {
+      "about": {
+        "company": "Company",
+        "howWeWork": "How we work",
+        "help": "Help"
+      },
+      "viewAll": "View all"
+    },
+    "signUp": "Sign up"
   },
   "footer": {
     "newsletterHeading": "Stay in the loop",
+    "newsletterBlurb": "Weekly market notes, new lessons and tools — straight to your inbox.",
     "getTheApp": "Get the app",
     "appPlatform": {
       "ios": "iOS",
@@ -65,7 +111,9 @@
     "newsletterPlaceholder": "you@example.com",
     "newsletterLabel": "Email address",
     "newsletterSubmit": "Subscribe",
-    "newsletterUnavailable": "Newsletter signup is coming soon."
+    "newsletterUnavailable": "Newsletter signup is coming soon.",
+    "followUs": "Follow us",
+    "riskDisclaimerLabel": "Risk disclaimer"
   },
   "admin": {
     "dashboard": "Dashboard",
@@ -76,6 +124,11 @@
     "theme": "Theme",
     "signOut": "Sign out",
     "adminPortal": "Admin portal",
+    "collapseSidebar": "Collapse sidebar",
+    "expandSidebar": "Expand sidebar",
+    "idleTitle": "Still there?",
+    "idleDescription": "You've been inactive for a while. For your security you'll be signed out in {seconds} seconds.",
+    "idleStay": "Stay signed in",
     "save": "Save",
     "saved": "Saved",
     "enabled": "Enabled",
@@ -382,7 +435,16 @@
     "replaceImage": "Replace",
     "removeImage": "Remove",
     "uploading": "Uploading…",
+    "uploadPercent": "{percent}%",
+    "uploadSuccess": "Upload complete",
+    "uploadRetry": "Retry upload",
     "uploadHint": "PNG, JPEG, GIF, WebP, ICO or SVG — up to 5 MB.",
+    "uploadTooLarge": "This file is {size} MB. The limit is {max} MB — compress it or choose a smaller file.",
+    "mediaChooseFromLibrary": "Choose from library",
+    "mediaPickerTitle": "Choose media",
+    "mediaPickerLibraryTab": "Library",
+    "mediaPickerUploadTab": "Upload new",
+    "mediaPickerEmpty": "Nothing in the library yet. Upload a file to reuse it anywhere.",
     "editorBold": "Bold",
     "editorItalic": "Italic",
     "editorUnderline": "Underline",
@@ -435,7 +497,271 @@
     "fieldText": "Text",
     "fieldDismissible": "Dismissible",
     "fieldPlatform": "Platform",
-    "fieldMenu": "Menu"
+    "fieldMenu": "Menu",
+    "website": "Website",
+    "websitePages": "Pages",
+    "websiteDesigns": "Designs",
+    "websiteGlobal": "Global",
+    "websiteStyles": "Styles",
+    "websiteTemplates": "Templates",
+    "websiteCards": "Cards",
+    "websiteMedia": "Media",
+    "websiteRedirects": "Redirects",
+    "mediaUpload": "Upload",
+    "mediaSearchPlaceholder": "Search media…",
+    "mediaKindAll": "All",
+    "mediaKindImage": "Images",
+    "mediaKindVideo": "Video",
+    "mediaKindAudio": "Audio",
+    "mediaKindDocument": "Documents",
+    "mediaDetailTitle": "Media details",
+    "mediaAltTextLabel": "Alt text",
+    "mediaFolderLabel": "Folder",
+    "mediaTagsLabel": "Tags",
+    "mediaTagsHint": "Comma-separated",
+    "mediaReplace": "Replace file",
+    "confirmDeleteMediaTitle": "Delete this file?",
+    "confirmDeleteMediaBody": "This cannot be undone.",
+    "newStyle": "New style",
+    "styleKeyLabel": "Key",
+    "styleNameLabel": "Name",
+    "styleScopeLabel": "Scope",
+    "styleConfigLabel": "Config (JSON)",
+    "invalidJson": "This isn't valid JSON.",
+    "usageCount": "In use",
+    "rename": "Rename",
+    "confirmDeleteStyleTitle": "Delete this style preset?",
+    "confirmDeleteStyleBody": "This cannot be undone.",
+    "confirmDeleteTemplateTitle": "Delete this template?",
+    "confirmDeleteTemplateBody": "This cannot be undone. Pages already started from it are unaffected.",
+    "newCardTemplate": "New card template",
+    "cardKeyLabel": "Key",
+    "cardNameLabel": "Name",
+    "cardContentTypeLabel": "Content type (blank = any)",
+    "cardVariantLabel": "Variant",
+    "cardConfigLabel": "Config (JSON)",
+    "cardPreview": "Preview",
+    "confirmDeleteCardTitle": "Delete this card template?",
+    "confirmDeleteCardBody": "This cannot be undone.",
+    "newPage": "New Page",
+    "pagePath": "Path",
+    "pageParent": "Parent page",
+    "noParent": "No parent (top level)",
+    "publish": "Publish",
+    "unpublish": "Unpublish",
+    "restoreVersion": "Restore",
+    "publishedBadge": "Published",
+    "draftBadge": "Draft",
+    "unpublishedChangesBadge": "Unpublished changes",
+    "confirmDeletePageTitle": "Delete this page?",
+    "confirmDeletePageBody": "The page will be hidden and can be restored later.",
+    "confirmUnpublishTitle": "Unpublish this page?",
+    "confirmUnpublishBody": "The public page will stop being served immediately.",
+    "newRedirect": "New Redirect",
+    "redirectFromLabel": "From path",
+    "redirectToLabel": "To path",
+    "redirectStatusCodeLabel": "Status code",
+    "versionsTitle": "Versions",
+    "noVersionsYet": "Not published yet",
+    "previewLink": "Preview",
+    "noPagesYet": "No pages yet",
+    "noPagesHint": "Create the first page to get started.",
+    "globalTabEmpty": "Header, footer and other global parts land in a later phase.",
+    "designsTabEmpty": "Per-content-type designs (news, courses, ...) land in a later phase.",
+    "hasUnpublishedChangesShort": "Unpublished changes",
+    "editPostDescription": "Update your blog post content and settings",
+    "viewLive": "View Live",
+    "updateAndPublish": "Update & Publish",
+    "postUrlLabel": "Post URL",
+    "wordsLabel": "Words",
+    "charactersLabel": "Characters",
+    "readingTimeLabel": "Reading Time",
+    "minutesSuffix": "min",
+    "keywordsLabel": "Keywords",
+    "keywordDensityLabel": "Keyword Density",
+    "keywordDensityHint": "Optimal keyword density: 2–3%. These figures are a hint, not a requirement.",
+    "keywordDensityEmpty": "Add focus keywords under SEO to measure their density.",
+    "seoTabBasic": "Basic SEO",
+    "seoTabSocial": "Social Media",
+    "seoTabAdvanced": "Advanced",
+    "seoTabAnalysis": "SEO Analysis",
+    "seoTitleHint": "Leave empty to use the post title. Optimal length: 50–60 characters.",
+    "seoDescriptionHint": "Leave empty to use the excerpt. Optimal length: 120–160 characters.",
+    "focusKeywordsLabel": "Focus Keywords",
+    "focusKeywordsHint": "Separate multiple keywords with commas. They should appear naturally in your content.",
+    "canonicalUrlHint": "Leave empty to use the default URL. Use for duplicate content management.",
+    "canonicalDefault": "default URL",
+    "allowIndexLabel": "Allow search engines to index this post",
+    "allowFollowLabel": "Allow search engines to follow links",
+    "ogTitleLabel": "Open Graph title",
+    "ogDescriptionLabel": "Open Graph description",
+    "twitterCardLabel": "Twitter card",
+    "twitterCardSummary": "Summary",
+    "twitterCardLargeImage": "Summary with large image",
+    "twitterImageLabel": "Twitter image",
+    "robotsSummaryHint": "What search engines will be told for this post, derived from the Basic SEO tab.",
+    "robotsIndexRow": "Indexing",
+    "robotsFollowRow": "Link following",
+    "postSettingsSection": "Post Settings",
+    "mediaTabImage": "Image",
+    "mediaTabVideo": "Video",
+    "headerImageLabel": "Page Header Image",
+    "headerImageHint": "Optional header image displayed at the top of this specific post page.",
+    "featuredPostLabel": "Featured Post",
+    "postInfoSection": "Post Information",
+    "createdLabel": "Created",
+    "idLabel": "ID",
+    "seoScoreLabel": "SEO score",
+    "seoCheckTitleLength": "Meta title is 50–60 characters",
+    "seoCheckDescriptionLength": "Meta description is 120–160 characters",
+    "seoCheckKeywordInTitle": "Focus keyword appears in the title",
+    "seoCheckKeywordInDescription": "Focus keyword appears in the description",
+    "seoCheckKeywordEarly": "Focus keyword appears early in the content",
+    "seoCheckContentLength": "Content is at least 300 words",
+    "seoCheckSubheadings": "Content uses subheadings",
+    "seoCheckImages": "Content includes at least one image",
+    "seoCheckInternalLink": "Content links to another page on this site",
+    "faqSection": "FAQ Block Editor",
+    "faqEmptyTitle": "No FAQs yet",
+    "faqEmptyBody": "Create your first FAQ to get started.",
+    "addFaq": "Add FAQ",
+    "addFirstFaq": "Add First FAQ",
+    "questionLabel": "Question",
+    "answerLabel": "Answer",
+    "remove": "Remove",
+    "relatedPostsSection": "Related Posts",
+    "relatedPostsHint": "Related posts help improve user engagement and SEO by suggesting relevant content.",
+    "relatedEmptyTitle": "No related posts yet",
+    "relatedEmptyBody": "Add related posts to improve engagement and SEO.",
+    "addRelatedPosts": "Add a related post",
+    "relatedSettingsSection": "Related Posts Settings",
+    "showRelatedLabel": "Show Related Posts",
+    "relatedCountLabel": "Number of Related Posts",
+    "postsSuffix": "posts",
+    "publishHint": "Manage when this post will be published",
+    "schedulePlusHour": "+1 Hour",
+    "scheduleTomorrow9": "Tomorrow 9AM",
+    "scheduleNextWeek": "Next Week",
+    "scheduleClear": "Clear",
+    "quickEdit": "Quick Edit",
+    "fullEditor": "Full Editor",
+    "setAsDraft": "Set as Draft",
+    "setFeatured": "Set Featured",
+    "unsetFeatured": "Unset Featured",
+    "viewPost": "View Post",
+    "editGroupLabel": "Edit",
+    "statusGroupLabel": "Status",
+    "featuredCol": "Featured",
+    "visitSite": "Visit site",
+    "visitSiteHint": "Opens the public site in a new tab",
+    "socialIconCol": "Icon",
+    "socialIconGlyph": "Built-in icon",
+    "socialIconUpload": "Custom icon",
+    "socialIconUploadHint": "Overrides the built-in icon. Square SVG or PNG works best.",
+    "confirmDeleteGlossaryTitle": "Delete this term?",
+    "confirmDeleteGlossaryBody": "The term is soft-deleted and disappears from the public glossary. It can be restored.",
+    "confirmRemoveImageTitle": "Remove this image?",
+    "confirmRemoveImageBody": "The field is cleared. The change applies when you save the section.",
+    "confirmRemoveRowTitle": "Remove this row?",
+    "confirmRemoveRowBody": "The row is removed. The change applies when you save the section.",
+    "pageDesc": {
+      "dashboard": "Activity, content and account totals at a glance",
+      "users": "Accounts, their roles, and their access to the platform",
+      "userDetail": "Roles, permission overrides, status and sessions for this account",
+      "roles": "Every role, the level it sits at, and how many permissions it grants",
+      "roleDetail": "Rename this role, set its level, and grant or revoke its permissions",
+      "employees": "Staff records, departments, designations and reporting lines",
+      "employeeDetail": "Employment details, reporting line and offboarding for this employee",
+      "glossary": "Trading terms published to the public glossary",
+      "articles": "News, analysis and trade ideas — from draft through to published",
+      "articleDetail": "Content, metadata, SEO and translations for this article",
+      "articleCategories": "The categories articles are filed under",
+      "articleTags": "The tags used to cross-link articles",
+      "media": "Every image, video, audio file and document uploaded for use across the site",
+      "features": "Feature flags that turn parts of the site on and off without a deploy",
+      "theme": "Brand colours, light and dark modes, presets and logos",
+      "profile": "Your own account details and password"
+    },
+    "editorToolbar": "Formatting toolbar",
+    "editorParagraph": "Paragraph",
+    "editorHeading4": "Heading 4",
+    "editorBlockType": "Block type",
+    "editorFontFamily": "Font family",
+    "editorFontSans": "Sans",
+    "editorFontSerif": "Serif",
+    "editorFontMono": "Monospace",
+    "editorFontSize": "Size",
+    "editorSizeSm": "Small",
+    "editorSizeBase": "Normal",
+    "editorSizeLg": "Large",
+    "editorSizeXl": "Extra large",
+    "editorSize2xl": "Display",
+    "editorTextColor": "Text colour",
+    "editorHighlight": "Highlight",
+    "editorTonePrimary": "Brand",
+    "editorToneSuccess": "Positive",
+    "editorToneWarning": "Caution",
+    "editorToneInfo": "Informational",
+    "editorToneDanger": "Negative",
+    "editorToneMuted": "Muted",
+    "editorDefaultOption": "Default",
+    "editorAlign": "Alignment",
+    "editorAlignStart": "Align to start",
+    "editorAlignCenter": "Centre",
+    "editorAlignEnd": "Align to end",
+    "editorAlignJustify": "Justify",
+    "editorTable": "Table",
+    "editorInsertTable": "Insert 3×3 table",
+    "editorAddRow": "Add row below",
+    "editorAddColumn": "Add column after",
+    "editorDeleteRow": "Delete row",
+    "editorDeleteColumn": "Delete column",
+    "editorToggleHeaderRow": "Toggle header row",
+    "editorDeleteTable": "Delete table",
+    "editorVideo": "Embed video",
+    "editorVideoPrompt": "Paste a YouTube, Vimeo or Dailymotion link",
+    "editorVideoInvalid": "That link isn't a supported YouTube, Vimeo or Dailymotion video.",
+    "editorClearFormatting": "Clear formatting",
+    "editorModeVisual": "Visual",
+    "editorModeHtml": "HTML",
+    "editorHtmlHint": "Sanitised on save — unsupported tags are removed.",
+    "contentSectionDescription": "The headline, address and body readers will see.",
+    "seoSectionDescription": "How this post looks in search results and when shared.",
+    "faqSectionDescription": "Questions answered on the post, and emitted as FAQPage structured data.",
+    "relatedPostsSectionDescription": "Choose what appears under the article, or leave it automatic.",
+    "relatedSettingsSectionDescription": "Whether the related strip shows, and how many posts it holds.",
+    "publishSectionDescription": "Status, schedule and lifecycle for this post.",
+    "categoriesSectionDescription": "The one section this post files under.",
+    "tagsSectionDescription": "Topics used for filtering and for automatic related posts.",
+    "postSettingsSectionDescription": "Cover art, video and visibility switches.",
+    "postInfoSectionDescription": "Type, provenance and record details.",
+    "contentStatsSection": "Content statistics",
+    "editFaq": "Edit question",
+    "faqDialogDescription": "Both fields are per-locale — switching locale swaps the list.",
+    "faqAnswerHint": "Answers are sanitised on save; basic formatting is kept.",
+    "faqSaveItem": "Save question",
+    "faqUnanswered": "No answer yet",
+    "confirmRemoveFaqTitle": "Remove this question?",
+    "confirmRemoveFaqBody": "It is removed from this locale's FAQ list. Nothing is written until you save the post.",
+    "addCategory": "Add category",
+    "addTag": "Add tag",
+    "categoryCreated": "Category created and selected.",
+    "tagCreated": "Tag created and selected.",
+    "tagName": "Tag name",
+    "slugOptional": "Slug (optional — generated from the name)",
+    "taxonomySearch": "Filter tags",
+    "articleActionsHint": "Colour marks consequence: publishing is positive, archiving destroys.",
+    "confirmArchiveArticleTitle": "Archive this post?",
+    "confirmArchiveArticleBody": "It comes off the public site immediately. You can bring it back to draft afterwards.",
+    "signIn": {
+      "title": "Staff sign in",
+      "description": "This portal is for MBFX staff accounts.",
+      "email": "Email",
+      "password": "Password",
+      "submit": "Sign in",
+      "failed": "Sign-in failed. Check your email and password.",
+      "notStaff": "That account does not have access to the admin portal."
+    }
   },
   "glossary": {
     "title": "Glossary",
@@ -475,13 +801,839 @@
     "shareTwitter": "Share on X",
     "shareLinkedin": "Share on LinkedIn",
     "copyLink": "Copy link",
-    "linkCopied": "Link copied"
+    "linkCopied": "Link copied",
+    "faqTitle": "Frequently asked questions"
+  },
+  "economicCalendar": {
+    "title": "Economic calendar",
+    "intro": "Every scheduled release that moves the majors, grouped by day — with the forecast, the previous print, and the actual figure the moment it lands.",
+    "frameTitle": "Economic calendar",
+    "legendTitle": "Reading the impact column",
+    "legendIntro": "Impact is how much volatility a release is expected to cause in the listed currency — not whether the number itself is good or bad.",
+    "impactHigh": "High",
+    "impactHighBody": "Rate decisions, inflation, employment. Expect fast, wide moves in the listed currency.",
+    "impactMedium": "Medium",
+    "impactMediumBody": "Secondary data that usually moves price, but rarely sets the day's direction on its own.",
+    "impactLow": "Low",
+    "impactLowBody": "Minor releases. Worth knowing about, seldom worth trading.",
+    "impactHoliday": "Holiday",
+    "impactHolidayBody": "A market is closed. Thin liquidity can make an ordinary move look far larger than it is.",
+    "columnsTitle": "What the three numbers mean",
+    "actualLabel": "Actual",
+    "actualBody": "The figure as released. Price reacts to the distance between this and the forecast, not to the figure on its own.",
+    "forecastLabel": "Forecast",
+    "forecastBody": "What economists expected. It is already priced in before the release lands.",
+    "previousLabel": "Previous",
+    "previousBody": "Last period's reading, so you can see the direction of travel. It is sometimes revised on the day.",
+    "timezoneTitle": "Times are shown in your own timezone",
+    "timezoneBody": "The calendar detects your timezone and offers a clock control in its header to change it. Use the settings icon to filter by currency and by impact, and the date control to step between weeks and months.",
+    "openLabel": "Open the calendar in a new tab",
+    "unavailableTitle": "Calendar not loading?",
+    "unavailableBody": "The calendar is supplied by a third party and loads in a frame. If it stays blank, a browser extension or a network policy is the likely cause — open it in a new tab instead.",
+    "attribution": "Calendar data supplied by the MQL5 Economic Calendar.",
+    "heroEyebrow": "Market data",
+    "heroFootnote": "Times, filters and event detail are supplied by the embedded calendar. Nothing here is a recommendation to trade.",
+    "heroMediaAlt": "The week's scheduled economic releases",
+    "viewWeekAction": "See this week",
+    "readAnalysisAction": "Read our analysis",
+    "calendarEyebrow": "This week",
+    "calendarTitle": "The week ahead",
+    "calendarLead": "Step between weeks and months, filter by currency and by impact, and set your own timezone from the calendar's own controls.",
+    "legendEyebrow": "Impact",
+    "columnsEyebrow": "The numbers",
+    "columnsLead": "Three figures sit beside every release. The gap between the first two is what actually moves price.",
+    "howToEyebrow": "Using it",
+    "howToTitle": "Plan the week before it starts",
+    "howToLead": "A calendar is a risk tool before it is an opportunity tool. Five minutes on a Sunday tells you when not to be surprised.",
+    "howToMediaAlt": "Planning the trading week around scheduled releases",
+    "howToStepOne": "Mark the high-impact releases for the currencies you actually trade.",
+    "howToStepTwo": "Note the times in your own timezone, not the market's.",
+    "howToStepThree": "Check the forecast against the previous print to see what is already expected.",
+    "howToStepFour": "Decide in advance whether you will hold, hedge, or stand aside through each one.",
+    "notesEyebrow": "Good to know",
+    "notesTitle": "Two things that catch people out",
+    "ctaTitle": "Understand the releases, not just the dates",
+    "ctaDescription": "Our analysis explains what moved, and why, after the numbers land.",
+    "ctaAction": "Read the latest analysis"
   },
   "auth": {
     "signInTitle": "Sign in",
     "email": "Email",
     "password": "Password",
     "submit": "Sign in",
-    "failed": "Sign-in failed. Check your email and password."
+    "failed": "Sign-in failed. Check your email and password.",
+    "signInDescription": "Sign in to your MBFX Learning Center account.",
+    "learnersOnly": "This account can't sign in here.",
+    "noAccount": "New to MBFX?",
+    "signUpLink": "Create an account",
+    "signUpTitle": "Create your account",
+    "signUpDescription": "Join MBFX Learning Center and track what you learn.",
+    "name": "Full name",
+    "passwordHint": "At least {count} characters.",
+    "signUpSubmit": "Create account",
+    "signUpFailed": "We couldn't create your account. Check your details and try again.",
+    "emailTaken": "An account with this email already exists.",
+    "haveAccount": "Already have an account?",
+    "signInLink": "Sign in"
+  },
+  "cms": {
+    "blocks": {
+      "common": {
+        "fields": {
+          "spacing": "Spacing",
+          "size": "Size",
+          "text": "Text",
+          "align": "Alignment",
+          "label": "Label",
+          "link": "Link",
+          "variant": "Style variant",
+          "columnCount": "Column count",
+          "gap": "Gap",
+          "title": "Title",
+          "description": "Description",
+          "body": "Body text",
+          "icon": "Icon",
+          "value": "Value",
+          "prefix": "Prefix",
+          "suffix": "Suffix",
+          "image": "Image",
+          "autoplay": "Autoplay"
+        },
+        "options": {
+          "sm": "Small",
+          "md": "Medium",
+          "lg": "Large",
+          "xl": "Extra large",
+          "default": "Default",
+          "none": "None",
+          "alignStart": "Start",
+          "alignCenter": "Center",
+          "count1": "1",
+          "count2": "2",
+          "count3": "3",
+          "count4": "4"
+        }
+      },
+      "section": {
+        "label": "Section"
+      },
+      "container": {
+        "label": "Container",
+        "options": {
+          "page": "Page width",
+          "wide": "Wide",
+          "narrow": "Narrow"
+        }
+      },
+      "heading": {
+        "label": "Heading",
+        "fields": {
+          "level": "Heading level"
+        },
+        "options": {
+          "h1": "H1",
+          "h2": "H2",
+          "h3": "H3",
+          "h4": "H4",
+          "h5": "H5",
+          "h6": "H6"
+        }
+      },
+      "paragraph": {
+        "label": "Paragraph"
+      },
+      "button": {
+        "label": "Button",
+        "options": {
+          "default": "Solid",
+          "outline": "Outline",
+          "secondary": "Secondary",
+          "ghost": "Ghost",
+          "xl": "Extra large"
+        }
+      },
+      "columns": {
+        "label": "Columns"
+      },
+      "grid": {
+        "label": "Grid"
+      },
+      "spacer": {
+        "label": "Spacer"
+      },
+      "divider": {
+        "label": "Divider"
+      },
+      "rich-text": {
+        "label": "Rich text"
+      },
+      "image": {
+        "label": "Image",
+        "fields": {
+          "alt": "Alt text",
+          "fit": "Image fit",
+          "aspectRatio": "Aspect ratio"
+        },
+        "options": {
+          "cover": "Cover",
+          "contain": "Contain",
+          "auto": "Auto",
+          "square": "Square",
+          "video": "Video (16:9)",
+          "portrait": "Portrait"
+        }
+      },
+      "video": {
+        "label": "Video",
+        "fields": {
+          "poster": "Poster image"
+        }
+      },
+      "badge": {
+        "label": "Badge",
+        "options": {
+          "default": "Solid",
+          "secondary": "Secondary",
+          "outline": "Outline",
+          "eyebrow": "Eyebrow",
+          "pill": "Pill"
+        }
+      },
+      "cta-band": {
+        "label": "Call-to-action band",
+        "options": {
+          "fullWidth": "Full width"
+        }
+      },
+      "icon-card": {
+        "label": "Icon card",
+        "options": {
+          "trending-up": "Trending up",
+          "shield": "Shield",
+          "users": "Users",
+          "zap": "Zap",
+          "globe": "Globe",
+          "book-open": "Book",
+          "bar-chart": "Bar chart",
+          "dollar-sign": "Dollar sign"
+        }
+      },
+      "stat-card": {
+        "label": "Stat card"
+      },
+      "process-step": {
+        "label": "Process step",
+        "fields": {
+          "step": "Step number",
+          "isLast": "Last step (hides the connector)"
+        }
+      },
+      "faq": {
+        "label": "FAQ",
+        "fields": {
+          "items": "Questions & answers (JSON)",
+          "itemsHelp": "Array of question/answer pairs"
+        }
+      },
+      "tabs": {
+        "label": "Tabs",
+        "fields": {
+          "items": "Tabs (JSON)",
+          "itemsHelp": "Array of label/content pairs"
+        }
+      },
+      "table": {
+        "label": "Table",
+        "fields": {
+          "headers": "Table headers (JSON)",
+          "rows": "Table rows (JSON)"
+        }
+      },
+      "marquee": {
+        "label": "Marquee",
+        "fields": {
+          "items": "Marquee items (JSON)",
+          "itemsHelp": "Array of strings",
+          "speed": "Scroll speed"
+        }
+      },
+      "counter": {
+        "label": "Counter"
+      },
+      "newsletter-form": {
+        "label": "Newsletter signup",
+        "fields": {
+          "placeholder": "Input placeholder",
+          "submitLabel": "Submit button label",
+          "unavailableLabel": "Unavailable message",
+          "tone": "Tone"
+        },
+        "options": {
+          "default": "Default",
+          "onFill": "On filled background",
+          "onSecondary": "On secondary background"
+        }
+      },
+      "breadcrumb": {
+        "label": "Breadcrumb"
+      },
+      "widget": {
+        "label": "Widget",
+        "fields": {
+          "widgetKey": "Widget key",
+          "config": "Widget configuration (JSON)"
+        }
+      },
+      "collection": {
+        "label": "Collection",
+        "fields": {
+          "contentType": "Content type",
+          "bindingId": "Binding id",
+          "filter": "Filter (JSON)",
+          "sort": "Sort key",
+          "limit": "Item limit",
+          "layout": "Layout",
+          "cardTemplateId": "Card template id"
+        },
+        "options": {
+          "grid": "Grid",
+          "list": "List",
+          "carousel": "Carousel"
+        }
+      },
+      "featuredContent": {
+        "label": "Featured content"
+      },
+      "collectionFilter": {
+        "label": "Collection filter",
+        "fields": {
+          "filterKey": "Filter key",
+          "style": "Style",
+          "options": "Options (JSON)"
+        },
+        "options": {
+          "pills": "Pills",
+          "dropdown": "Dropdown",
+          "checkboxes": "Checkboxes"
+        }
+      },
+      "collectionSearch": {
+        "label": "Collection search"
+      },
+      "collectionSort": {
+        "label": "Collection sort",
+        "fields": {
+          "options": "Sort options (JSON)"
+        }
+      },
+      "collectionPagination": {
+        "label": "Collection pagination",
+        "fields": {
+          "mode": "Mode"
+        },
+        "options": {
+          "numbered": "Numbered",
+          "loadMore": "Load more"
+        }
+      }
+    },
+    "builder": {
+      "title": "Composer",
+      "tree": "Layers",
+      "settings": "Settings",
+      "preview": "Preview",
+      "addBlock": "Add block",
+      "searchBlocks": "Search blocks…",
+      "noBlocks": "No blocks found",
+      "groupLayout": "Layout & structure",
+      "groupContent": "Content you type",
+      "groupData": "Live data",
+      "startFromSection": "Start from a saved section",
+      "duplicate": "Duplicate",
+      "delete": "Delete",
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "hide": "Hide",
+      "show": "Show",
+      "copy": "Copy",
+      "paste": "Paste",
+      "rename": "Rename",
+      "setAnchor": "Set anchor id",
+      "replaceWith": "Replace with…",
+      "undo": "Undo",
+      "redo": "Redo",
+      "tabGeneral": "General",
+      "tabStyle": "Style",
+      "tabMotion": "Motion",
+      "tabVisibility": "Visibility",
+      "tabResponsive": "Responsive",
+      "empty": "This page has no blocks yet — add one to get started.",
+      "emptySelection": "Select a block to edit its settings.",
+      "labelField": "Label (admin only)",
+      "anchorField": "Anchor id",
+      "visibilityField": "Who can see this",
+      "requiresFeatureField": "Requires feature flag",
+      "visibilityPublic": "Everyone",
+      "visibilityAuthenticated": "Signed-in users",
+      "visibilityPremium": "Premium (staff-only for now)",
+      "visibilityAdmin": "Staff only",
+      "useStyle": "Use style",
+      "useStyleNone": "— None —",
+      "saveAsStyle": "Save as style…",
+      "saveAsTemplate": "Save as template…",
+      "saveAsStyleTitle": "Save as style",
+      "saveAsTemplateTitle": "Save as template",
+      "styleKeyLabel": "Key",
+      "styleNameLabel": "Name",
+      "save": "Save",
+      "cancel": "Cancel",
+      "savedDraft": "Draft saved",
+      "saving": "Saving…",
+      "conflictTitle": "Someone else saved this page",
+      "conflictBody": "Your local changes are still here, but the server has a newer version. Reload it to keep going.",
+      "reloadLatest": "Reload latest",
+      "gateErrors": "Blocking issues",
+      "gateWarnings": "Warnings",
+      "deviceMobile": "Mobile",
+      "deviceTablet": "Tablet",
+      "deviceDesktop": "Desktop",
+      "linkTypeLabel": "Link type",
+      "linkTypeNone": "No link",
+      "linkTypeUrl": "External URL",
+      "linkTypeRoute": "Site route",
+      "linkTypePage": "CMS page",
+      "linkTypeAnchor": "Anchor on this page",
+      "linkUrlLabel": "URL",
+      "linkNewTab": "Open in a new tab",
+      "linkRouteLabel": "Route",
+      "linkPageLabel": "Page",
+      "linkAnchorLabel": "Anchor id",
+      "dataPanel": "Data",
+      "dataPanelEmpty": "This page doesn't fetch any dynamic data.",
+      "confirmDeleteBlockTitle": "Delete this block?",
+      "confirmDeleteBlockBody": "This also removes everything nested inside it. This cannot be undone here, but Undo can bring it back.",
+      "confirm": "Delete",
+      "openBuilder": "Open composer",
+      "mediaChoose": "Choose",
+      "mediaClear": "Clear",
+      "mediaPickerTitle": "Choose media",
+      "mediaSearch": "Search…",
+      "mediaUpload": "Upload",
+      "mediaUploading": "Uploading…",
+      "mediaEmpty": "No media found",
+      "inherit": "— Inherit —",
+      "background": "Background",
+      "backgroundNone": "None",
+      "backgroundToken": "Solid color",
+      "backgroundGradient": "Gradient",
+      "backgroundImage": "Image",
+      "backgroundVideo": "Video",
+      "overlayTone": "Overlay tone",
+      "overlayStrength": "Overlay strength",
+      "gradientFrom": "Gradient from",
+      "gradientTo": "Gradient to",
+      "textTone": "Text tone",
+      "padding": "Padding",
+      "gap": "Gap",
+      "radius": "Corner radius",
+      "shadow": "Shadow",
+      "border": "Border",
+      "width": "Width",
+      "entrance": "Entrance animation",
+      "hover": "Hover animation",
+      "unsavedChanges": "Unsaved changes…",
+      "linkedBadge": "Linked",
+      "dataPanelCollections": "Dynamic collections",
+      "versionsButton": "Versions",
+      "translationsButton": "Translations",
+      "versionsTitle": "Versions",
+      "versionsDescription": "Every published snapshot of this page. Restoring loads it back into the draft for further editing — publishing is a separate step.",
+      "versionsEmpty": "This page has never been published.",
+      "restoreAsDraft": "Restore as draft",
+      "discardDraftButton": "Discard draft",
+      "confirmRestoreTitle": "Restore this version as the draft?",
+      "confirmRestoreBody": "Your current draft will be replaced with this version. This does not change what is published.",
+      "confirmDiscardTitle": "Discard the draft?",
+      "confirmDiscardBody": "Every unpublished change will be lost — the draft will match what is currently published.",
+      "publishedBy": "Published by",
+      "translationsTitle": "Translations",
+      "translationsDescription": "Every translatable field across the page, side by side with each locale.",
+      "translationsEmpty": "This page has no translatable text yet.",
+      "translationsMissing": "Missing",
+      "translationsBlock": "Block",
+      "translationsField": "Field"
+    }
+  },
+  "about": {
+    "nav": {
+      "sectionLabel": "About MBFX",
+      "aboutUs": "About MBFX",
+      "whyUs": "Why MBFX",
+      "transparency": "How we operate",
+      "security": "Security & trust",
+      "support": "Support"
+    },
+    "meta": {
+      "aboutUsTitle": "About MBFX",
+      "aboutUsDescription": "Who we are, what we teach, and how the MBFX Learning Center works.",
+      "whyUsTitle": "Why MBFX",
+      "whyUsDescription": "The five things that make the MBFX Learning Center worth your time.",
+      "transparencyTitle": "How we operate",
+      "transparencyDescription": "Where our data comes from, how we deliver it, and how MBFX is funded.",
+      "securityTitle": "Security & trust",
+      "securityDescription": "How we protect your account, your data, and your learning record.",
+      "supportTitle": "Support",
+      "supportDescription": "How to reach us, and what we can help you with."
+    },
+    "shared": {
+      "learnMore": "Learn more",
+      "viewAll": "View all",
+      "readMore": "Read more",
+      "breadcrumb": "About"
+    },
+    "overview": {
+      "hero": {
+        "eyebrow": "About MBFX",
+        "title": "Learn the markets with MBFX",
+        "body": "The MBFX Learning Center is where we explain how trading actually works — in plain language, with worked examples, and without pretending anything is risk-free.",
+        "primaryCta": "Start learning",
+        "secondaryCta": "Browse the glossary"
+      },
+      "offer": {
+        "eyebrow": "What's here",
+        "title": "Ways in, depending on how you learn",
+        "lead": "Take the structured route from the beginning, or dip in wherever you already are.",
+        "courses": {
+          "title": "Structured courses",
+          "body": "Work through the fundamentals in order — what moves a currency pair, how an order fills, how to size a position."
+        },
+        "glossary": {
+          "title": "Plain-language glossary",
+          "body": "Every term you will meet, defined without jargon and cross-linked so one definition leads to the next."
+        },
+        "analysis": {
+          "title": "Market analysis",
+          "body": "What happened, why it mattered, and which levels traders were watching — written after the move, never sold as a prediction."
+        },
+        "news": {
+          "title": "Market news",
+          "body": "The headlines that actually change how a market trades, filtered from the ones that do not."
+        },
+        "tools": {
+          "title": "Calculators and tools",
+          "body": "Position size, pip value, margin and profit — the arithmetic worked out so you can check your own."
+        },
+        "calendar": {
+          "title": "Economic calendar",
+          "body": "The releases that move markets, with dates and consensus, so nothing catches you mid-trade."
+        }
+      },
+      "principles": {
+        "eyebrow": "Our approach",
+        "title": "How we teach",
+        "lead": "Four commitments that shape everything published here.",
+        "plainLanguage": "Plain language first. Every term is defined where it appears and linked to the glossary — we assume no vocabulary you have not been given.",
+        "workedExamples": "Worked examples over theory. Real numbers and real charts, with the arithmetic shown rather than asserted.",
+        "riskIncluded": "Risk is part of the lesson, never an appendix. What can go wrong is taught alongside what can go right.",
+        "notAdvice": "Education, not advice. Nothing here is a signal, a recommendation, or guidance about your own money."
+      },
+      "stats": {
+        "caption": "Where we are today",
+        "learners": "Learners taking a course right now",
+        "countries": "Countries our learners write in from",
+        "lessons": "Lessons, articles and glossary entries published"
+      },
+      "timeline": {
+        "title": "How we got here",
+        "expand": "Show the full history",
+        "collapse": "Hide the full history",
+        "entries": {
+          "founded": {
+            "title": "Ten lessons and a spreadsheet",
+            "body": "MBFX starts as a set of evening classes for friends who kept asking the same questions about leverage. The first curriculum fits on one page."
+          },
+          "curriculum": {
+            "title": "A curriculum, not a blog",
+            "body": "The lessons are rewritten in order, each one building on the last, with a worked example and a risk note attached to every concept."
+          },
+          "glossary": {
+            "title": "The glossary opens",
+            "body": "Every term used in a lesson gets its own definition, cross-linked both ways, so nobody has to leave a lesson to look something up."
+          },
+          "languages": {
+            "title": "Reading right to left",
+            "body": "The platform is rebuilt around logical layout properties so an Arabic or Urdu reader gets the same design rather than a mirrored afterthought."
+          },
+          "surge": {
+            "title": "A year of full rooms",
+            "body": "Enrolment triples. The support inbox tells us what the curriculum was missing, and beginner material is reorganised around what people actually ask first."
+          },
+          "analysis": {
+            "title": "The analysis desk",
+            "body": "Daily market notes begin — written after the move, explaining what happened and why, never predicting the next one."
+          },
+          "mentors": {
+            "title": "Mentors, not signals",
+            "body": "Learners get scheduled sessions with someone who reviews their trading journal. We turn down every offer to resell entry signals."
+          },
+          "calendar": {
+            "title": "The economic calendar",
+            "body": "Releases, forecasts and prior values land in one place, tied back to the lessons that explain what each number moves."
+          },
+          "recognition": {
+            "title": "First recognition",
+            "body": "The curriculum is named in its first industry listing, judged on how much of it is free to read without an account."
+          },
+          "accessibility": {
+            "title": "Rebuilt for everyone",
+            "body": "A full accessibility pass: keyboard paths, contrast thresholds derived rather than hand-picked, and a dark mode the reader controls."
+          },
+          "platform": {
+            "title": "One platform, four languages",
+            "body": "Courses, glossary, analysis and tools move onto a single codebase with translation built into the foundations instead of bolted on."
+          },
+          "today": {
+            "title": "Where we are now",
+            "body": "Tens of thousands of learners, a curriculum that still starts at the beginning, and the same rule as the first evening class: explain it or cut it."
+          }
+        }
+      },
+      "awards": {
+        "title": "Recognition",
+        "lead": "Awards and listings the Learning Center has received.",
+        "items": {
+          "bestEducation": "Best Forex Education Platform",
+          "editorsChoice": "Editor's Choice — Learning Tools",
+          "interactive": "Best Use of Interactive Content",
+          "regional": "Regional Education Provider of the Year",
+          "beginner": "Best Beginner Curriculum",
+          "trusted": "Most Trusted Learning Resource",
+          "analysis": "Best Independent Market Analysis",
+          "accessibility": "Accessible Design Commendation",
+          "rising": "Rising Platform of the Year",
+          "glossary": "Best Free Trading Glossary",
+          "literacy": "Innovation in Financial Literacy",
+          "courseDesign": "Highly Commended — Course Design"
+        }
+      },
+      "payments": {
+        "title": "Deposit and withdrawal options",
+        "lead": "Accepted methods for funding an MBFX account."
+      },
+      "learnMore": {
+        "title": "Want to know more?",
+        "whyUs": "What makes this different from the hundred other places you could learn.",
+        "transparency": "Where our data comes from and how MBFX pays for all this.",
+        "support": "Talk to a person when a lesson or a platform question needs one."
+      },
+      "cta": {
+        "title": "Start where you are",
+        "description": "New to the markets? Begin with the basics. Been at it a while? The glossary and the analysis are open too.",
+        "action": "Start learning"
+      }
+    },
+    "whyUs": {
+      "hero": {
+        "eyebrow": "Why MBFX",
+        "title": "Why learn the markets here",
+        "body": "Anyone can publish a chart with an arrow on it. Here is what we do differently — and what we will never do.",
+        "primaryCta": "Start learning",
+        "secondaryCta": "See how we operate"
+      },
+      "commitments": {
+        "eyebrow": "Our commitments",
+        "title": "What you can hold us to",
+        "lead": "Five things that are true of everything published in the Learning Center.",
+        "noAccount": "You can read everything here without an account and without funding anything.",
+        "noSignals": "We never sell trading signals, tips, or strategies described as guaranteed.",
+        "afterTheMove": "Analysis explains a move that has already happened. It is never dressed up as a forecast of the next one.",
+        "riskInline": "Risk warnings sit with the content they apply to, not only in the footer.",
+        "ownProducts": "Where a lesson refers to MBFX products, it says so plainly instead of implying neutrality."
+      },
+      "reasons": {
+        "eyebrow": "Five reasons",
+        "title": "What makes this worth your time",
+        "curriculum": {
+          "title": "A curriculum, not a pile of content",
+          "body": "Lessons run in order and build on each other, so you always know what came before a topic and what it prepares you for. Start at the beginning or join where you already are.",
+          "cta": "See the courses"
+        },
+        "glossary": {
+          "title": "Definitions you can actually use",
+          "body": "Every term is written for someone meeting it for the first time, with an example rather than a circular restatement — and cross-linked, so one definition leads you to the next.",
+          "cta": "Open the glossary"
+        },
+        "analysis": {
+          "title": "Analysis that explains rather than predicts",
+          "body": "We write about what moved, why it moved, and which levels traders were watching while it did. That is a lesson you can reuse; a price target is not.",
+          "cta": "Read the analysis"
+        },
+        "tools": {
+          "title": "The arithmetic done for you",
+          "body": "Position size, pip value, margin, profit and loss — worked out step by step so you can check the numbers yourself rather than take ours on trust.",
+          "cta": "Open the tools"
+        },
+        "support": {
+          "title": "A person on the other end",
+          "body": "When a lesson does not land or a platform question gets in the way, you can reach someone. Support is part of the education, not a separate department.",
+          "cta": "Contact support"
+        }
+      },
+      "cta": {
+        "title": "See it for yourself",
+        "description": "Read a lesson, look up a term, or check a calculation. Nothing here asks you to sign up first.",
+        "action": "Start learning"
+      }
+    },
+    "transparency": {
+      "hero": {
+        "eyebrow": "How we operate",
+        "title": "How we operate",
+        "body": "Where the numbers on this site come from, how they reach you, and what we will and will not do with your attention.",
+        "primaryCta": "Read the analysis",
+        "secondaryCta": "Talk to support"
+      },
+      "sources": {
+        "title": "Where our numbers come from",
+        "body": "Market prices, rates and calculator inputs come from our market-data provider. Everything shown here is indicative and published for learning: it is not a dealing price, and it should not be used as one."
+      },
+      "delivery": {
+        "title": "How it reaches you",
+        "lead": "Four surfaces, one source. A number that changes changes everywhere.",
+        "web": "The pages you are reading now, on any screen size.",
+        "articles": "News and analysis, with the date and the author on every piece.",
+        "glossary": "The glossary, cross-linked from every lesson that uses a term.",
+        "tools": "The calculators, which show their working rather than just an answer."
+      },
+      "funding": {
+        "title": "How the Learning Center is funded",
+        "body": "The Learning Center is published by MBFX. It does not charge for access and it does not carry advertising. Where a lesson or an article refers to an MBFX product, it says so rather than implying neutrality."
+      },
+      "notDoing": {
+        "title": "What we don't do",
+        "lead": "Commitments about the content itself, not about the markets.",
+        "noSignals": "We do not sell signals, copy-trading, or managed accounts through the Learning Center.",
+        "noTargets": "We do not publish price targets, and we never describe an outcome as guaranteed.",
+        "noSilentEdits": "We do not quietly rewrite published analysis. A correction is marked as a correction.",
+        "noPaidEditorial": "We do not present a paid placement as editorial."
+      },
+      "example": {
+        "title": "We show the arithmetic",
+        "body": "A standard lot is 100,000 units of the base currency. One pip on EUR/USD is 0.0001, so one pip on a standard lot is $10 — and on 0.10 lots, $1. Every calculator here shows that working, so you can check it rather than trust it.",
+        "caption": "1 pip · EUR/USD · 0.10 lots",
+        "value": "$1.00",
+        "cta": "Open the calculators"
+      },
+      "corrections": {
+        "title": "When we get it wrong",
+        "body": "Mistakes are corrected in place, with a note saying what changed and when. Analysis is a record of what we thought at the time; editing that record silently would make it worthless."
+      },
+      "cta": {
+        "title": "Still have a question?",
+        "description": "Ask it. A person answers, and the answer usually improves the page.",
+        "action": "Contact support"
+      }
+    },
+    "security": {
+      "hero": {
+        "eyebrow": "Security & trust",
+        "title": "Security and trust",
+        "body": "How your account is protected, what happens to your data, and what gets written down when something changes.",
+        "primaryCta": "Contact support"
+      },
+      "account": {
+        "eyebrow": "Your account",
+        "title": "How your account is protected",
+        "lead": "Specifics, not reassurance.",
+        "argon": "Passwords are hashed with Argon2id. We never store one, log one, or email you one.",
+        "sessions": "Sessions live in our database rather than only in a token, so a session can actually be revoked.",
+        "backoff": "Repeated failed sign-ins slow down with an increasing delay instead of locking you out permanently.",
+        "cookies": "Sign-in cookies are HTTP-only, so no script running on the page can read them."
+      },
+      "data": {
+        "eyebrow": "Your data",
+        "title": "What we do with it",
+        "minimal": "We ask for what an account needs, and no more.",
+        "nonPublic": "Settings marked non-public never reach a public page's data payload.",
+        "audit": "Every administrative change is written to an audit log — who, what, and when."
+      },
+      "platform": {
+        "title": "How the site itself is built",
+        "body": "The defences that matter are the ones a visitor never sees.",
+        "sanitised": "Anything an editor writes is sanitised on the server before it is stored, not merely inside the editor.",
+        "uploads": "Uploads are identified by their leading bytes, never by the filename or the type a browser claims.",
+        "csp": "The site sends a Content Security Policy, and the administration area gets a stricter one than the public pages.",
+        "permissions": "Every change is permission-checked on the server. A hidden button is not security, so we do not treat it as any."
+      },
+      "jurisdictions": {
+        "title": "Where our people are",
+        "lead": "MBFX is built by a distributed team. These are the places our curriculum, editorial, engineering and support work is done from.",
+        "legend": "Locations and the teams based there",
+        "places": {
+          "london": "London, United Kingdom",
+          "newYork": "New York, United States",
+          "saoPaulo": "São Paulo, Brazil",
+          "lagos": "Lagos, Nigeria",
+          "istanbul": "Istanbul, Türkiye",
+          "karachi": "Karachi, Pakistan",
+          "singapore": "Singapore",
+          "sydney": "Sydney, Australia"
+        }
+      },
+      "cta": {
+        "title": "Something look wrong?",
+        "description": "If you spot anything that looks like a security problem, tell us before you tell anyone else.",
+        "action": "Contact support"
+      }
+    },
+    "support": {
+      "hero": {
+        "eyebrow": "Support",
+        "title": "How we support you",
+        "body": "When a lesson does not land or a platform question gets in the way, you should be able to reach a person. Here is how.",
+        "primaryCta": "Browse the glossary",
+        "secondaryCta": "Start learning"
+      },
+      "channels": {
+        "title": "Ways to reach us",
+        "lead": "Pick whichever suits the question."
+      },
+      "help": {
+        "eyebrow": "What we can help with",
+        "title": "Bring us any of these",
+        "lead": "Support here is part of the education, not a separate department.",
+        "gettingStarted": {
+          "title": "Getting started",
+          "body": "Where to begin if you have never placed a trade, and what to read in what order."
+        },
+        "lesson": {
+          "title": "A lesson that didn't land",
+          "body": "Tell us which part lost you. That is how the lesson gets rewritten."
+        },
+        "tools": {
+          "title": "Finding the right tool",
+          "body": "Which calculator answers your question, and how to read what it gives back."
+        },
+        "account": {
+          "title": "Account and access",
+          "body": "Sign-in trouble, or a change to the details we hold for you."
+        }
+      },
+      "selfServe": {
+        "title": "Or answer it yourself, faster",
+        "lead": "Most questions have a page already.",
+        "glossaryTitle": "The glossary",
+        "glossary": "Look the term up, with an example rather than a definition that uses itself.",
+        "analysisTitle": "Past analysis",
+        "analysis": "See how a move like the one you are asking about was explained last time.",
+        "calendarTitle": "The economic calendar",
+        "calendar": "Check what is scheduled before it moves the market you are watching."
+      },
+      "cta": {
+        "title": "Still stuck?",
+        "description": "Ask. The answer usually ends up improving a page for everyone else too.",
+        "action": "Start learning"
+      }
+    }
   }
 }

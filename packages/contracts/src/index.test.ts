@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { isRouteKey, menuItemLinkSchema, ROUTE_PATHS, SETTINGS_SCHEMAS } from "./index.ts";
+import {
+  ABOUT_PATHS,
+  ABOUT_ROUTE_KEYS,
+  isRouteKey,
+  menuItemLinkSchema,
+  ROUTE_PATHS,
+  SETTINGS_SCHEMAS,
+} from "./index.ts";
 
 describe("@repo/contracts — barrel", () => {
   it("exports the settings schema registry", () => {
@@ -41,5 +48,29 @@ describe("ROUTE_PATHS registry", () => {
   it("isRouteKey narrows correctly", () => {
     expect(isRouteKey("glossary")).toBe(true);
     expect(isRouteKey("bogus")).toBe(false);
+  });
+});
+
+describe("About section routes (ADR-047)", () => {
+  it("registers all five keys, so a menu row can link to them", () => {
+    for (const key of ABOUT_ROUTE_KEYS) {
+      expect(menuItemLinkSchema.safeParse({ routeKey: key, url: null }).success).toBe(true);
+    }
+  });
+
+  it("ABOUT_PATHS stays in sync with the registry and the menu order", () => {
+    expect(ABOUT_PATHS).toEqual([
+      "/about",
+      "/about/why-us",
+      "/about/transparency",
+      "/about/security",
+      "/about/support",
+    ]);
+  });
+
+  it("every child path nests under the section root", () => {
+    const [root, ...children] = ABOUT_PATHS;
+    expect(root).toBe("/about");
+    for (const path of children) expect(path.startsWith("/about/")).toBe(true);
   });
 });

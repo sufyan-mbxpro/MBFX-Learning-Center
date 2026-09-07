@@ -3,8 +3,8 @@ import { getTranslations } from "next-intl/server";
 import { requirePermission } from "@repo/rbac";
 import { loadAdminMenus } from "@repo/core";
 import { getActiveLocales } from "@repo/i18n";
-import { AdminPage, AdminSection } from "../../_components/admin-page.tsx";
-import { SettingsNav } from "../_components/settings-nav.tsx";
+import { AdminSection } from "../../_components/admin-page.tsx";
+import { SettingsScreen } from "../_components/settings-screen.tsx";
 import { groupDescription, groupLabel, loadSettingsIndex } from "../_components/settings-shared.ts";
 import { SettingsGroupForm } from "../settings-group-form.tsx";
 
@@ -28,58 +28,64 @@ export default async function SettingsGroupPage({ params }: PageProps<"/admin/se
   const description = groupDescription(t, group);
 
   return (
-    <AdminPage title={groupLabel(t, group)} description={description ?? undefined} width="lg">
-      <div className="flex flex-col gap-6 md:flex-row">
-        <SettingsNav heading={t("settingsCategories")} entries={navEntries} />
-        <div className="flex min-w-0 flex-1 flex-col gap-6">
-          <AdminSection>
-            <SettingsGroupForm
-              settings={groupSettings}
-              locales={locales.map((l) => ({
-                code: l.code,
-                name: l.name,
-                nativeName: l.nativeName,
-              }))}
-              menus={menus.map((m) => ({ value: m.key, label: m.name }))}
-              labels={{
-                save: t("save"),
-                saved: t("saved"),
-                publicBadge: t("publicBadge"),
-                privateBadge: t("privateBadge"),
-                selectPlaceholder: t("selectPlaceholder"),
-                managedElsewhere: t("settingManagedElsewhere"),
-                upload: {
-                  upload: t("uploadImage"),
-                  replace: t("replaceImage"),
-                  remove: t("removeImage"),
-                  uploading: t("uploading"),
-                  hint: t("uploadHint"),
-                },
-                fields: {
-                  addRow: t("fieldAddRow"),
-                  removeRow: t("fieldRemoveRow"),
-                  emptyList: t("fieldEmptyList"),
-                  selectPlaceholder: t("selectPlaceholder"),
-                  // Every labelKey SETTING_FIELDS references, resolved here
-                  // so the generic editors never touch a catalog themselves.
-                  field: {
-                    fieldEnabled: t("fieldEnabled"),
-                    fieldPhone: t("fieldPhone"),
-                    fieldPromoText: t("fieldPromoText"),
-                    fieldPromoUrl: t("fieldPromoUrl"),
-                    fieldLabel: t("fieldLabel"),
-                    fieldUrl: t("fieldUrl"),
-                    fieldText: t("fieldText"),
-                    fieldDismissible: t("fieldDismissible"),
-                    fieldPlatform: t("fieldPlatform"),
-                    fieldMenu: t("fieldMenu"),
-                  },
-                },
-              }}
-            />
-          </AdminSection>
-        </div>
-      </div>
-    </AdminPage>
+    <SettingsScreen
+      navHeading={t("settingsCategories")}
+      navEntries={navEntries}
+      title={groupLabel(t, group)}
+      description={description ?? undefined}
+    >
+      <AdminSection>
+        <SettingsGroupForm
+          settings={groupSettings}
+          locales={locales.map((l) => ({
+            code: l.code,
+            name: l.name,
+            nativeName: l.nativeName,
+          }))}
+          menus={menus.map((m) => ({ value: m.key, label: m.name }))}
+          labels={{
+            save: t("save"),
+            saved: t("saved"),
+            publicBadge: t("publicBadge"),
+            privateBadge: t("privateBadge"),
+            selectPlaceholder: t("selectPlaceholder"),
+            managedElsewhere: t("settingManagedElsewhere"),
+            upload: {
+              upload: t("uploadImage"),
+              replace: t("replaceImage"),
+              remove: t("removeImage"),
+              uploading: t("uploading"),
+              hint: t("uploadHint"),
+              cancel: t("cancel"),
+              confirmRemoveTitle: t("confirmRemoveImageTitle"),
+              confirmRemoveBody: t("confirmRemoveImageBody"),
+            },
+            fields: {
+              addRow: t("fieldAddRow"),
+              removeRow: t("fieldRemoveRow"),
+              emptyList: t("fieldEmptyList"),
+              selectPlaceholder: t("selectPlaceholder"),
+              cancel: t("cancel"),
+              confirmRemoveTitle: t("confirmRemoveRowTitle"),
+              confirmRemoveBody: t("confirmRemoveRowBody"),
+              // Every labelKey SETTING_FIELDS references, resolved here
+              // so the generic editors never touch a catalog themselves.
+              field: {
+                fieldEnabled: t("fieldEnabled"),
+                fieldPhone: t("fieldPhone"),
+                fieldPromoText: t("fieldPromoText"),
+                fieldPromoUrl: t("fieldPromoUrl"),
+                fieldLabel: t("fieldLabel"),
+                fieldUrl: t("fieldUrl"),
+                fieldText: t("fieldText"),
+                fieldDismissible: t("fieldDismissible"),
+                fieldPlatform: t("fieldPlatform"),
+                fieldMenu: t("fieldMenu"),
+              },
+            },
+          }}
+        />
+      </AdminSection>
+    </SettingsScreen>
   );
 }

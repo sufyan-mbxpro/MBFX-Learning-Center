@@ -32,8 +32,8 @@ Two facts make the clone-only lock stricter than the risk it guards:
    touch `super_admin` (level 100) because nobody outranks it, and the
    last-super_admin guards on demotion/deactivation still stand.
 
-What actually prevents lock-out is *existence* (no delete), *rank* (level
-guard) and *the super_admin bypass* — not immutability of a label or of the
+What actually prevents lock-out is _existence_ (no delete), _rank_ (level
+guard) and _the super_admin bypass_ — not immutability of a label or of the
 lesser system roles' permission sets.
 
 ## Decision

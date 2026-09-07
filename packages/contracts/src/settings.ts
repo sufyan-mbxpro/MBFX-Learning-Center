@@ -22,6 +22,10 @@ import { z } from "zod";
  */
 export const HOME_SECTION_VARIANTS = {
   hero: ["centered", "split", "background"],
+  // "Explore the platform" — one card per destination the site offers.
+  // `carousel` is the scroll-snap track; `grid` lays the same cards out
+  // statically for a page that wants no horizontal scroll.
+  explore_platform: ["carousel", "grid"],
   learning_paths: ["default", "elevated", "bordered", "featured"],
   featured_lessons: ["default", "elevated", "bordered", "featured"],
   popular_tools: ["default", "elevated", "bordered", "featured"],
@@ -51,6 +55,7 @@ export function isKnownHomeSectionKey(key: string): key is HomeSectionKey {
  */
 export const HOME_SECTION_BUILT_KEYS = [
   "hero",
+  "explore_platform",
   "latest_analysis",
   "glossary_spotlight",
   "newsletter",
@@ -136,6 +141,24 @@ const footerAppLinkSchema = z.object({
   url: z.string().regex(/^(\/|https?:\/\/)/, "must be a path or URL"),
 });
 
+// Data budget (ADR-029 §5, PR 3.4) — policy in settings, not architecture.
+// `block ≥ warn` and both strictly positive; raising these numbers is a
+// DEVLOG entry citing a Lighthouse run, not a code change.
+const budgetPairSchema = z
+  .object({ warn: z.int().min(1), block: z.int().min(1) })
+  .refine((v) => v.block >= v.warn, { message: "block must be >= warn", path: ["block"] });
+
+const dataBudgetScopeSchema = z.object({
+  collections: budgetPairSchema,
+  items: budgetPairSchema,
+});
+
+export const dataBudgetSchema = z.object({
+  page: dataBudgetScopeSchema,
+  part: dataBudgetScopeSchema,
+});
+export type DataBudget = z.infer<typeof dataBudgetSchema>;
+
 export const SETTINGS_SCHEMAS = {
   "site.name": z.string().min(1).max(150),
   "site.tagline": z.string().max(200),
@@ -182,6 +205,15 @@ export const SETTINGS_SCHEMAS = {
   "articles.showAuthor": z.boolean(),
   "articles.showReadingTime": z.boolean(),
   "articles.relatedCount": z.int().min(0).max(12),
+
+  // Media v2 (ADR-034 §1) — per-kind upload caps, in bytes. Server-side
+  // only: validated before any byte reaches the storage driver.
+  "media.maxBytes.image": z.int().min(1),
+  "media.maxBytes.video": z.int().min(1),
+  "media.maxBytes.audio": z.int().min(1),
+  "media.maxBytes.document": z.int().min(1),
+
+  "cms.dataBudget": dataBudgetSchema,
 } as const satisfies Record<string, z.ZodType>;
 
 export type SettingKey = keyof typeof SETTINGS_SCHEMAS;
@@ -234,6 +266,13 @@ export const SETTING_GROUPS: Record<SettingKey, string> = {
   "articles.showAuthor": "articles",
   "articles.showReadingTime": "articles",
   "articles.relatedCount": "articles",
+
+  "media.maxBytes.image": "media",
+  "media.maxBytes.video": "media",
+  "media.maxBytes.audio": "media",
+  "media.maxBytes.document": "media",
+
+  "cms.dataBudget": "cms",
 };
 
 // ─── Widget hints (changes-02) ───────────────────────────────

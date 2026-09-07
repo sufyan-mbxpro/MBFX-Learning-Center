@@ -56,51 +56,51 @@ enum ThemeMode {
 
 model User {
   // ─── Better Auth core (generated) ───
-  id               String      @id
-  name             String      @db.Text
-  email            String
-  emailVerified    Boolean     @default(false)
-  image            String?     @db.Text
-  createdAt        DateTime    @default(now())
-  updatedAt        DateTime    @updatedAt
+  id            String   @id
+  name          String   @db.Text
+  email         String
+  emailVerified Boolean  @default(false)
+  image         String?  @db.Text
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   // admin plugin
-  role             String?     @db.Text
-  banned           Boolean?    @default(false)
-  banReason        String?     @db.Text
-  banExpires       DateTime?
+  role       String?   @db.Text
+  banned     Boolean?  @default(false)
+  banReason  String?   @db.Text
+  banExpires DateTime?
 
   // two-factor plugin (supersedes the plan's original mfaEnabled/mfaSecret —
   // the plugin brings its own fields + the TwoFactor table below)
-  twoFactorEnabled Boolean?    @default(false)
+  twoFactorEnabled Boolean? @default(false)
 
   // ─── Project fields (additionalFields, ADR-001) ───
   // firstName/lastName/phone are ours; Better Auth's own name/image stay in
   // sync at the app layer (Module 04/10 own that reconciliation).
-  firstName        String?     @db.VarChar(100)
-  lastName         String?     @db.VarChar(100)
-  phone            String?     @db.VarChar(32)
-  userType         UserType    @default(LEARNER)
-  status           UserStatus  @default(PENDING_VERIFICATION)
-  locale           String      @default("en") @db.VarChar(10)
-  timezone         String      @default("UTC") @db.VarChar(64)
-  themeMode        ThemeMode   @default(SYSTEM)
+  firstName        String?    @db.VarChar(100)
+  lastName         String?    @db.VarChar(100)
+  phone            String?    @db.VarChar(32)
+  userType         UserType   @default(LEARNER)
+  status           UserStatus @default(PENDING_VERIFICATION)
+  locale           String     @default("en") @db.VarChar(10)
+  timezone         String     @default("UTC") @db.VarChar(64)
+  themeMode        ThemeMode  @default(SYSTEM)
   lastLoginAt      DateTime?
-  lastLoginIp      String?     @db.VarChar(45)
-  failedLoginCount Int         @default(0)
+  lastLoginIp      String?    @db.VarChar(45)
+  failedLoginCount Int        @default(0)
   lockedUntil      DateTime?
   deletedAt        DateTime?
 
-  accounts         Account[]
-  sessions         Session[]
-  twofactors       TwoFactor[]
-  roles            UserRole[]
-  permissions      UserPermission[]
-  employee         Employee?
-  auditLogs        AuditLog[]
-  notifications    Notification[]
+  accounts      Account[]
+  sessions      Session[]
+  twofactors    TwoFactor[]
+  roles         UserRole[]
+  permissions   UserPermission[]
+  employee      Employee?
+  auditLogs     AuditLog[]
+  notifications Notification[]
   // ADR-019, design-only — see Comment.
-  comments         Comment[]
+  comments      Comment[]
 
   @@unique([email])
   @@index([userType, status])
@@ -129,12 +129,12 @@ model Account {
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
-  @@index([userId(length: 191)])
   // Not part of Better Auth's own generated output, but it's exactly the key
   // its internal adapter queries by (findAccountByKey/findAccountOwnerByKey)
   // — enforcing it at the DB level closes a gap the app layer already
   // assumes is closed.
   @@unique([issuer, accountId(length: 191)])
+  @@index([userId])
   @@map("account")
 }
 
@@ -156,7 +156,7 @@ model Session {
   impersonatedBy String?  @db.Text
 
   @@unique([token])
-  @@index([userId(length: 191)])
+  @@index([userId])
   @@map("session")
 }
 
@@ -187,7 +187,7 @@ model TwoFactor {
   lockedUntil             DateTime?
 
   @@index([secret(length: 191)])
-  @@index([userId(length: 191)])
+  @@index([userId])
   @@map("twoFactor")
 }
 
@@ -198,14 +198,14 @@ model TwoFactor {
 model Permission {
   id          String   @id @default(cuid())
   key         String   @unique @db.VarChar(100) // "lessons.publish"
-  groupName   String   @db.VarChar(50)          // "content", "users", "settings"
+  groupName   String   @db.VarChar(50) // "content", "users", "settings"
   label       String   @db.VarChar(150)
   description String?  @db.VarChar(500)
   sortOrder   Int      @default(0)
   createdAt   DateTime @default(now())
 
-  roles       RolePermission[]
-  users       UserPermission[]
+  roles RolePermission[]
+  users UserPermission[]
 
   @@index([groupName])
   @@map("permissions")
@@ -213,11 +213,11 @@ model Permission {
 
 model Role {
   id          String   @id @default(cuid())
-  key         String   @unique @db.VarChar(50)  // "content_manager"
+  key         String   @unique @db.VarChar(50) // "content_manager"
   name        String   @db.VarChar(100)
   description String?  @db.VarChar(500)
-  isSystem    Boolean  @default(false)          // cannot be deleted
-  level       Int      @default(0)              // higher = more senior; guards escalation
+  isSystem    Boolean  @default(false) // cannot be deleted
+  level       Int      @default(0) // higher = more senior; guards escalation
   sortOrder   Int      @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -231,10 +231,10 @@ model Role {
 model RolePermission {
   roleId       String
   permissionId String
-  createdAt    DateTime   @default(now())
+  createdAt    DateTime @default(now())
 
-  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
-  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
 
   @@id([roleId, permissionId])
   @@index([permissionId])
@@ -247,8 +247,8 @@ model UserRole {
   assignedBy String?
   assignedAt DateTime @default(now())
 
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role       Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
 
   @@id([userId, roleId])
   @@index([roleId])
@@ -264,8 +264,8 @@ model UserPermission {
   assignedBy   String?
   assignedAt   DateTime         @default(now())
 
-  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
 
   @@id([userId, permissionId])
   @@index([permissionId])
@@ -298,72 +298,72 @@ enum EmploymentType {
 }
 
 model Department {
-  id          String     @id @default(cuid())
-  key         String     @unique @db.VarChar(50)
-  name        String     @db.VarChar(100)
-  description String?    @db.VarChar(500)
+  id          String   @id @default(cuid())
+  key         String   @unique @db.VarChar(50)
+  name        String   @db.VarChar(100)
+  description String?  @db.VarChar(500)
   headId      String?
-  isActive    Boolean    @default(true)
-  sortOrder   Int        @default(0)
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  employees   Employee[]
+  employees Employee[]
 
   @@map("departments")
 }
 
 model Designation {
-  id           String     @id @default(cuid())
-  key          String     @unique @db.VarChar(50)
-  title        String     @db.VarChar(100)
-  level        Int        @default(0)
-  isActive     Boolean    @default(true)
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  id        String   @id @default(cuid())
+  key       String   @unique @db.VarChar(50)
+  title     String   @db.VarChar(100)
+  level     Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  employees    Employee[]
+  employees Employee[]
 
   @@map("designations")
 }
 
 model Employee {
-  id               String           @id @default(cuid())
+  id           String  @id @default(cuid())
   // Nullable: an employee may exist before their login is provisioned.
-  userId           String?          @unique
-  employeeCode     String           @unique @db.VarChar(30)
+  userId       String? @unique
+  employeeCode String  @unique @db.VarChar(30)
 
-  firstName        String           @db.VarChar(100)
-  lastName         String           @db.VarChar(100)
-  workEmail        String           @unique @db.VarChar(255)
-  personalEmail    String?          @db.VarChar(255)
-  phone            String?          @db.VarChar(32)
-  photoUrl         String?          @db.VarChar(500)
+  firstName     String  @db.VarChar(100)
+  lastName      String  @db.VarChar(100)
+  workEmail     String  @unique @db.VarChar(255)
+  personalEmail String? @db.VarChar(255)
+  phone         String? @db.VarChar(32)
+  photoUrl      String? @db.VarChar(500)
 
-  departmentId     String?
-  designationId    String?
-  reportingToId    String?
+  departmentId  String?
+  designationId String?
+  reportingToId String?
 
-  employmentType   EmploymentType   @default(FULL_TIME)
-  status           EmploymentStatus @default(ACTIVE)
-  joinedAt         DateTime
-  confirmedAt      DateTime?
-  exitedAt         DateTime?
+  employmentType EmploymentType   @default(FULL_TIME)
+  status         EmploymentStatus @default(ACTIVE)
+  joinedAt       DateTime
+  confirmedAt    DateTime?
+  exitedAt       DateTime?
 
-  location         String?          @db.VarChar(150)
-  emergencyName    String?          @db.VarChar(150)
-  emergencyPhone   String?          @db.VarChar(32)
-  notes            String?          @db.Text
+  location       String? @db.VarChar(150)
+  emergencyName  String? @db.VarChar(150)
+  emergencyPhone String? @db.VarChar(32)
+  notes          String? @db.Text
 
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
-  deletedAt        DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
 
-  user             User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
-  department       Department?      @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  designation      Designation?     @relation(fields: [designationId], references: [id], onDelete: SetNull)
-  reportingTo      Employee?        @relation("EmployeeHierarchy", fields: [reportingToId], references: [id], onDelete: SetNull)
-  directReports    Employee[]       @relation("EmployeeHierarchy")
+  user          User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  department    Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  designation   Designation? @relation(fields: [designationId], references: [id], onDelete: SetNull)
+  reportingTo   Employee?    @relation("EmployeeHierarchy", fields: [reportingToId], references: [id], onDelete: SetNull)
+  directReports Employee[]   @relation("EmployeeHierarchy")
 
   @@index([departmentId])
   @@index([status])
@@ -388,7 +388,7 @@ enum SettingType {
 
 model Setting {
   id             String      @id @default(cuid())
-  groupName      String      @db.VarChar(50)   // general | seo | social | layout | legal
+  groupName      String      @db.VarChar(50) // general | seo | social | layout | legal
   key            String      @unique @db.VarChar(120)
   value          Json?
   type           SettingType @default(STRING)
@@ -430,11 +430,17 @@ model FeatureFlag {
 
 model SocialLink {
   id           String   @id @default(cuid())
-  platform     String   @unique @db.VarChar(50)  // instagram | facebook | youtube | linkedin | x
+  platform     String   @unique @db.VarChar(50) // instagram | facebook | youtube | linkedin | x
   label        String   @db.VarChar(100)
   url          String   @db.VarChar(500)
-  icon         String   @db.VarChar(80)          // lucide name or uploaded asset key
-  handle       String?  @db.VarChar(100)         // "@mbxproofficial"
+  // Built-in glyph key (@repo/ui social-glyph.tsx). Lucide brand icons
+  // were removed in lucide v1, so this no longer names a lucide export.
+  icon         String   @db.VarChar(80)
+  // ADR-045: an admin-uploaded icon, which WINS over `icon` when set.
+  // Null = use the built-in glyph. Stores the served URL, same shape as
+  // every other uploaded asset reference (ADR-017).
+  iconUrl      String?  @db.VarChar(500)
+  handle       String?  @db.VarChar(100) // "@mbxproofficial"
   sortOrder    Int      @default(0)
   isActive     Boolean  @default(true)
   openInNewTab Boolean  @default(true)
@@ -452,13 +458,13 @@ model SocialLink {
 // ─────────────────────────────────────────────────────────────
 
 model Theme {
-  id                 String   @id @default(cuid())
-  key                String   @unique @db.VarChar(50)
-  name               String   @db.VarChar(100)
-  description        String?  @db.VarChar(500)
+  id          String  @id @default(cuid())
+  key         String  @unique @db.VarChar(50)
+  name        String  @db.VarChar(100)
+  description String? @db.VarChar(500)
 
   // Tab 1 — Colors & Branding. Seven brand colours, shared across modes.
-  brandColors        Json
+  brandColors Json
 
   // Tab 3 — Theme Modes. Surfaces, text, and borders authored per mode.
   lightSurface       Json
@@ -467,35 +473,38 @@ model Theme {
   darkBrandOverrides Json?
 
   // Tab 2 — Layout & Display. Radius, container width, font stacks.
-  layoutTokens       Json
+  layoutTokens Json
 
-  defaultMode        ThemeMode @default(SYSTEM)
+  defaultMode ThemeMode @default(SYSTEM)
   // allowUserToggle intentionally dropped (plan.md A5.4, ADR-008): dark/light
   // is user-controlled, never admin-controlled.
 
-  isActive           Boolean  @default(false)
-  isSystem           Boolean  @default(false)
-  scope              String   @default("both") @db.VarChar(20) // web | admin | both
+  isActive Boolean @default(false)
+  isSystem Boolean @default(false)
+  scope    String  @default("both") @db.VarChar(20) // web | admin | both
 
-  createdBy          String?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  createdBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([isActive, scope])
   @@map("themes")
 }
 
 model BrandAsset {
-  id        String   @id @default(cuid())
-  key       String   @unique @db.VarChar(50) // logo_light | logo_dark | favicon (ADR-017/contracts' BrandAssetKey — the default OG image lives at the seo.defaultOgImage setting instead, one home per asset)
-  url       String   @db.VarChar(500)
-  altText   String?  @db.VarChar(255)
-  width     Int?
-  height    Int?
-  mimeType  String?  @db.VarChar(100)
-  updatedBy String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(cuid())
+  key          String   @unique @db.VarChar(50) // logo_light | logo_dark | favicon (ADR-017/contracts' BrandAssetKey — the default OG image lives at the seo.defaultOgImage setting instead, one home per asset)
+  url          String   @db.VarChar(500)
+  // ADR-035 — the MediaAsset id url was resolved from, tracked so
+  // deleteMedia's usage guard can see this reference.
+  mediaAssetId String?
+  altText      String?  @db.VarChar(255)
+  width        Int?
+  height       Int?
+  mimeType     String?  @db.VarChar(100)
+  updatedBy    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@map("brand_assets")
 }
@@ -504,20 +513,41 @@ model BrandAsset {
 // storage driver owns the bytes, this row owns the metadata the app needs
 // to serve and audit them. `key` is the driver-side object name (random,
 // extension-bearing); `url` is what pages embed.
+// ADR-034 §1 — decided by magic bytes, never the client's declared type.
+enum MediaKind {
+  IMAGE
+  VIDEO
+  AUDIO
+  DOCUMENT
+}
+
 model MediaAsset {
-  id         String   @id @default(cuid())
-  key        String   @unique @db.VarChar(120)
-  url        String   @db.VarChar(500)
-  fileName   String   @db.VarChar(255)   // original client filename, display only
-  mimeType   String   @db.VarChar(100)
-  size       Int
-  width      Int?
-  height     Int?
-  purpose    String   @db.VarChar(30)    // brand | setting | article | content
-  uploadedBy String?
-  createdAt  DateTime @default(now())
+  id            String    @id @default(cuid())
+  key           String    @unique @db.VarChar(120)
+  url           String    @db.VarChar(500)
+  fileName      String    @db.VarChar(255) // original client filename, display only
+  mimeType      String    @db.VarChar(100)
+  size          Int
+  width         Int?
+  height        Int?
+  purpose       String    @db.VarChar(30) // brand | setting | article | content
+  uploadedBy    String?
+  createdAt     DateTime  @default(now())
+  // ADR-034 §2 — the library's metadata. Existing rows backfill to
+  // `kind: IMAGE`, `folder: "/"` via these column defaults (plan §5.2
+  // pre-launch policy: a default carries a backfill, never a script).
+  kind          MediaKind @default(IMAGE)
+  title         String?   @db.VarChar(200)
+  altText       String?   @db.VarChar(500) // default alt; a placement's translatable alt overrides it
+  folder        String    @default("/") @db.VarChar(300) // path string, no folder table (ADR-034 §2)
+  tags          Json? // string[] — validated, lower-cased, <= 20 (ADR-034 Consequences: filtered in memory, not indexed)
+  durationMs    Int?
+  posterAssetId String? // VIDEO: a MediaAsset IMAGE id; required for background use (ADR-032 §2)
+  version       Int       @default(1) // bumped by replace-in-place (ADR-034 §3)
+  deletedAt     DateTime?
 
   @@index([purpose, createdAt])
+  @@index([kind, folder])
   @@map("media_assets")
 }
 
@@ -532,9 +562,9 @@ enum TextDirection {
 
 model Locale {
   id           String        @id @default(cuid())
-  code         String        @unique @db.VarChar(10)  // en, es, ar, ur
-  name         String        @db.VarChar(100)         // English
-  nativeName   String        @db.VarChar(100)         // English / العربية
+  code         String        @unique @db.VarChar(10) // en, es, ar, ur
+  name         String        @db.VarChar(100) // English
+  nativeName   String        @db.VarChar(100) // English / العربية
   direction    TextDirection @default(LTR)
   flagEmoji    String?       @db.VarChar(10)
   isDefault    Boolean       @default(false)
@@ -549,44 +579,44 @@ model Locale {
 }
 
 model Menu {
-  id        String     @id @default(cuid())
-  key       String     @unique @db.VarChar(50) // main | footer_learn | mobile
-  name      String     @db.VarChar(100)
-  location  String     @db.VarChar(50)         // header | footer | sidebar
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  id        String   @id @default(cuid())
+  key       String   @unique @db.VarChar(50) // main | footer_learn | mobile
+  name      String   @db.VarChar(100)
+  location  String   @db.VarChar(50) // header | footer | sidebar
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  items     MenuItem[]
+  items MenuItem[]
 
   @@map("menus")
 }
 
 model MenuItem {
-  id            String            @id @default(cuid())
-  menuId        String
-  parentId      String?
+  id       String  @id @default(cuid())
+  menuId   String
+  parentId String?
 
   // Either an internal route or an external URL — not both.
-  url           String?           @db.VarChar(500)
-  routeKey      String?           @db.VarChar(100)
-  icon          String?           @db.VarChar(80)
-  badge         String?           @db.VarChar(30)
+  url      String? @db.VarChar(500)
+  routeKey String? @db.VarChar(100)
+  icon     String? @db.VarChar(80)
+  badge    String? @db.VarChar(30)
 
-  sortOrder     Int               @default(0)
-  isActive      Boolean           @default(true)
-  openInNewTab  Boolean           @default(false)
-  visibility    FeatureVisibility @default(PUBLIC)
+  sortOrder          Int               @default(0)
+  isActive           Boolean           @default(true)
+  openInNewTab       Boolean           @default(false)
+  visibility         FeatureVisibility @default(PUBLIC)
   // Hidden entirely when the named feature flag is off.
-  requiresFeature String?         @db.VarChar(80)
-  requiresPermission String?      @db.VarChar(100)
+  requiresFeature    String?           @db.VarChar(80)
+  requiresPermission String?           @db.VarChar(100)
 
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  menu          Menu              @relation(fields: [menuId], references: [id], onDelete: Cascade)
-  parent        MenuItem?         @relation("MenuTree", fields: [parentId], references: [id], onDelete: Cascade)
-  children      MenuItem[]        @relation("MenuTree")
-  translations  MenuItemTranslation[]
+  menu         Menu                  @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  parent       MenuItem?             @relation("MenuTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children     MenuItem[]            @relation("MenuTree")
+  translations MenuItemTranslation[]
 
   @@index([menuId, sortOrder])
   @@index([parentId])
@@ -594,13 +624,13 @@ model MenuItem {
 }
 
 model MenuItemTranslation {
-  id         String   @id @default(cuid())
+  id         String  @id @default(cuid())
   menuItemId String
-  locale     String   @db.VarChar(10)
-  label      String   @db.VarChar(150)
-  title      String?  @db.VarChar(255)
+  locale     String  @db.VarChar(10)
+  label      String  @db.VarChar(150)
+  title      String? @db.VarChar(255)
 
-  menuItem   MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  menuItem MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
 
   @@unique([menuItemId, locale])
   @@map("menu_item_translations")
@@ -635,10 +665,12 @@ enum TranslationStatus {
   OUTDATED // source changed after this translation was written
 }
 
-// ADR-019: design-only for now — no migration generated/applied, no
-// service or UI code reads/writes this yet. Kept here (not just in the
-// ADR) so the shape is checked by `prisma validate`/`generate` ahead of
-// the implementation pass.
+// ADR-019: design-only — no service or UI code reads or writes this yet.
+// The TABLE now exists (created by 20260906211059_article_editor_v2): the
+// model had been in this schema without a migration since ADR-019, so every
+// diff wanted to create it and each new migration failed on the leftover.
+// Landing the empty table makes history match the schema; it does not build
+// the feature, which is still unimplemented exactly as ADR-019 describes.
 enum CommentStatus {
   PENDING
   APPROVED
@@ -646,47 +678,47 @@ enum CommentStatus {
 }
 
 model Course {
-  id              String        @id @default(cuid())
-  difficulty      Difficulty    @default(BEGINNER)
-  estimatedHours  Int?
-  coverImageUrl   String?       @db.VarChar(500)
-  status          ContentStatus @default(DRAFT)
-  visibility      FeatureVisibility @default(PUBLIC)
-  sortOrder       Int           @default(0)
-  authorId        String?
-  publishedAt     DateTime?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  deletedAt       DateTime?
+  id             String            @id @default(cuid())
+  difficulty     Difficulty        @default(BEGINNER)
+  estimatedHours Int?
+  coverImageUrl  String?           @db.VarChar(500)
+  status         ContentStatus     @default(DRAFT)
+  visibility     FeatureVisibility @default(PUBLIC)
+  sortOrder      Int               @default(0)
+  authorId       String?
+  publishedAt    DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  deletedAt      DateTime?
 
-  translations    CourseTranslation[]
-  modules         Module[]
+  translations CourseTranslation[]
+  modules      Module[]
 
   @@index([status, publishedAt])
   @@map("courses")
 }
 
 model CourseTranslation {
-  id                String            @id @default(cuid())
-  courseId          String
-  locale            String            @db.VarChar(10)
+  id       String @id @default(cuid())
+  courseId String
+  locale   String @db.VarChar(10)
 
-  title             String            @db.VarChar(255)
-  slug              String            @db.VarChar(255)
-  summary           String?           @db.Text
-  description       String?           @db.LongText
+  title       String  @db.VarChar(255)
+  slug        String  @db.VarChar(255)
+  summary     String? @db.Text
+  description String? @db.LongText
 
-  seoTitle          String?           @db.VarChar(70)
-  seoDescription    String?           @db.VarChar(180)
-  seoFocusKeyword   String?           @db.VarChar(100)
-  ogImageUrl        String?           @db.VarChar(500)
+  seoTitle        String? @db.VarChar(70)
+  seoDescription  String? @db.VarChar(180)
+  seoFocusKeyword String? @db.VarChar(100)
+  ogImageUrl      String? @db.VarChar(500)
 
   translationStatus TranslationStatus @default(DRAFT)
   translatedBy      String?
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
-  course            Course            @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
 
   @@unique([courseId, locale])
   @@unique([locale, slug])
@@ -695,14 +727,14 @@ model CourseTranslation {
 }
 
 model Module {
-  id           String   @id @default(cuid())
-  courseId     String
-  sortOrder    Int      @default(0)
-  isPublished  Boolean  @default(false)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id          String   @id @default(cuid())
+  courseId    String
+  sortOrder   Int      @default(0)
+  isPublished Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  course       Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  course       Course              @relation(fields: [courseId], references: [id], onDelete: Cascade)
   lessons      Lesson[]
   translations ModuleTranslation[]
 
@@ -711,39 +743,39 @@ model Module {
 }
 
 model ModuleTranslation {
-  id          String   @id @default(cuid())
+  id          String  @id @default(cuid())
   moduleId    String
-  locale      String   @db.VarChar(10)
-  title       String   @db.VarChar(255)
-  description String?  @db.Text
+  locale      String  @db.VarChar(10)
+  title       String  @db.VarChar(255)
+  description String? @db.Text
 
-  module      Module   @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  module Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
 
   @@unique([moduleId, locale])
   @@map("module_translations")
 }
 
 model Lesson {
-  id                   String        @id @default(cuid())
+  id                   String            @id @default(cuid())
   moduleId             String
-  difficulty           Difficulty    @default(BEGINNER)
+  difficulty           Difficulty        @default(BEGINNER)
   estimatedMinutes     Int?
-  videoUrl             String?       @db.VarChar(500)
-  coverImageUrl        String?       @db.VarChar(500)
+  videoUrl             String?           @db.VarChar(500)
+  coverImageUrl        String?           @db.VarChar(500)
   prerequisiteLessonId String?
-  sortOrder            Int           @default(0)
-  status               ContentStatus @default(DRAFT)
+  sortOrder            Int               @default(0)
+  status               ContentStatus     @default(DRAFT)
   visibility           FeatureVisibility @default(PUBLIC)
   authorId             String?
   publishedAt          DateTime?
   lastReviewedAt       DateTime?
-  viewCount            Int           @default(0)
-  createdAt            DateTime      @default(now())
-  updatedAt            DateTime      @updatedAt
+  viewCount            Int               @default(0)
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
   deletedAt            DateTime?
 
-  module               Module        @relation(fields: [moduleId], references: [id], onDelete: Cascade)
-  translations         LessonTranslation[]
+  module       Module              @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  translations LessonTranslation[]
 
   @@index([moduleId, sortOrder])
   @@index([status, publishedAt])
@@ -751,29 +783,29 @@ model Lesson {
 }
 
 model LessonTranslation {
-  id                 String            @id @default(cuid())
-  lessonId           String
-  locale             String            @db.VarChar(10)
+  id       String @id @default(cuid())
+  lessonId String
+  locale   String @db.VarChar(10)
 
-  title              String            @db.VarChar(255)
-  slug               String            @db.VarChar(255)
-  summary            String?           @db.Text
-  content            String?           @db.LongText
+  title              String  @db.VarChar(255)
+  slug               String  @db.VarChar(255)
+  summary            String? @db.Text
+  content            String? @db.LongText
   learningObjectives Json?
 
-  seoTitle           String?           @db.VarChar(70)
-  seoDescription     String?           @db.VarChar(180)
-  seoFocusKeyword    String?           @db.VarChar(100)
+  seoTitle        String? @db.VarChar(70)
+  seoDescription  String? @db.VarChar(180)
+  seoFocusKeyword String? @db.VarChar(100)
 
-  translationStatus  TranslationStatus @default(DRAFT)
+  translationStatus TranslationStatus @default(DRAFT)
   // Hash of the source-locale content at translation time. When the source
   // changes, the hash mismatch flips this row to OUTDATED automatically.
-  sourceHash         String?           @db.VarChar(64)
-  translatedBy       String?
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @updatedAt
+  sourceHash        String?           @db.VarChar(64)
+  translatedBy      String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
 
-  lesson             Lesson            @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
 
   @@unique([lessonId, locale])
   @@unique([locale, slug])
@@ -782,20 +814,20 @@ model LessonTranslation {
 }
 
 model GlossaryTerm {
-  id            String        @id @default(cuid())
-  category      String?       @db.VarChar(80)
-  difficulty    Difficulty    @default(BEGINNER)
-  formula       String?       @db.Text
-  imageUrl      String?       @db.VarChar(500)
-  status        ContentStatus @default(DRAFT)
-  viewCount     Int           @default(0)
-  authorId      String?
-  publishedAt   DateTime?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  deletedAt     DateTime?
+  id          String        @id @default(cuid())
+  category    String?       @db.VarChar(80)
+  difficulty  Difficulty    @default(BEGINNER)
+  formula     String?       @db.Text
+  imageUrl    String?       @db.VarChar(500)
+  status      ContentStatus @default(DRAFT)
+  viewCount   Int           @default(0)
+  authorId    String?
+  publishedAt DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  deletedAt   DateTime?
 
-  translations  GlossaryTermTranslation[]
+  translations GlossaryTermTranslation[]
 
   @@index([category])
   @@index([status])
@@ -803,27 +835,27 @@ model GlossaryTerm {
 }
 
 model GlossaryTermTranslation {
-  id                  String            @id @default(cuid())
-  termId              String
-  locale              String            @db.VarChar(10)
+  id     String @id @default(cuid())
+  termId String
+  locale String @db.VarChar(10)
 
-  term                String            @db.VarChar(150)
-  slug                String            @db.VarChar(150)
-  simpleExplanation   String            @db.Text
-  detailedExplanation String?           @db.LongText
-  advancedExplanation String?           @db.LongText
-  exampleScenario     String?           @db.Text
+  term                String  @db.VarChar(150)
+  slug                String  @db.VarChar(150)
+  simpleExplanation   String  @db.Text
+  detailedExplanation String? @db.LongText
+  advancedExplanation String? @db.LongText
+  exampleScenario     String? @db.Text
   faq                 Json?
 
-  seoTitle            String?           @db.VarChar(70)
-  seoDescription      String?           @db.VarChar(180)
+  seoTitle       String? @db.VarChar(70)
+  seoDescription String? @db.VarChar(180)
 
-  translationStatus   TranslationStatus @default(DRAFT)
-  sourceHash          String?           @db.VarChar(64)
-  createdAt           DateTime          @default(now())
-  updatedAt           DateTime          @updatedAt
+  translationStatus TranslationStatus @default(DRAFT)
+  sourceHash        String?           @db.VarChar(64)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
 
-  glossaryTerm        GlossaryTerm      @relation(fields: [termId], references: [id], onDelete: Cascade)
+  glossaryTerm GlossaryTerm @relation(fields: [termId], references: [id], onDelete: Cascade)
 
   @@unique([termId, locale])
   @@unique([locale, slug])
@@ -843,11 +875,11 @@ enum ArticleKind {
 }
 
 model ArticleCategory {
-  id           String   @id @default(cuid())
-  isActive     Boolean  @default(true)
-  sortOrder    Int      @default(0)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id        String   @id @default(cuid())
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   translations ArticleCategoryTranslation[]
   articles     Article[]
@@ -857,20 +889,20 @@ model ArticleCategory {
 }
 
 model ArticleCategoryTranslation {
-  id             String   @id @default(cuid())
-  categoryId     String
-  locale         String   @db.VarChar(10)
+  id         String @id @default(cuid())
+  categoryId String
+  locale     String @db.VarChar(10)
 
-  name           String   @db.VarChar(100)
-  slug           String   @db.VarChar(150)
-  description    String?  @db.VarChar(500)
-  seoTitle       String?  @db.VarChar(70)
-  seoDescription String?  @db.VarChar(180)
+  name           String  @db.VarChar(100)
+  slug           String  @db.VarChar(150)
+  description    String? @db.VarChar(500)
+  seoTitle       String? @db.VarChar(70)
+  seoDescription String? @db.VarChar(180)
 
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  category       ArticleCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  category ArticleCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
   @@unique([categoryId, locale])
   @@unique([locale, slug])
@@ -879,10 +911,10 @@ model ArticleCategoryTranslation {
 }
 
 model ArticleTag {
-  id           String   @id @default(cuid())
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id        String   @id @default(cuid())
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   translations ArticleTagTranslation[]
   articles     ArticleTagAssignment[]
@@ -899,7 +931,7 @@ model ArticleTagTranslation {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tag       ArticleTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  tag ArticleTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
   @@unique([tagId, locale])
   @@unique([locale, slug])
@@ -908,63 +940,94 @@ model ArticleTagTranslation {
 }
 
 model Article {
-  id            String        @id @default(cuid())
-  kind          ArticleKind   @default(NEWS)
+  id        String        @id @default(cuid())
+  kind      ArticleKind   @default(NEWS)
   // Reuses the shared enum; articles run a leaner transition map (ADR-015 #4)
   // — the review states are unused here.
-  status        ContentStatus @default(DRAFT)
+  status    ContentStatus @default(DRAFT)
   // Instant hide/show without touching status (ADR-015 #4).
-  isActive      Boolean       @default(true)
+  isActive  Boolean       @default(true)
   // Schema-ready, unenforced until entitlements land (ADR-012 reference).
-  isPremium     Boolean       @default(false)
+  isPremium Boolean       @default(false)
 
-  coverImageUrl String?       @db.VarChar(500)
+  coverImageUrl     String? @db.VarChar(500)
+  // ADR-035 — the MediaAsset id behind coverImageUrl, tracked so deleteMedia's
+  // usage guard can see this reference. Null for rows saved before ADR-035
+  // or set via an external URL rather than the upload widget.
+  coverImageAssetId String?
   // Featured video — validated against the @repo/utils provider whitelist;
   // embed iframes are constructed at render, never stored (ADR-015 #9).
-  videoUrl      String?       @db.VarChar(500)
+  videoUrl          String? @db.VarChar(500)
 
-  categoryId    String
-  authorId      String?
+  categoryId String
+  authorId   String?
 
   // Ingestion-ready (null for admin-authored articles; worker is deferred).
-  source        String?       @db.VarChar(150)
-  sourceUrl     String?       @db.VarChar(500)
+  source    String? @db.VarChar(150)
+  sourceUrl String? @db.VarChar(500)
 
-  scheduledFor  DateTime?
-  publishedAt   DateTime?
+  // changes-07 PR 2 — editor v2 fields.
+  // Editorial promotion flag. Public consumers are a listing decision under
+  // ADR-042's philosophy; nothing reads it yet beyond the admin list.
+  isFeatured         Boolean @default(false)
+  // Distinct from coverImageUrl: rendered at the top of THIS article's page,
+  // where the cover is the card/OG image. ADR-035 asset pairing as usual.
+  headerImageUrl     String? @db.VarChar(500)
+  headerImageAssetId String?
+  // Related posts are rows in ContentRelation (sourceType "article",
+  // relationType "related"); these two only control rendering.
+  showRelated        Boolean @default(true)
+  relatedCount       Int     @default(3)
 
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  deletedAt     DateTime?
+  scheduledFor DateTime?
+  publishedAt  DateTime?
 
-  category      ArticleCategory        @relation(fields: [categoryId], references: [id])
-  translations  ArticleTranslation[]
-  tags          ArticleTagAssignment[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  category     ArticleCategory        @relation(fields: [categoryId], references: [id])
+  translations ArticleTranslation[]
+  tags         ArticleTagAssignment[]
   // ADR-019, design-only — see Comment.
-  comments      Comment[]
+  comments     Comment[]
 
   @@index([kind, status, publishedAt])
+  @@index([isFeatured, status, publishedAt])
   @@index([status, scheduledFor])
   @@index([categoryId])
   @@map("articles")
 }
 
 model ArticleTranslation {
-  id                String            @id @default(cuid())
-  articleId         String
-  locale            String            @db.VarChar(10)
+  id        String @id @default(cuid())
+  articleId String
+  locale    String @db.VarChar(10)
 
-  title             String            @db.VarChar(255)
-  slug              String            @db.VarChar(255)
-  excerpt           String?           @db.VarChar(500)
+  title   String  @db.VarChar(255)
+  slug    String  @db.VarChar(255)
+  excerpt String? @db.VarChar(500)
   // Sanitized HTML — every save path goes through sanitizeRichText (ADR-009).
-  body              String?           @db.LongText
+  body    String? @db.LongText
 
-  seoTitle          String?           @db.VarChar(70)
-  seoDescription    String?           @db.VarChar(180)
-  ogImageUrl        String?           @db.VarChar(500)
-  canonicalUrl      String?           @db.VarChar(500)
-  noIndex           Boolean           @default(false)
+  seoTitle            String? @db.VarChar(70)
+  seoDescription      String? @db.VarChar(180)
+  ogImageUrl          String? @db.VarChar(500)
+  // ADR-035 — same purpose as Article.coverImageAssetId, scoped per translation.
+  ogImageAssetId      String?
+  canonicalUrl        String? @db.VarChar(500)
+  noIndex             Boolean @default(false)
+  // changes-07 PR 2 — per-locale SEO, matching the reference editor.
+  // Comma-separated; parsed by @repo/utils parseKeywords, never split in SQL.
+  focusKeywords       String? @db.VarChar(300)
+  noFollow            Boolean @default(false)
+  // Open Graph / Twitter overrides. Both fall back to seoTitle → title and
+  // seoDescription → excerpt at render; null means inherit, not empty.
+  ogTitle             String? @db.VarChar(120)
+  ogDescription       String? @db.VarChar(300)
+  twitterCard         String? @db.VarChar(20)
+  twitterImageUrl     String? @db.VarChar(500)
+  twitterImageAssetId String?
 
   translationStatus TranslationStatus @default(DRAFT)
   sourceHash        String?           @db.VarChar(64)
@@ -972,7 +1035,8 @@ model ArticleTranslation {
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
-  article           Article           @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  article  Article          @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  faqItems ArticleFaqItem[]
 
   @@unique([articleId, locale])
   @@unique([locale, slug])
@@ -980,13 +1044,33 @@ model ArticleTranslation {
   @@map("article_translations")
 }
 
+// changes-07 PR 2. Keyed to the TRANSLATION, not the article: a question and
+// its answer are translatable prose, so they are naturally per-locale and
+// cascade with the translation — no second translation table, no orphan-locale
+// case. Answers are sanitized HTML through the same ADR-009 pipeline as bodies.
+model ArticleFaqItem {
+  id            String @id @default(cuid())
+  translationId String
+  sortOrder     Int    @default(0)
+  question      String @db.VarChar(300)
+  answer        String @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  translation ArticleTranslation @relation(fields: [translationId], references: [id], onDelete: Cascade)
+
+  @@index([translationId, sortOrder])
+  @@map("article_faq_items")
+}
+
 model ArticleTagAssignment {
   articleId String
   tagId     String
-  createdAt DateTime   @default(now())
+  createdAt DateTime @default(now())
 
-  article   Article    @relation(fields: [articleId], references: [id], onDelete: Cascade)
-  tag       ArticleTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  article Article    @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  tag     ArticleTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
   @@id([articleId, tagId])
   @@index([tagId])
@@ -1007,8 +1091,8 @@ model Comment {
   updatedAt DateTime      @updatedAt
   deletedAt DateTime?
 
-  article   Article       @relation(fields: [articleId], references: [id], onDelete: Cascade)
-  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  article Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([articleId, status, createdAt])
   @@index([userId])
@@ -1042,12 +1126,12 @@ model AuditLog {
   action     String   @db.VarChar(100) // "theme.update", "user.role.assign"
   entityType String?  @db.VarChar(50)
   entityId   String?
-  changes    Json?    // { before: {...}, after: {...} }
+  changes    Json? // { before: {...}, after: {...} }
   ipAddress  String?  @db.VarChar(45)
   userAgent  String?  @db.Text
   createdAt  DateTime @default(now())
 
-  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([entityType, entityId])
@@ -1073,7 +1157,7 @@ model Notification {
   readAt    DateTime?
   createdAt DateTime  @default(now())
 
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, readAt])
   @@index([userId, createdAt])
@@ -1093,4 +1177,221 @@ model Redirect {
 
   @@index([fromPath])
   @@map("redirects")
+}
+
+// ─────────────────────────────────────────────────────────────
+// WEBSITE BUILDER / CMS (Module 16) — page model
+// ADR-021 (Page/PageTranslation/PageVersion) + ADR-032 §6 amendments
+// (revision/gateResult/templateKey, updatedById/parentId/group) +
+// ADR-033 §4 (ContentReference). `PageKind` gains PART in Phase 6
+// (ADR-027) — not added yet, no PART rows exist to migrate.
+// Layout is Json, Zod-validated in @repo/contracts on every read/write
+// (the full node-envelope schema lands in Phase 2 per ADR-032).
+// ─────────────────────────────────────────────────────────────
+
+enum PageKind {
+  STATIC
+  COLLECTION
+  DETAIL
+  DATA
+}
+
+model Page {
+  id                 String            @id @default(cuid())
+  key                String?           @unique @db.VarChar(80) // stable key: "home", "news-listing"
+  kind               PageKind          @default(STATIC)
+  contentType        String?           @db.VarChar(60) // registry key; required for COLLECTION/DETAIL
+  dataProvider       String?           @db.VarChar(60) // registry key; required for DATA
+  status             ContentStatus     @default(DRAFT)
+  isActive           Boolean           @default(true) // instant hide, status untouched (ADR-015 #4 pattern)
+  visibility         FeatureVisibility @default(PUBLIC)
+  requiresFeature    String?           @db.VarChar(80)
+  // Plain ids, not Prisma relations: the pointed-at PageVersion is created
+  // after the Page row exists (avoids a circular required FK), and the
+  // published/draft distinction is app-level, not referential (ADR-021 §5).
+  publishedVersionId String?           @unique
+  draftVersionId     String?           @unique
+  // Nested paths (ADR-032 §6): breadcrumbs + per-locale path derivation.
+  parentId           String?
+  group              String?           @db.VarChar(80) // admin-only list-screen label
+  createdById        String
+  updatedById        String?
+  publishedAt        DateTime?
+  deletedAt          DateTime?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  parent       Page?             @relation("PageTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children     Page[]            @relation("PageTree")
+  translations PageTranslation[]
+  versions     PageVersion[]     @relation("PageVersions")
+
+  @@index([kind, status])
+  @@index([parentId])
+  @@map("pages")
+}
+
+model PageTranslation {
+  id               String            @id @default(cuid())
+  pageId           String
+  locale           String            @db.VarChar(10)
+  title            String            @db.VarChar(255)
+  slug             String            @db.VarChar(255) // localized; empty for the home page
+  path             String            @db.VarChar(500) // resolved public path, no locale prefix stored
+  status           TranslationStatus @default(DRAFT)
+  seoTitle         String?           @db.VarChar(70)
+  seoDescription   String?           @db.VarChar(180)
+  ogImageId        String? // MediaAsset id (ADR-017) — plain id, no relation
+  canonicalUrl     String?           @db.VarChar(500)
+  robots           String?           @default("index,follow") @db.VarChar(40)
+  includeInSitemap Boolean           @default(true)
+  schemaType       String?           @default("WebPage") @db.VarChar(40)
+  sourceHash       String?           @db.VarChar(64) // OUTDATED flow, as content translations do
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  page Page @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@unique([pageId, locale])
+  @@unique([locale, path])
+  @@index([locale, slug])
+  @@map("page_translations")
+}
+
+model PageVersion {
+  id          String   @id @default(cuid())
+  pageId      String
+  // 0 on the mutable draft row (never shown as publish history); 1, 2, 3…
+  // on immutable published snapshots (ADR-032 §6: publish creates a new
+  // row, the draft is never renumbered).
+  number      Int
+  layout      Json // the block tree — Zod-validated on every read and write
+  note        String?  @db.VarChar(500)
+  authorId    String
+  // Optimistic lock on the draft row only: autosave refuses a stale
+  // `revision`. Publish snapshots copy the draft's current revision as-is.
+  revision    Int      @default(0)
+  gateResult  Json? // last publish-gate run (ADR-024 §4); gate wiring lands Phase 3/8
+  templateKey String?  @db.VarChar(80) // which LayoutTemplate this started from (ADR-033), usage reporting
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  page Page @relation("PageVersions", fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@unique([pageId, number])
+  @@map("page_versions")
+}
+
+// ADR-033 §1/§2 — "Linked": a node stores an id; editing this row updates
+// every placement. Config is the same StyleChoices + MotionChoices shape
+// node.style.overrides uses (ADR-032 §2, ADR-024 §2) — validated by
+// @repo/contracts on write, not by the database. `scope` narrows which
+// block types a preset is offered for in the composer ("any" | a block
+// type key | "widget"); it is advisory, not a foreign key.
+model StylePreset {
+  id          String   @id @default(cuid())
+  key         String   @unique @db.VarChar(80)
+  name        String   @db.VarChar(120)
+  scope       String   @default("any") @db.VarChar(60)
+  config      Json
+  isSystem    Boolean  @default(false) // seeded; clone-only (ADR-016/ADR-023 pattern)
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("style_presets")
+}
+
+// ADR-023 — referenced by id from `collection`/`featured-content` blocks'
+// `cardTemplateId` prop, never copied: editing one updates every
+// placement. `contentType: null` means it works against any
+// `CollectionItem`. Deletion is refused while any `ContentReference`
+// still points at it (styles.ts's own pattern, `refType: "CARD_TEMPLATE"`
+// — that enum value has existed since Phase 1/2's schema, ADR-033 §4).
+model CardTemplate {
+  id             String   @id @default(cuid())
+  key            String   @unique @db.VarChar(80)
+  name           String   @db.VarChar(120)
+  contentType    String?  @db.VarChar(60)
+  variant        String   @db.VarChar(60)
+  config         Json
+  isSystem       Boolean  @default(false)
+  previewImageId String?
+  createdById    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("card_templates")
+}
+
+// ADR-033 §1/§3 — "Start from": layout is copied into the target and is
+// then independent (no id retained, no propagation). One table covers
+// page/section/block/part templates — a table per preset "type" would be
+// identical rows under different names (ADR-033 Alternatives).
+enum LayoutTemplateKind {
+  PAGE
+  SECTION
+  BLOCK
+  PART
+}
+
+model LayoutTemplate {
+  id             String             @id @default(cuid())
+  key            String             @unique @db.VarChar(80)
+  name           String             @db.VarChar(120)
+  kind           LayoutTemplateKind
+  pageKind       PageKind? // PAGE templates: which Page.kind they seed
+  partKey        String?            @db.VarChar(60) // PART templates: header | footer | announcement | … (ADR-027 presets)
+  layout         Json // a full tree (PAGE/PART), a subtree (SECTION), or one node (BLOCK) — Zod-validated
+  previewImageId String?
+  isSystem       Boolean            @default(false)
+  createdById    String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@map("layout_templates")
+}
+
+// ADR-033 §4 — one usage/integrity index over every layout-holding row.
+// Written on save by syncReferences() as a diff-and-replace; the compound
+// unique is what makes "replace" well-defined (no duplicate reference rows
+// for one source/target/field triple).
+enum ReferenceSourceType {
+  PAGE_VERSION
+  MENU_ITEM
+  CARD_TEMPLATE
+  STYLE_PRESET
+  LAYOUT_TEMPLATE
+  ARTICLE
+  COURSE
+  BRAND
+  SETTING
+}
+
+enum ReferenceType {
+  MEDIA
+  CARD_TEMPLATE
+  STYLE_PRESET
+  WIDGET
+  PART
+  PAGE
+  ARTICLE
+  ARTICLE_CATEGORY
+  ARTICLE_TAG
+  COURSE
+  GLOSSARY_TERM
+}
+
+model ContentReference {
+  id         String              @id @default(cuid())
+  sourceType ReferenceSourceType
+  sourceId   String
+  refType    ReferenceType
+  refId      String
+  field      String?             @db.VarChar(120) // "style.presetId", "props.image", "props.link"
+  createdAt  DateTime            @default(now())
+
+  @@unique([sourceType, sourceId, refType, refId, field])
+  @@index([refType, refId])
+  @@map("content_references")
 }

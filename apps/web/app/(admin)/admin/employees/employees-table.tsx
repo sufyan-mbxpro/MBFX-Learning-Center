@@ -95,7 +95,7 @@ export function EmployeesTable({
             >
               {row.original.firstName} {row.original.lastName}
             </Link>
-            <code className="text-xs text-muted-foreground">{row.original.employeeCode}</code>
+            <span className="text-xs text-muted-foreground">{row.original.employeeCode}</span>
           </div>
         ),
       },

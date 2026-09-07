@@ -299,3 +299,84 @@ describe("loadMenuData carries the menu's own name (what buildMenu exposes)", ()
     expect(data.items).toEqual([]);
   });
 });
+
+// ─── About section (ADR-047 / ADR-048) ───────────────────────
+
+describe("the About parent and its five children, as the seed writes them", () => {
+  it("resolves five children with registry hrefs and their one-line titles", async () => {
+    await db.locale.upsert({
+      where: { code: "en" },
+      update: {},
+      create: {
+        code: "en",
+        name: "English",
+        nativeName: "English",
+        direction: "LTR",
+        isDefault: true,
+        isActive: true,
+        sortOrder: 1,
+      },
+    });
+    const menu = await db.menu.create({
+      data: { key: `about-${Date.now()}`, name: "Main", location: "header" },
+    });
+    const root = await db.menuItem.create({
+      data: { menuId: menu.id, routeKey: "about", sortOrder: 8, isActive: true },
+    });
+    await db.menuItemTranslation.create({
+      data: { menuItemId: root.id, locale: "en", label: "About" },
+    });
+
+    // Same shape as seed.ts's ABOUT_NAV.children — the panel's descriptions
+    // ride on MenuItemTranslation.title, so a child with no title would
+    // silently render a description-less row rather than fail.
+    const children = [
+      { routeKey: "about", label: "About MBFX", title: "Who we are and what we teach" },
+      { routeKey: "about-why-us", label: "Why MBFX", title: "Five reasons" },
+      { routeKey: "about-transparency", label: "How we operate", title: "Data and funding" },
+      { routeKey: "about-security", label: "Security & trust", title: "Account and data" },
+      { routeKey: "about-support", label: "Support", title: "Reach a human" },
+    ];
+    for (const [index, child] of children.entries()) {
+      const record = await db.menuItem.create({
+        data: {
+          menuId: menu.id,
+          parentId: root.id,
+          routeKey: child.routeKey,
+          sortOrder: index + 1,
+          isActive: true,
+        },
+      });
+      await db.menuItemTranslation.create({
+        data: {
+          menuItemId: record.id,
+          locale: "en",
+          label: child.label,
+          title: child.title,
+        },
+      });
+    }
+
+    const built = assembleNavigation(await nav.loadMenuData(menu.key), "en", null);
+    expect(built).toHaveLength(1);
+    const about = built[0];
+    expect(about?.href).toBe("/about");
+    expect(about?.children.map((c) => c.href)).toEqual([
+      "/about",
+      "/about/why-us",
+      "/about/transparency",
+      "/about/security",
+      "/about/support",
+    ]);
+    expect(about?.children.map((c) => c.title)).toEqual([
+      "Who we are and what we teach",
+      "Five reasons",
+      "Data and funding",
+      "Account and data",
+      "Reach a human",
+    ]);
+    // No feature flag gates these — they are coded routes that always exist,
+    // unlike the flag-gated areas beside them in the seeded menu.
+    expect(about?.children.every((c) => !c.isExternal)).toBe(true);
+  });
+});

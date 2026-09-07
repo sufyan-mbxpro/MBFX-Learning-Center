@@ -40,7 +40,7 @@ both require that bytes only enter storage through one validated path.
   streams it with the stored MIME, `nosniff`, and a long immutable cache
   (keys are random, never reused). SVG is served with
   `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline';
-  sandbox` so an uploaded SVG cannot run script when opened directly.
+sandbox` so an uploaded SVG cannot run script when opened directly.
 - **No URL ingestion.** The upload widget replaces every image URL text
   field it touches (settings `IMAGE` type, article cover / OG image, theme
   logos & favicon). The contracts still accept a stored URL string because

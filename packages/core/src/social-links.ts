@@ -10,6 +10,8 @@ export interface SocialLinkItem {
   label: string;
   url: string;
   icon: string;
+  /** Admin-uploaded icon (ADR-045). Wins over `icon` when present. */
+  iconUrl: string | null;
   handle: string | null;
   openInNewTab: boolean;
   showInHeader: boolean;
@@ -26,6 +28,7 @@ export async function loadActiveSocialLinks(): Promise<SocialLinkItem[]> {
       label: true,
       url: true,
       icon: true,
+      iconUrl: true,
       handle: true,
       openInNewTab: true,
       showInHeader: true,

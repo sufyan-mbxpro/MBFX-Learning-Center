@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" width="1600" height="900" role="presentation" aria-hidden="true"><defs>
+<linearGradient id="g-transparency-hero" x1="0" y1="0" x2="1" y2="1">
+<stop offset="0" stop-color="#2E251C"/>
+<stop offset=".55" stop-color="#221C16"/>
+<stop offset="1" stop-color="#14110E"/>
+</linearGradient>
+<radialGradient id="warm-transparency-hero" cx=".5" cy=".5" r=".5">
+<stop offset="0" stop-color="#E8B98C" stop-opacity=".55"/>
+<stop offset="1" stop-color="#E8B98C" stop-opacity="0"/>
+</radialGradient>
+<radialGradient id="cool-transparency-hero" cx=".5" cy=".5" r=".5">
+<stop offset="0" stop-color="#7FA3C4" stop-opacity=".38"/>
+<stop offset="1" stop-color="#7FA3C4" stop-opacity="0"/>
+</radialGradient>
+<linearGradient id="fade-transparency-hero" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#E8B98C" stop-opacity=".5"/>
+<stop offset="1" stop-color="#E8B98C" stop-opacity="0"/>
+</linearGradient>
+<pattern id="grid-transparency-hero" width="64" height="64" patternUnits="userSpaceOnUse">
+<path d="M64 0H0V64" fill="none" stroke="#F5EFE8" stroke-opacity=".05" stroke-width="1"/>
+</pattern>
+<radialGradient id="vig-transparency-hero" cx=".5" cy=".45" r=".75">
+<stop offset=".55" stop-color="#14110E" stop-opacity="0"/>
+<stop offset="1" stop-color="#14110E" stop-opacity=".42"/>
+</radialGradient>
+</defs><rect width="1600" height="900" fill="url(#g-transparency-hero)"/><ellipse cx="1120.89" cy="285.93" rx="334.62" ry="261" fill="url(#warm-transparency-hero)"/><ellipse cx="445.46" cy="705.74" rx="448.33" ry="349.7" fill="url(#cool-transparency-hero)"/><ellipse cx="580.31" cy="659.62" rx="612.86" ry="478.03" fill="url(#warm-transparency-hero)"/><rect width="1600" height="900" fill="url(#grid-transparency-hero)"/><path d="M192 252 C672 252 736 450 1376 450" fill="none" stroke="#E8B98C" stroke-opacity=".7" stroke-width="26" stroke-linecap="round"/>
+<path d="M192 648 C672 648 736 450 1376 450" fill="none" stroke="#3F5B75" stroke-opacity=".7" stroke-width="18" stroke-linecap="round"/>
+<circle cx="192" cy="252" r="20" fill="#E8B98C"/>
+<circle cx="192" cy="648" r="16" fill="#7FA3C4"/>
+<rect x="1354" y="270" width="44" height="360" rx="22" fill="#F5EFE8" fill-opacity=".85"/><rect width="1600" height="900" fill="url(#vig-transparency-hero)"/></svg>

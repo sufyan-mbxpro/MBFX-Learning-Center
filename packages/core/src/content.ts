@@ -8,6 +8,7 @@ import sanitize from "sanitize-html";
 import { db, ContentStatus, TranslationStatus } from "@repo/db";
 import { computeSourceHash, isTranslationOutdated } from "@repo/i18n";
 import { can, type Subject } from "@repo/rbac";
+import { parseVideoEmbedUrl } from "@repo/utils";
 import { recordAudit } from "./index.ts";
 
 // ─── Status machine ──────────────────────────────────────────
@@ -101,14 +102,68 @@ export async function transitionContentStatus(
 // ─── Sanitization (security.md #8) ───────────────────────────
 
 /**
+ * The closed class vocabulary the editor may emit (changes-10, ADR-046).
+ * Mirrors the `.ed-*` rules in `@repo/ui`'s globals.css — that file is the
+ * definition, this is the gate. Enumerated rather than globbed as `ed-*`
+ * so a class with no stylesheet behind it cannot ride along.
+ */
+const EDITORIAL_CLASSES = [
+  "ed-tx-primary",
+  "ed-tx-success",
+  "ed-tx-warning",
+  "ed-tx-info",
+  "ed-tx-danger",
+  "ed-tx-muted",
+  "ed-hl-primary",
+  "ed-hl-success",
+  "ed-hl-warning",
+  "ed-hl-info",
+  "ed-hl-danger",
+  "ed-hl-muted",
+  "ed-ff-sans",
+  "ed-ff-serif",
+  "ed-ff-mono",
+  "ed-fs-sm",
+  "ed-fs-base",
+  "ed-fs-lg",
+  "ed-fs-xl",
+  "ed-fs-2xl",
+  "ed-align-start",
+  "ed-align-center",
+  "ed-align-end",
+  "ed-align-justify",
+  "ed-embed",
+];
+
+/** The one permission set a derived provider frame is given. */
+const EMBED_ALLOW = "accelerometer; encrypted-media; gyroscope; picture-in-picture";
+
+/**
  * Server-side, on SAVE, regardless of what the editor claims to have done.
  * Allows the rich-text vocabulary Tiptap emits (ADR-009); strips scripts,
  * styles, event handlers, javascript: URLs — the XSS regression suite
  * pins this.
+ *
+ * changes-10 widened the vocabulary in three controlled ways, none of which
+ * relax the "no inline styles" rule (security.md #8 — `allowedStyles` is
+ * still `{}`):
+ *
+ *  - `allowedClasses` replaces the old blanket `class` attribute on
+ *    span/code. That is a TIGHTENING: a class used to be able to say
+ *    anything, and now must come from `EDITORIAL_CLASSES` (or be a
+ *    `language-*` hint on a code block).
+ *  - Author styling — colour, highlight, family, size, alignment — arrives
+ *    as those classes, so it resolves to theme tokens and survives a
+ *    re-brand and dark mode (code-style.md #1).
+ *  - `<iframe>` is allowed ONLY where `parseVideoEmbedUrl` recognises the
+ *    src as one of our own derived provider embeds. The surviving frame is
+ *    REBUILT from the parsed provider and id — src, attributes and all — so
+ *    an author-supplied iframe contributes nothing but a video id.
  */
 export function sanitizeRichText(html: string): string {
   return sanitize(html, {
     allowedTags: [
+      "iframe",
       "h1",
       "h2",
       "h3",
@@ -137,17 +192,64 @@ export function sanitizeRichText(html: string): string {
       "figure",
       "figcaption",
       "span",
+      "mark",
     ],
     allowedAttributes: {
       a: ["href", "title", "target", "rel"],
       img: ["src", "alt", "title", "width", "height"],
-      td: ["colspan", "rowspan"],
-      th: ["colspan", "rowspan"],
+      td: ["colspan", "rowspan", "class"],
+      th: ["colspan", "rowspan", "class"],
       span: ["class"],
       code: ["class"],
+      mark: ["class"],
+      p: ["class"],
+      h1: ["class"],
+      h2: ["class"],
+      h3: ["class"],
+      h4: ["class"],
+      li: ["class"],
+      blockquote: ["class"],
+      figure: ["class"],
+      figcaption: ["class"],
+      table: ["class"],
+      // Rebuilt wholesale by transformTags below — an author-supplied value
+      // for any of these never reaches the output.
+      iframe: ["src", "title", "loading", "allow", "allowfullscreen"],
+    },
+    allowedClasses: {
+      "*": EDITORIAL_CLASSES,
+      // Highlight.js/Prism-style language hint on a fenced code block. Kept
+      // as a glob because the language name is open-ended and inert.
+      code: [...EDITORIAL_CLASSES, "language-*"],
     },
     allowedSchemes: ["https", "http", "mailto"],
-    // No inline styles at all — styling is the theme engine's job.
+    // Second, independent lock on the frames transformTags lets through:
+    // even a bug there cannot point a frame at another host.
+    allowedIframeHostnames: ["www.youtube-nocookie.com", "player.vimeo.com", "www.dailymotion.com"],
+    transformTags: {
+      // Derive, don't trust (ADR-015 #9's principle, applied on save rather
+      // than at render because the body IS the rendered output). Anything
+      // that does not parse loses its src and is dropped by exclusiveFilter.
+      iframe: (_tagName, attribs) => {
+        const parsed = parseVideoEmbedUrl(attribs.src ?? "");
+        if (!parsed) return { tagName: "iframe", attribs: {} };
+        return {
+          tagName: "iframe",
+          attribs: {
+            src: parsed.embedUrl,
+            // The author's caption is prose and stays theirs; sanitize-html
+            // escapes it as an attribute value.
+            ...(attribs.title ? { title: attribs.title } : {}),
+            loading: "lazy",
+            allow: EMBED_ALLOW,
+            allowfullscreen: "",
+          },
+        };
+      },
+    },
+    exclusiveFilter: (frame) => frame.tag === "iframe" && !frame.attribs.src,
+    // No inline styles at all — styling is the theme engine's job. Author
+    // styling goes through EDITORIAL_CLASSES instead (ADR-046).
     allowedStyles: {},
   });
 }

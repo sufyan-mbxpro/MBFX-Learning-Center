@@ -26,11 +26,22 @@ import "@repo/ui/globals.css";
 // generateMetadata (not a static export) because the favicon is a
 // BrandAsset upload (changes-02, ADR-017) — falls back to the static
 // /favicon.ico in public/ when no admin upload has replaced it.
-export async function generateMetadata(): Promise<Metadata> {
-  const brandAssets = await getBrandAssets();
+//
+// This is the site-wide metadata FALLBACK: any public route that doesn't
+// define its own `generateMetadata` inherits it, so it must be
+// locale-aware — it was two hardcoded English literals (including a
+// "scaffold in progress" placeholder), which both broke code-style.md #2
+// and shipped English metadata to `es`/`ar`/`ur`. Now read per-locale from
+// the catalogs, which carry real translations for both keys.
+export async function generateMetadata({ params }: LayoutProps<"/[locale]">): Promise<Metadata> {
+  const { locale } = await params;
+  if (!hasLocale(routing.locales, locale)) return {};
+  setRequestLocale(locale);
+
+  const [brandAssets, t] = await Promise.all([getBrandAssets(), getTranslations("common")]);
   return {
-    title: "MBFX Learning Center",
-    description: "Forex learning platform — scaffold in progress.",
+    title: t("siteName"),
+    description: t("siteDescription"),
     icons: brandAssets.favicon ? { icon: brandAssets.favicon } : undefined,
   };
 }

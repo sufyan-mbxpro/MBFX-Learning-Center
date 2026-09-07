@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" width="1200" height="900" role="presentation" aria-hidden="true"><defs>
+<linearGradient id="g-why-us-support" x1="0" y1="0" x2="1" y2="1">
+<stop offset="0" stop-color="#2E251C"/>
+<stop offset=".55" stop-color="#221C16"/>
+<stop offset="1" stop-color="#14110E"/>
+</linearGradient>
+<radialGradient id="warm-why-us-support" cx=".5" cy=".5" r=".5">
+<stop offset="0" stop-color="#E8B98C" stop-opacity=".55"/>
+<stop offset="1" stop-color="#E8B98C" stop-opacity="0"/>
+</radialGradient>
+<radialGradient id="cool-why-us-support" cx=".5" cy=".5" r=".5">
+<stop offset="0" stop-color="#7FA3C4" stop-opacity=".38"/>
+<stop offset="1" stop-color="#7FA3C4" stop-opacity="0"/>
+</radialGradient>
+<linearGradient id="fade-why-us-support" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#E8B98C" stop-opacity=".5"/>
+<stop offset="1" stop-color="#E8B98C" stop-opacity="0"/>
+</linearGradient>
+<pattern id="grid-why-us-support" width="64" height="64" patternUnits="userSpaceOnUse">
+<path d="M64 0H0V64" fill="none" stroke="#F5EFE8" stroke-opacity=".05" stroke-width="1"/>
+</pattern>
+<radialGradient id="vig-why-us-support" cx=".5" cy=".45" r=".75">
+<stop offset=".55" stop-color="#14110E" stop-opacity="0"/>
+<stop offset="1" stop-color="#14110E" stop-opacity=".42"/>
+</radialGradient>
+</defs><rect width="1200" height="900" fill="url(#g-why-us-support)"/><ellipse cx="449.23" cy="173.64" rx="550.57" ry="429.44" fill="url(#warm-why-us-support)"/><ellipse cx="720.99" cy="744.26" rx="566.11" ry="441.57" fill="url(#cool-why-us-support)"/><ellipse cx="796.77" cy="416.42" rx="441.33" ry="344.24" fill="url(#warm-why-us-support)"/><rect width="1200" height="900" fill="url(#grid-why-us-support)"/><rect x="144" y="216" width="552" height="198" rx="67.32" fill="#F5EFE8" fill-opacity="0.16"/>
+<rect x="408" y="468" width="600" height="216" rx="73.44" fill="#E8B98C" fill-opacity="0.85"/>
+<rect x="216" y="279" width="312" height="10" rx="5" fill="#F5EFE8" fill-opacity=".4"/>
+<rect x="216" y="324" width="216" height="10" rx="5" fill="#F5EFE8" fill-opacity=".26"/>
+<rect x="480" y="540" width="384" height="10" rx="5" fill="#14110E" fill-opacity=".45"/>
+<rect x="480" y="585" width="264" height="10" rx="5" fill="#14110E" fill-opacity=".3"/><rect width="1200" height="900" fill="url(#vig-why-us-support)"/></svg>

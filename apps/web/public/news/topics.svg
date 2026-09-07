@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" width="1600" height="900" role="presentation" aria-hidden="true"><defs>
+<linearGradient id="g-topics" x1="0" y1="0" x2="1" y2="1">
+<stop offset="0" stop-color="#2E251C"/>
+<stop offset=".55" stop-color="#221C16"/>
+<stop offset="1" stop-color="#14110E"/>
+</linearGradient>
+<radialGradient id="warm-topics" cx=".5" cy=".5" r=".5">
+<stop offset="0" stop-color="#E8B98C" stop-opacity=".55"/>
+<stop offset="1" stop-color="#E8B98C" stop-opacity="0"/>
+</radialGradient>
+<radialGradient id="cool-topics" cx=".5" cy=".5" r=".5">
+<stop offset="0" stop-color="#7FA3C4" stop-opacity=".38"/>
+<stop offset="1" stop-color="#7FA3C4" stop-opacity="0"/>
+</radialGradient>
+<linearGradient id="fade-topics" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#E8B98C" stop-opacity=".5"/>
+<stop offset="1" stop-color="#E8B98C" stop-opacity="0"/>
+</linearGradient>
+<pattern id="grid-topics" width="64" height="64" patternUnits="userSpaceOnUse">
+<path d="M64 0H0V64" fill="none" stroke="#F5EFE8" stroke-opacity=".05" stroke-width="1"/>
+</pattern>
+<radialGradient id="vig-topics" cx=".5" cy=".45" r=".75">
+<stop offset=".55" stop-color="#14110E" stop-opacity="0"/>
+<stop offset="1" stop-color="#14110E" stop-opacity=".42"/>
+</radialGradient>
+</defs><rect width="1600" height="900" fill="url(#g-topics)"/><ellipse cx="1338.24" cy="536.28" rx="536.61" ry="418.56" fill="url(#warm-topics)"/><ellipse cx="654.37" cy="641.63" rx="378.09" ry="294.91" fill="url(#cool-topics)"/><ellipse cx="394.62" cy="572.28" rx="341.05" ry="266.02" fill="url(#warm-topics)"/><rect width="1600" height="900" fill="url(#grid-topics)"/><rect x="288" y="198" width="30" height="12" rx="6" fill="#F5EFE8" fill-opacity=".22"/><rect x="288" y="265.5" width="30" height="12" rx="6" fill="#F5EFE8" fill-opacity=".22"/><rect x="288" y="333" width="44" height="12" rx="6" fill="#E8B98C" fill-opacity=".95"/><rect x="288" y="400.5" width="30" height="12" rx="6" fill="#F5EFE8" fill-opacity=".22"/><rect x="288" y="468" width="30" height="12" rx="6" fill="#F5EFE8" fill-opacity=".22"/><rect x="288" y="535.5" width="30" height="12" rx="6" fill="#F5EFE8" fill-opacity=".22"/><rect x="288" y="603" width="30" height="12" rx="6" fill="#F5EFE8" fill-opacity=".22"/><rect x="288" y="670.5" width="30" height="12" rx="6" fill="#F5EFE8" fill-opacity=".22"/><rect x="544" y="216" width="298.41" height="14" rx="7" fill="#E8B98C" fill-opacity=".9"/>
+<rect x="544" y="242" width="660.28" height="9" rx="4.5" fill="#F5EFE8" fill-opacity=".24"/>
+<rect x="544" y="257" width="409.37" height="9" rx="4.5" fill="#F5EFE8" fill-opacity=".14"/><rect x="544" y="360" width="379.56" height="14" rx="7" fill="#E8B98C" fill-opacity=".55"/>
+<rect x="544" y="386" width="657.57" height="9" rx="4.5" fill="#F5EFE8" fill-opacity=".24"/>
+<rect x="544" y="401" width="407.69" height="9" rx="4.5" fill="#F5EFE8" fill-opacity=".14"/><rect x="544" y="504" width="305.25" height="14" rx="7" fill="#E8B98C" fill-opacity=".55"/>
+<rect x="544" y="530" width="547.33" height="9" rx="4.5" fill="#F5EFE8" fill-opacity=".24"/>
+<rect x="544" y="545" width="339.34" height="9" rx="4.5" fill="#F5EFE8" fill-opacity=".14"/><rect x="544" y="648" width="376.98" height="14" rx="7" fill="#E8B98C" fill-opacity=".55"/>
+<rect x="544" y="674" width="431.7" height="9" rx="4.5" fill="#F5EFE8" fill-opacity=".24"/>
+<rect x="544" y="689" width="267.65" height="9" rx="4.5" fill="#F5EFE8" fill-opacity=".14"/><rect width="1600" height="900" fill="url(#vig-topics)"/></svg>

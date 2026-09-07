@@ -3,6 +3,7 @@ import { getTranslations } from "next-intl/server";
 import { loadRoleDetail, loadRoleMatrix } from "@repo/core";
 import { can, canAssignRole, requirePermission } from "@repo/rbac";
 import { Badge } from "@repo/ui/components/badge";
+import { humanizeKey } from "@repo/utils";
 import { AdminPage, AdminSection } from "../../_components/admin-page.tsx";
 import { RoleActions } from "./role-actions.tsx";
 import { RolePermissions } from "./role-permissions.tsx";
@@ -33,7 +34,7 @@ export default async function RoleDetailPage({ params }: PageProps<"/admin/roles
   return (
     <AdminPage
       title={role.name}
-      width="full"
+      description={t("pageDesc.roleDetail")}
       backHref="/admin/roles"
       backLabel={t("backToList")}
       meta={
@@ -74,9 +75,7 @@ export default async function RoleDetailPage({ params }: PageProps<"/admin/roles
           <dl className="flex flex-col gap-3 text-sm">
             <div>
               <dt className="text-muted-foreground">{t("roleKey")}</dt>
-              <dd>
-                <code>{role.key}</code>
-              </dd>
+              <dd>{humanizeKey(role.key)}</dd>
             </div>
             <div>
               <dt className="text-muted-foreground">{t("level")}</dt>

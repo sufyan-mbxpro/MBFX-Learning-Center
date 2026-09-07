@@ -28,6 +28,8 @@ export interface CuratedFont {
 
 export const CURATED_FONTS: CuratedFont[] = [
   { key: "system", label: "System UI", category: "sans" },
+  // The brand typeface and the DEFAULT_LAYOUT.fontSans default (ADR-039).
+  { key: "outfit", label: "Outfit", category: "sans" },
   { key: "inter", label: "Inter", category: "sans" },
   { key: "roboto", label: "Roboto", category: "sans" },
   { key: "opensans", label: "Open Sans", category: "sans" },
@@ -160,7 +162,9 @@ export const DEFAULT_DARK_BRAND_OVERRIDES: BrandOverrides = {
 export const DEFAULT_LAYOUT: LayoutTokens = {
   radiusBase: "4px",
   containerWidth: "1400px",
-  fontSans: "system",
+  // ADR-039: Outfit is the brand typeface. "system" stays a selectable
+  // registry key — it is simply no longer the default.
+  fontSans: "outfit",
   fontMono: "systemmono",
   baseFontSize: "14px",
 };
@@ -510,12 +514,14 @@ export async function loadActiveTheme(scope: "web" | "admin"): Promise<ResolvedT
     (theme?.darkBrandOverrides as unknown as BrandOverrides) ?? DEFAULT_DARK_BRAND_OVERRIDES;
   const rawLayout = (theme?.layoutTokens as unknown as LayoutTokens) ?? DEFAULT_LAYOUT;
   // Defensive default: an invalid/removed curated font key (see ADR-005's
-  // noted consequence) falls back to "system" rather than emitting a
-  // var() reference to a font that no longer exists.
+  // noted consequence) falls back to the DEFAULT_LAYOUT family rather than
+  // emitting a var() reference to a font that no longer exists. ADR-039
+  // made that fallback the brand typeface instead of the OS stack — a
+  // broken key should land on the brand, not look like an unstyled page.
   const layout: LayoutTokens = {
     ...rawLayout,
-    fontSans: isCuratedFontKey(rawLayout.fontSans) ? rawLayout.fontSans : "system",
-    fontMono: isCuratedFontKey(rawLayout.fontMono) ? rawLayout.fontMono : "systemmono",
+    fontSans: isCuratedFontKey(rawLayout.fontSans) ? rawLayout.fontSans : DEFAULT_LAYOUT.fontSans,
+    fontMono: isCuratedFontKey(rawLayout.fontMono) ? rawLayout.fontMono : DEFAULT_LAYOUT.fontMono,
   };
 
   return {

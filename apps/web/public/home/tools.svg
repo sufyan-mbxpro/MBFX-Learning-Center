@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900" width="1440" height="900" role="presentation" aria-hidden="true"><defs>
+<linearGradient id="g-tools" x1="0" y1="0" x2="1" y2="1">
+<stop offset="0" stop-color="#2E251C"/>
+<stop offset=".55" stop-color="#221C16"/>
+<stop offset="1" stop-color="#14110E"/>
+</linearGradient>
+<radialGradient id="warm-tools" cx=".5" cy=".5" r=".5">
+<stop offset="0" stop-color="#E8B98C" stop-opacity=".55"/>
+<stop offset="1" stop-color="#E8B98C" stop-opacity="0"/>
+</radialGradient>
+<radialGradient id="cool-tools" cx=".5" cy=".5" r=".5">
+<stop offset="0" stop-color="#7FA3C4" stop-opacity=".38"/>
+<stop offset="1" stop-color="#7FA3C4" stop-opacity="0"/>
+</radialGradient>
+<linearGradient id="fade-tools" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#E8B98C" stop-opacity=".5"/>
+<stop offset="1" stop-color="#E8B98C" stop-opacity="0"/>
+</linearGradient>
+<pattern id="grid-tools" width="64" height="64" patternUnits="userSpaceOnUse">
+<path d="M64 0H0V64" fill="none" stroke="#F5EFE8" stroke-opacity=".05" stroke-width="1"/>
+</pattern>
+<radialGradient id="vig-tools" cx=".5" cy=".45" r=".75">
+<stop offset=".55" stop-color="#14110E" stop-opacity="0"/>
+<stop offset="1" stop-color="#14110E" stop-opacity=".42"/>
+</radialGradient>
+</defs><rect width="1440" height="900" fill="url(#g-tools)"/><ellipse cx="800.9" cy="732.3" rx="457.55" ry="356.89" fill="url(#warm-tools)"/><ellipse cx="356.28" cy="562.47" rx="375.78" ry="293.11" fill="url(#cool-tools)"/><ellipse cx="832.67" cy="184.36" rx="355.39" ry="277.2" fill="url(#warm-tools)"/><rect width="1440" height="900" fill="url(#grid-tools)"/><path d="M449.37 638.5 A288 288 0 1 1 990.63 638.5" fill="none" stroke="#F5EFE8" stroke-opacity="0.12" stroke-width="22" stroke-linecap="round"/><path d="M449.37 638.5 A288 288 0 0 1 935.37 348.79" fill="none" stroke="#E8B98C" stroke-opacity="0.92" stroke-width="22" stroke-linecap="round"/>
+<line x1="720" y1="540" x2="875.06" y2="402.33" stroke="#F5EFE8" stroke-width="8" stroke-linecap="round"/>
+<circle cx="720" cy="540" r="16" fill="#F5EFE8"/><rect width="1440" height="900" fill="url(#vig-tools)"/></svg>

@@ -51,8 +51,8 @@ export function ProfileForm({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="flex flex-col gap-1.5 sm:col-span-2">
+      <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="flex flex-col gap-1.5 sm:col-span-2 xl:col-span-1">
           <Label htmlFor="profile-name">{labels.name}</Label>
           <Input
             id="profile-name"
@@ -85,7 +85,7 @@ export function ProfileForm({
           />
         </div>
       </div>
-      <div>
+      <div className="flex justify-end">
         <Button onClick={submit} disabled={pending || !form.name.trim()}>
           {labels.save}
         </Button>
@@ -130,7 +130,7 @@ export function ChangePasswordForm({
   };
 
   return (
-    <div className="flex max-w-sm flex-col gap-3">
+    <div className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2 xl:grid-cols-3">
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="pw-current">{labels.currentPassword}</Label>
         <Input
@@ -161,7 +161,7 @@ export function ChangePasswordForm({
           onChange={(e) => setConfirm(e.target.value)}
         />
       </div>
-      <div>
+      <div className="sm:col-span-2 xl:col-span-3">
         <Button onClick={submit} disabled={pending || !current || next.length < 8 || !confirm}>
           {labels.change}
         </Button>

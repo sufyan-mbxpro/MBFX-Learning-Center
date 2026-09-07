@@ -93,6 +93,10 @@ export async function setSocialLinkActive(
 export interface SocialLinkInput {
   label: string;
   url: string;
+  /** Built-in glyph key (ADR-045). Defaults to the platform slug. */
+  icon?: string;
+  /** Admin-uploaded icon; wins over `icon`. `null` clears it. */
+  iconUrl?: string | null;
   handle?: string;
   isActive?: boolean;
   openInNewTab?: boolean;
@@ -119,8 +123,10 @@ export async function createSocialLink(
       label: input.label,
       url: input.url,
       // Icon key defaults to the platform slug — the renderer falls back to
-      // a generic link icon for keys it doesn't recognize.
-      icon: platform,
+      // a generic link glyph for keys it doesn't recognize (ADR-045), so a
+      // new platform is never an invisible control.
+      icon: input.icon ?? platform,
+      iconUrl: input.iconUrl ?? null,
       handle: input.handle,
       isActive: input.isActive ?? true,
       openInNewTab: input.openInNewTab ?? true,
@@ -146,13 +152,15 @@ export async function updateSocialLink(
 ): Promise<void> {
   const before = await db.socialLink.findUniqueOrThrow({
     where: { platform },
-    select: { label: true, url: true, handle: true, isActive: true },
+    select: { label: true, url: true, icon: true, iconUrl: true, handle: true, isActive: true },
   });
   await db.socialLink.update({
     where: { platform },
     data: {
       ...(input.label !== undefined ? { label: input.label } : {}),
       ...(input.url !== undefined ? { url: input.url } : {}),
+      ...(input.icon !== undefined ? { icon: input.icon } : {}),
+      ...(input.iconUrl !== undefined ? { iconUrl: input.iconUrl } : {}),
       ...(input.handle !== undefined ? { handle: input.handle } : {}),
       ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
       ...(input.openInNewTab !== undefined ? { openInNewTab: input.openInNewTab } : {}),

@@ -8,11 +8,14 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "e2e": "playwright test",
+    "e2e:ui": "playwright test --ui"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",
     "@repo/auth": "workspace:*",
+    "@repo/blocks": "workspace:*",
     "@repo/contracts": "workspace:*",
     "@repo/core": "workspace:*",
     "@repo/i18n": "workspace:*",
@@ -23,6 +26,7 @@
     "@repo/utils": "workspace:*",
     "@tanstack/react-table": "8.21.3",
     "@tiptap/extension-image": "3.31.0",
+    "@tiptap/extension-table": "3.31.0",
     "@tiptap/extensions": "3.31.0",
     "@tiptap/pm": "3.31.0",
     "@tiptap/react": "3.31.0",

@@ -1,0 +1,7 @@
+{
+  "title": "Ready to start?",
+  "description": "Join thousands of learners today.",
+  "buttonLabel": "Get started",
+  "buttonLink": { "type": "ROUTE", "routeKey": "sign-up" },
+  "variant": "default"
+}

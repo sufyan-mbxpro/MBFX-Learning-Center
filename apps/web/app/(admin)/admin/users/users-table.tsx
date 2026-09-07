@@ -263,49 +263,52 @@ export function UsersTable({
 
   return (
     <div className="flex flex-col gap-3">
-      <FilterBar>
-        <Select
-          value={userType}
-          onValueChange={(value) => setParams({ userType: (value as string) || null })}
-        >
-          <SelectTrigger aria-label={labels.type} className="min-w-36">
-            <SelectValue>
-              {userType ? (labels.typeLabels[userType] ?? userType) : labels.allTypes}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="">{labels.allTypes}</SelectItem>
-            {Object.entries(labels.typeLabels).map(([value, label]) => (
-              <SelectItem key={value} value={value}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select
-          value={status}
-          onValueChange={(value) => setParams({ status: (value as string) || null })}
-        >
-          <SelectTrigger aria-label={labels.status} className="min-w-36">
-            <SelectValue>
-              {status ? (labels.statusLabels[status] ?? status) : labels.allStatuses}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="">{labels.allStatuses}</SelectItem>
-            {Object.entries(labels.statusLabels).map(([value, label]) => (
-              <SelectItem key={value} value={value}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </FilterBar>
-
+      {/* changes-08 #7: type and status sit in the DataTable's own
+          toolbar, sharing a row with the search box. */}
       <DataTable
         columns={columns}
         data={rows}
         labels={tableLabels}
+        filters={
+          <FilterBar>
+            <Select
+              value={userType}
+              onValueChange={(value) => setParams({ userType: (value as string) || null })}
+            >
+              <SelectTrigger aria-label={labels.type} className="min-w-36">
+                <SelectValue>
+                  {userType ? (labels.typeLabels[userType] ?? userType) : labels.allTypes}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">{labels.allTypes}</SelectItem>
+                {Object.entries(labels.typeLabels).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={status}
+              onValueChange={(value) => setParams({ status: (value as string) || null })}
+            >
+              <SelectTrigger aria-label={labels.status} className="min-w-36">
+                <SelectValue>
+                  {status ? (labels.statusLabels[status] ?? status) : labels.allStatuses}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">{labels.allStatuses}</SelectItem>
+                {Object.entries(labels.statusLabels).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FilterBar>
+        }
         pageCount={pageCount}
         pagination={pagination}
         onPaginationChange={(updater: Updater<PaginationState>) => {

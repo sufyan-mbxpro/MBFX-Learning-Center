@@ -23,6 +23,22 @@ const buttonVariants = cva(
           "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50",
         destructive:
           "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
+        // Intent variants (changes-10, ADR-046). Same tinted-surface shape as
+        // `destructive` so the whole family reads as one system: the semantic
+        // token at 10% for the surface, its *-interactive derivation for the
+        // label (that derivation is what @repo/theme guarantees contrast on —
+        // never the raw brand hue, which is a fill colour, ADR-003).
+        //
+        // These exist so an action's COLOUR carries its consequence: publish
+        // is success, un-publishing is a warning, archiving is destructive.
+        // Do not reach for them decoratively — a page where six buttons each
+        // shout a different colour communicates less than one where only the
+        // consequential ones do.
+        success:
+          "bg-success/10 text-success-interactive hover:bg-success/20 focus-visible:border-success/40 focus-visible:ring-success/20 dark:bg-success/20 dark:hover:bg-success/30 dark:focus-visible:ring-success/40",
+        warning:
+          "bg-warning/10 text-warning-interactive hover:bg-warning/20 focus-visible:border-warning/40 focus-visible:ring-warning/20 dark:bg-warning/20 dark:hover:bg-warning/30 dark:focus-visible:ring-warning/40",
+        info: "bg-info/10 text-info-interactive hover:bg-info/20 focus-visible:border-info/40 focus-visible:ring-info/20 dark:bg-info/20 dark:hover:bg-info/30 dark:focus-visible:ring-info/40",
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {

@@ -1,8 +1,9 @@
 import { getTranslations } from "next-intl/server";
 import { requirePermission } from "@repo/rbac";
 import { loadAllFeatureFlags } from "@repo/settings";
-import { AdminPage, AdminSection } from "../_components/admin-page.tsx";
-import { SettingsNav } from "../settings/_components/settings-nav.tsx";
+import { humanizeKey } from "@repo/utils";
+import { AdminSection } from "../_components/admin-page.tsx";
+import { SettingsScreen } from "../settings/_components/settings-screen.tsx";
 import { loadSettingsIndex } from "../settings/_components/settings-shared.ts";
 import { FlagToggle } from "./flag-toggle.tsx";
 
@@ -24,36 +25,36 @@ export default async function FeatureFlagsPage() {
   };
 
   return (
-    <AdminPage title={t("features")} width="lg">
-      <div className="flex flex-col gap-6 md:flex-row">
-        <SettingsNav heading={t("settingsCategories")} entries={navEntries} />
-        <div className="flex min-w-0 flex-1 flex-col gap-6">
-          {groups.map((group) => (
-            <AdminSection
-              key={group}
-              title={t.has(`settingsGroups.${group}`) ? t(`settingsGroups.${group}`) : group}
-            >
-              {flags
-                .filter((f) => f.groupName === group)
-                .map((flag) => (
-                  <div
-                    key={flag.key}
-                    className="flex items-center gap-3 border-b pb-3 last:border-b-0 last:pb-0"
-                  >
-                    <FlagToggle flagKey={flag.key} isEnabled={flag.isEnabled} />
-                    <div className="flex flex-col">
-                      <span className="text-sm font-medium">{flag.label}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {flag.key} · {t("visibility")}:{" "}
-                        {visibilityLabels[flag.visibility] ?? flag.visibility}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-            </AdminSection>
-          ))}
-        </div>
-      </div>
-    </AdminPage>
+    <SettingsScreen
+      navHeading={t("settingsCategories")}
+      navEntries={navEntries}
+      title={t("features")}
+      description={t("pageDesc.features")}
+    >
+      {groups.map((group) => (
+        <AdminSection
+          key={group}
+          title={t.has(`settingsGroups.${group}`) ? t(`settingsGroups.${group}`) : group}
+        >
+          {flags
+            .filter((f) => f.groupName === group)
+            .map((flag) => (
+              <div
+                key={flag.key}
+                className="flex items-center gap-3 border-b pb-3 last:border-b-0 last:pb-0"
+              >
+                <FlagToggle flagKey={flag.key} isEnabled={flag.isEnabled} />
+                <div className="flex flex-col">
+                  <span className="text-sm font-medium">{flag.label}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {humanizeKey(flag.key)} · {t("visibility")}:{" "}
+                    {visibilityLabels[flag.visibility] ?? flag.visibility}
+                  </span>
+                </div>
+              </div>
+            ))}
+        </AdminSection>
+      ))}
+    </SettingsScreen>
   );
 }

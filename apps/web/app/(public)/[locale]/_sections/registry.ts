@@ -11,6 +11,7 @@
 // and an admin can add a key ahead of its build.
 import type { ComponentType } from "react";
 import type { HomeSectionKey } from "@repo/contracts";
+import { Explore } from "./explore.tsx";
 import { Faq } from "./faq.tsx";
 import { GlossarySpotlight } from "./glossary-spotlight.tsx";
 import { Hero } from "./hero.tsx";
@@ -30,6 +31,7 @@ export const SECTION_COMPONENTS: Partial<
   Record<HomeSectionKey | string, ComponentType<SectionProps>>
 > = {
   hero: Hero,
+  explore_platform: Explore,
   latest_analysis: LatestAnalysis,
   glossary_spotlight: GlossarySpotlight,
   newsletter: Newsletter,

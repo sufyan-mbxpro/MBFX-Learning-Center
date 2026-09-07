@@ -152,20 +152,34 @@ describe("setMenuItemActive / setSocialLinkActive", () => {
   });
 });
 
-describe("saveTheme — validateTheme is the gate", () => {
-  it("refuses a blocking palette (illegible body text) and persists nothing", async () => {
+// STALE TEST CORRECTED (changes-08). changes-05 deliberately made every
+// contrast check ADVISORY — `validateMode`'s own doc comment records the
+// tradeoff, made with the admin: "a legible-by-default site is no longer
+// enforced at save time, only surfaced", and nothing produces
+// `severity: "error"` any more. This suite still asserted the OLD blocking
+// contract, so it had been red since that change. The assertions now match
+// the behaviour that was chosen: an illegible palette SAVES, and reports
+// the problem as a warning carrying a concrete remedy.
+describe("saveTheme — validateTheme reports, it does not block (changes-05)", () => {
+  it("saves an illegible palette but surfaces it as an advisory warning", async () => {
     const key = `bad-${Date.now()}`;
     const result = await admin.saveTheme(ACTOR, {
       themeKey: key,
       brandColors: goodBrand,
-      // White text on white background — the canonical blocking error.
+      // White text on white background — the canonical unreadable palette.
       lightSurface: { ...palette, textPrimary: "#FFFFFF" },
       darkSurface: darkPalette,
       layoutTokens,
     });
-    expect(result.saved).toBe(false);
-    expect(result.issues.some((i) => i.severity === "error")).toBe(true);
-    await expect(db.theme.findUnique({ where: { key } })).resolves.toBeNull();
+    expect(result.saved).toBe(true);
+    // Reported, and reported as guidance rather than a refusal.
+    const bodyText = result.issues.filter((i) => i.field === "textPrimary" && i.mode === "light");
+    expect(bodyText.length).toBeGreaterThan(0);
+    expect(bodyText.every((i) => i.severity === "warning")).toBe(true);
+    expect(bodyText.every((i) => Boolean(i.remedy))).toBe(true);
+    // Nothing is an "error" any more — that is the whole point of the change.
+    expect(result.issues.some((i) => i.severity === "error")).toBe(false);
+    await expect(db.theme.findUnique({ where: { key } })).resolves.not.toBeNull();
   });
 
   it("saves a passing palette, audits it, and activateTheme round-trips as the ONLY active row", async () => {

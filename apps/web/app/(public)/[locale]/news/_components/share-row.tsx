@@ -55,7 +55,8 @@ export function ShareRow({
         className={LINK_CLASS}
         onClick={() =>
           openIntent(
-            (url) => `https://www.facebook.com/sharer/sharer.php?${new URLSearchParams({ u: url })}`,
+            (url) =>
+              `https://www.facebook.com/sharer/sharer.php?${new URLSearchParams({ u: url })}`,
           )
         }
       >
@@ -66,7 +67,8 @@ export function ShareRow({
         className={LINK_CLASS}
         onClick={() =>
           openIntent(
-            (url) => `https://twitter.com/intent/tweet?${new URLSearchParams({ url, text: title })}`,
+            (url) =>
+              `https://twitter.com/intent/tweet?${new URLSearchParams({ url, text: title })}`,
           )
         }
       >
@@ -77,7 +79,8 @@ export function ShareRow({
         className={LINK_CLASS}
         onClick={() =>
           openIntent(
-            (url) => `https://www.linkedin.com/sharing/share-offsite/?${new URLSearchParams({ url })}`,
+            (url) =>
+              `https://www.linkedin.com/sharing/share-offsite/?${new URLSearchParams({ url })}`,
           )
         }
       >
@@ -88,7 +91,11 @@ export function ShareRow({
         onClick={copyLink}
         className={`inline-flex items-center gap-1.5 ${LINK_CLASS}`}
       >
-        {copied ? <Check aria-hidden className="size-3.5" /> : <Link2 aria-hidden className="size-3.5" />}
+        {copied ? (
+          <Check aria-hidden className="size-3.5" />
+        ) : (
+          <Link2 aria-hidden className="size-3.5" />
+        )}
         {copied ? copiedLabel : copyLabel}
       </button>
     </div>

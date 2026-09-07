@@ -11,6 +11,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { db as DbClient } from "@repo/db";
 import type { Subject } from "@repo/rbac";
 import type * as ArticlesModule from "./articles.ts";
+import type * as MediaModule from "./media.ts";
 import type * as PublicArticlesModule from "./public-articles.ts";
 import {
   ARTICLE_TRANSITIONS,
@@ -26,6 +27,7 @@ const prismaCli = createRequire(import.meta.url).resolve("prisma/build/index.js"
 let container: StartedMariaDbContainer;
 let db: typeof DbClient;
 let articles: typeof ArticlesModule;
+let media: typeof MediaModule;
 let publicArticles: typeof PublicArticlesModule;
 let editor: Subject; // full news + analysis rights
 let analyst: Subject; // analysis.* only — the seeded analyst role's shape
@@ -48,6 +50,7 @@ beforeAll(async () => {
   process.env.DATABASE_URL = url;
   db = (await import("@repo/db")).db;
   articles = await import("./articles.ts");
+  media = await import("./media.ts");
   publicArticles = await import("./public-articles.ts");
 
   const user = await db.user.create({
@@ -314,6 +317,122 @@ describe("translation lifecycle", () => {
       where: { articleId_locale: { articleId: id, locale: "es" } },
     });
     expect(es.translationStatus).toBe("OUTDATED");
+  });
+});
+
+describe("ADR-035: media reference wiring (closes ADR-034's usage-guard gap)", () => {
+  let assetCounter = 0;
+  async function fakeMediaAsset(): Promise<string> {
+    assetCounter += 1;
+    const asset = await db.mediaAsset.create({
+      data: {
+        key: `adr035-${assetCounter}-${Date.now().toString(36)}.png`,
+        url: `/uploads/adr035-${assetCounter}-${Date.now().toString(36)}.png`,
+        fileName: "cover.png",
+        mimeType: "image/png",
+        size: 1024,
+        purpose: "article",
+      },
+    });
+    return asset.id;
+  }
+
+  it("updateArticleMeta syncs a MEDIA reference for coverImageAssetId, and clearing it removes the reference", async () => {
+    const id = await articles.createArticle(editor, { kind: "NEWS", categoryId: newsCategoryId });
+    const assetId = await fakeMediaAsset();
+
+    await articles.updateArticleMeta(editor, id, { coverImageAssetId: assetId });
+    let refs = await db.contentReference.findMany({
+      where: { sourceType: "ARTICLE", sourceId: id, refType: "MEDIA" },
+    });
+    expect(refs).toHaveLength(1);
+    expect(refs[0]?.refId).toBe(assetId);
+    expect(refs[0]?.field).toBe("coverImageAssetId");
+
+    // A meta save that doesn't touch the image must not wipe the reference.
+    await articles.updateArticleMeta(editor, id, { isPremium: true });
+    refs = await db.contentReference.findMany({
+      where: { sourceType: "ARTICLE", sourceId: id, refType: "MEDIA" },
+    });
+    expect(refs).toHaveLength(1);
+
+    // Explicitly clearing the cover image clears the reference.
+    await articles.updateArticleMeta(editor, id, { coverImageAssetId: null });
+    refs = await db.contentReference.findMany({
+      where: { sourceType: "ARTICLE", sourceId: id, refType: "MEDIA" },
+    });
+    expect(refs).toHaveLength(0);
+  });
+
+  it("saveArticleTranslation syncs ogImageAssetId per locale, independent of the article's cover reference", async () => {
+    const id = await articles.createArticle(editor, { kind: "NEWS", categoryId: newsCategoryId });
+    const coverAssetId = await fakeMediaAsset();
+    const enOgAssetId = await fakeMediaAsset();
+    const esOgAssetId = await fakeMediaAsset();
+
+    await articles.updateArticleMeta(editor, id, { coverImageAssetId: coverAssetId });
+    await articles.saveArticleTranslation(editor, {
+      articleId: id,
+      locale: "en",
+      title: "Reference wiring",
+      body: "<p>x</p>",
+      ogImageAssetId: enOgAssetId,
+    });
+    await articles.saveArticleTranslation(editor, {
+      articleId: id,
+      locale: "es",
+      title: "Cableado de referencias",
+      body: "<p>x</p>",
+      ogImageAssetId: esOgAssetId,
+    });
+
+    const coverRefs = await db.contentReference.findMany({
+      where: { sourceType: "ARTICLE", sourceId: id, refType: "MEDIA" },
+    });
+    expect(coverRefs.map((r) => r.refId)).toEqual([coverAssetId]);
+
+    const enRefs = await db.contentReference.findMany({
+      where: { sourceType: "ARTICLE", sourceId: `${id}:en`, refType: "MEDIA" },
+    });
+    expect(enRefs.map((r) => r.refId)).toEqual([enOgAssetId]);
+
+    const esRefs = await db.contentReference.findMany({
+      where: { sourceType: "ARTICLE", sourceId: `${id}:es`, refType: "MEDIA" },
+    });
+    expect(esRefs.map((r) => r.refId)).toEqual([esOgAssetId]);
+  });
+
+  it("duplicateArticle syncs references for the COPY's id, not the source's", async () => {
+    const sourceId = await articles.createArticle(editor, {
+      kind: "NEWS",
+      categoryId: newsCategoryId,
+    });
+    const assetId = await fakeMediaAsset();
+    await articles.updateArticleMeta(editor, sourceId, { coverImageAssetId: assetId });
+
+    const copyId = await articles.duplicateArticle(editor, sourceId);
+
+    const sourceRefs = await db.contentReference.findMany({
+      where: { sourceType: "ARTICLE", sourceId, refType: "MEDIA" },
+    });
+    const copyRefs = await db.contentReference.findMany({
+      where: { sourceType: "ARTICLE", sourceId: copyId, refType: "MEDIA" },
+    });
+    expect(sourceRefs.map((r) => r.refId)).toEqual([assetId]);
+    expect(copyRefs.map((r) => r.refId)).toEqual([assetId]);
+    expect(copyId).not.toBe(sourceId);
+  });
+
+  it("deleteMedia refuses when an ARTICLE-sourced reference exists, and reports ARTICLE in the count", async () => {
+    const id = await articles.createArticle(editor, { kind: "NEWS", categoryId: newsCategoryId });
+    const assetId = await fakeMediaAsset();
+    await articles.updateArticleMeta(editor, id, { coverImageAssetId: assetId });
+
+    await expect(media.deleteMedia(editor.id, assetId)).rejects.toThrow(media.MediaAssetInUseError);
+
+    // Freeing the reference allows the delete to proceed.
+    await articles.updateArticleMeta(editor, id, { coverImageAssetId: null });
+    await expect(media.deleteMedia(editor.id, assetId)).resolves.toBeUndefined();
   });
 });
 
@@ -631,5 +750,406 @@ describe("author byline on listing entries (changes-04 image-10)", () => {
     for (const id of ids) {
       expect(page.entries.find((e) => e.articleId === id)?.authorName).toBe("Editor");
     }
+  });
+});
+
+// ─── changes-07 PR 3: saveArticle, FAQ, relations, featured, quick edit ───
+
+describe("saveArticle — one transaction, one audit, one revalidation", () => {
+  async function draft(kind: "NEWS" | "ANALYSIS" = "ANALYSIS") {
+    return articles.createArticle(editor, { kind, categoryId: newsCategoryId });
+  }
+
+  it("commits meta and translation together", async () => {
+    const id = await draft();
+    await articles.saveArticle(editor, {
+      articleId: id,
+      meta: { isFeatured: true, showRelated: false, relatedCount: 5, isPremium: true },
+      translation: {
+        articleId: id,
+        locale: "en",
+        title: "Combined save",
+        body: "<p>body</p>",
+        focusKeywords: "risk, sizing",
+        noFollow: true,
+        ogTitle: "OG title",
+        twitterCard: "summary_large_image",
+      },
+    });
+
+    const detail = await articles.loadArticleAdminDetail(id);
+    expect(detail).toMatchObject({
+      isFeatured: true,
+      showRelated: false,
+      relatedCount: 5,
+      isPremium: true,
+    });
+    expect(detail?.translations[0]).toMatchObject({
+      title: "Combined save",
+      focusKeywords: "risk, sizing",
+      noFollow: true,
+      ogTitle: "OG title",
+      twitterCard: "summary_large_image",
+    });
+  });
+
+  it("writes exactly ONE audit row for the whole save", async () => {
+    const id = await draft();
+    const before = await db.auditLog.count({ where: { entityId: id } });
+    await articles.saveArticle(editor, {
+      articleId: id,
+      meta: { isFeatured: true },
+      translation: { articleId: id, locale: "en", title: "Audited once" },
+    });
+    const after = await db.auditLog.count({ where: { entityId: id } });
+    expect(after - before).toBe(1);
+  });
+
+  it("is ATOMIC — a failure mid-save persists neither half", async () => {
+    const id = await draft();
+    await articles.saveArticle(editor, {
+      articleId: id,
+      meta: { isFeatured: false },
+      translation: { articleId: id, locale: "en", title: "Original title" },
+    });
+
+    // A non-existent category id violates the FK on `articles.categoryId`, so
+    // the meta write fails while the translation write in the SAME transaction
+    // has already run — exactly the interleaving that would leave a half-saved
+    // article if these were two separate service calls.
+    await expect(
+      articles.saveArticle(editor, {
+        articleId: id,
+        meta: { categoryId: "does-not-exist-fk" },
+        translation: { articleId: id, locale: "en", title: "Should not persist" },
+      }),
+    ).rejects.toThrow();
+
+    const detail = await articles.loadArticleAdminDetail(id);
+    expect(detail?.translations[0]?.title).toBe("Original title");
+    expect(detail?.isFeatured).toBe(false);
+  });
+
+  it("denies a subject without rights on the article's kind", async () => {
+    const id = await draft("NEWS");
+    await expect(
+      articles.saveArticle(analyst, {
+        articleId: id,
+        meta: {},
+        translation: { articleId: id, locale: "en", title: "nope" },
+      }),
+    ).rejects.toThrow(/news\.manage/);
+    // Denial asserted at the DB level, not just by the thrown error.
+    const detail = await articles.loadArticleAdminDetail(id);
+    expect(detail?.translations).toHaveLength(0);
+  });
+
+  it("writes the 301 redirect when the slug changes, same as a translation save", async () => {
+    const id = await draft();
+    await articles.saveArticle(editor, {
+      articleId: id,
+      meta: {},
+      translation: { articleId: id, locale: "en", title: "First title", slug: "first-slug" },
+    });
+    await articles.saveArticle(editor, {
+      articleId: id,
+      meta: {},
+      translation: { articleId: id, locale: "en", title: "First title", slug: "second-slug" },
+    });
+    const redirect = await db.redirect.findUnique({
+      where: { fromPath: articlePath("en", "en", "first-slug") },
+    });
+    expect(redirect).toMatchObject({
+      toPath: articlePath("en", "en", "second-slug"),
+      statusCode: 301,
+    });
+  });
+});
+
+describe("FAQ items", () => {
+  // Each host needs its OWN title: slug is derived from it and
+  // (locale, slug) is unique, so a shared fixture title collides.
+  async function withFaq(
+    title: string,
+    items: { id?: string; question: string; answer: string }[],
+  ) {
+    const id = await articles.createArticle(editor, {
+      kind: "ANALYSIS",
+      categoryId: newsCategoryId,
+    });
+    await articles.saveArticle(editor, {
+      articleId: id,
+      meta: {},
+      translation: { articleId: id, locale: "en", title, faqItems: items },
+    });
+    return id;
+  }
+
+  it("stores items in array order", async () => {
+    const id = await withFaq("FAQ order host", [
+      { question: "First?", answer: "<p>one</p>" },
+      { question: "Second?", answer: "<p>two</p>" },
+    ]);
+    const detail = await articles.loadArticleAdminDetail(id);
+    expect(detail?.translations[0]?.faqItems.map((f) => f.question)).toEqual(["First?", "Second?"]);
+  });
+
+  it("SANITIZES answers on save — a script tag never reaches the database", async () => {
+    const id = await withFaq("FAQ xss host", [
+      {
+        question: "XSS?",
+        answer: "<p>ok</p><script>alert(1)</script><img src=x onerror=alert(1)>",
+      },
+    ]);
+    const stored = await db.articleFaqItem.findFirst({
+      where: { translation: { articleId: id } },
+    });
+    expect(stored?.answer).not.toContain("<script");
+    expect(stored?.answer).not.toContain("onerror");
+    expect(stored?.answer).toContain("<p>ok</p>");
+  });
+
+  it("replaces the whole list — removed items are deleted", async () => {
+    const id = await withFaq("FAQ replace host", [
+      { question: "Keep?", answer: "<p>a</p>" },
+      { question: "Drop?", answer: "<p>b</p>" },
+    ]);
+    const before = await articles.loadArticleAdminDetail(id);
+    const keepId = before?.translations[0]?.faqItems[0]?.id;
+
+    await articles.saveArticle(editor, {
+      articleId: id,
+      meta: {},
+      translation: {
+        articleId: id,
+        locale: "en",
+        title: "FAQ replace host",
+        faqItems: [{ id: keepId, question: "Keep, renamed?", answer: "<p>a2</p>" }],
+      },
+    });
+
+    const after = await articles.loadArticleAdminDetail(id);
+    expect(after?.translations[0]?.faqItems).toHaveLength(1);
+    // The kept row keeps its identity rather than being deleted and recreated.
+    expect(after?.translations[0]?.faqItems[0]?.id).toBe(keepId);
+    expect(after?.translations[0]?.faqItems[0]?.question).toBe("Keep, renamed?");
+  });
+
+  it("omitting faqItems entirely leaves the stored list untouched", async () => {
+    const id = await withFaq("FAQ untouched host", [
+      { question: "Survives?", answer: "<p>yes</p>" },
+    ]);
+    await articles.saveArticle(editor, {
+      articleId: id,
+      meta: {},
+      translation: { articleId: id, locale: "en", title: "FAQ untouched host" },
+    });
+    const after = await articles.loadArticleAdminDetail(id);
+    expect(after?.translations[0]?.faqItems).toHaveLength(1);
+  });
+
+  it("cascades when the article is deleted", async () => {
+    const id = await withFaq("FAQ cascade host", [{ question: "Cascade?", answer: "<p>y</p>" }]);
+    await db.article.delete({ where: { id } });
+    const orphans = await db.articleFaqItem.count({ where: { translation: { articleId: id } } });
+    expect(orphans).toBe(0);
+  });
+});
+
+describe("related articles (ContentRelation reuse)", () => {
+  async function published(title: string) {
+    const id = await articles.createArticle(editor, {
+      kind: "ANALYSIS",
+      categoryId: newsCategoryId,
+    });
+    await articles.saveArticleTranslation(editor, { articleId: id, locale: "en", title });
+    await articles.transitionArticle(editor, id, "PUBLISHED");
+    return id;
+  }
+
+  it("stores curated ids in order and reads them back", async () => {
+    const a = await published("Rel A");
+    const b = await published("Rel B");
+    const c = await published("Rel C");
+    const host = await published("Rel host");
+    await articles.saveArticle(editor, {
+      articleId: host,
+      meta: { relatedArticleIds: [c, a, b] },
+      translation: { articleId: host, locale: "en", title: "Rel host" },
+    });
+    const detail = await articles.loadArticleAdminDetail(host);
+    expect(detail?.relatedArticleIds).toEqual([c, a, b]);
+  });
+
+  it("is idempotent and drops removed targets", async () => {
+    const a = await published("Idem A");
+    const b = await published("Idem B");
+    const host = await published("Idem host");
+    const save = (ids: string[]) =>
+      articles.saveArticle(editor, {
+        articleId: host,
+        meta: { relatedArticleIds: ids },
+        translation: { articleId: host, locale: "en", title: "Idem host" },
+      });
+
+    await save([a, b]);
+    await save([a, b]);
+    expect(await db.contentRelation.count({ where: { sourceId: host } })).toBe(2);
+
+    await save([b]);
+    expect((await articles.loadArticleAdminDetail(host))?.relatedArticleIds).toEqual([b]);
+  });
+
+  it("drops a self-reference rather than failing the save", async () => {
+    const host = await published("Self host");
+    const other = await published("Self other");
+    await articles.saveArticle(editor, {
+      articleId: host,
+      meta: { relatedArticleIds: [host, other] },
+      translation: { articleId: host, locale: "en", title: "Self host" },
+    });
+    expect((await articles.loadArticleAdminDetail(host))?.relatedArticleIds).toEqual([other]);
+  });
+
+  it("NEVER returns a non-public curated pick (the frozen visibility rule)", async () => {
+    const visible = await published("Curated visible");
+    const draftPick = await articles.createArticle(editor, {
+      kind: "ANALYSIS",
+      categoryId: newsCategoryId,
+    });
+    await articles.saveArticleTranslation(editor, {
+      articleId: draftPick,
+      locale: "en",
+      title: "Curated draft",
+    });
+    const deactivated = await published("Curated deactivated");
+    await articles.setArticleActive(editor, deactivated, false);
+    const deleted = await published("Curated deleted");
+    await articles.setArticleDeleted(editor, deleted, true);
+
+    const host = await published("Visibility host");
+    await articles.saveArticle(editor, {
+      articleId: host,
+      meta: { relatedArticleIds: [draftPick, deactivated, deleted, visible] },
+      translation: { articleId: host, locale: "en", title: "Visibility host" },
+    });
+
+    const shown = await publicArticles.loadCuratedRelatedArticles(host, "en", 10);
+    expect(shown.map((e) => e.articleId)).toEqual([visible]);
+  });
+
+  it("respects the editor's order and the limit", async () => {
+    const a = await published("Ord A");
+    const b = await published("Ord B");
+    const c = await published("Ord C");
+    const host = await published("Ord host");
+    await articles.saveArticle(editor, {
+      articleId: host,
+      meta: { relatedArticleIds: [c, b, a] },
+      translation: { articleId: host, locale: "en", title: "Ord host" },
+    });
+    const shown = await publicArticles.loadCuratedRelatedArticles(host, "en", 2);
+    expect(shown.map((e) => e.articleId)).toEqual([c, b]);
+  });
+
+  it("returns nothing when nothing is curated, so the caller can fall back", async () => {
+    const host = await published("Uncurated");
+    expect(await publicArticles.loadCuratedRelatedArticles(host, "en", 3)).toEqual([]);
+  });
+});
+
+describe("setArticleFeatured", () => {
+  it("toggles the flag and audits it", async () => {
+    const id = await articles.createArticle(editor, {
+      kind: "ANALYSIS",
+      categoryId: newsCategoryId,
+    });
+    await articles.setArticleFeatured(editor, id, true);
+    expect((await articles.loadArticleAdminDetail(id))?.isFeatured).toBe(true);
+    await articles.setArticleFeatured(editor, id, false);
+    expect((await articles.loadArticleAdminDetail(id))?.isFeatured).toBe(false);
+
+    const audits = await db.auditLog.count({
+      where: { entityId: id, action: "articles.setFeatured" },
+    });
+    expect(audits).toBe(2);
+  });
+
+  it("denies a subject holding only the OTHER kind's permission", async () => {
+    const id = await articles.createArticle(editor, {
+      kind: "NEWS",
+      categoryId: newsCategoryId,
+    });
+    await expect(articles.setArticleFeatured(analyst, id, true)).rejects.toThrow(/news\.manage/);
+    expect((await articles.loadArticleAdminDetail(id))?.isFeatured).toBe(false);
+  });
+});
+
+describe("quickUpdateArticle", () => {
+  it("updates title, slug, category and featured without opening the editor", async () => {
+    const id = await articles.createArticle(editor, {
+      kind: "ANALYSIS",
+      categoryId: newsCategoryId,
+    });
+    await articles.saveArticleTranslation(editor, {
+      articleId: id,
+      locale: "en",
+      title: "Quick original",
+      slug: "quick-original",
+    });
+    const otherCategory = await articles.createArticleCategory(editor, { name: "Quick Cat" });
+
+    await articles.quickUpdateArticle(editor, id, {
+      title: "Quick renamed",
+      slug: "quick-renamed",
+      categoryId: otherCategory,
+      isFeatured: true,
+    });
+
+    const detail = await articles.loadArticleAdminDetail(id);
+    expect(detail).toMatchObject({ categoryId: otherCategory, isFeatured: true });
+    expect(detail?.translations[0]).toMatchObject({
+      title: "Quick renamed",
+      slug: "quick-renamed",
+    });
+  });
+
+  it("STILL writes the 301 redirect on a slug change", async () => {
+    const id = await articles.createArticle(editor, {
+      kind: "ANALYSIS",
+      categoryId: newsCategoryId,
+    });
+    await articles.saveArticleTranslation(editor, {
+      articleId: id,
+      locale: "en",
+      title: "Quick redirect",
+      slug: "quick-redirect-old",
+    });
+    await articles.quickUpdateArticle(editor, id, { slug: "quick-redirect-new" });
+
+    const redirect = await db.redirect.findUnique({
+      where: { fromPath: articlePath("en", "en", "quick-redirect-old") },
+    });
+    expect(redirect).toMatchObject({
+      toPath: articlePath("en", "en", "quick-redirect-new"),
+      statusCode: 301,
+    });
+  });
+
+  it("denies a subject without rights on the article's kind", async () => {
+    const id = await articles.createArticle(editor, {
+      kind: "NEWS",
+      categoryId: newsCategoryId,
+    });
+    await articles.saveArticleTranslation(editor, {
+      articleId: id,
+      locale: "en",
+      title: "Quick denied",
+    });
+    await expect(articles.quickUpdateArticle(analyst, id, { title: "hacked" })).rejects.toThrow(
+      /news\.manage/,
+    );
+    const detail = await articles.loadArticleAdminDetail(id);
+    expect(detail?.translations[0]?.title).toBe("Quick denied");
   });
 });

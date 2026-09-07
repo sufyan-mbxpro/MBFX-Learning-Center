@@ -6,6 +6,7 @@
 import { cacheLife, cacheTag, revalidateTag } from "next/cache";
 import { db } from "@repo/db";
 import { BRAND_ASSET_KEYS, type BrandAssetKey, type SetBrandAssetInput } from "@repo/contracts";
+import { syncReferences } from "./cms/references.ts";
 import { recordAudit } from "./index.ts";
 
 export interface BrandAssetView {
@@ -41,16 +42,23 @@ export async function setBrandAsset(actorId: string, input: SetBrandAssetInput):
   const before = await db.brandAsset.findUnique({ where: { key: input.key } });
   const data = {
     url: media.url,
+    mediaAssetId: media.id,
     altText: input.altText ?? before?.altText ?? null,
     width: media.width,
     height: media.height,
     mimeType: media.mimeType,
     updatedBy: actorId,
   };
-  await db.brandAsset.upsert({
-    where: { key: input.key },
-    update: data,
-    create: { key: input.key, ...data },
+  await db.$transaction(async (tx) => {
+    await tx.brandAsset.upsert({
+      where: { key: input.key },
+      update: data,
+      create: { key: input.key, ...data },
+    });
+    // ADR-035: closes the ADR-034 usage-guard gap for BrandAsset.
+    await syncReferences(tx, { sourceType: "BRAND", sourceId: input.key }, [
+      { refType: "MEDIA", refId: media.id, field: "mediaAssetId" },
+    ]);
   });
   await recordAudit({
     userId: actorId,
@@ -65,7 +73,10 @@ export async function setBrandAsset(actorId: string, input: SetBrandAssetInput):
 export async function clearBrandAsset(actorId: string, key: BrandAssetKey): Promise<void> {
   const before = await db.brandAsset.findUnique({ where: { key } });
   if (!before) return;
-  await db.brandAsset.delete({ where: { key } });
+  await db.$transaction(async (tx) => {
+    await tx.brandAsset.delete({ where: { key } });
+    await syncReferences(tx, { sourceType: "BRAND", sourceId: key }, []);
+  });
   await recordAudit({
     userId: actorId,
     action: "brandAssets.clear",

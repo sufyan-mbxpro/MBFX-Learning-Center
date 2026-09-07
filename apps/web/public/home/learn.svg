@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900" width="1440" height="900" role="presentation" aria-hidden="true"><defs>
+<linearGradient id="g-learn" x1="0" y1="0" x2="1" y2="1">
+<stop offset="0" stop-color="#2E251C"/>
+<stop offset=".55" stop-color="#221C16"/>
+<stop offset="1" stop-color="#14110E"/>
+</linearGradient>
+<radialGradient id="warm-learn" cx=".5" cy=".5" r=".5">
+<stop offset="0" stop-color="#E8B98C" stop-opacity=".55"/>
+<stop offset="1" stop-color="#E8B98C" stop-opacity="0"/>
+</radialGradient>
+<radialGradient id="cool-learn" cx=".5" cy=".5" r=".5">
+<stop offset="0" stop-color="#7FA3C4" stop-opacity=".38"/>
+<stop offset="1" stop-color="#7FA3C4" stop-opacity="0"/>
+</radialGradient>
+<linearGradient id="fade-learn" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#E8B98C" stop-opacity=".5"/>
+<stop offset="1" stop-color="#E8B98C" stop-opacity="0"/>
+</linearGradient>
+<pattern id="grid-learn" width="64" height="64" patternUnits="userSpaceOnUse">
+<path d="M64 0H0V64" fill="none" stroke="#F5EFE8" stroke-opacity=".05" stroke-width="1"/>
+</pattern>
+<radialGradient id="vig-learn" cx=".5" cy=".45" r=".75">
+<stop offset=".55" stop-color="#14110E" stop-opacity="0"/>
+<stop offset="1" stop-color="#14110E" stop-opacity=".42"/>
+</radialGradient>
+</defs><rect width="1440" height="900" fill="url(#g-learn)"/><ellipse cx="881.14" cy="301.49" rx="618.91" ry="482.75" fill="url(#warm-learn)"/><ellipse cx="1094.7" cy="175.54" rx="326.57" ry="254.72" fill="url(#cool-learn)"/><ellipse cx="423.57" cy="202.34" rx="573.57" ry="447.38" fill="url(#warm-learn)"/><rect width="1440" height="900" fill="url(#grid-learn)"/><path d="M201.6 657.47 C331.2 657.47 331.2 560 460.8 560 C590.4 560 590.4 463.59 720 463.59 C849.6 463.59 849.6 359.16 979.2 359.16 C1108.8 359.16 1108.8 269.83 1238.4 269.83" fill="none" stroke="#F5EFE8" stroke-opacity=".22" stroke-width="6" stroke-linecap="round"/><circle cx="201.6" cy="657.47" r="34" fill="#E8B98C" fill-opacity=".14"/><circle cx="201.6" cy="657.47" r="18" fill="#E8B98C" fill-opacity=".95"/><rect x="167.6" y="699.47" width="68" height="9" rx="4.5" fill="#F5EFE8" fill-opacity=".2"/><circle cx="460.8" cy="560" r="34" fill="#E8B98C" fill-opacity=".14"/><circle cx="460.8" cy="560" r="18" fill="#E8B98C" fill-opacity=".95"/><rect x="426.8" y="602" width="68" height="9" rx="4.5" fill="#F5EFE8" fill-opacity=".2"/><circle cx="720" cy="463.59" r="34" fill="#E8B98C" fill-opacity=".14"/><circle cx="720" cy="463.59" r="18" fill="#E8B98C" fill-opacity=".95"/><rect x="686" y="505.59" width="68" height="9" rx="4.5" fill="#F5EFE8" fill-opacity=".2"/><circle cx="979.2" cy="359.16" r="34" fill="#7FA3C4" fill-opacity=".14"/><circle cx="979.2" cy="359.16" r="18" fill="#7FA3C4" fill-opacity=".55"/><rect x="945.2" y="401.16" width="68" height="9" rx="4.5" fill="#F5EFE8" fill-opacity=".2"/><circle cx="1238.4" cy="269.83" r="34" fill="#7FA3C4" fill-opacity=".14"/><circle cx="1238.4" cy="269.83" r="18" fill="#7FA3C4" fill-opacity=".55"/><rect x="1204.4" y="311.83" width="68" height="9" rx="4.5" fill="#F5EFE8" fill-opacity=".2"/><rect width="1440" height="900" fill="url(#vig-learn)"/></svg>

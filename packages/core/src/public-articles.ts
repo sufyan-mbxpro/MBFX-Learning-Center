@@ -7,6 +7,7 @@ import { cacheLife, cacheTag } from "next/cache";
 import { ArticleKind, ContentStatus, db } from "@repo/db";
 import { pickTranslation, type LocaleFallbackInfo } from "@repo/i18n";
 import { readingTimeMinutes } from "@repo/utils";
+import { ARTICLE, RELATED, loadRelationTargets } from "./content-relations.ts";
 
 interface LocaleContext {
   locales: LocaleFallbackInfo[];
@@ -70,6 +71,13 @@ export interface ArticleListEntry {
    * count, rather than the detail page's pattern repeated 48 times.
    */
   authorName: string | null;
+  /**
+   * The editor's "Featured" toggle (changes-07 PR 8). Stored since that PR
+   * but read by nothing on the public surface until the /news spotlight — a
+   * flag an editor sets and no reader ever sees is a promise the product was
+   * not keeping.
+   */
+  isFeatured: boolean;
 }
 
 /**
@@ -112,6 +120,24 @@ export interface ListPublishedArticlesOptions {
    * ever hits text in a locale the reader can actually see.
    */
   q?: string;
+  /**
+   * Article ids the page has already rendered elsewhere — the /news
+   * spotlight's picks, so the grid beneath it does not repeat them.
+   *
+   * Applied to the COUNT as well as the rows (it is part of `where`), so
+   * `total`/`pageCount` describe the set actually being paginated. The
+   * caller must pass the same ids on every page of a run or the pagination
+   * shifts under the reader; `getSpotlightArticles` is deterministic for
+   * exactly that reason.
+   */
+  excludeIds?: string[];
+  /**
+   * Restrict to articles an editor flagged Featured. Composed into the same
+   * `where` as everything else so the frozen visibility rule
+   * (`publicArticleWhere`) is never re-derived for the spotlight — a
+   * featured DRAFT stays invisible, like any other draft.
+   */
+  featuredOnly?: boolean;
 }
 
 export async function loadPublishedArticles(
@@ -124,6 +150,8 @@ export async function loadPublishedArticles(
     kind: { in: options.kinds },
     ...(options.categoryId ? { categoryId: options.categoryId } : {}),
     ...(options.tagId ? { tags: { some: { tagId: options.tagId } } } : {}),
+    ...(options.excludeIds?.length ? { id: { notIn: options.excludeIds } } : {}),
+    ...(options.featuredOnly ? { isFeatured: true } : {}),
     ...(options.q
       ? {
           translations: {
@@ -178,6 +206,7 @@ export async function loadPublishedArticles(
       publishedAt: effectivePublishedAt(row),
       category: category ? { name: category.name, slug: category.slug } : null,
       authorName: row.authorId ? (authorNames.get(row.authorId) ?? null) : null,
+      isFeatured: row.isFeatured,
     });
   }
   return { entries, total, pageCount: Math.max(1, Math.ceil(total / options.perPage)) };
@@ -191,6 +220,54 @@ export async function getPublishedArticles(
   cacheTag("content");
   cacheLife({ revalidate: 300 });
   return loadPublishedArticles(locale, options);
+}
+
+/**
+ * The /news masthead's spotlight: the editor's Featured articles, newest
+ * first, TOPPED UP with the newest unflagged ones when there are not enough.
+ *
+ * Topping up is the design, not a fallback bolted on. The spotlight is part
+ * of the page's layout, so it has to fill: a site with nothing flagged would
+ * otherwise open on a hole where its lead story goes. An editor who flags
+ * three articles gets exactly those three; an editor who flags none gets the
+ * three most recent, which is what a reader expects anyway.
+ *
+ * Deterministic for a given content set — same input, same ids, same order —
+ * which is what lets the listing exclude these ids on EVERY page without the
+ * pagination shifting under the reader between page 1 and page 2.
+ */
+export async function loadSpotlightArticles(
+  locale: string,
+  options: { kinds: ArticleKind[]; limit: number },
+): Promise<ArticleListEntry[]> {
+  if (options.limit <= 0) return [];
+  const { kinds, limit } = options;
+
+  const featured = await loadPublishedArticles(locale, {
+    kinds,
+    page: 0,
+    perPage: limit,
+    featuredOnly: true,
+  });
+  if (featured.entries.length >= limit) return featured.entries.slice(0, limit);
+
+  const topUp = await loadPublishedArticles(locale, {
+    kinds,
+    page: 0,
+    perPage: limit - featured.entries.length,
+    excludeIds: featured.entries.map((entry) => entry.articleId),
+  });
+  return [...featured.entries, ...topUp.entries];
+}
+
+export async function getSpotlightArticles(
+  locale: string,
+  options: { kinds: ArticleKind[]; limit: number },
+): Promise<ArticleListEntry[]> {
+  "use cache";
+  cacheTag("content");
+  cacheLife({ revalidate: 300 });
+  return loadSpotlightArticles(locale, options);
 }
 
 export interface ArticleView {
@@ -216,6 +293,17 @@ export interface ArticleView {
   ogImageUrl: string | null;
   canonicalUrl: string | null;
   noIndex: boolean;
+  // changes-07 PR 8 — per-locale social/robots overrides and the article-level
+  // header image, related settings and FAQ list the detail page renders.
+  noFollow: boolean;
+  ogTitle: string | null;
+  ogDescription: string | null;
+  twitterCard: string | null;
+  twitterImageUrl: string | null;
+  headerImageUrl: string | null;
+  showRelated: boolean;
+  relatedCount: number;
+  faqItems: { question: string; answer: string }[];
   alternates: { locale: string; slug: string }[];
 }
 
@@ -227,7 +315,9 @@ export async function loadArticleBySlug(locale: string, slug: string): Promise<A
     include: {
       article: {
         include: {
-          translations: true,
+          // FAQ rows ride along with each translation so the picked one has its
+          // own locale’s list (changes-07 PR 8).
+          translations: { include: { faqItems: { orderBy: { sortOrder: "asc" } } } },
           category: {
             include: { translations: { select: { locale: true, name: true, slug: true } } },
           },
@@ -295,6 +385,15 @@ export async function loadArticleBySlug(locale: string, slug: string): Promise<A
       ogImageUrl: null,
       canonicalUrl: null,
       noIndex: true,
+      noFollow: false,
+      ogTitle: null,
+      ogDescription: null,
+      twitterCard: null,
+      twitterImageUrl: null,
+      headerImageUrl: article.headerImageUrl,
+      showRelated: article.showRelated,
+      relatedCount: article.relatedCount,
+      faqItems: [],
       alternates,
     };
   }
@@ -324,6 +423,15 @@ export async function loadArticleBySlug(locale: string, slug: string): Promise<A
     ogImageUrl: picked.ogImageUrl,
     canonicalUrl: picked.canonicalUrl,
     noIndex: picked.noIndex,
+    noFollow: picked.noFollow,
+    ogTitle: picked.ogTitle,
+    ogDescription: picked.ogDescription,
+    twitterCard: picked.twitterCard,
+    twitterImageUrl: picked.twitterImageUrl,
+    headerImageUrl: article.headerImageUrl,
+    showRelated: article.showRelated,
+    relatedCount: article.relatedCount,
+    faqItems: picked.faqItems.map((f) => ({ question: f.question, answer: f.answer })),
     alternates,
   };
 }
@@ -386,11 +494,95 @@ export async function loadRelatedArticles(
       publishedAt: effectivePublishedAt(row),
       category: category ? { name: category.name, slug: category.slug } : null,
       authorName: row.authorId ? (relatedAuthorNames.get(row.authorId) ?? null) : null,
+      isFeatured: row.isFeatured,
     });
   }
   return entries;
 }
 
+/**
+ * CURATED related articles — the ones an editor picked by hand in the article
+ * editor (changes-07 PR 3), stored as `ContentRelation` rows.
+ *
+ * Visibility composes `publicArticleWhere(now)`, the frozen rule from Module
+ * 15's SKILL.md, so a curated pick that is drafted, deactivated, deleted,
+ * scheduled-for-later or in a deactivated category can never leak through.
+ * The rule is never re-derived here.
+ *
+ * Returns FEWER than `limit` when some curated picks aren't publicly visible.
+ * It does not top up with automatic ones: a curated list quietly padded with
+ * algorithmic picks is not what the editor chose. (Falling back wholesale when
+ * nothing is curated is a different question — see `loadRelatedArticles`.)
+ */
+export async function loadCuratedRelatedArticles(
+  articleId: string,
+  locale: string,
+  limit: number,
+): Promise<ArticleListEntry[]> {
+  if (limit <= 0) return [];
+  const targetIds = await loadRelationTargets({
+    sourceType: ARTICLE,
+    sourceId: articleId,
+    targetType: ARTICLE,
+    relationType: RELATED,
+  });
+  if (targetIds.length === 0) return [];
+
+  const now = new Date();
+  const ctx = await localeContext();
+  const rows = await db.article.findMany({
+    where: { AND: [{ id: { in: targetIds } }, publicArticleWhere(now)] },
+    include: {
+      translations: { select: { locale: true, title: true, slug: true, excerpt: true } },
+      category: {
+        include: { translations: { select: { locale: true, name: true, slug: true } } },
+      },
+    },
+  });
+  const authorNames = await authorNamesFor(rows);
+
+  // Restore the editor's order — an `in` query returns database order, not the
+  // curated one.
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const entries: ArticleListEntry[] = [];
+  for (const id of targetIds) {
+    if (entries.length >= limit) break;
+    const row = byId.get(id);
+    if (!row) continue;
+    const picked = pickTranslation(row.translations, locale, ctx.defaultLocale, ctx.locales);
+    if (!picked) continue;
+    const category = pickTranslation(
+      row.category.translations,
+      locale,
+      ctx.defaultLocale,
+      ctx.locales,
+    );
+    entries.push({
+      articleId: row.id,
+      title: picked.title,
+      slug: picked.slug,
+      excerpt: picked.excerpt,
+      coverImageUrl: row.coverImageUrl,
+      publishedAt: effectivePublishedAt(row),
+      kind: row.kind,
+      locale: picked.locale,
+      category: category ? { name: category.name, slug: category.slug } : null,
+      authorName: row.authorId ? (authorNames.get(row.authorId) ?? null) : null,
+      isFeatured: row.isFeatured,
+    });
+  }
+  return entries;
+}
+
+/**
+ * What the public detail page renders: the editor's curated picks if there are
+ * any, otherwise the automatic by-shared-tags list.
+ *
+ * Curation is opt-in per article, so an editor who never opens the Related
+ * Posts panel keeps exactly the behaviour that shipped with Module 15 — the
+ * fallback is what stops "Show Related Posts" from rendering an empty strip on
+ * every pre-existing article.
+ */
 export async function getRelatedArticles(
   articleId: string,
   locale: string,
@@ -399,6 +591,8 @@ export async function getRelatedArticles(
   "use cache";
   cacheTag("content");
   cacheLife({ revalidate: 300 });
+  const curated = await loadCuratedRelatedArticles(articleId, locale, limit);
+  if (curated.length > 0) return curated;
   return loadRelatedArticles(articleId, locale, limit);
 }
 

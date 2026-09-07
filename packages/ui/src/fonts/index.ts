@@ -7,10 +7,24 @@
 // Files come from @fontsource packages (OFL-1.1, real font binaries pulled
 // through the same supply-chain-guarded registry as every other dep) —
 // next/font/local inlines and self-hosts them at build; no runtime request
-// ever leaves our origin. `preload: false` everywhere: nine families are
-// declared but only the one the active theme references is ever used, so
-// eager-preloading all of them would be nine wasted downloads per visit.
+// ever leaves our origin. `preload: false` everywhere EXCEPT Outfit: ten
+// families are declared but only the one the active theme references is
+// ever used, so eager-preloading all of them would be nine wasted
+// downloads per visit. Outfit is the exception because ADR-039 made it the
+// default — it is the family essentially every render actually uses, so
+// preloading it saves a FOUT rather than wasting a request.
 import localFont from "next/font/local";
+
+// The brand typeface (ADR-039) — DEFAULT_LAYOUT.fontSans resolves to
+// `var(--font-outfit)`, so this declaration is what every surface renders
+// in unless a theme row names another curated family.
+const outfit = localFont({
+  src: "../../node_modules/@fontsource-variable/outfit/files/outfit-latin-wght-normal.woff2",
+  weight: "100 900",
+  variable: "--font-outfit",
+  preload: true,
+  fallback: ["sans-serif"],
+});
 
 const inter = localFont({
   src: "../../node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2",
@@ -131,6 +145,7 @@ const ibmplexmono = localFont({
  * engine emits their literal stacks directly (ADR-005).
  */
 export const curatedFontVariables = [
+  outfit.variable,
   inter.variable,
   roboto.variable,
   opensans.variable,

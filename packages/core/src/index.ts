@@ -17,12 +17,14 @@ export * from "./roles.ts";
 export * from "./content.ts";
 export * from "./public-content.ts";
 export * from "./articles.ts";
+export * from "./content-relations.ts";
 export * from "./public-articles.ts";
 export * from "./market.ts";
 export * from "./notifications.ts";
 export * from "./search.ts";
 export * from "./media.ts";
 export * from "./brand-assets.ts";
+export * from "./cms/index.ts";
 
 export interface RecordAuditInput {
   userId: string | null;

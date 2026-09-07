@@ -10,6 +10,7 @@ import { createAuthMiddleware } from "better-auth/api";
 import { admin } from "better-auth/plugins/admin";
 import { twoFactor } from "better-auth/plugins/two-factor";
 import { bearer } from "better-auth/plugins/bearer";
+import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from "@repo/contracts";
 import { db } from "@repo/db";
 import { redisSecondaryStorage } from "./redis-secondary-storage.ts";
 
@@ -85,8 +86,10 @@ const authOptions: BetterAuthOptions = {
     // at the application layer (FeatureVisibility / permission checks),
     // not here.
     requireEmailVerification: false,
-    minPasswordLength: 8,
-    maxPasswordLength: 128,
+    // From @repo/contracts so the public sign-up screen (ADR-052) can state
+    // and enforce the same minimum without importing this package.
+    minPasswordLength: MIN_PASSWORD_LENGTH,
+    maxPasswordLength: MAX_PASSWORD_LENGTH,
     resetPasswordTokenExpiresIn: 30 * 60, // 30 min, per plan.md
     password: {
       // Argon2id via @node-rs/argon2 overrides Better Auth's scrypt default.

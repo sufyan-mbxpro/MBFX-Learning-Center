@@ -4,6 +4,7 @@
 // typo and a section that silently renders wrong.
 import { describe, expect, it } from "vitest";
 import {
+  dataBudgetSchema,
   HOME_SECTION_BUILT_KEYS,
   HOME_SECTION_STUB_KEYS,
   HOME_SECTION_VARIANTS,
@@ -148,5 +149,31 @@ describe("homepage section built/stub registries (Phase 9a)", () => {
         (HOME_SECTION_STUB_KEYS as readonly string[]).includes(key);
       expect(known, `${key} declares variants but is neither built nor a known stub`).toBe(true);
     }
+  });
+});
+
+describe("cms.dataBudget (ADR-029 §5, PR 3.4)", () => {
+  const valid = {
+    page: { collections: { warn: 6, block: 10 }, items: { warn: 36, block: 72 } },
+    part: { collections: { warn: 2, block: 4 }, items: { warn: 12, block: 24 } },
+  };
+
+  it("accepts the seeded default shape", () => {
+    expect(dataBudgetSchema.parse(valid)).toEqual(valid);
+  });
+
+  it("rejects block < warn", () => {
+    const invalid = { ...valid, page: { ...valid.page, collections: { warn: 10, block: 6 } } };
+    expect(dataBudgetSchema.safeParse(invalid).success).toBe(false);
+  });
+
+  it("rejects a non-positive bound", () => {
+    const invalid = { ...valid, part: { ...valid.part, items: { warn: 0, block: 5 } } };
+    expect(dataBudgetSchema.safeParse(invalid).success).toBe(false);
+  });
+
+  it("is registered in SETTINGS_SCHEMAS/SETTING_GROUPS", () => {
+    expect(SETTINGS_SCHEMAS["cms.dataBudget"]).toBe(dataBudgetSchema);
+    expect(SETTING_GROUPS["cms.dataBudget"]).toBe("cms");
   });
 });

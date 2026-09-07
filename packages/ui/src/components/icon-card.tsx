@@ -14,16 +14,26 @@ function IconCard({
   children,
   className,
   render,
+  interactive,
   ...props
 }: Omit<useRender.ComponentProps<"div">, "children"> & {
   icon: LucideIcon;
   title: React.ReactNode;
   children?: React.ReactNode;
+  /**
+   * Adds the hover lift (ADR-051 §6). Defaults to "yes when `render` made
+   * this a link" — a card that rises under the pointer but does nothing when
+   * clicked promises an interaction it does not have, so the affordance
+   * follows the behaviour rather than being a styling choice per call site.
+   */
+  interactive?: boolean;
 }) {
+  const lifts = interactive ?? render !== undefined;
   const merged = mergeProps<"div">(
     {
       className: cn(
         "card-hover group/icon-card flex flex-col gap-3 rounded-xl bg-card p-6 ring-1 ring-foreground/10",
+        lifts && "hover-lift hover:ring-primary/25",
         className,
       ),
     },
@@ -40,7 +50,17 @@ function IconCard({
       // variant for why the fixed near-white tint breaks in dark mode.
       children: (
         <>
-          <span className="flex size-11 items-center justify-center rounded-lg bg-primary/10 text-primary-interactive">
+          <span
+            className={cn(
+              "flex size-11 items-center justify-center rounded-lg bg-primary/10 text-primary-interactive transition-colors duration-(--duration-base)",
+              // On hover the tint becomes a FILL and the glyph takes the
+              // derived --primary-foreground — the one pairing ADR-003
+              // guarantees legible, so inverting the mark carries no
+              // contrast risk.
+              lifts &&
+                "group-hover/icon-card:bg-primary group-hover/icon-card:text-primary-foreground",
+            )}
+          >
             <Icon aria-hidden className="size-5" />
           </span>
           <h3 className="text-base font-semibold text-foreground">{title}</h3>

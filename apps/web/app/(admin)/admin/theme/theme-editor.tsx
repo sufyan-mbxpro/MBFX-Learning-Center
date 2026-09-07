@@ -17,6 +17,7 @@ import type {
   LayoutTokens,
   SurfacePalette,
 } from "@repo/theme";
+import { humanizeKey } from "@repo/utils";
 import { Alert, AlertDescription, AlertTitle } from "@repo/ui/components/alert";
 import { Button } from "@repo/ui/components/button";
 import { Input } from "@repo/ui/components/input";
@@ -67,15 +68,14 @@ export interface BrandAssetUrls {
   favicon: string | null;
 }
 
-// Registry token ids ("primaryHover") shown as words ("Primary Hover") when
-// no catalog label exists — the registry is code-defined, so the id is the
-// canonical name.
-function humanize(field: string): string {
-  const spaced = field.replace(/([A-Z])/g, " $1");
-  return (spaced[0]?.toUpperCase() ?? "") + spaced.slice(1);
-}
-
 const HEX_COLOR_RE = /^#[0-9A-Fa-f]{6}$/;
+
+// Structural design (container width, radius, base font size, curated font
+// pickers) is paused per ADR-038 — the owner wants layout/typography design
+// handled module-by-module in code, not admin-editable. Values already
+// saved keep rendering exactly as before; only this tab's editing UI is
+// hidden. Flip back to `true` to restore it.
+const THEME_LAYOUT_TAB_ENABLED = false;
 
 function ColorField({
   id,
@@ -169,7 +169,11 @@ export function ThemeEditor({
   const { run, pending } = useServerAction();
   const logoAction = useServerAction();
 
-  const fieldLabel = (field: string) => labels.fieldLabels[field] ?? humanize(field);
+  // Registry token ids ("primaryHover") shown as words ("Primary Hover")
+  // when no catalog label exists — the registry is code-defined, so the id
+  // IS the canonical name. One shared humanizer across the admin
+  // (changes-08 #2) rather than a per-screen variant.
+  const fieldLabel = (field: string) => labels.fieldLabels[field] ?? humanizeKey(field);
 
   // Save only means anything when something changed — and a disabled clean
   // button doubles as "your edits are saved" feedback.
@@ -226,13 +230,20 @@ export function ThemeEditor({
       <Tabs defaultValue="brand">
         <TabsList>
           <TabsTrigger value="brand">{labels.brand}</TabsTrigger>
-          <TabsTrigger value="layout">{labels.layout}</TabsTrigger>
+          {THEME_LAYOUT_TAB_ENABLED && <TabsTrigger value="layout">{labels.layout}</TabsTrigger>}
           <TabsTrigger value="modes">{labels.modes}</TabsTrigger>
           <TabsTrigger value="presets">{labels.presets}</TabsTrigger>
           <TabsTrigger value="logos">{labels.logos}</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="brand" className="flex max-w-md flex-col gap-3 pt-4">
+        {/* changes-08 #5: Brand & Colours is TWO columns at most. A colour
+            row is a label, a swatch and a hex field — at three columns the
+            hex inputs were squeezed to the point of truncating, and the
+            eye has to scan three ways to compare two related tones. */}
+        <TabsContent
+          value="brand"
+          className="grid grid-cols-1 items-start gap-x-8 gap-y-3 pt-4 md:grid-cols-2"
+        >
           {brandFields.map((field) => (
             <ColorField
               key={field}
@@ -243,7 +254,7 @@ export function ThemeEditor({
               onChange={(v) => setBrand({ ...brand, [field]: v })}
             />
           ))}
-          <div className="mt-2 rounded-md border p-3">
+          <div className="mt-2 rounded-md border p-3 md:col-span-2">
             <p className="mb-2 text-sm font-medium">{labels.derivedPreview}</p>
             <div className="flex flex-col gap-1.5">
               {[derived.interactive, derived.interactiveDark].map((color, i) => (
@@ -253,59 +264,64 @@ export function ThemeEditor({
                     className="size-5 shrink-0 rounded border"
                     style={{ backgroundColor: color }}
                   />
-                  <code className="text-muted-foreground">{color}</code>
+                  <span className="tracking-wide text-muted-foreground uppercase">{color}</span>
                 </span>
               ))}
             </div>
           </div>
         </TabsContent>
 
-        <TabsContent value="layout" className="flex max-w-md flex-col gap-3 pt-4">
-          {(["radiusBase", "containerWidth", "baseFontSize"] as const).map((field) => (
-            <div key={field} className="flex items-center gap-3">
-              <Label htmlFor={`layout-${field}`} className="w-36">
-                {fieldLabel(field)}
-              </Label>
-              <Input
-                id={`layout-${field}`}
-                value={layout[field]}
-                onChange={(e) => setLayout({ ...layout, [field]: e.target.value })}
-                className="max-w-40"
-              />
-            </div>
-          ))}
-          {(["fontSans", "fontMono"] as const).map((field) => {
-            const options = fonts.filter((f) =>
-              field === "fontSans" ? f.category === "sans" : f.category === "mono",
-            );
-            return (
+        {THEME_LAYOUT_TAB_ENABLED && (
+          <TabsContent
+            value="layout"
+            className="grid grid-cols-1 gap-3 pt-4 md:grid-cols-2 xl:grid-cols-3"
+          >
+            {(["radiusBase", "containerWidth", "baseFontSize"] as const).map((field) => (
               <div key={field} className="flex items-center gap-3">
                 <Label htmlFor={`layout-${field}`} className="w-36">
                   {fieldLabel(field)}
                 </Label>
-                <Select
+                <Input
+                  id={`layout-${field}`}
                   value={layout[field]}
-                  onValueChange={(v) =>
-                    setLayout({ ...layout, [field]: (v as string) || layout[field] })
-                  }
-                >
-                  <SelectTrigger id={`layout-${field}`} className="min-w-40">
-                    <SelectValue>
-                      {options.find((f) => f.key === layout[field])?.label ?? layout[field]}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {options.map((f) => (
-                      <SelectItem key={f.key} value={f.key}>
-                        {f.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  onChange={(e) => setLayout({ ...layout, [field]: e.target.value })}
+                  className="w-full"
+                />
               </div>
-            );
-          })}
-        </TabsContent>
+            ))}
+            {(["fontSans", "fontMono"] as const).map((field) => {
+              const options = fonts.filter((f) =>
+                field === "fontSans" ? f.category === "sans" : f.category === "mono",
+              );
+              return (
+                <div key={field} className="flex items-center gap-3">
+                  <Label htmlFor={`layout-${field}`} className="w-36">
+                    {fieldLabel(field)}
+                  </Label>
+                  <Select
+                    value={layout[field]}
+                    onValueChange={(v) =>
+                      setLayout({ ...layout, [field]: (v as string) || layout[field] })
+                    }
+                  >
+                    <SelectTrigger id={`layout-${field}`} className="min-w-40">
+                      <SelectValue>
+                        {options.find((f) => f.key === layout[field])?.label ?? layout[field]}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {options.map((f) => (
+                        <SelectItem key={f.key} value={f.key}>
+                          {f.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              );
+            })}
+          </TabsContent>
+        )}
 
         <TabsContent value="modes" className="grid gap-6 pt-4 md:grid-cols-2">
           <section className="card-hover flex flex-col gap-3 rounded-lg border p-4">
@@ -318,9 +334,15 @@ export function ThemeEditor({
           </section>
         </TabsContent>
 
-        <TabsContent value="presets" className="flex max-w-md flex-col gap-3 pt-4">
+        <TabsContent
+          value="presets"
+          className="grid grid-cols-1 gap-3 pt-4 md:grid-cols-2 xl:grid-cols-3"
+        >
           {presets.map((preset) => (
-            <div key={preset.key} className="card-hover flex items-center gap-3 rounded-md border p-3">
+            <div
+              key={preset.key}
+              className="card-hover flex items-center gap-3 rounded-md border p-3"
+            >
               <div className="flex flex-1 flex-col">
                 <span className="text-sm font-medium">{preset.name}</span>
                 <span className="text-xs text-muted-foreground">
@@ -345,7 +367,10 @@ export function ThemeEditor({
           ))}
         </TabsContent>
 
-        <TabsContent value="logos" className="flex max-w-md flex-col gap-4 pt-4">
+        <TabsContent
+          value="logos"
+          className="grid grid-cols-1 items-start gap-6 pt-4 md:grid-cols-2 xl:grid-cols-3"
+        >
           {(
             [
               ["logo_light", labels.logoLight, "brand"],
@@ -392,7 +417,10 @@ export function ThemeEditor({
         </div>
       )}
 
-      <Button onClick={save} disabled={pending || !dirty} className="self-start">
+      {/* changes-08 #3: Save sits at the inline-END of its section, where every
+      // other confirming action in the admin already sits (dialog footers,
+      // "New X" buttons) — not at the start. */}
+      <Button onClick={save} disabled={pending || !dirty} className="self-end">
         {labels.save}
       </Button>
     </div>

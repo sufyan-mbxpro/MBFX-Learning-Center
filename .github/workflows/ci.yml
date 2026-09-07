@@ -50,6 +50,9 @@ jobs:
       - name: Homepage section registries agree (changes-03-plan.md §12.6)
         run: pnpm check:home-sections
 
+      - name: Every CMS block has a fixture and an axe-fixture entry (ADR-024 §4)
+        run: pnpm check:block-fixtures
+
       - name: Dependency audit (Module 14 — security.md #15)
         run: pnpm audit --audit-level high
 

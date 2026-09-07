@@ -8,15 +8,20 @@
 // NEWS articles need `news.manage`, ANALYSIS/TRADE_IDEA need `analysis.*`.
 // Same conditional-gate precedent as content.ts's publish check.
 import { revalidateTag } from "next/cache";
-import { ArticleKind, ContentStatus, TranslationStatus, db } from "@repo/db";
+import { ArticleKind, ContentStatus, TranslationStatus, db, type Prisma } from "@repo/db";
 import { computeSourceHash, isTranslationOutdated } from "@repo/i18n";
 import { can, type Subject } from "@repo/rbac";
 import { parseVideoUrl } from "@repo/utils";
+import { syncReferences } from "./cms/references.ts";
+import { ARTICLE, RELATED, loadRelationTargets, replaceRelations } from "./content-relations.ts";
 import type {
+  ArticleFaqItemInput,
   CreateArticleCategoryInput,
   CreateArticleInput,
   CreateArticleTagInput,
+  QuickEditArticleInput,
   SaveArticleCategoryTranslationInput,
+  SaveArticleInput,
   SaveArticleTagTranslationInput,
   SaveArticleTranslationInput,
   UpdateArticleCategoryInput,
@@ -173,24 +178,82 @@ export async function updateArticleMeta(
     throw new InvalidVideoUrlError();
   }
 
-  const { tagIds, ...meta } = input;
-  await db.article.update({ where: { id: articleId }, data: meta });
-  if (tagIds) {
-    await db.articleTagAssignment.deleteMany({ where: { articleId } });
-    if (tagIds.length > 0) {
-      await db.articleTagAssignment.createMany({
-        data: tagIds.map((tagId) => ({ articleId, tagId })),
-      });
-    }
-  }
+  await db.$transaction((tx) => applyArticleMeta(tx, articleId, input));
+  const { tagIds, relatedArticleIds, ...meta } = input;
   await recordAudit({
     userId: actor.id,
     action: "articles.updateMeta",
     entityType: "article",
     entityId: articleId,
-    changes: { after: { ...meta, ...(tagIds ? { tagIds } : {}) } },
+    changes: {
+      after: {
+        ...meta,
+        ...(tagIds ? { tagIds } : {}),
+        ...(relatedArticleIds ? { relatedArticleIds } : {}),
+      },
+    },
   });
   revalidateTag("content", { expire: 0 });
+}
+
+/**
+ * The transactional body of a meta save, without gating, audit or
+ * revalidation — so `saveArticle` can commit it in the SAME transaction as a
+ * translation save instead of running two (changes-07 §4.2). Callers own the
+ * gate; this function assumes it already passed.
+ */
+async function applyArticleMeta(
+  tx: Prisma.TransactionClient,
+  articleId: string,
+  input: UpdateArticleMetaInput,
+): Promise<void> {
+  const { tagIds, relatedArticleIds, ...meta } = input;
+  const updated = await tx.article.update({ where: { id: articleId }, data: meta });
+
+  if (tagIds) {
+    await tx.articleTagAssignment.deleteMany({ where: { articleId } });
+    if (tagIds.length > 0) {
+      await tx.articleTagAssignment.createMany({
+        data: tagIds.map((tagId) => ({ articleId, tagId })),
+      });
+    }
+  }
+
+  // Related posts live in ContentRelation, not a column (changes-07 §3).
+  if (relatedArticleIds) {
+    await replaceRelations(tx, {
+      sourceType: ARTICLE,
+      sourceId: articleId,
+      targetType: ARTICLE,
+      relationType: RELATED,
+      targetIds: relatedArticleIds,
+    });
+  }
+
+  // ADR-035: sync from the row's resulting value, not the raw input, so a
+  // meta save that doesn't touch an image can't wipe its reference. Both the
+  // cover and the (changes-07) header image are tracked under this one
+  // sourceId, each tagged with its own field name.
+  await syncReferences(
+    tx,
+    { sourceType: "ARTICLE", sourceId: articleId },
+    [
+      updated.coverImageAssetId
+        ? {
+            refType: "MEDIA" as const,
+            refId: updated.coverImageAssetId,
+            field: "coverImageAssetId",
+          }
+        : null,
+      updated.headerImageAssetId
+        ? {
+            refType: "MEDIA" as const,
+            refId: updated.headerImageAssetId,
+            field: "headerImageAssetId",
+          }
+        : null,
+    ].filter((r) => r !== null),
+  );
 }
 
 /**
@@ -209,60 +272,11 @@ export async function saveArticleTranslation(
   assertKindPermission(actor, article.kind, "update");
 
   const defaultLocale = await defaultLocaleCode();
-  const body = input.body ? sanitizeRichText(input.body) : null;
-  const slug = slugify(input.slug?.trim() || input.title);
-  const isSource = input.locale === defaultLocale;
+  const prepared = await prepareArticleTranslation(actor, input, defaultLocale);
+  await db.$transaction((tx) => applyArticleTranslation(tx, input, prepared));
+  await finishArticleTranslation(actor, input, prepared, defaultLocale);
 
-  const existing = await db.articleTranslation.findUnique({
-    where: { articleId_locale: { articleId: input.articleId, locale: input.locale } },
-  });
-
-  const sourceHash = isSource
-    ? computeSourceHash((input.title ?? "") + (body ?? ""))
-    : await currentArticleSourceHash(input.articleId, defaultLocale);
-
-  const fields = {
-    title: input.title,
-    slug,
-    excerpt: input.excerpt ?? null,
-    body,
-    seoTitle: input.seoTitle ?? null,
-    seoDescription: input.seoDescription ?? null,
-    ogImageUrl: input.ogImageUrl ?? null,
-    canonicalUrl: input.canonicalUrl ?? null,
-    noIndex: input.noIndex ?? false,
-    sourceHash,
-    translationStatus: TranslationStatus.TRANSLATED,
-    translatedBy: actor.id,
-  };
-  await db.articleTranslation.upsert({
-    where: { articleId_locale: { articleId: input.articleId, locale: input.locale } },
-    update: fields,
-    create: { articleId: input.articleId, locale: input.locale, ...fields },
-  });
-
-  if (existing && existing.slug !== slug) {
-    await createSlugRedirect(
-      articlePath(input.locale, defaultLocale, existing.slug),
-      articlePath(input.locale, defaultLocale, slug),
-      actor.id,
-    );
-  }
-
-  if (isSource) {
-    const siblings = await db.articleTranslation.findMany({
-      where: { articleId: input.articleId, locale: { not: defaultLocale } },
-      select: { id: true, sourceHash: true },
-    });
-    const stale = siblings.filter((s) => isTranslationOutdated(sourceHash!, s.sourceHash));
-    if (stale.length > 0) {
-      await db.articleTranslation.updateMany({
-        where: { id: { in: stale.map((s) => s.id) } },
-        data: { translationStatus: TranslationStatus.OUTDATED },
-      });
-    }
-  }
-
+  const slug = prepared.slug;
   await recordAudit({
     userId: actor.id,
     action: "articles.saveTranslation",
@@ -271,6 +285,179 @@ export async function saveArticleTranslation(
     changes: { after: { title: input.title, slug, locale: input.locale } },
   });
   revalidateTag("content", { expire: 0 });
+}
+
+/**
+ * A translation save split into three pieces so `saveArticle` can put the
+ * middle one inside a shared transaction (changes-07 §4.2):
+ *
+ *   prepare — reads and pure computation (sanitize, slug, hashes). No writes.
+ *   apply   — every write, transactional.
+ *   finish  — the after-effects that are deliberately NOT in the transaction:
+ *             the 301 redirect row and the sibling-OUTDATED sweep.
+ *
+ * Keeping finish outside preserves the pre-existing behaviour exactly: a
+ * failure to write a redirect has never rolled back a saved translation, and
+ * changing that inside a refactor would be a silent behavioural change.
+ */
+interface PreparedTranslation {
+  slug: string;
+  isSource: boolean;
+  previousSlug: string | null;
+  sourceHash: string | null;
+  fields: Prisma.ArticleTranslationCreateWithoutArticleInput;
+  faqItems: ArticleFaqItemInput[] | undefined;
+}
+
+async function prepareArticleTranslation(
+  actor: Subject,
+  input: SaveArticleTranslationInput,
+  defaultLocale: string,
+): Promise<PreparedTranslation> {
+  const body = input.body ? sanitizeRichText(input.body) : null;
+  const slug = slugify(input.slug?.trim() || input.title);
+  const isSource = input.locale === defaultLocale;
+
+  const existing = await db.articleTranslation.findUnique({
+    where: { articleId_locale: { articleId: input.articleId, locale: input.locale } },
+    select: { slug: true },
+  });
+
+  const sourceHash = isSource
+    ? computeSourceHash((input.title ?? "") + (body ?? ""))
+    : await currentArticleSourceHash(input.articleId, defaultLocale);
+
+  return {
+    slug,
+    isSource,
+    previousSlug: existing?.slug ?? null,
+    sourceHash,
+    faqItems: input.faqItems,
+    fields: {
+      locale: input.locale,
+      title: input.title,
+      slug,
+      excerpt: input.excerpt ?? null,
+      body,
+      seoTitle: input.seoTitle ?? null,
+      seoDescription: input.seoDescription ?? null,
+      ogImageUrl: input.ogImageUrl ?? null,
+      ogImageAssetId: input.ogImageAssetId ?? null,
+      canonicalUrl: input.canonicalUrl ?? null,
+      noIndex: input.noIndex ?? false,
+      // changes-07 PR 2 fields.
+      focusKeywords: input.focusKeywords ?? null,
+      noFollow: input.noFollow ?? false,
+      ogTitle: input.ogTitle ?? null,
+      ogDescription: input.ogDescription ?? null,
+      twitterCard: input.twitterCard ?? null,
+      twitterImageUrl: input.twitterImageUrl ?? null,
+      twitterImageAssetId: input.twitterImageAssetId ?? null,
+      sourceHash,
+      translationStatus: TranslationStatus.TRANSLATED,
+      translatedBy: actor.id,
+    },
+  };
+}
+
+async function applyArticleTranslation(
+  tx: Prisma.TransactionClient,
+  input: SaveArticleTranslationInput,
+  prepared: PreparedTranslation,
+): Promise<void> {
+  const { locale: _locale, ...updateFields } = prepared.fields;
+  const saved = await tx.articleTranslation.upsert({
+    where: { articleId_locale: { articleId: input.articleId, locale: input.locale } },
+    update: updateFields,
+    create: { articleId: input.articleId, ...prepared.fields },
+  });
+
+  if (prepared.faqItems) {
+    await replaceArticleFaqItems(tx, saved.id, prepared.faqItems);
+  }
+
+  // ADR-035: one ContentReference sourceId per translation so two locales'
+  // OG images don't overwrite each other's synced reference set. The
+  // changes-07 Twitter image is tracked in the same set, under its own field.
+  await syncReferences(
+    tx,
+    { sourceType: "ARTICLE", sourceId: `${input.articleId}:${input.locale}` },
+    [
+      saved.ogImageAssetId
+        ? { refType: "MEDIA" as const, refId: saved.ogImageAssetId, field: "ogImageAssetId" }
+        : null,
+      saved.twitterImageAssetId
+        ? {
+            refType: "MEDIA" as const,
+            refId: saved.twitterImageAssetId,
+            field: "twitterImageAssetId",
+          }
+        : null,
+    ].filter((r) => r !== null),
+  );
+}
+
+async function finishArticleTranslation(
+  actor: Subject,
+  input: SaveArticleTranslationInput,
+  prepared: PreparedTranslation,
+  defaultLocale: string,
+): Promise<void> {
+  if (prepared.previousSlug !== null && prepared.previousSlug !== prepared.slug) {
+    await createSlugRedirect(
+      articlePath(input.locale, defaultLocale, prepared.previousSlug),
+      articlePath(input.locale, defaultLocale, prepared.slug),
+      actor.id,
+    );
+  }
+
+  if (prepared.isSource) {
+    const siblings = await db.articleTranslation.findMany({
+      where: { articleId: input.articleId, locale: { not: defaultLocale } },
+      select: { id: true, sourceHash: true },
+    });
+    const stale = siblings.filter((s) => isTranslationOutdated(prepared.sourceHash!, s.sourceHash));
+    if (stale.length > 0) {
+      await db.articleTranslation.updateMany({
+        where: { id: { in: stale.map((s) => s.id) } },
+        data: { translationStatus: TranslationStatus.OUTDATED },
+      });
+    }
+  }
+}
+
+/**
+ * Full replacement of a translation's FAQ list, in array order.
+ *
+ * Answers go through `sanitizeRichText` exactly like article bodies — the
+ * editor is authoring convenience, never the boundary (security.md #8,
+ * ADR-009). Rows absent from `items` are deleted; rows carrying an existing
+ * `id` are updated in place so their identity survives a reorder.
+ */
+async function replaceArticleFaqItems(
+  tx: Prisma.TransactionClient,
+  translationId: string,
+  items: ArticleFaqItemInput[],
+): Promise<void> {
+  const keepIds = items.map((i) => i.id).filter((id) => id !== undefined);
+  await tx.articleFaqItem.deleteMany({
+    where: { translationId, ...(keepIds.length > 0 ? { id: { notIn: keepIds } } : {}) },
+  });
+
+  for (const [index, item] of items.entries()) {
+    const data = {
+      sortOrder: index,
+      question: item.question,
+      answer: sanitizeRichText(item.answer),
+    };
+    if (item.id) {
+      // `updateMany` scoped to the translation, so a forged id from another
+      // article's FAQ cannot be repointed here (IDOR, security.md #7).
+      await tx.articleFaqItem.updateMany({ where: { id: item.id, translationId }, data });
+    } else {
+      await tx.articleFaqItem.create({ data: { translationId, ...data } });
+    }
+  }
 }
 
 async function currentArticleSourceHash(
@@ -283,6 +470,154 @@ async function currentArticleSourceHash(
   });
   if (!source) return null;
   return computeSourceHash(source.title + (source.body ?? ""));
+}
+
+/**
+ * The editor's single "Update & Publish" (changes-07 §4.2). Meta and
+ * translation commit in ONE transaction, with ONE audit row and ONE
+ * revalidation — not two independent saves that can leave an article half
+ * updated when the second one throws.
+ *
+ * This is a COMPOSITION, not a rewrite: `updateArticleMeta` and
+ * `saveArticleTranslation` stay exported and behave exactly as before, and
+ * all three now share the same `apply*` bodies, so there is one implementation
+ * of each write, not two that can drift.
+ */
+export async function saveArticle(actor: Subject, input: SaveArticleInput): Promise<void> {
+  const current = await db.article.findUniqueOrThrow({
+    where: { id: input.articleId },
+    select: { kind: true },
+  });
+  assertKindPermission(actor, current.kind, "update");
+  if (input.meta.kind && input.meta.kind !== current.kind) {
+    assertKindPermission(actor, input.meta.kind, "update");
+  }
+  if (input.meta.videoUrl && parseVideoUrl(input.meta.videoUrl) === null) {
+    throw new InvalidVideoUrlError();
+  }
+
+  const defaultLocale = await defaultLocaleCode();
+  const prepared = await prepareArticleTranslation(actor, input.translation, defaultLocale);
+
+  await db.$transaction(async (tx) => {
+    await applyArticleMeta(tx, input.articleId, input.meta);
+    await applyArticleTranslation(tx, input.translation, prepared);
+  });
+
+  await finishArticleTranslation(actor, input.translation, prepared, defaultLocale);
+
+  const { tagIds, relatedArticleIds, ...meta } = input.meta;
+  await recordAudit({
+    userId: actor.id,
+    action: "articles.save",
+    entityType: "article",
+    entityId: input.articleId,
+    changes: {
+      after: {
+        ...meta,
+        ...(tagIds ? { tagIds } : {}),
+        ...(relatedArticleIds ? { relatedArticleIds } : {}),
+        locale: input.translation.locale,
+        title: input.translation.title,
+        slug: prepared.slug,
+      },
+    },
+  });
+  revalidateTag("content", { expire: 0 });
+}
+
+/**
+ * Editorial promotion toggle — mirrors `setArticleActive` exactly, including
+ * its kind gate. Separate from the meta save so the list's row menu can flip
+ * it without loading or re-submitting a whole article.
+ */
+export async function setArticleFeatured(
+  actor: Subject,
+  articleId: string,
+  isFeatured: boolean,
+): Promise<void> {
+  const current = await db.article.findUniqueOrThrow({
+    where: { id: articleId },
+    select: { kind: true },
+  });
+  assertKindPermission(actor, current.kind, "update");
+
+  await db.article.update({ where: { id: articleId }, data: { isFeatured } });
+  await recordAudit({
+    userId: actor.id,
+    action: "articles.setFeatured",
+    entityType: "article",
+    entityId: articleId,
+    changes: { after: { isFeatured } },
+  });
+  revalidateTag("content", { expire: 0 });
+}
+
+/**
+ * The list row-menu's Quick Edit: default-locale title/slug plus category and
+ * the featured flag, without opening the editor.
+ *
+ * A slug change here writes the same 301 `Redirect` row a full translation
+ * save does — a shortcut that silently broke inbound links would be worse
+ * than no shortcut.
+ */
+export async function quickUpdateArticle(
+  actor: Subject,
+  articleId: string,
+  input: QuickEditArticleInput,
+): Promise<void> {
+  const current = await db.article.findUniqueOrThrow({
+    where: { id: articleId },
+    select: { kind: true },
+  });
+  assertKindPermission(actor, current.kind, "update");
+
+  const defaultLocale = await defaultLocaleCode();
+  const existing = await db.articleTranslation.findUnique({
+    where: { articleId_locale: { articleId, locale: defaultLocale } },
+    select: { id: true, title: true, slug: true },
+  });
+
+  const nextSlug =
+    input.slug !== undefined || input.title !== undefined
+      ? slugify(input.slug?.trim() || input.title || existing?.title || "")
+      : undefined;
+
+  await db.$transaction(async (tx) => {
+    const articleData = {
+      ...(input.categoryId !== undefined ? { categoryId: input.categoryId } : {}),
+      ...(input.isFeatured !== undefined ? { isFeatured: input.isFeatured } : {}),
+    };
+    if (Object.keys(articleData).length > 0) {
+      await tx.article.update({ where: { id: articleId }, data: articleData });
+    }
+    if (existing && (input.title !== undefined || nextSlug !== undefined)) {
+      await tx.articleTranslation.update({
+        where: { id: existing.id },
+        data: {
+          ...(input.title !== undefined ? { title: input.title } : {}),
+          ...(nextSlug !== undefined ? { slug: nextSlug } : {}),
+        },
+      });
+    }
+  });
+
+  if (existing && nextSlug !== undefined && nextSlug !== existing.slug) {
+    await createSlugRedirect(
+      articlePath(defaultLocale, defaultLocale, existing.slug),
+      articlePath(defaultLocale, defaultLocale, nextSlug),
+      actor.id,
+    );
+  }
+
+  await recordAudit({
+    userId: actor.id,
+    action: "articles.quickUpdate",
+    entityType: "article",
+    entityId: articleId,
+    changes: { after: { ...input, ...(nextSlug !== undefined ? { slug: nextSlug } : {}) } },
+  });
+  revalidateTag("content", { expire: 0 });
 }
 
 /**
@@ -385,33 +720,53 @@ export async function duplicateArticle(actor: Subject, articleId: string): Promi
   });
   assertKindPermission(actor, source.kind, "create");
 
-  const copy = await db.article.create({
-    data: {
-      kind: source.kind,
-      categoryId: source.categoryId,
-      authorId: actor.id,
-      coverImageUrl: source.coverImageUrl,
-      videoUrl: source.videoUrl,
-      isPremium: source.isPremium,
-      // Fresh lifecycle: draft, unscheduled, never published.
-      status: ContentStatus.DRAFT,
-      tags: { create: source.tags.map((t) => ({ tagId: t.tagId })) },
-      translations: {
-        create: source.translations.map((t) => ({
-          locale: t.locale,
-          title: t.title,
-          // Uniqueness without a lookup loop; editable before publish anyway.
-          slug: `${t.slug}-copy-${Date.now().toString(36)}`.slice(0, 255),
-          excerpt: t.excerpt,
-          body: t.body,
-          seoTitle: t.seoTitle,
-          seoDescription: t.seoDescription,
-          ogImageUrl: t.ogImageUrl,
-          noIndex: t.noIndex,
-          translationStatus: TranslationStatus.DRAFT,
-        })),
+  const copy = await db.$transaction(async (tx) => {
+    const created = await tx.article.create({
+      data: {
+        kind: source.kind,
+        categoryId: source.categoryId,
+        authorId: actor.id,
+        coverImageUrl: source.coverImageUrl,
+        coverImageAssetId: source.coverImageAssetId,
+        videoUrl: source.videoUrl,
+        isPremium: source.isPremium,
+        // Fresh lifecycle: draft, unscheduled, never published.
+        status: ContentStatus.DRAFT,
+        tags: { create: source.tags.map((t) => ({ tagId: t.tagId })) },
+        translations: {
+          create: source.translations.map((t) => ({
+            locale: t.locale,
+            title: t.title,
+            // Uniqueness without a lookup loop; editable before publish anyway.
+            slug: `${t.slug}-copy-${Date.now().toString(36)}`.slice(0, 255),
+            excerpt: t.excerpt,
+            body: t.body,
+            seoTitle: t.seoTitle,
+            seoDescription: t.seoDescription,
+            ogImageUrl: t.ogImageUrl,
+            ogImageAssetId: t.ogImageAssetId,
+            noIndex: t.noIndex,
+            translationStatus: TranslationStatus.DRAFT,
+          })),
+        },
       },
-    },
+      include: { translations: true },
+    });
+    // ADR-035: the copy is a real, independent usage from the moment it
+    // exists — the guard must see it, not just the source article's refs.
+    if (created.coverImageAssetId) {
+      await syncReferences(tx, { sourceType: "ARTICLE", sourceId: created.id }, [
+        { refType: "MEDIA", refId: created.coverImageAssetId, field: "coverImageAssetId" },
+      ]);
+    }
+    for (const t of created.translations) {
+      if (t.ogImageAssetId) {
+        await syncReferences(tx, { sourceType: "ARTICLE", sourceId: `${created.id}:${t.locale}` }, [
+          { refType: "MEDIA", refId: t.ogImageAssetId, field: "ogImageAssetId" },
+        ]);
+      }
+    }
+    return created;
   });
   await recordAudit({
     userId: actor.id,
@@ -470,6 +825,7 @@ export interface ArticleAdminRow {
   kind: ArticleKind;
   status: ContentStatus;
   isActive: boolean;
+  isFeatured: boolean;
   deletedAt: Date | null;
   title: string | null;
   slug: string | null;
@@ -526,6 +882,7 @@ export async function listArticlesAdmin(params: ListArticlesParams): Promise<Lis
         kind: row.kind,
         status: row.status,
         isActive: row.isActive,
+        isFeatured: row.isFeatured,
         deletedAt: row.deletedAt,
         title: source?.title ?? null,
         slug: source?.slug ?? null,
@@ -551,8 +908,14 @@ export interface ArticleAdminDetail {
   status: ContentStatus;
   isActive: boolean;
   isPremium: boolean;
+  isFeatured: boolean;
   coverImageUrl: string | null;
+  coverImageAssetId: string | null;
+  headerImageUrl: string | null;
+  headerImageAssetId: string | null;
   videoUrl: string | null;
+  showRelated: boolean;
+  relatedCount: number;
   categoryId: string;
   authorId: string | null;
   source: string | null;
@@ -560,8 +923,11 @@ export interface ArticleAdminDetail {
   scheduledFor: Date | null;
   publishedAt: Date | null;
   deletedAt: Date | null;
+  createdAt: Date;
   updatedAt: Date;
   tagIds: string[];
+  /** Curated related-article ids, in the order the editor arranged them. */
+  relatedArticleIds: string[];
   translations: {
     locale: string;
     title: string;
@@ -571,8 +937,17 @@ export interface ArticleAdminDetail {
     seoTitle: string | null;
     seoDescription: string | null;
     ogImageUrl: string | null;
+    ogImageAssetId: string | null;
     canonicalUrl: string | null;
     noIndex: boolean;
+    focusKeywords: string | null;
+    noFollow: boolean;
+    ogTitle: string | null;
+    ogDescription: string | null;
+    twitterCard: string | null;
+    twitterImageUrl: string | null;
+    twitterImageAssetId: string | null;
+    faqItems: { id: string; question: string; answer: string }[];
     translationStatus: TranslationStatus;
   }[];
   legalTransitions: ContentStatus[];
@@ -583,17 +958,36 @@ export async function loadArticleAdminDetail(
 ): Promise<ArticleAdminDetail | null> {
   const row = await db.article.findUnique({
     where: { id: articleId },
-    include: { translations: true, tags: { select: { tagId: true } } },
+    include: {
+      translations: { include: { faqItems: { orderBy: { sortOrder: "asc" } } } },
+      tags: { select: { tagId: true } },
+    },
   });
   if (!row) return null;
+
+  // Related posts are relation rows, not a column — one extra read rather than
+  // a join, since the editor loads a single article at a time.
+  const relatedArticleIds = await loadRelationTargets({
+    sourceType: ARTICLE,
+    sourceId: articleId,
+    targetType: ARTICLE,
+    relationType: RELATED,
+  });
+
   return {
     id: row.id,
     kind: row.kind,
     status: row.status,
     isActive: row.isActive,
     isPremium: row.isPremium,
+    isFeatured: row.isFeatured,
     coverImageUrl: row.coverImageUrl,
+    coverImageAssetId: row.coverImageAssetId,
+    headerImageUrl: row.headerImageUrl,
+    headerImageAssetId: row.headerImageAssetId,
     videoUrl: row.videoUrl,
+    showRelated: row.showRelated,
+    relatedCount: row.relatedCount,
     categoryId: row.categoryId,
     authorId: row.authorId,
     source: row.source,
@@ -601,8 +995,10 @@ export async function loadArticleAdminDetail(
     scheduledFor: row.scheduledFor,
     publishedAt: row.publishedAt,
     deletedAt: row.deletedAt,
+    createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     tagIds: row.tags.map((t) => t.tagId),
+    relatedArticleIds,
     translations: row.translations.map((t) => ({
       locale: t.locale,
       title: t.title,
@@ -612,8 +1008,17 @@ export async function loadArticleAdminDetail(
       seoTitle: t.seoTitle,
       seoDescription: t.seoDescription,
       ogImageUrl: t.ogImageUrl,
+      ogImageAssetId: t.ogImageAssetId,
       canonicalUrl: t.canonicalUrl,
       noIndex: t.noIndex,
+      focusKeywords: t.focusKeywords,
+      noFollow: t.noFollow,
+      ogTitle: t.ogTitle,
+      ogDescription: t.ogDescription,
+      twitterCard: t.twitterCard,
+      twitterImageUrl: t.twitterImageUrl,
+      twitterImageAssetId: t.twitterImageAssetId,
+      faqItems: t.faqItems.map((f) => ({ id: f.id, question: f.question, answer: f.answer })),
       translationStatus: t.translationStatus,
     })),
     legalTransitions: ARTICLE_TRANSITIONS[row.status],

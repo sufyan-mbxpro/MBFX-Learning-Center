@@ -317,6 +317,22 @@ describe("curated fonts (ADR-005)", () => {
     expect(isCuratedFontKey("systemmono")).toBe(true);
   });
 
+  // ADR-039. The default is a real curated key, so @repo/ui owes it a
+  // --font-{key} family; asserting the emitted var() (rather than just the
+  // key) is what would catch a default silently reverting to a literal
+  // stack — the failure mode that would make "Outfit everywhere" a no-op.
+  it("Outfit is the default sans and emits a var(--font-outfit) reference", () => {
+    expect(DEFAULT_LAYOUT.fontSans).toBe("outfit");
+    expect(isCuratedFontKey("outfit")).toBe(true);
+    const css = buildThemeStyleSheet({
+      key: "default",
+      lightCss: "",
+      darkCss: "",
+      layout: DEFAULT_LAYOUT,
+    });
+    expect(css).toContain("--brand-font-sans:var(--font-outfit);");
+  });
+
   it("rejects an arbitrary/unregistered font key", () => {
     expect(isCuratedFontKey("comic-sans-from-a-random-url")).toBe(false);
   });

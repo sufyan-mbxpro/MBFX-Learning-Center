@@ -141,7 +141,9 @@ function TagEditDialog({
               <Label htmlFor="tag-locale">{labels.locale}</Label>
               <Select value={locale} onValueChange={(v) => switchLocale(v ?? locale)}>
                 <SelectTrigger id="tag-locale" className="w-full">
-                  <SelectValue>{locales.find((l) => l.code === locale)?.label ?? locale}</SelectValue>
+                  <SelectValue>
+                    {locales.find((l) => l.code === locale)?.label ?? locale}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {locales.map((l) => (
@@ -234,7 +236,7 @@ export function TagsManager({
           <div className="flex flex-col">
             <span className="font-medium">{row.original.name}</span>
             {row.original.slug && (
-              <code className="text-xs text-muted-foreground">/{row.original.slug}</code>
+              <span className="text-xs text-muted-foreground">/{row.original.slug}</span>
             )}
           </div>
         ),

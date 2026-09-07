@@ -94,7 +94,7 @@ follow-up pass so the design can be reviewed before the feature is built.
    to the right role rather than inventing a second moderation path.
 4. **Visibility gate mirrors `publicArticleWhere()`'s shape.** A comment is
    publicly visible when: `status === "APPROVED" && !deletedAt &&
-   isFeatureVisible("community.comments", subject)` **and** the parent
+isFeatureVisible("community.comments", subject)` **and** the parent
    article itself is publicly visible. The last clause matters because an
    article can be unpublished/deactivated after comments were approved on
    it — an orphaned comment thread under a 404'd article must not leak

@@ -9,14 +9,24 @@ import type { ArticleFacets } from "@repo/core";
 import { Link } from "@repo/i18n/navigation";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
+import { Card, CardContent, CardHeader } from "@repo/ui/components/card";
 import { Input } from "@repo/ui/components/input";
 
+// Built on the design system's Card (ADR-050), not on a copy of its class
+// string. The copy this replaced had already drifted — it omitted
+// `text-card-foreground` — and it was the reason these four stacked panels
+// had no header band while every other card was about to get one.
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="card-hover flex flex-col gap-3 rounded-xl bg-card p-5 ring-1 ring-foreground/10">
-      <h2 className="text-sm font-semibold">{title}</h2>
-      {children}
-    </section>
+    <Card>
+      <CardHeader>
+        {/* The heading element stays real — Card/CardTitle are plain divs
+            here, so the <h2> goes in directly rather than through a render
+            prop this component does not have. */}
+        <h2 className="text-sm leading-snug font-semibold">{title}</h2>
+      </CardHeader>
+      <CardContent>{children}</CardContent>
+    </Card>
   );
 }
 

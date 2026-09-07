@@ -20,6 +20,8 @@
     "check:permission-keys": "node scripts/check-permission-keys.mjs",
     "check:catalog-completeness": "node scripts/check-catalog-completeness.mjs",
     "check:home-sections": "node scripts/check-home-sections.mjs",
+    "check:block-fixtures": "node scripts/check-block-fixtures.mjs",
+    "check:reserved-paths": "node scripts/check-reserved-paths.mjs",
     "test:governance": "vitest run scripts",
     "db:generate": "pnpm --filter @repo/db generate",
     "db:migrate": "pnpm --filter @repo/db migrate:dev",
@@ -27,7 +29,8 @@
     "db:seed": "pnpm --filter @repo/db seed",
     "db:studio": "pnpm --filter @repo/db studio",
     "db:reset": "pnpm --filter @repo/db reset",
-    "ui:add": "pnpm --filter @repo/ui shadcn:add"
+    "ui:add": "pnpm --filter @repo/ui shadcn:add",
+    "e2e": "pnpm --filter web e2e"
   },
   "devDependencies": {
     "@repo/typescript-config": "workspace:*",

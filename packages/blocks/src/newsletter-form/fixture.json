@@ -1,0 +1,7 @@
+{
+  "placeholder": "you@example.com",
+  "label": "Email address",
+  "submitLabel": "Subscribe",
+  "unavailableLabel": "Newsletter sign-up is coming soon.",
+  "tone": "default"
+}

@@ -22,6 +22,26 @@ swap contained to this package.
   (configured, unrouted — future mobile).
 - `auth()` session helper exposed with the call shape `@repo/rbac` expects.
 
+## Two credential surfaces (ADR-052 — read it before touching either)
+
+- **Staff:** `/admin/sign-in`, rendered from the `(admin-auth)` route group
+  (its own root layout — it CANNOT live in `(admin)`, whose root layout is
+  the STAFF re-check and would redirect the page to itself). It is the one
+  `/admin` path `proxy.ts` lets through unauthenticated, and every gate
+  redirect points at it.
+- **Learners:** `/[locale]/sign-in` and `/[locale]/sign-up`. The public site
+  links to neither `/admin` nor the staff screen — do not add such a link.
+- Each form refuses the other's `userType` (signs it back out, shows an
+  error). That is **UX, not a boundary**: the proxy gate, the admin layout's
+  `loadSubject()` re-check and `requirePermission()` are unchanged and are
+  what actually enforce access.
+- Every credential call goes to Better Auth's own `/api/auth/*` handler —
+  rate limiting, lockout and cookies live there (ADR-001 #4). Do not wrap
+  sign-in/sign-up in a server action.
+- Shared browser helpers: `apps/web/app/_lib/credentials.ts` (unit-tested).
+  `MIN/MAX_PASSWORD_LENGTH` live in `@repo/contracts` so a public screen can
+  state the rule without importing this package.
+
 ## Single-app consequences (ADR-006 — read it)
 
 Same origin for learner and staff sessions. Mandatory: STAFF gate in

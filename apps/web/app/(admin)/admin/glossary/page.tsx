@@ -5,6 +5,7 @@ import { getActiveLocales } from "@repo/i18n";
 import { requirePermission } from "@repo/rbac";
 import { Empty, EmptyDescription, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
 import { AdminPage } from "../_components/admin-page.tsx";
+import { richTextLabels } from "../_components/editor-labels.ts";
 import { StatusBadge, TRANSLATION_STATUS_TONE, statusTone } from "../_components/status-badge.tsx";
 import { GlossaryControls, NewTermButton, TranslationForm } from "./glossary-controls.tsx";
 
@@ -20,7 +21,10 @@ export default async function GlossaryAdminPage() {
     listOutdatedGlossaryTranslations(),
     getActiveLocales(),
   ]);
-  const locales = activeLocales.map((l) => ({ code: l.code, label: `${l.name} (${l.nativeName})` }));
+  const locales = activeLocales.map((l) => ({
+    code: l.code,
+    label: `${l.name} (${l.nativeName})`,
+  }));
 
   // Shared ContentStatus labels — raw enum values never render (code-style #2).
   const statusLabels: Record<string, string> = {
@@ -32,14 +36,18 @@ export default async function GlossaryAdminPage() {
   };
 
   return (
-    <AdminPage title={t("glossary")} actions={<NewTermButton label={t("newTerm")} />}>
+    <AdminPage
+      title={t("glossary")}
+      description={t("pageDesc.glossary")}
+      actions={<NewTermButton label={t("newTerm")} />}
+    >
       {outdated.length > 0 && (
         <section className="flex flex-col gap-2 rounded-lg border border-warning-interactive/40 bg-card p-4">
           <h2 className="text-sm font-semibold">{t("outdatedQueue")}</h2>
           <ul className="flex flex-col gap-1 text-sm text-muted-foreground">
             {outdated.map((row) => (
               <li key={`${row.termId}:${row.locale}`}>
-                {row.term} — <code>{row.locale}</code>
+                {row.term} — <span className="text-muted-foreground">{row.locale}</span>
               </li>
             ))}
           </ul>
@@ -57,10 +65,13 @@ export default async function GlossaryAdminPage() {
       ) : (
         <section className="flex flex-col gap-4">
           {terms.map((term) => (
-            <div key={term.id} className="card-hover flex flex-col gap-3 rounded-lg border bg-card p-4">
+            <div
+              key={term.id}
+              className="card-hover flex flex-col gap-3 rounded-lg border bg-card p-4"
+            >
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm font-medium">{term.term ?? t("untitled")}</span>
-                {term.slug && <code className="text-xs text-muted-foreground">/{term.slug}</code>}
+                {term.slug && <span className="text-xs text-muted-foreground">/{term.slug}</span>}
                 <StatusBadge tone={statusTone(TRANSLATION_STATUS_TONE, term.status)}>
                   {statusLabels[term.status] ?? term.status}
                 </StatusBadge>
@@ -81,6 +92,9 @@ export default async function GlossaryAdminPage() {
                 labels={{
                   delete: t("softDelete"),
                   restore: t("restore"),
+                  cancel: t("cancel"),
+                  confirmDeleteTitle: t("confirmDeleteGlossaryTitle"),
+                  confirmDeleteBody: t("confirmDeleteGlossaryBody"),
                   statusLabels,
                 }}
               />
@@ -94,26 +108,7 @@ export default async function GlossaryAdminPage() {
                   body: t("bodyLabel"),
                   save: t("save"),
                   saved: t("saved"),
-                  editor: {
-                    bold: t("editorBold"),
-                    italic: t("editorItalic"),
-                    underline: t("editorUnderline"),
-                    strike: t("editorStrike"),
-                    heading2: t("editorHeading2"),
-                    heading3: t("editorHeading3"),
-                    bulletList: t("editorBulletList"),
-                    orderedList: t("editorOrderedList"),
-                    blockquote: t("editorBlockquote"),
-                    codeBlock: t("editorCodeBlock"),
-                    link: t("editorLink"),
-                    unlink: t("editorUnlink"),
-                    image: t("editorImage"),
-                    horizontalRule: t("editorHorizontalRule"),
-                    undo: t("editorUndo"),
-                    redo: t("editorRedo"),
-                    linkPrompt: t("editorLinkPrompt"),
-                    placeholder: t("editorPlaceholder"),
-                  },
+                  editor: richTextLabels(t),
                 }}
               />
             </div>

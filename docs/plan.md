@@ -89,7 +89,7 @@ Auth.js receives security patches only; no new features. For a greenfield projec
 
 ## A7. Schema gaps to spec later (don't block Phase 0)
 
-Permissions are seeded for capabilities with **no backing models yet**: `analysis.*`, `news.manage`, `media.*`, `comments.moderate`, `market.*`. Add models in their phases: `MediaAsset` (+usage tracking), `Article`/`ArticleTranslation` (analysis & news, one model + `kind` enum), `Comment`, `Instrument`, `EconomicEvent`, `Page`/`PageTranslation` (for admin-editable static pages — currently missing entirely and needed for "highly dynamic public site"). Seeding a permission before its feature exists is fine (it gates nothing); shipping the feature without wiring the permission is not — add a CI check that every `requirePermission()` string exists in the seed registry (Module 03 tests).
+Permissions are seeded for capabilities with **no backing models yet**: `analysis.*`, `news.manage`, `media.*`, `comments.moderate`, `market.*`. Add models in their phases: `MediaAsset` (+usage tracking), `Article`/`ArticleTranslation` (analysis & news, one model + `kind` enum), `Comment`, `Instrument`, `EconomicEvent`, `Page`/`PageTranslation` (for admin-editable static pages — currently missing entirely and needed for "highly dynamic public site"). **Update 2026-09-04:** `Page`/`PageTranslation` are now owned by **Module 16** (website builder) and specified in **ADR-021** — they are the CMS page model, not a second one; `Comment` landed design-only in ADR-019. Seeding a permission before its feature exists is fine (it gates nothing); shipping the feature without wiring the permission is not — add a CI check that every `requirePermission()` string exists in the seed registry (Module 03 tests).
 
 ---
 
@@ -239,11 +239,25 @@ Each module below is a unit of work with: **Scope**, an **Implementation prompt*
 
 ## Module 08 — Navigation & header/footer runtime
 
+**Paused (2026-09-06, ADR-038):** the admin menu-reorder screen
+(`/admin/navigation`) is hidden from the Settings hub/sub-nav pending the
+owner's move to module-by-module/static site design. `buildNavigation()`
+and the public header/footer are untouched — menus keep rendering from
+their current `Menu`/`MenuItem` rows exactly as before.
+
 **Scope:** `buildNavigation(menuKey, locale, subject|null)` in `@repo/core`: reads menu tree (cached, tag `navigation`), filters by `isActive`, `visibility`, `requiresFeature` (flags), `requiresPermission` (staff menus), resolves translations with fallback, resolves `routeKey` vs external `url` (exactly-one rule validated by contracts). Public `Header` (logo per mode from `BrandAsset`, main menu with 2-level dropdowns, locale switcher, theme-mode toggle — user-controlled per A5.4, auth state slot, admin-configured CTA, optional announcement bar) and `Footer` (admin-ordered footer menus as columns, `SocialLink` active set in sortOrder, translatable copyright with `{year}`, risk-disclaimer legal setting) as server components in `@repo/ui`/app-level composition.
 
 **Tests:** nav builder truth-table (inactive item pruned; feature-flag-off pruned; permission-gated pruned for learner, present for staff; parent with all children pruned is itself pruned); translation fallback on labels; exactly-one of url/routeKey enforced by contract test; E2E — admin reorders a menu item → public header reflects it without redeploy (tag invalidation round-trip, the demo that proves the whole architecture); a11y: header nav passes axe, keyboard-operable dropdowns, `aria-current` on active item.
 
 ## Module 09 — Admin shell, settings screens, theme editor
+
+**Paused in part (2026-09-06, ADR-038):** the theme editor's Layout &
+Display tab (border radius, container width, base font size, curated font
+pickers) and the Settings → Layout group (header/footer/homepage
+structural settings) are hidden pending the owner's move to
+module-by-module/static site design. Colors & Branding, Theme Modes,
+Presets and Logos & Favicon are unaffected and fully live — this is a
+partial pause of the theme editor, not the whole screen.
 
 **Scope:** Admin shell as the `(admin)` route-group root layout (ADR-006) — `export const dynamic = "force-dynamic"`, server-side STAFF re-check, sidebar from a permission-filtered admin menu, breadcrumbs, command palette optional, settings CRUD screens generated from the settings registry (type-driven field rendering: STRING/TEXT/NUMBER/BOOLEAN/JSON/IMAGE/COLOR/SELECT), navigation manager (drag-reorder, nested ≤2, translation side-panel), social links manager, feature flag screen, **theme editor**: tabs per `theme-engine.ts` header (Colors & Branding from `BRAND_FIELD_REGISTRY`, Layout & Display, Theme Modes side-by-side light/dark with live preview iframe, Logos & Favicons via `BrandAsset` upload), inline `validateTheme` results (blocking errors disable save; advisories shown with derived-value remedy text), preset save/switch/activate with instant rollback, per-scope activation with the fixed resolution rule.
 
@@ -263,6 +277,13 @@ Each module below is a unit of work with: **Scope**, an **Implementation prompt*
 
 ## Module 12 — Public site
 
+**Paused in part (2026-09-06, ADR-038):** the homepage section
+order/enable/variant editor (`/admin/homepage`) is hidden pending the
+owner's move to module-by-module/static site design. It edits one setting
+(`home.sections`); the setting's current value keeps rendering the
+homepage exactly as before — only its admin editing screen is
+unreachable while paused.
+
 **Scope:** Homepage assembled from admin-configured sections (section registry: hero, featured courses, latest analysis, market ticker, CTA — order/visibility from `layout` settings), learn area (course → module → lesson with prerequisites), glossary (A–Z, categories, per-locale slugs), static pages from new `Page` model, SEO (metadata from settings + per-translation fields, `sitemap.ts` per locale from published content, `robots.ts`, canonical + hreflang pairs, JSON-LD for courses/articles), ISR with tags per Part A caching table, Core Web Vitals budget (LCP < 2.5s on lesson page, enforced by Lighthouse CI budget file).
 
 **Tests:** E2E user journeys (browse course → lesson, glossary search, locale switch preserving route where translation exists / fallback notice where not, dark-mode toggle persists across reload); hreflang/sitemap correctness snapshot; disabled feature 404s (not blank); Lighthouse CI budgets blocking; full axe + RTL suites from Part C.
@@ -279,6 +300,187 @@ Each module below is a unit of work with: **Scope**, an **Implementation prompt*
 
 **Tests/gate:** CSP report-only soak then enforce; IDOR automated suite (authenticated-as-A requests B's resources across all admin APIs → 403/404) **plus the cross-surface probe: an authenticated LEARNER session against every `/admin/*` route and admin API handler → 403/404, never 200**; the full CI matrix green; Lighthouse budgets green (blocking — this is the bundle-isolation backstop under one app); **launch checklist in DEVLOG signed off**.
 
+## Module 15 — News & Analysis (articles)
+
+Added after this document was written; spec'd by
+`docs/news-analysis-module-plan.md` as reconciled by **ADR-015**, standards
+in `.claude/skills/articles/`. Comments are designed but unbuilt (ADR-019).
+
+## Module 16 — Website builder (CMS)
+
+> **CANCELLED 2026-09-07 — ADR-042** (supersedes the ADR-037 pause). This
+> module is withdrawn: no resume path, no further work planned against it.
+> `docs/MBX-Dynamic-Site-Control-Plan-v2.md` is history, not a forward plan.
+> The scope below is retained as the record of what was built (Phases 1–3
+> plus PR 4.3) — the code, models, seeded rows and permissions all still
+> exist and are not to be deleted without a further ADR. Read ADR-042 first.
+
+**Scope:** admin-designed public pages **and the global site layer** — one
+`Page` model with five kinds (STATIC / COLLECTION / DETAIL / DATA / PART;
+`PART` = header, footer, announcement, top bar, mobile nav, mega-menu
+panels, per ADR-027, with per-page overrides and menu items extended by
+ADR-028), a versioned JSON block tree, a closed
+block registry (`@repo/blocks`, the only new package), content/data
+providers wrapping the services that already exist, card templates by
+reference, and a form-based composer with the visual canvas gated behind a
+spike. Plan: `docs/MBX-Dynamic-Site-Control-Plan-v2.md` (v2.2 — §12 has
+per-PR checklists, §18 an ADR → touchpoint index). Binding decisions:
+**ADR-020…ADR-034** (v2.1 adds ADR-030 widget registry, ADR-031 link targets, ADR-032 node schema, ADR-033 reuse model, ADR-034 media v2). Module 08's navigation/header/footer are **extended,
+not replaced** — they remain the fallback rendering path. Repo facts: `docs/cms/00-reconciliation.md`. Standards:
+`.claude/skills/website-builder/SKILL.md`.
+
+**Paused (2026-09-06, ADR-037):** admin UI (sidebar/settings entry point,
+composer, media-library screen) hidden pending owner request to resume; no
+further development in the interim. Code, DB tables/data and the public
+renderer are untouched — the homepage and `/news` keep rendering from their
+already-published `PageVersion` rows. The status below reflects progress at
+the moment of pausing, not current work.
+
+**Status (2026-09-05): Phases 1–2 complete.** Phase 1: `Page`/
+`PageTranslation`/`PageVersion`/`ContentReference` migrated and seeded;
+`packages/core/src/cms/*` services (CRUD, nested-path derivation with
+redirect + shadow handling, the draft optimistic lock, publish/unpublish/
+rollback); the public catch-all (`(public)/[locale]/[...slug]/page.tsx` —
+a **required** catch-all, not optional, per plan §12 PR 1.4) with
+`/api/preview`; `/admin/website/{pages,redirects}` admin screens. Phase 2:
+`@repo/blocks` (the one new package, ADR-020) — `defineBlock`/registry,
+the two-pass collect→resolve→render pipeline (ADR-029), 25 registered
+blocks (24 layout/content + the generic `widget` dispatcher, ADR-030), the
+full node/style/responsive/link/widget contracts (ADR-024/031/032) in
+`@repo/contracts`; the shared `LinkTarget` resolver
+(`@repo/core/src/cms/links.ts`, ADR-031) also powering `buildNavigation`;
+real `collectReferences()` (ADR-033 §4); the homepage now renders from a
+published `PageVersion` behind `[locale]/page.tsx`'s fallback switch —
+hero, newsletter, FAQ and the risk disclaimer are CMS-authored content,
+verified against a real dev server end to end (including resolved
+`ROUTE` links and the `/es` fallback path). 191/192 `@repo/core` tests
+green throughout (the one failure is the same unrelated pre-existing
+Module 02 regression, flagged separately every entry). Deliberately
+incomplete: the CMS homepage is missing `latest_analysis`/
+`glossary_spotlight` until Phase 4's `collection` block lands (accepted —
+no production deployment exists yet, plan §5.2). Phase 3 (composer,
+preview, translations, Media v2, the Puck spike) is in progress: PR 3.1
+(`StylePreset`/`LayoutTemplate`, ADR-033, `/admin/website/{styles,
+templates}`) and PR 3.2 (Media v2, ADR-034 — `storeMedia()`, HTTP Range
+serving, replace/soft-delete, `/admin/website/media`) are done. PR 3.2
+shipped `deleteMedia`'s usage guard wired only for CMS pages
+(`PAGE_VERSION`); ADR-035 (same day) closed that for Article (cover +
+per-locale OG image) and BrandAsset (logo/favicon), leaving Setting
+(`site.faviconUrl`/`seo.defaultOgImage`) and MenuItem/Course usage
+deliberately unwired — the former costs more than two settings justify,
+the latter have no write path yet to hook into (see ADR-035 for the full
+reasoning, DEVLOG 2026-09-05). PR 3.3 (composer core) is done: the
+composer at `/admin/website/pages/[id]/builder` — tree/layers, block
+picker, settings panel generated from each block's new `fields` metadata,
+undo/redo, autosave with a revision-based conflict toast, gates surfaced
+inline, "Use style/Save as style/Save as template." Two prerequisites
+landed with it: the catch-all public route renders real layouts for the
+first time (was a Phase-1 placeholder), and `resolveMediaUrl` became a
+real batched `resolveMediaUrls` now that Media v2 exists. Verified against
+the real seeded homepage, not just a scratch page. Reorder is up/down
+buttons, not drag — the drag precedent ADR-026/the plan both cite doesn't
+actually exist in this repo (checked). PR 3.4 (gates + data budget) is
+done: `runPublishGates` (moved to `packages/core/src/cms/gates.ts`, now
+async — two checks need the DB) grew from Phase 1's bare schema check
+into heading order, the ADR-032 §2 overlay gate, style-preset existence,
+and the `cms.dataBudget` block/warn thresholds (seeded, ADR-029 §5's own
+numbers); duplicate anchors, depth > 3, and empty translatable props warn
+without blocking. Two of the plan's eight named checks (dangling
+`bindingId`, missing card template) and the budget's blindness to widget
+needs are honestly unimplemented — nothing exists yet for them to check
+(Phase 4/a widget registry), named in DEVLOG rather than faked. Verified
+live: a heading-order violation appeared in the composer's gate panel
+within one autosave cycle and cleared on the next after fixing it. PR 3.5
+(preview/versions/translations) is done: a device-width toggle
+(375/768/1440) above the existing live preview; a Versions panel (publish
+history with resolved author names, "Restore as draft" per version,
+"Discard draft"); a Translations panel (every string-typed translatable
+field × every non-default locale, MISSING badges, inline editing).
+`restoreVersionAsDraft`/`discardDraft` deliberately bypass the ADR-032 §6
+optimistic lock — one-shot explicit admin actions, not a concurrent-
+editing race. Scoped down, named in DEVLOG: "preview any version through
+draft mode" became restore-then-preview (a version-parameterized preview
+pipeline is real, separate plumbing not built here); Translations shows
+MISSING only, not OUTDATED (no source-hash mechanism exists yet). A real
+UI bug found live — both version-panel confirm dialogs read "Delete"
+(a copy-paste of the block-delete dialog's shared label) — was fixed and
+re-verified in the browser. Verified against the real seeded homepage,
+including a full sign-out/reload round-trip proving a translation edit
+persists server-side. PR 3.6 (SEO suggestions + JSON-LD) is done:
+`buildPageSeo` (`packages/core/src/cms/seo.ts`, pure tree-walking, no DB)
+— explicit `PageTranslation` fields win, else title/description/OG image
+are suggested from the page's first heading/paragraph/image, locale-aware,
+matching the renderer's own translation-merge order; JSON-LD (`WebPage` or
+an admin-set `schemaType`) on the catch-all route and, opportunistically,
+`[locale]/page.tsx` (Home) — a real pre-existing gap: Home had zero
+CMS-driven metadata despite `home` having real SEO fields since Phase 1.
+Named scope cut: hreflang alternates need a `PublicPageRow` lookup change
+not built here. Verified against the real seeded homepage and a scratch
+page via `curl`, both the suggestion path and the explicit-override path.
+PR 3.7 (Puck spike) is done, resolved **reject** (ADR-036): 4 of ADR-026's
+5 gates pass cleanly or with only a named, containable future CSP risk (an
+un-nonced `<style>` tag in Puck's canvas-iframe CSS mirroring — irrelevant
+under today's report-only, nonce-less public CSP); the fifth (real render
+fidelity against this repo's `fields` vocabulary) can't be verified without
+installing Puck, which ADR-026 forbids before this ADR exists. Real
+evidence throughout — `npm view`/`npm pack`/a scratch dry-run install
+pinned to React 19.2.8, all outside this repo, deleted afterward; `git
+status` confirms zero dependency trace. Correction to the record: Puck's
+real `latest` is 0.20.2, not "0.23.x." Not permanent — the composer already
+delivers everything ADR-026 asked of it and nothing later in this plan
+depends on a canvas, so revisiting is optional. **Phase 3 is complete**
+(PR 3.1–3.7). Phase 4 (dynamic collections, card templates, content-type
+registry) is in progress: PR 4.1 (providers) is done —
+`CollectionProvider`/`DataProvider` in `@repo/contracts`, `news`/
+`analysis`/`trade-idea`/`glossary` providers in `packages/core/src/cms/
+providers/` composing the existing article/glossary services (never
+re-deriving their visibility rules), a `collectionProviders` registry in
+`apps/web/app/_cms/registry.ts`, a 9-test conformance suite including the
+ADR-022-named "equals `getPublishedArticles`" test. No premium-item
+filtering added — `Article.isPremium` isn't enforced anywhere publicly
+today and `FeatureVisibility.PREMIUM` means staff-only here (ADR-012),
+so conflating the two would be wrong; the real visibility rule is already
+enforced upstream by the renderer. From this PR on, verification leans on
+integration tests over live-browser sessions for PRs with no new UI
+surface — Phase 4 alone is 6 PRs and the user has asked to proceed through
+all remaining phases, so matching Phase 3's full ceremony on every PR
+isn't sustainable; live checks resume for PRs that ship something visible.
+PR 4.2 (collection blocks) is done: `collection`/`featured-content`/
+`collection-filter`/`collection-search`/`collection-sort`/
+`collection-pagination`, a real Pass 0 in `render.tsx` resolving each
+`collection` node's canonical query via a new injected
+`resolveBindingQuery` so companion blocks sharing a `bindingId` dedupe
+onto the same result, the dangling-`bindingId` WARN gate. Two real
+live-browser-only bugs found and fixed: a `"use client"` block's
+`registerBlock()` call never reaching the server registry (split into
+`index.tsx` + `client.tsx`), and a function-valued prop crashing any
+client component even unused (a new `BlockDefinition.client` flag).
+Verified live: a real published article rendering through a `collection`
+block, and a real search narrowing/clearing results on the published
+public route. PR 4.3 (card templates) is done: `CardTemplate` model +
+migration, `cardConfigSchema`, `core/cms/cards.ts` mirroring `styles.ts`'s
+exact deletion-guard shape over `ContentReference` (a Phase 2 seam that
+needed no change), 4 seeded system templates (`standard`/`featured`/
+`compact` checked against `article-list.tsx`'s real code; `horizontal`
+built new), `/admin/website/cards` with a real live preview reusing the
+public renderer's own `renderCard()`. `collection`/`featured-content`
+bumped to schema v2 (`cardTemplateId`) and render through one shared
+`card/render-card.tsx`. Verified live: switching a real collection
+block's card template between two seeded templates re-rendered two real
+published articles into different layouts instantly. PR 4.4 (`/news` as
+a COLLECTION page) is next.
+
+This supersedes `docs/MBX-Dynamic-Site-Controle-Plan.md` (v1), which
+proposed eight new packages, twelve new models and a two-app topology
+against decisions this repo had already locked (ADR-003/004/006/011/012/
+015/017/018). The review is `docs/changes/dynamic-site-plan-review.md`.
+
+**Tests:** renderer suite runs with no database (90% floor on
+`@repo/blocks`); provider conformance suite; publish-gate refusals;
+tag-invalidation integration tests; the authoring and publish-an-article
+E2E journeys; the gate extensions in ADR-024 §4 (combination-contrast,
+all-blocks axe fixture, Lighthouse on a worst-realistic page).
+
 ---
 
 # PART E — UPDATED BUILD ORDER
@@ -292,6 +494,7 @@ Each module below is a unit of work with: **Scope**, an **Implementation prompt*
 | 4 — Content           | 7–9   | 11                                  | status-machine + XSS suites green                                               |
 | 5 — Public site       | 10–12 | 12                                  | journeys + Lighthouse budgets green                                             |
 | 6 — Market            | 13–14 | 13                                  | provider contract + calculator suites green                                     |
+| 7 — Website builder   | —     | 16                                  | plan v2 Phases 1–6 (MVP): homepage, `/news`, article detail + global site layer |
 | — Continuous          | all   | 14                                  | launch gate                                                                     |
 
 Two changes vs the original phasing: **testing/governance is Phase 0 work, not an afterthought** (the original plan had no test line at all), and Module 08 (navigation runtime) moved ahead of the admin shell so the header/footer requirement is proven end-to-end early.
@@ -300,18 +503,20 @@ Two changes vs the original phasing: **testing/governance is Phase 0 work, not a
 
 # PART F — KICKOFF DECISIONS (status as of 31 Aug 2026)
 
-| #   | Decision               | Status                                                                                                                                                                                                                                                                                                                                                                                                       | Record                                                                      |
-| --- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
-| 1   | Auth library           | **OPEN — Better Auth recommended**; 2-day compatibility spike (MariaDB adapter, Argon2id hasher, admin/2FA plugins), then lock                                                                                                                                                                                                                                                                               | ADR-001 (write after spike, day 2–3)                                        |
-| 2   | Prisma 7 vs 8          | **RESOLVED (Day 1, 31 Aug 2026)** — Prisma 8 is still `8.0.0-rc.12`; `@prisma/client` stable is 7.10.0. **Locked to Prisma 7.10.x.** Revisit after 8.0 GA.                                                                                                                                                                                                                                                   | ADR-002                                                                     |
-| 3   | App topology           | **LOCKED (revised 31 Aug 2026)** — **one** Next.js app at `apps/web` containing both surfaces as `(public)` and `(admin)` route groups, each with its own root layout. `apps/admin` is not created. Packages-first structure unchanged so `apps/mobile` / `apps/desktop` drop in later; platform-specific UI goes in new packages (e.g. `packages/ui-native`), never by coupling shared packages to Next.js. | ADR-006                                                                     |
-| 4   | Launch locale          | **LOCKED** — English (`en`) only at launch; i18n + RTL machinery built and tested from Phase 1                                                                                                                                                                                                                                                                                                               | ADR-007                                                                     |
-| 5   | Dark/Light mode        | **LOCKED** — user-controlled; admin cannot disable or override; `Theme.allowUserToggle` removed (A5.4)                                                                                                                                                                                                                                                                                                       | ADR-008                                                                     |
-| 6   | Theme branding         | **LOCKED** — admin-controlled dynamic branding via theme engine; hover/active colors remain derived, never directly editable                                                                                                                                                                                                                                                                                 | ADR-003                                                                     |
-| 7   | Fonts                  | **LOCKED** — curated self-hosted fonts only (allowlist via `next/font/local`); no arbitrary font URLs                                                                                                                                                                                                                                                                                                        | ADR-005                                                                     |
-| 8   | Rich-text editor       | **LOCKED: yes, WYSIWYG editing** — library: **Tiptap** (open-source MIT core; the consensus default for CMS/admin content in React as of 2026; ProseMirror-based, mature extension ecosystem, works headless with shadcn styling). Free core only — no paid cloud add-ons in v1. Server-side sanitization on save is mandatory regardless of editor.                                                         | ADR-009 (Phase 4 kickoff: pin exact version, confirm React/Next peer range) |
-| 9   | Exact package versions | **LOCKED process** — pinned in `docs/memory/stack.md` on kickoff Day 1 after a registry sweep; plan names version lines only. Day-1 sweep done 31 Aug 2026; three of the plan's own stated lines had already moved (pnpm 10→11, Node 22→24, TypeScript 5.9→6.0.3-not-7).                                                                                                                                     | `stack.md`, ADR-010                                                         |
-| 10  | Architecture changes   | **LOCKED rule** — any deviation from this plan requires an ADR _before_ the code; enforced by `governance:check` + review                                                                                                                                                                                                                                                                                    | `.claude/rules/architecture.md`                                             |
+| #   | Decision               | Status                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Record                                                                      |
+| --- | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| 1   | Auth library           | **OPEN — Better Auth recommended**; 2-day compatibility spike (MariaDB adapter, Argon2id hasher, admin/2FA plugins), then lock                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | ADR-001 (write after spike, day 2–3)                                        |
+| 2   | Prisma 7 vs 8          | **RESOLVED (Day 1, 31 Aug 2026)** — Prisma 8 is still `8.0.0-rc.12`; `@prisma/client` stable is 7.10.0. **Locked to Prisma 7.10.x.** Revisit after 8.0 GA.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | ADR-002                                                                     |
+| 3   | App topology           | **LOCKED (revised 31 Aug 2026)** — **one** Next.js app at `apps/web` containing both surfaces as `(public)` and `(admin)` route groups, each with its own root layout. `apps/admin` is not created. Packages-first structure unchanged so `apps/mobile` / `apps/desktop` drop in later; platform-specific UI goes in new packages (e.g. `packages/ui-native`), never by coupling shared packages to Next.js.                                                                                                                                                                                                                                                                 | ADR-006                                                                     |
+| 4   | Launch locale          | **LOCKED** — English (`en`) only at launch; i18n + RTL machinery built and tested from Phase 1                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | ADR-007                                                                     |
+| 5   | Dark/Light mode        | **LOCKED** — user-controlled; admin cannot disable or override; `Theme.allowUserToggle` removed (A5.4)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | ADR-008                                                                     |
+| 6   | Theme branding         | **LOCKED** — admin-controlled dynamic branding via theme engine; hover/active colors remain derived, never directly editable                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | ADR-003                                                                     |
+| 7   | Fonts                  | **LOCKED** — curated self-hosted fonts only (allowlist via `next/font/local`); no arbitrary font URLs                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | ADR-005                                                                     |
+| 8   | Rich-text editor       | **LOCKED: yes, WYSIWYG editing** — library: **Tiptap** (open-source MIT core; the consensus default for CMS/admin content in React as of 2026; ProseMirror-based, mature extension ecosystem, works headless with shadcn styling). Free core only — no paid cloud add-ons in v1. Server-side sanitization on save is mandatory regardless of editor.                                                                                                                                                                                                                                                                                                                         | ADR-009 (Phase 4 kickoff: pin exact version, confirm React/Next peer range) |
+| 9   | Exact package versions | **LOCKED process** — pinned in `docs/memory/stack.md` on kickoff Day 1 after a registry sweep; plan names version lines only. Day-1 sweep done 31 Aug 2026; three of the plan's own stated lines had already moved (pnpm 10→11, Node 22→24, TypeScript 5.9→6.0.3-not-7).                                                                                                                                                                                                                                                                                                                                                                                                     | `stack.md`, ADR-010                                                         |
+| 10  | Architecture changes   | **LOCKED rule** — any deviation from this plan requires an ADR _before_ the code; enforced by `governance:check` + review                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | `.claude/rules/architecture.md`                                             |
+| 11  | Website builder (CMS)  | ~~**LOCKED (4 Sep 2026)** — Module 16 ships as `docs/MBX-Dynamic-Site-Control-Plan-v2.md`: one new package (`@repo/blocks`), four new models, provider registry, token-only authored styling, renderer before canvas. v1 (`MBX-Dynamic-Site-Controle-Plan.md`) is superseded history and must not be implemented from.~~ **Update 2026-09-07 — UNLOCKED AND CANCELLED (ADR-042).** The programme is withdrawn: v2.2 joins v1 as history and neither is to be implemented from. Built code, models, seeded rows and permissions are retained (deleting them needs its own ADR); ADR-020…036 stand as accurate history with no forward force. The replacement position is #12. | ADR-042 (supersedes ADR-037/038; ADR-020…036 = history)                     |
+| 12  | Site design ownership  | **LOCKED (7 Sep 2026)** — site design (layout structure, navigation, homepage composition, theme layout tokens and fonts) is built module-by-module in code or statically, never through admin-configurable dynamic composition. Only content _data_ is dynamic and admin-managed. Changing menu order, homepage composition or layout tokens is a code change, permanently.                                                                                                                                                                                                                                                                                                 | ADR-042 (philosophy first stated in ADR-038)                                |
 
 **Kickoff Day 1–3 sequence:** (1) Day 1 morning — ~~Prisma 8 GA check~~ **done**: 8 is still RC → ADR-002 locks Prisma 7.10.x; `stack.md` written with exact pins; ADR-010 pins TypeScript 6.0.3 over the TS 7 native compiler. (2) Day 1–2 — Better Auth spike (schema generation against MariaDB, Argon2id custom hasher, session revocation round-trip). (3) Day 2–3 — ADR-001 locked either way; Module 00 scaffold proceeds in parallel since it's auth-agnostic. Only Module 01's auth tables wait on ADR-001.
 

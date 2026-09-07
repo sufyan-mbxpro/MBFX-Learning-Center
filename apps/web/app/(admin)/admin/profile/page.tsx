@@ -13,12 +13,12 @@ import { ChangePasswordForm, ProfileForm } from "./profile-forms.tsx";
 // STAFF gate already ran.
 export default async function ProfilePage() {
   const session = await auth();
-  if (!session?.user?.id) redirect("/sign-in");
+  if (!session?.user?.id) redirect("/admin/sign-in");
   const [t, profile] = await Promise.all([
     getTranslations("admin"),
     loadOwnProfile(session.user.id),
   ]);
-  if (!profile) redirect("/sign-in");
+  if (!profile) redirect("/admin/sign-in");
 
   const initials = profile.name
     .split(/\s+/)
@@ -29,7 +29,7 @@ export default async function ProfilePage() {
     .toUpperCase();
 
   return (
-    <AdminPage title={t("profile")} description={t("profileSubtitle")} width="lg">
+    <AdminPage title={t("profile")} description={t("profileSubtitle")}>
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
         <AdminSection className="items-center text-center lg:w-72 lg:shrink-0">
           <Avatar className="size-20">

@@ -21,6 +21,12 @@ import { Reveal } from "@repo/ui/components/reveal";
 import { Section } from "@repo/ui/components/section";
 import { ArticleCards } from "../_components/article-list.tsx";
 import { ArticleSidebar } from "../_components/article-sidebar.tsx";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@repo/ui/components/accordion";
 import { ListingHeader } from "../_components/listing-header.tsx";
 import { ShareRow } from "../_components/share-row.tsx";
 import { VideoFacade } from "../_components/video-facade.tsx";
@@ -50,6 +56,11 @@ export async function generateMetadata({
 
   // OG image fallback chain (ADR-015 #7): article OG → cover → site default.
   const ogImage = view.ogImageUrl ?? view.coverImageUrl ?? defaultOgImage ?? undefined;
+  // changes-07: OG/Twitter overrides fall back through the SEO fields to the
+  // article itself — a null override means "inherit", never "render empty".
+  const ogTitle = view.ogTitle ?? view.seoTitle ?? view.title;
+  const ogDescription = view.ogDescription ?? view.seoDescription ?? view.excerpt ?? undefined;
+  const twitterImage = view.twitterImageUrl ?? ogImage;
 
   return {
     title: (template ?? "%s").replace("%s", view.seoTitle ?? view.title),
@@ -58,14 +69,23 @@ export async function generateMetadata({
       languages,
       ...(view.canonicalUrl ? { canonical: view.canonicalUrl } : {}),
     },
-    robots: view.noIndex ? { index: false, follow: false } : undefined,
+    // index and follow are now INDEPENDENT (changes-07): the editor exposes
+    // them as two checkboxes, so noIndex no longer implies nofollow.
+    robots:
+      view.noIndex || view.noFollow ? { index: !view.noIndex, follow: !view.noFollow } : undefined,
     openGraph: {
       type: "article",
-      title: view.seoTitle ?? view.title,
-      description: view.seoDescription ?? view.excerpt ?? undefined,
+      title: ogTitle,
+      description: ogDescription,
       publishedTime: view.publishedAt?.toISOString(),
       modifiedTime: view.updatedAt.toISOString(),
       images: ogImage ? [{ url: ogImage }] : undefined,
+    },
+    twitter: {
+      card: view.twitterCard === "summary" ? "summary" : "summary_large_image",
+      title: ogTitle,
+      description: ogDescription,
+      images: twitterImage ? [twitterImage] : undefined,
     },
   };
 }
@@ -95,9 +115,13 @@ export default async function ArticlePage({ params }: PageProps<"/[locale]/news/
   // Same kind grouping as the listing pages (ADR-015 #11: analysis + trade
   // ideas share one feed) — the sidebar facets match whichever feed this
   // article belongs to, not just its own single kind.
-  const sidebarKinds = view.kind === "NEWS" ? (["NEWS"] as const) : (["ANALYSIS", "TRADE_IDEA"] as const);
+  const sidebarKinds =
+    view.kind === "NEWS" ? (["NEWS"] as const) : (["ANALYSIS", "TRADE_IDEA"] as const);
   const [related, facets] = await Promise.all([
-    getRelatedArticles(view.articleId, locale, relatedCount ?? 3),
+    // Per-article settings win over the site default (changes-07).
+    view.showRelated
+      ? getRelatedArticles(view.articleId, locale, view.relatedCount || (relatedCount ?? 3))
+      : Promise.resolve([]),
     getArticleFacets(locale, { kinds: [...sidebarKinds] }),
   ]);
 
@@ -120,13 +144,51 @@ export default async function ArticlePage({ params }: PageProps<"/[locale]/news/
       : {}),
   };
 
+  // changes-07: FAQPage structured data whenever the article HAS FAQ items.
+  // No toggle — a switch whose only "off" state is "have structured data but
+  // hide it" is a footgun (plan §2.4 #37). Answers are already sanitized HTML
+  // (ADR-009); schema.org accepts HTML in acceptedAnswer.text.
+  const faqJsonLd =
+    view.faqItems.length > 0
+      ? {
+          "@context": "https://schema.org",
+          "@type": "FAQPage",
+          mainEntity: view.faqItems.map((item) => ({
+            "@type": "Question",
+            name: item.question,
+            acceptedAnswer: { "@type": "Answer", text: item.answer },
+          })),
+        }
+      : null;
+
   return (
     <main className="flex flex-col">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
+      {faqJsonLd && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
+        />
+      )}
 
+      {/* changes-07: the article’s own page banner, distinct from the cover
+          image (which is the card/OG image and renders below with the body). */}
+      {view.headerImageUrl && (
+        <div className="relative h-48 w-full overflow-hidden border-b bg-muted sm:h-64">
+          <Image
+            src={view.headerImageUrl}
+            alt=""
+            fill
+            unoptimized
+            sizes="100vw"
+            className="object-cover"
+            priority
+          />
+        </div>
+      )}
       <ListingHeader title={view.title} crumbs={[{ label: view.title }]} />
 
       <Section spacing="md">
@@ -200,13 +262,42 @@ export default async function ArticlePage({ params }: PageProps<"/[locale]/news/
                        this renders already-clean HTML; the save path is the
                        boundary. */
                     <div
-                      className="flex flex-col gap-4 leading-relaxed [&_a]:text-primary-interactive [&_a]:underline-offset-4 [&_a:hover]:underline [&_blockquote]:my-2 [&_blockquote]:border-y [&_blockquote]:border-border [&_blockquote]:py-6 [&_blockquote]:text-center [&_blockquote]:text-lg [&_blockquote]:font-medium [&_blockquote]:text-foreground [&_blockquote]:italic [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:font-mono [&_code]:text-sm [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:text-lg [&_h3]:font-semibold [&_h4]:font-semibold [&_img]:rounded-lg [&_ol]:list-decimal [&_ol]:ps-5 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:bg-muted [&_pre]:p-4 [&_table]:w-full [&_table]:text-sm [&_td]:border [&_td]:p-2 [&_th]:border [&_th]:bg-muted/40 [&_th]:p-2 [&_th]:text-start [&_ul]:list-disc [&_ul]:ps-5"
+                      /* changes-10: `min-w-0 break-words` and the table
+                         scroll container, for the same reason the editor has
+                         them — authors can now insert tables and long code,
+                         and a wide one must scroll inside the column rather
+                         than widen the article. */
+                      className="flex min-w-0 flex-col gap-4 leading-relaxed break-words [&_a]:text-primary-interactive [&_a]:underline-offset-4 [&_a:hover]:underline [&_blockquote]:my-2 [&_blockquote]:border-y [&_blockquote]:border-border [&_blockquote]:py-6 [&_blockquote]:text-center [&_blockquote]:text-lg [&_blockquote]:font-medium [&_blockquote]:text-foreground [&_blockquote]:italic [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:font-mono [&_code]:text-sm [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:text-lg [&_h3]:font-semibold [&_h4]:font-semibold [&_img]:rounded-lg [&_ol]:list-decimal [&_ol]:ps-5 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:bg-muted [&_pre]:p-4 [&_table]:block [&_table]:w-full [&_table]:overflow-x-auto [&_table]:text-sm [&_td]:border [&_td]:p-2 [&_th]:border [&_th]:bg-muted/40 [&_th]:p-2 [&_th]:text-start [&_ul]:list-disc [&_ul]:ps-5"
                       dangerouslySetInnerHTML={{ __html: view.body }}
                     />
                   )}
                 </>
               )}
             </Reveal>
+
+            {/* changes-07: the FAQ list, rendered as an accordion and mirrored
+                into the FAQPage JSON-LD above. Answers are sanitized on save
+                (ADR-009), same as the body — this renders already-clean HTML. */}
+            {view.faqItems.length > 0 && (
+              <Reveal variant="up" className="flex flex-col gap-3 border-t pt-6">
+                <h2 className="text-xl font-semibold">{t("news.faqTitle")}</h2>
+                <Accordion>
+                  {view.faqItems.map((item, i) => (
+                    // Authored rows have no stable id on the public view;
+                    // order is their identity, as in @repo/blocks' faq block.
+                    <AccordionItem key={i} value={"faq-" + i}>
+                      <AccordionTrigger>{item.question}</AccordionTrigger>
+                      <AccordionContent>
+                        <div
+                          className="flex flex-col gap-2 leading-relaxed [&_a]:text-primary-interactive [&_a]:underline [&_ol]:list-decimal [&_ol]:ps-5 [&_ul]:list-disc [&_ul]:ps-5"
+                          dangerouslySetInnerHTML={{ __html: item.answer }}
+                        />
+                      </AccordionContent>
+                    </AccordionItem>
+                  ))}
+                </Accordion>
+              </Reveal>
+            )}
 
             {/* Tags + share always render together as the body's closing
                 row — share doesn't depend on tags existing. */}

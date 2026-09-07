@@ -1,0 +1,241 @@
+{
+  "version": 1,
+  "nodes": [
+    {
+      "type": "section",
+      "id": "home-hero",
+      "version": 1,
+      "hidden": false,
+      "props": { "spacing": "lg" },
+      "children": [
+        {
+          "type": "container",
+          "id": "home-hero-container",
+          "version": 1,
+          "hidden": false,
+          "props": { "size": "narrow" },
+          "children": [
+            {
+              "type": "heading",
+              "id": "home-hero-heading",
+              "version": 1,
+              "hidden": false,
+              "props": { "text": "Learn to trade the markets", "level": "1", "align": "center" },
+              "children": []
+            },
+            {
+              "type": "paragraph",
+              "id": "home-hero-body",
+              "version": 1,
+              "hidden": false,
+              "props": {
+                "text": "Free forex education, tools, and analysis.",
+                "align": "center",
+                "size": "lg"
+              },
+              "children": []
+            },
+            {
+              "type": "columns",
+              "id": "home-hero-ctas",
+              "version": 1,
+              "hidden": false,
+              "props": { "count": "2", "gap": "sm" },
+              "children": [
+                {
+                  "type": "button",
+                  "id": "home-hero-cta-primary",
+                  "version": 1,
+                  "hidden": false,
+                  "props": {
+                    "label": "Read the latest analysis",
+                    "link": { "type": "ROUTE", "routeKey": "news" },
+                    "variant": "default",
+                    "size": "xl"
+                  },
+                  "children": []
+                },
+                {
+                  "type": "button",
+                  "id": "home-hero-cta-secondary",
+                  "version": 1,
+                  "hidden": false,
+                  "props": {
+                    "label": "Browse the glossary",
+                    "link": { "type": "ROUTE", "routeKey": "glossary" },
+                    "variant": "outline",
+                    "size": "xl"
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "section",
+      "id": "home-newsletter",
+      "version": 1,
+      "hidden": false,
+      "props": { "spacing": "md" },
+      "children": [
+        {
+          "type": "container",
+          "id": "home-newsletter-container",
+          "version": 1,
+          "hidden": false,
+          "props": { "size": "narrow" },
+          "children": [
+            {
+              "type": "heading",
+              "id": "home-newsletter-heading",
+              "version": 1,
+              "hidden": false,
+              "props": { "text": "Stay ahead of the market", "level": "2", "align": "center" },
+              "children": []
+            },
+            {
+              "type": "paragraph",
+              "id": "home-newsletter-body",
+              "version": 1,
+              "hidden": false,
+              "props": {
+                "text": "Analysis and education, delivered as it publishes.",
+                "align": "center",
+                "size": "default"
+              },
+              "children": []
+            },
+            {
+              "type": "newsletter-form",
+              "id": "home-newsletter-form",
+              "version": 1,
+              "hidden": false,
+              "props": {
+                "placeholder": "you@example.com",
+                "label": "Email address",
+                "submitLabel": "Subscribe",
+                "unavailableLabel": "Newsletter signup is coming soon.",
+                "tone": "default"
+              },
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "section",
+      "id": "home-faq",
+      "version": 1,
+      "hidden": false,
+      "props": { "spacing": "md" },
+      "children": [
+        {
+          "type": "container",
+          "id": "home-faq-container",
+          "version": 1,
+          "hidden": false,
+          "props": { "size": "narrow" },
+          "children": [
+            {
+              "type": "badge",
+              "id": "home-faq-eyebrow",
+              "version": 1,
+              "hidden": false,
+              "props": { "text": "Questions", "variant": "eyebrow" },
+              "children": []
+            },
+            {
+              "type": "heading",
+              "id": "home-faq-heading",
+              "version": 1,
+              "hidden": false,
+              "props": { "text": "Frequently asked questions", "level": "2", "align": "center" },
+              "children": []
+            },
+            {
+              "type": "paragraph",
+              "id": "home-faq-lead",
+              "version": 1,
+              "hidden": false,
+              "props": {
+                "text": "The things new traders ask us most often.",
+                "align": "center",
+                "size": "default"
+              },
+              "children": []
+            },
+            {
+              "type": "faq",
+              "id": "home-faq-list",
+              "version": 1,
+              "hidden": false,
+              "props": {
+                "items": [
+                  {
+                    "question": "Is the learning material free?",
+                    "answer": "Yes. Every lesson, glossary entry and market article on this site is free to read."
+                  },
+                  {
+                    "question": "Do I need trading experience to start?",
+                    "answer": "No. The material starts from first principles and builds up, so a complete beginner can follow it."
+                  },
+                  {
+                    "question": "Is this financial advice?",
+                    "answer": "No. Everything here is educational. Nothing on this site is a recommendation to buy or sell any instrument."
+                  },
+                  {
+                    "question": "How often is new analysis published?",
+                    "answer": "New articles and analysis are published regularly; the latest always appear on this page and in the News section."
+                  }
+                ]
+              },
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "section",
+      "id": "home-risk-disclaimer",
+      "version": 1,
+      "hidden": false,
+      "props": { "spacing": "sm" },
+      "children": [
+        {
+          "type": "container",
+          "id": "home-risk-disclaimer-container",
+          "version": 1,
+          "hidden": false,
+          "props": { "size": "page" },
+          "children": [
+            {
+              "type": "paragraph",
+              "id": "home-risk-disclaimer-text",
+              "version": 1,
+              "hidden": false,
+              "props": {
+                "text": "All content is educational and does not constitute financial advice. Trading carries risk, and you may lose more than your initial deposit. Past performance does not indicate future results.",
+                "align": "start",
+                "size": "sm"
+              },
+              "style": {
+                "overrides": {
+                  "background": { "kind": "token", "token": "surface-1" },
+                  "border": "hairline",
+                  "radius": "md",
+                  "padding": "md"
+                }
+              },
+              "children": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

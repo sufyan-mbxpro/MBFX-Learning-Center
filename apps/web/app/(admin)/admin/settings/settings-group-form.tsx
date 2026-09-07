@@ -14,6 +14,8 @@ import {
   SETTING_WIDGETS,
   type SettingKey,
 } from "@repo/contracts";
+import { humanizeKey } from "@repo/utils";
+import { cn } from "@repo/ui/lib/utils";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { Checkbox } from "@repo/ui/components/checkbox";
@@ -166,6 +168,19 @@ export function SettingsGroupForm({
   const setValue = (key: string, value: string) =>
     setText((current) => ({ ...current, [key]: value }));
 
+  // ADR-040: the form is a responsive 2-column grid above xl, so a settings
+  // group fills the (now full-width) page instead of leaving the inline-end
+  // half empty. Which fields take the whole row is derived from the
+  // registry TYPE, never hand-tagged per key — that way a settings row
+  // added later lands in the right column count with no edit here.
+  const spansFullRow = (setting: SettingFieldData) =>
+    setting.type === "TEXT" ||
+    setting.type === "JSON" ||
+    setting.type === "IMAGE" ||
+    // Structured list/object editors are tables of sub-fields, not one
+    // control — they never fit a half-row.
+    Boolean(SETTING_FIELDS[setting.key as SettingKey]);
+
   const renderControl = (setting: SettingFieldData) => {
     const id = `setting-${setting.key}`;
     const value = text[setting.key] ?? "";
@@ -261,7 +276,7 @@ export function SettingsGroupForm({
       const current = selectOptions.find((o) => o.value === value);
       return (
         <Select value={value} onValueChange={(v) => setValue(setting.key, (v as string) ?? value)}>
-          <SelectTrigger id={id} className="w-full max-w-md">
+          <SelectTrigger id={id} className="w-full">
             <SelectValue>{current?.label ?? value ?? labels.selectPlaceholder}</SelectValue>
           </SelectTrigger>
           <SelectContent>
@@ -281,14 +296,14 @@ export function SettingsGroupForm({
         type={setting.type === "NUMBER" ? "number" : setting.type === "COLOR" ? "color" : "text"}
         value={value}
         onChange={(e) => setValue(setting.key, e.target.value)}
-        className="max-w-md"
+        className="w-full"
       />
     );
   };
 
   return (
     <form
-      className="flex flex-col gap-5"
+      className="grid grid-cols-1 items-start gap-x-8 gap-y-5 xl:grid-cols-2"
       onSubmit={(e) => {
         e.preventDefault();
         submit();
@@ -297,14 +312,17 @@ export function SettingsGroupForm({
       {settings.map((setting) => (
         <div
           key={setting.key}
-          className="flex flex-col gap-1.5 border-b pb-4 last:border-b-0 last:pb-0"
+          className={cn(
+            "flex flex-col gap-1.5 border-b pb-4",
+            spansFullRow(setting) && "xl:col-span-2",
+          )}
         >
           <div className="flex flex-wrap items-center gap-2">
             <Label htmlFor={`setting-${setting.key}`}>{setting.label}</Label>
             <Badge variant="secondary">
               {setting.isPublic ? labels.publicBadge : labels.privateBadge}
             </Badge>
-            <code className="text-xs text-muted-foreground">{setting.key}</code>
+            <span className="text-xs text-muted-foreground">{humanizeKey(setting.key)}</span>
           </div>
           {setting.description && (
             <p className="text-sm text-muted-foreground">{setting.description}</p>
@@ -312,15 +330,20 @@ export function SettingsGroupForm({
           {renderControl(setting)}
         </div>
       ))}
-      <div className="flex items-center gap-3 border-t pt-4">
+      {/* changes-08 #3: Save at the inline-END of the section. The
+          dirty-field summary reads BEFORE it (start-aligned) so the button
+          keeps the corner every other confirming action in the admin uses.
+          #2: the summary names the changed fields in words, not raw
+          setting keys. */}
+      <div className="flex flex-wrap items-center justify-end gap-3 border-t pt-4 xl:col-span-2">
+        {dirty && (
+          <span className="me-auto text-xs text-muted-foreground">
+            {changedKeys.length} · {changedKeys.map((key) => humanizeKey(key)).join(", ")}
+          </span>
+        )}
         <Button type="submit" disabled={pending || !dirty}>
           {labels.save}
         </Button>
-        {dirty && (
-          <span className="text-xs text-muted-foreground">
-            {changedKeys.length} · {changedKeys.join(", ")}
-          </span>
-        )}
       </div>
     </form>
   );

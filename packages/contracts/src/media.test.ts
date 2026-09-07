@@ -3,7 +3,10 @@
 import { describe, expect, it } from "vitest";
 import {
   brandAssetKeySchema,
+  listMediaAssetsQuerySchema,
+  mediaKindSchema,
   setBrandAssetSchema,
+  updateMediaMetaSchema,
   uploadPurposeSchema,
   type BrandAssetKey,
 } from "./media.ts";
@@ -29,13 +32,13 @@ describe("brandAssetKeySchema", () => {
 
 describe("setBrandAssetSchema", () => {
   it("requires a key and a mediaAssetId, and strips unknown fields", () => {
-    expect(
-      setBrandAssetSchema.safeParse({ key: "favicon", mediaAssetId: "asset1" }).success,
-    ).toBe(true);
+    expect(setBrandAssetSchema.safeParse({ key: "favicon", mediaAssetId: "asset1" }).success).toBe(
+      true,
+    );
     expect(setBrandAssetSchema.safeParse({ key: "favicon" }).success).toBe(false);
-    expect(
-      setBrandAssetSchema.safeParse({ key: "logo_light", mediaAssetId: "" }).success,
-    ).toBe(false);
+    expect(setBrandAssetSchema.safeParse({ key: "logo_light", mediaAssetId: "" }).success).toBe(
+      false,
+    );
 
     const parsed = setBrandAssetSchema.parse({
       key: "logo_light",
@@ -46,11 +49,49 @@ describe("setBrandAssetSchema", () => {
   });
 });
 
+describe("mediaKindSchema (ADR-034 §1)", () => {
+  it("accepts exactly the four kinds", () => {
+    for (const kind of ["IMAGE", "VIDEO", "AUDIO", "DOCUMENT"]) {
+      expect(mediaKindSchema.safeParse(kind).success).toBe(true);
+    }
+    expect(mediaKindSchema.safeParse("EMBED").success).toBe(false);
+  });
+});
+
+describe("updateMediaMetaSchema", () => {
+  it("accepts a partial update with every field optional", () => {
+    expect(updateMediaMetaSchema.safeParse({}).success).toBe(true);
+    expect(updateMediaMetaSchema.safeParse({ title: "Logo" }).success).toBe(true);
+  });
+
+  it("lower-cases tags and rejects more than 20", () => {
+    const parsed = updateMediaMetaSchema.parse({ tags: ["Logo", "BRAND"] });
+    expect(parsed.tags).toEqual(["logo", "brand"]);
+    expect(
+      updateMediaMetaSchema.safeParse({ tags: Array.from({ length: 21 }, (_, i) => `t${i}`) })
+        .success,
+    ).toBe(false);
+  });
+
+  it("requires folder to be an absolute path", () => {
+    expect(updateMediaMetaSchema.safeParse({ folder: "brand" }).success).toBe(false);
+    expect(updateMediaMetaSchema.safeParse({ folder: "/brand" }).success).toBe(true);
+  });
+});
+
+describe("listMediaAssetsQuerySchema", () => {
+  it("accepts an empty query and an optional kind/q filter", () => {
+    expect(listMediaAssetsQuerySchema.safeParse({}).success).toBe(true);
+    expect(listMediaAssetsQuerySchema.safeParse({ kind: "VIDEO", q: "logo" }).success).toBe(true);
+    expect(listMediaAssetsQuerySchema.safeParse({ kind: "EMBED" }).success).toBe(false);
+  });
+});
+
 describe("updateSettingsBatchSchema (changes-02: one Save per section)", () => {
   it("accepts a non-empty array of {key, value} entries, rejects an empty batch", () => {
-    expect(
-      updateSettingsBatchSchema.safeParse([{ key: "site.name", value: "MBX" }]).success,
-    ).toBe(true);
+    expect(updateSettingsBatchSchema.safeParse([{ key: "site.name", value: "MBX" }]).success).toBe(
+      true,
+    );
     expect(updateSettingsBatchSchema.safeParse([]).success).toBe(false);
     expect(updateSettingsBatchSchema.safeParse([{ value: "x" }]).success).toBe(false);
   });

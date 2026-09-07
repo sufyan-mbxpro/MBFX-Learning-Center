@@ -137,6 +137,8 @@ erDiagram
   SocialLink {
     string id PK
     string platform UK
+    string icon "built-in glyph key (ADR-045)"
+    string iconUrl "admin-uploaded, nullable, WINS over icon"
   }
   Theme {
     string id PK
@@ -186,6 +188,69 @@ erDiagram
   MenuItemTranslation {
     string menuItemId FK
     string locale
+  }
+```
+
+## Articles — News & Analysis (Module 15, ADR-015; extended changes-07 PR 2)
+
+One `Article` base row + `kind` (NEWS / ANALYSIS / TRADE_IDEA), with the
+base+translation pattern above. Related posts are **not** a column: they are
+`ContentRelation` rows (`sourceType "article"`, `relationType "related"`),
+reusing the generic linking table. FAQ entries hang off the TRANSLATION, not
+the article — a question and its answer are translatable prose, so they are
+per-locale by construction and cascade with the translation.
+
+```mermaid
+erDiagram
+  Article ||--o{ ArticleTranslation : "translations"
+  Article ||--o{ ArticleTagAssignment : "tags"
+  Article }o--|| ArticleCategory : "category"
+  ArticleTranslation ||--o{ ArticleFaqItem : "faqItems"
+  ArticleTag ||--o{ ArticleTagAssignment : "articles"
+
+  Article {
+    string id PK
+    ArticleKind kind
+    ContentStatus status
+    boolean isActive "instant hide/show, status untouched"
+    boolean isPremium "ADR-012, unenforced"
+    boolean isFeatured "changes-07: editorial promotion"
+    string coverImageUrl "card/OG image"
+    string coverImageAssetId "ADR-035 usage guard"
+    string headerImageUrl "changes-07: top of THIS article's page"
+    string headerImageAssetId "ADR-035 usage guard"
+    string videoUrl "provider whitelist, embed derived at render"
+    boolean showRelated "changes-07: render toggle"
+    int relatedCount "changes-07: how many to show"
+    datetime scheduledFor
+    datetime publishedAt
+    datetime deletedAt
+  }
+  ArticleTranslation {
+    string articleId FK
+    string locale
+    string slug "unique per (locale, slug)"
+    string body "sanitized HTML, ADR-009"
+    string seoTitle
+    string seoDescription
+    string ogImageUrl
+    string canonicalUrl
+    boolean noIndex
+    string focusKeywords "changes-07: comma-separated, parsed in @repo/utils"
+    boolean noFollow "changes-07"
+    string ogTitle "changes-07: null means inherit"
+    string ogDescription "changes-07: null means inherit"
+    string twitterCard "changes-07: summary | summary_large_image"
+    string twitterImageUrl "changes-07"
+    string twitterImageAssetId "changes-07, ADR-035 usage guard"
+    TranslationStatus translationStatus
+  }
+  ArticleFaqItem {
+    string id PK
+    string translationId FK "cascade; per-locale by construction"
+    int sortOrder
+    string question
+    string answer "sanitized HTML, same ADR-009 pipeline as bodies"
   }
 ```
 

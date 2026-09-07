@@ -2,28 +2,23 @@
 // CACHED data (tags: navigation, settings:layout, settings:general, theme,
 // locales); auth state is a CLIENT chip (auth-slot.tsx), so the server
 // shell carries zero per-request reads and navigations stay cheap.
-import { ChevronDown, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { buildNavigation, getBrandAssets } from "@repo/core";
 import { getActiveLocales } from "@repo/i18n";
 import { Link } from "@repo/i18n/navigation";
 import { getSetting } from "@repo/settings";
 import { cn } from "@repo/ui/lib/utils";
+import { BrandLogo } from "@repo/ui/components/brand-logo";
 import { Button } from "@repo/ui/components/button";
 import { Container } from "@repo/ui/components/container";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@repo/ui/components/dropdown-menu";
 import { getTranslations } from "next-intl/server";
 import { AnnouncementBar } from "./announcement-bar.tsx";
 import { AuthSlot } from "./auth-slot.tsx";
 import { LocaleSwitcher } from "./locale-switcher.tsx";
 import { MobileNav } from "./mobile-nav.tsx";
 import { ModeToggle } from "./mode-toggle.tsx";
-import { NavLink } from "./nav-link.tsx";
 import { TopBar } from "./top-bar.tsx";
+import { SiteNav, type SiteNavItem } from "../_nav/site-nav.tsx";
 
 export async function SiteHeader({ locale }: { locale: string }) {
   const [nav, siteName, sticky, cta, announcement, topBar, showSearch, locales, t, brandAssets] =
@@ -40,6 +35,27 @@ export async function SiteHeader({ locale }: { locale: string }) {
       getBrandAssets(),
     ]);
 
+  // One serializable projection of the menu tree, shared by both the
+  // desktop panel and the mobile sheet — they render the SAME rows, so a
+  // destination can never appear on one and not the other. `title` is the
+  // per-row description a panel shows under the label.
+  const navItems: SiteNavItem[] = nav.map((item) => ({
+    id: item.id,
+    label: item.label,
+    title: item.title,
+    href: item.href,
+    isExternal: item.isExternal,
+    openInNewTab: item.openInNewTab,
+    children: item.children.map((child) => ({
+      id: child.id,
+      label: child.label,
+      title: child.title,
+      href: child.href,
+      isExternal: child.isExternal,
+      openInNewTab: child.openInNewTab,
+    })),
+  }));
+
   return (
     <div className={cn(sticky && "sticky top-0 z-40")}>
       {announcement?.enabled && (
@@ -50,25 +66,8 @@ export async function SiteHeader({ locale }: { locale: string }) {
       )}
       <header className="bg-glow-primary relative isolate border-b border-border/70 bg-background/95 shadow-sm backdrop-blur-md">
         <Container className="flex h-[var(--height-header)] items-center gap-3 md:gap-6">
-          {/* Below lg the nav lives behind the hamburger; same NavItem data. */}
-          <MobileNav
-            items={nav.map((item) => ({
-              id: item.id,
-              label: item.label,
-              href: item.href,
-              isExternal: item.isExternal,
-              openInNewTab: item.openInNewTab,
-              children: item.children.map((child) => ({
-                id: child.id,
-                label: child.label,
-                href: child.href,
-                isExternal: child.isExternal,
-                openInNewTab: child.openInNewTab,
-                children: [],
-              })),
-            }))}
-            menuLabel={t("openMenu")}
-          />
+          {/* Below lg the nav lives behind the hamburger; same rows. */}
+          <MobileNav items={navItems} menuLabel={t("openMenu")} />
 
           {/* Uploaded logo (changes-02, ADR-017) when set — light/dark
               variants swap via the `dark:` class variant, same as every
@@ -77,77 +76,20 @@ export async function SiteHeader({ locale }: { locale: string }) {
             href="/"
             className="flex shrink-0 items-center truncate transition-transform duration-(--duration-base) ease-(--ease-out-quint) hover:scale-[1.03]"
           >
-            {brandAssets.logo_light || brandAssets.logo_dark ? (
-              <>
-                {brandAssets.logo_light && (
-                  // eslint-disable-next-line @next/next/no-img-element -- served by our own route (ADR-017), no optimizer allowlist to maintain
-                  <img
-                    src={brandAssets.logo_light.url}
-                    alt={siteName ?? ""}
-                    className={brandAssets.logo_dark ? "h-8 w-auto dark:hidden" : "h-8 w-auto"}
-                  />
-                )}
-                {brandAssets.logo_dark && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={brandAssets.logo_dark.url}
-                    alt={siteName ?? ""}
-                    className={
-                      brandAssets.logo_light ? "hidden h-8 w-auto dark:block" : "h-8 w-auto"
-                    }
-                  />
-                )}
-              </>
-            ) : (
-              <span className="text-lg font-semibold tracking-tight">{siteName}</span>
-            )}
+            <BrandLogo
+              light={brandAssets.logo_light?.url ?? null}
+              dark={brandAssets.logo_dark?.url ?? null}
+              alt={siteName ?? ""}
+              className="h-8"
+              fallback={<span className="text-lg font-semibold tracking-tight">{siteName}</span>}
+            />
           </Link>
 
-          <nav className="hidden items-center gap-5 lg:flex" aria-label={t("mainNavigation")}>
-            {nav.map((item) =>
-              item.children.length > 0 ? (
-                <DropdownMenu key={item.id}>
-                  <DropdownMenuTrigger
-                    render={
-                      <Button variant="ghost" size="sm" className="gap-1 text-muted-foreground">
-                        {item.label}
-                        <ChevronDown
-                          aria-hidden
-                          className="size-3.5 transition-transform duration-(--duration-base) group-aria-expanded/button:rotate-180"
-                        />
-                      </Button>
-                    }
-                  />
-                  <DropdownMenuContent align="start">
-                    {item.children.map((child) => (
-                      <DropdownMenuItem
-                        key={child.id}
-                        render={
-                          <NavLink
-                            href={child.href}
-                            isExternal={child.isExternal}
-                            openInNewTab={child.openInNewTab}
-                          >
-                            {child.label}
-                          </NavLink>
-                        }
-                      />
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              ) : (
-                <NavLink
-                  key={item.id}
-                  href={item.href}
-                  isExternal={item.isExternal}
-                  openInNewTab={item.openInNewTab}
-                  className="link-underline py-1"
-                >
-                  {item.label}
-                </NavLink>
-              ),
-            )}
-          </nav>
+          {/* Desktop nav is a CLIENT component (ADR-048): the mega-menu panel
+              registry carries icon components, which cannot cross the
+              server/client boundary as props, so the arrangement lives with
+              the registry and the server passes only serializable rows. */}
+          <SiteNav items={navItems} ariaLabel={t("mainNavigation")} />
 
           <div className="ms-auto flex items-center gap-2">
             {/* No site-wide search backend exists yet (admin-search.tsx is

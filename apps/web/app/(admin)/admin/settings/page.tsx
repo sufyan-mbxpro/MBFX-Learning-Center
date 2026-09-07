@@ -34,7 +34,7 @@ export default async function SettingsHubPage() {
   });
 
   return (
-    <AdminPage title={t("settings")} description={t("settingsHubSubtitle")} width="lg">
+    <AdminPage title={t("settings")} description={t("settingsHubSubtitle")}>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {cards.map((card) => (
           <Link key={card.href} href={card.href} className="group rounded-xl">

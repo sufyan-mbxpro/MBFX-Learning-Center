@@ -18,7 +18,7 @@ export default async function NavigationPage() {
   ]);
 
   return (
-    <AdminPage title={t("navigation")} width="lg">
+    <AdminPage title={t("navigation")}>
       <div className="flex flex-col gap-6 md:flex-row">
         <SettingsNav heading={t("settingsCategories")} entries={navEntries} />
         <div className="flex min-w-0 flex-1 flex-col gap-6">

@@ -7,6 +7,7 @@
 import { useState } from "react";
 import { KeyRound } from "lucide-react";
 import { Badge } from "@repo/ui/components/badge";
+import { humanizeKey } from "@repo/utils";
 import { Button } from "@repo/ui/components/button";
 import { ConfirmDialog } from "@repo/ui/components/confirm-dialog";
 import { Input } from "@repo/ui/components/input";
@@ -256,7 +257,7 @@ export function OverrideControls({
             <Badge variant={o.effect === "DENY" ? "destructive" : "outline"}>
               {o.effect === "DENY" ? labels.deny : labels.allow}
             </Badge>
-            <code>{o.permissionKey}</code>
+            <span>{humanizeKey(o.permissionKey)}</span>
             {o.reason && <span className="text-xs text-muted-foreground">— {o.reason}</span>}
             <button
               type="button"

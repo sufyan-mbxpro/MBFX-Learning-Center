@@ -5,6 +5,14 @@ import { routing } from "@repo/i18n/routing";
 
 const intl = createMiddleware(routing);
 
+/**
+ * The staff credential screen (ADR-052). It lives UNDER /admin — never on
+ * the public site — so the public surface carries no administrator entry
+ * point at all, and it is the single /admin path the STAFF gate below lets
+ * through unauthenticated.
+ */
+const ADMIN_SIGN_IN_PATH = "/admin/sign-in";
+
 // ─── Security headers (Module 14, security.md #14) ───────────
 //
 // Per-path policy: stricter on /admin than public (ADR-006 — same origin,
@@ -30,6 +38,10 @@ function baseCsp(nonce: string | null): string {
     `img-src 'self' data: https:`,
     `font-src 'self'`,
     `connect-src 'self'`,
+    // The only third party we frame: the economic calendar widget
+    // (ADR-050). Video embeds on /news are a known gap in this policy —
+    // they fall back to default-src today and are reported, not blocked.
+    `frame-src 'self' https://www.tradays.com`,
     `base-uri 'self'`,
     `form-action 'self'`,
     `object-src 'none'`,
@@ -61,6 +73,8 @@ function applySecurityHeaders(
  *                 is a GATE, not the security boundary. The admin root
  *                 layout re-verifies server-side against the database
  *                 (ADR-006 consequence #4: never assume the proxy ran).
+ *                 /admin/sign-in is exempt — it is where the gate SENDS
+ *                 people (ADR-052).
  *   - everything else → next-intl locale routing (Module 06): default
  *                 locale unprefixed ("/"), others prefixed ("/es/...").
  *                 MUST NOT touch /admin or /api — the matcher below
@@ -72,32 +86,18 @@ export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (pathname.startsWith("/admin")) {
-    const cache = await getCookieCache(request, { secret: process.env.BETTER_AUTH_SECRET });
-    const userType = (cache?.user as { userType?: string } | undefined)?.userType;
-
-    // Server Action POSTs carry this header. Found live: the cookie cache's
-    // maxAge (5 min, packages/auth) is shorter than a slow admin edit — e.g.
-    // sitting on the theme editor's Colors/Modes tabs — so a still-valid
-    // session (expiresIn: 7 days) can read as non-STAFF here on Save even
-    // though the real DB-backed session is fine. Redirecting an action
-    // request breaks the Next.js client's action-response parsing (surfaces
-    // as the generic "An unexpected response was received from the server"
-    // instead of a real error). This gate is a fast path, not the boundary
-    // (ADR-006/security.md #3) — requirePermission() re-verifies against the
-    // database inside every action and throws a normal, correctly-serialized
-    // error the client already catches, so letting a stale-cache action
-    // request fall through to that check is safe and gives the user the
-    // real error instead of a broken one.
-    const isServerAction = request.headers.has("next-action");
-
-    if (userType !== "STAFF" && !isServerAction) {
-      const signInUrl = new URL("/sign-in", request.url);
-      signInUrl.searchParams.set("redirect", pathname);
-      return applySecurityHeaders(NextResponse.redirect(signInUrl), "admin", null);
+    // The staff credential screen is the one /admin path that must be
+    // reachable without a session — gating it would redirect it to itself
+    // (ADR-052). It renders from the (admin-auth) route group, outside the
+    // (admin) layout that carries the server-side STAFF re-check, and still
+    // gets the admin surface's headers and per-request nonce below.
+    if (pathname !== ADMIN_SIGN_IN_PATH) {
+      const gated = await staffGate(request, pathname);
+      if (gated) return gated;
     }
 
     // Per-request nonce, forwarded as a REQUEST header so the (fully
-    // dynamic) admin layout can attach it to #brand-tokens via headers().
+    // dynamic) admin layouts can attach it to #brand-tokens via headers().
     const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
     const requestHeaders = new Headers(request.headers);
     requestHeaders.set("x-nonce", nonce);
@@ -106,6 +106,40 @@ export async function proxy(request: NextRequest) {
   }
 
   return applySecurityHeaders(intl(request), "public", null);
+}
+
+/**
+ * The STAFF gate itself: returns a redirect when the request must be turned
+ * away, or `null` to let it continue. Split out of `proxy()` so the sign-in
+ * path can skip exactly this and nothing else — headers and nonce still
+ * apply to it.
+ */
+async function staffGate(request: NextRequest, pathname: string): Promise<NextResponse | null> {
+  const cache = await getCookieCache(request, { secret: process.env.BETTER_AUTH_SECRET });
+  const userType = (cache?.user as { userType?: string } | undefined)?.userType;
+
+  // Server Action POSTs carry this header. Found live: the cookie cache's
+  // maxAge (5 min, packages/auth) is shorter than a slow admin edit — e.g.
+  // sitting on the theme editor's Colors/Modes tabs — so a still-valid
+  // session (expiresIn: 7 days) can read as non-STAFF here on Save even
+  // though the real DB-backed session is fine. Redirecting an action
+  // request breaks the Next.js client's action-response parsing (surfaces
+  // as the generic "An unexpected response was received from the server"
+  // instead of a real error). This gate is a fast path, not the boundary
+  // (ADR-006/security.md #3) — requirePermission() re-verifies against the
+  // database inside every action and throws a normal, correctly-serialized
+  // error the client already catches, so letting a stale-cache action
+  // request fall through to that check is safe and gives the user the
+  // real error instead of a broken one.
+  const isServerAction = request.headers.has("next-action");
+
+  if (userType !== "STAFF" && !isServerAction) {
+    const signInUrl = new URL(ADMIN_SIGN_IN_PATH, request.url);
+    signInUrl.searchParams.set("redirect", pathname);
+    return applySecurityHeaders(NextResponse.redirect(signInUrl), "admin", null);
+  }
+
+  return null;
 }
 
 export const config = {

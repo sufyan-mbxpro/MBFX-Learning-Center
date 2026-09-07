@@ -6,3 +6,4 @@
 export * from "./fallback.ts";
 export * from "./source-hash.ts";
 export * from "./locales.ts";
+export type { MessageKey, MessageNamespace, Messages } from "./message-keys.ts";

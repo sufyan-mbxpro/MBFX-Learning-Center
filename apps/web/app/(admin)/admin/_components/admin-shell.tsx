@@ -4,6 +4,7 @@
 // Server component — the layout passes the already-loaded Subject in; a
 // hidden sidebar entry is UX, the real boundary is each action's
 // requirePermission (a hidden button is not security).
+import { cookies } from "next/headers";
 import { getTranslations } from "next-intl/server";
 import { can, canAny, type Subject } from "@repo/rbac";
 import { countUnreadNotifications, getBrandAssets, listNotifications } from "@repo/core";
@@ -12,10 +13,17 @@ import { ModeToggle } from "@repo/ui/components/mode-toggle";
 import { AdminBreadcrumbs } from "./breadcrumbs.tsx";
 import { AdminMobileNav } from "./admin-mobile-nav.tsx";
 import { AdminSearch } from "./admin-search.tsx";
-import { AdminSidebarNav, type AdminNavGroup } from "./admin-sidebar-nav.tsx";
+import { AdminSidebar, SIDEBAR_COOKIE } from "./admin-sidebar.tsx";
+import { type AdminNavGroup, type VisitSiteLink } from "./admin-sidebar-nav.tsx";
+import { IdleTimeout } from "./idle-timeout.tsx";
 import { NotificationBell, type NotificationItem } from "./notification-bell.tsx";
 import { ProfileMenu } from "./profile-menu.tsx";
-import { SignOutButton } from "./sign-out-button.tsx";
+
+// Module 16 (Website Builder / CMS) is paused per ADR-037: hidden from the
+// admin UI (sidebar, mobile nav, ⌘K search — all driven by this one nav
+// entry) but not deleted. Code, DB tables and the public renderer are
+// untouched; flip this back to `true` to restore the nav entry.
+const WEBSITE_BUILDER_ADMIN_UI_ENABLED = false;
 
 interface NavEntryDef {
   href: string;
@@ -26,6 +34,8 @@ interface NavEntryDef {
     | "employees"
     | "glossary"
     | "articles"
+    | "websiteMedia"
+    | "website"
     | "settings"
     | "features"
     | "navigation"
@@ -34,6 +44,7 @@ interface NavEntryDef {
   icon: string;
   permission: string | string[] | null;
   exact?: boolean;
+  enabled?: boolean;
 }
 
 const ADMIN_NAV_GROUPS: {
@@ -68,6 +79,16 @@ const ADMIN_NAV_GROUPS: {
         icon: "glossary",
         permission: "glossary.view",
       },
+      // Standalone media library (ADR-037 Decision #4's follow-up) — the
+      // same MediaLibrary component the paused Website Builder screen uses,
+      // reachable independent of it so News & Analysis and other content
+      // modules always have a working upload/reuse entry point.
+      {
+        href: "/admin/media",
+        labelKey: "websiteMedia",
+        icon: "websiteMedia",
+        permission: "media.view",
+      },
       // News & Analysis (Module 15) — either key opens the section; each
       // action re-checks the kind-specific gate (ADR-015 #5).
       {
@@ -75,6 +96,16 @@ const ADMIN_NAV_GROUPS: {
         labelKey: "articles",
         icon: "articles",
         permission: ["analysis.view", "news.manage"],
+      },
+      // Website builder (Module 16) — paused, ADR-037. Kept in the array
+      // (rather than deleted) so re-enabling is a one-line flip of
+      // WEBSITE_BUILDER_ADMIN_UI_ENABLED above.
+      {
+        href: "/admin/website",
+        labelKey: "website",
+        icon: "website",
+        permission: ["cms.pages.view", "redirects.manage"],
+        enabled: WEBSITE_BUILDER_ADMIN_UI_ENABLED,
       },
     ],
   },
@@ -98,9 +129,12 @@ const ADMIN_NAV_GROUPS: {
   },
 ];
 
-function allows(subject: Subject, permission: string | string[] | null): boolean {
-  if (permission === null) return true;
-  return Array.isArray(permission) ? canAny(subject, permission) : can(subject, permission);
+function allows(subject: Subject, entry: NavEntryDef): boolean {
+  if (entry.enabled === false) return false;
+  if (entry.permission === null) return true;
+  return Array.isArray(entry.permission)
+    ? canAny(subject, entry.permission)
+    : can(subject, entry.permission);
 }
 
 export async function AdminShell({
@@ -116,17 +150,23 @@ export async function AdminShell({
   image: string | null;
   children: React.ReactNode;
 }) {
-  const [t, unreadCount, notifications, brandAssets] = await Promise.all([
+  const [t, unreadCount, notifications, brandAssets, cookieStore] = await Promise.all([
     getTranslations("admin"),
     countUnreadNotifications(subject.id),
     listNotifications(subject.id),
     getBrandAssets(),
+    // Sidebar collapse state is read on the SERVER so the first paint is
+    // already the right width (see admin-sidebar.tsx for why not
+    // localStorage). This layout is fully dynamic anyway (`instant =
+    // false`), so a cookie read costs nothing here.
+    cookies(),
   ]);
+  const sidebarCollapsed = cookieStore.get(SIDEBAR_COOKIE)?.value === "collapsed";
 
   const groups: AdminNavGroup[] = ADMIN_NAV_GROUPS.map((group) => ({
     label: group.labelKey ? t(group.labelKey) : null,
     entries: group.entries
-      .filter((entry) => allows(subject, entry.permission))
+      .filter((entry) => allows(subject, entry))
       .map((entry) => ({
         href: entry.href,
         label: t(entry.labelKey),
@@ -134,6 +174,15 @@ export async function AdminShell({
         exact: entry.exact,
       })),
   })).filter((group) => group.entries.length > 0);
+
+  // changes-08 #8. Root-relative, so the proxy applies the visitor's own
+  // locale prefix rather than the admin hard-coding one (ADR-043: the
+  // public surface is multilingual, the admin portal is not).
+  const visitSite: VisitSiteLink = {
+    href: "/",
+    label: t("visitSite"),
+    hint: t("visitSiteHint"),
+  };
 
   const flatEntries = groups.flatMap((group) => group.entries);
   const searchPages = [
@@ -156,47 +205,45 @@ export async function AdminShell({
   return (
     <div className="flex min-h-full">
       <Toaster />
-      {/* Sidebar below md would crush the content column — the mobile nav
-          in the topbar carries the same permission-filtered groups. Sticky
-          + h-dvh so it stays pinned while long lists scroll; the inner nav
-          scrolls independently. */}
-      <aside className="sticky top-0 hidden h-dvh w-[var(--width-sidebar)] shrink-0 flex-col border-e bg-card p-4 md:flex">
-        <div className="mb-4 flex items-center px-2.5">
-          {brandAssets.logo_light || brandAssets.logo_dark ? (
-            <>
-              {brandAssets.logo_light && (
-                // eslint-disable-next-line @next/next/no-img-element -- served by our own route (ADR-017)
-                <img
-                  src={brandAssets.logo_light.url}
-                  alt={t("adminPortal")}
-                  className={brandAssets.logo_dark ? "h-7 w-auto dark:hidden" : "h-7 w-auto"}
-                />
-              )}
-              {brandAssets.logo_dark && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={brandAssets.logo_dark.url}
-                  alt={t("adminPortal")}
-                  className={brandAssets.logo_light ? "hidden h-7 w-auto dark:block" : "h-7 w-auto"}
-                />
-              )}
-            </>
-          ) : (
-            <p className="text-sm font-semibold">{t("adminPortal")}</p>
-          )}
-        </div>
-        <AdminSidebarNav groups={groups} />
-        <div className="mt-4 flex flex-col gap-2 border-t pt-4">
-          <div className="px-2.5">
-            <p className="truncate text-sm font-medium">{userName}</p>
-            <p className="truncate text-xs text-muted-foreground">{email}</p>
-          </div>
-          <SignOutButton label={t("signOut")} />
-        </div>
-      </aside>
+      {/* ADR-041: ten-minute idle auto sign-out. Mounted HERE and nowhere
+          else — that is what scopes it to the admin surface. */}
+      <IdleTimeout
+        labels={{
+          title: t("idleTitle"),
+          // t.raw, not t: the {seconds} placeholder is filled on the CLIENT
+          // once a second as the countdown ticks, so the server must hand
+          // over the message with its placeholder intact rather than
+          // resolving it (t() would demand a value here and get a stale one).
+          description: String(t.raw("idleDescription")),
+          stay: t("idleStay"),
+          signOut: t("signOut"),
+        }}
+      />
+      <AdminSidebar
+        groups={groups}
+        visitSite={visitSite}
+        initialCollapsed={sidebarCollapsed}
+        logoLight={brandAssets.logo_light?.url ?? null}
+        logoDark={brandAssets.logo_dark?.url ?? null}
+        userName={userName}
+        email={email}
+        labels={{
+          brand: t("adminPortal"),
+          signOut: t("signOut"),
+          collapse: t("collapseSidebar"),
+          expand: t("expandSidebar"),
+        }}
+      />
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-30 flex h-[var(--height-header)] items-center gap-3 border-b bg-background/95 px-4 backdrop-blur md:gap-4 md:px-6">
-          <AdminMobileNav groups={groups} menuLabel={t("adminPortal")} closeLabel={t("close")} />
+          <AdminMobileNav
+            groups={groups}
+            visitSite={visitSite}
+            menuLabel={t("adminPortal")}
+            closeLabel={t("close")}
+            logoLight={brandAssets.logo_light?.url ?? null}
+            logoDark={brandAssets.logo_dark?.url ?? null}
+          />
           <AdminSearch
             pages={searchPages}
             labels={{

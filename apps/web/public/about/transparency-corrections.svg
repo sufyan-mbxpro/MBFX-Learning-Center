@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" width="1200" height="900" role="presentation" aria-hidden="true"><defs>
+<linearGradient id="g-transparency-corrections" x1="0" y1="0" x2="1" y2="1">
+<stop offset="0" stop-color="#2E251C"/>
+<stop offset=".55" stop-color="#221C16"/>
+<stop offset="1" stop-color="#14110E"/>
+</linearGradient>
+<radialGradient id="warm-transparency-corrections" cx=".5" cy=".5" r=".5">
+<stop offset="0" stop-color="#E8B98C" stop-opacity=".55"/>
+<stop offset="1" stop-color="#E8B98C" stop-opacity="0"/>
+</radialGradient>
+<radialGradient id="cool-transparency-corrections" cx=".5" cy=".5" r=".5">
+<stop offset="0" stop-color="#7FA3C4" stop-opacity=".38"/>
+<stop offset="1" stop-color="#7FA3C4" stop-opacity="0"/>
+</radialGradient>
+<linearGradient id="fade-transparency-corrections" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#E8B98C" stop-opacity=".5"/>
+<stop offset="1" stop-color="#E8B98C" stop-opacity="0"/>
+</linearGradient>
+<pattern id="grid-transparency-corrections" width="64" height="64" patternUnits="userSpaceOnUse">
+<path d="M64 0H0V64" fill="none" stroke="#F5EFE8" stroke-opacity=".05" stroke-width="1"/>
+</pattern>
+<radialGradient id="vig-transparency-corrections" cx=".5" cy=".45" r=".75">
+<stop offset=".55" stop-color="#14110E" stop-opacity="0"/>
+<stop offset="1" stop-color="#14110E" stop-opacity=".42"/>
+</radialGradient>
+</defs><rect width="1200" height="900" fill="url(#g-transparency-corrections)"/><ellipse cx="992.78" cy="599.46" rx="363.04" ry="283.17" fill="url(#warm-transparency-corrections)"/><ellipse cx="620.92" cy="672.94" rx="584.97" ry="456.28" fill="url(#cool-transparency-corrections)"/><ellipse cx="475.41" cy="100.57" rx="350.23" ry="273.18" fill="url(#warm-transparency-corrections)"/><rect width="1200" height="900" fill="url(#grid-transparency-corrections)"/><path d="M108 508.43 L165.88 488.84 L223.76 518.99 L281.65 518.4 L339.53 465.26 L397.41 442.1 L455.29 403.77 L513.18 381.53 L571.06 361.89 L628.94 339.08 L686.82 361.12 L744.71 333.88 L802.59 333.31 L860.47 313.45 L918.35 317.34 L976.24 269.55 L1034.12 236.97 L1092 245.08 L1092 900 L108 900 Z" fill="url(#fade-transparency-corrections)" fill-opacity=".9"/>
+<path d="M108 508.43 L165.88 488.84 L223.76 518.99 L281.65 518.4 L339.53 465.26 L397.41 442.1 L455.29 403.77 L513.18 381.53 L571.06 361.89 L628.94 339.08 L686.82 361.12 L744.71 333.88 L802.59 333.31 L860.47 313.45 L918.35 317.34 L976.24 269.55 L1034.12 236.97 L1092 245.08" fill="none" stroke="#E8B98C" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+<line x1="744.71" y1="108" x2="744.71" y2="333.88" stroke="#F5EFE8" stroke-opacity=".3" stroke-width="2" stroke-dasharray="8 8"/>
+<circle cx="744.71" cy="333.88" r="14" fill="#E8B98C" fill-opacity=".25"/>
+<circle cx="744.71" cy="333.88" r="7" fill="#F5EFE8"/><rect width="1200" height="900" fill="url(#vig-transparency-corrections)"/></svg>

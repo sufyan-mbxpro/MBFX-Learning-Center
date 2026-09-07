@@ -69,7 +69,7 @@ export default async function EmployeeDetailPage({ params }: PageProps<"/admin/e
   return (
     <AdminPage
       title={`${employee.firstName} ${employee.lastName}`}
-      width="lg"
+      description={t("pageDesc.employeeDetail")}
       backHref="/admin/employees"
       backLabel={t("backToList")}
       meta={
@@ -77,7 +77,7 @@ export default async function EmployeeDetailPage({ params }: PageProps<"/admin/e
           <StatusBadge tone={statusTone(EMPLOYEE_STATUS_TONE, employee.status)}>
             {fullStatusLabel}
           </StatusBadge>
-          <code className="text-xs text-muted-foreground">{employee.employeeCode}</code>
+          <span className="text-xs text-muted-foreground">{employee.employeeCode}</span>
         </>
       }
     >

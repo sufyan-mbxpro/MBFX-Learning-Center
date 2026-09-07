@@ -62,7 +62,7 @@ export default async function EmployeesPage() {
   };
 
   return (
-    <AdminPage title={t("employees")} width="lg">
+    <AdminPage title={t("employees")} description={t("pageDesc.employees")}>
       <EmployeesTable
         employees={employees.map((e) => ({
           id: e.id,

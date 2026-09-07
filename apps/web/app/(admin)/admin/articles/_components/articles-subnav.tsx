@@ -9,5 +9,7 @@ export interface ArticlesSubnavItem {
 }
 
 export function ArticlesSubnav({ items }: { items: ArticlesSubnavItem[] }) {
-  return <SubNav items={items} className="border-b pb-3" />;
+  // No bottom rule any more — SubNav carries its own tray/border, and the
+  // two together read as a box inside a box.
+  return <SubNav items={items} />;
 }

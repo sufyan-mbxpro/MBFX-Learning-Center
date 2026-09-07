@@ -14,6 +14,14 @@ import { ListingHeader } from "./_components/listing-header.tsx";
 import { NewsletterForm } from "../_components/newsletter-form.tsx";
 import { NumberedPagination } from "./_components/numbered-pagination.tsx";
 
+// ADR-042 (2026-09-07): the CMS switch that used to run ahead of this listing
+// is gone. Plan v2.2 §12 PR 4.4 had made `/news` a COLLECTION page resolved by
+// `resolveCollectionPage("news", …)`, with this coded listing as its fallback —
+// so the cancelled Website Builder was serving the live listing with its admin
+// UI permanently hidden. The Website Builder programme is cancelled (site
+// design is code; only content data is dynamic), so the coded listing is the
+// only path again. The `news-collection` CMS page rows are retained, not
+// deleted (ADR-042 Decision #2) — they are simply no longer resolved here.
 export async function generateMetadata({ params }: PageProps<"/[locale]/news">): Promise<Metadata> {
   const { locale } = await params;
   setRequestLocale(locale);

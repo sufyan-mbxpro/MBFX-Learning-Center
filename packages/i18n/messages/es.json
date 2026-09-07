@@ -1,6 +1,7 @@
 {
   "common": {
-    "siteName": "Centro de Aprendizaje MBFX"
+    "siteName": "Centro de Aprendizaje MBFX",
+    "siteDescription": "Educación forex gratuita, herramientas y análisis."
   },
   "home": {
     "placeholder": "Superficie pública — marcador de posición. Ver docs/logs/DEVLOG.md para el estado del módulo.",
@@ -27,7 +28,39 @@
     "faqQ3": "¿Esto es asesoramiento financiero?",
     "faqA3": "No. Todo el contenido es educativo. Nada en este sitio es una recomendación de compra o venta de ningún instrumento.",
     "faqQ4": "¿Con qué frecuencia se publica nuevo análisis?",
-    "faqA4": "Publicamos artículos y análisis con regularidad; los más recientes aparecen siempre en esta página y en la sección de Noticias."
+    "faqA4": "Publicamos artículos y análisis con regularidad; los más recientes aparecen siempre en esta página y en la sección de Noticias.",
+    "exploreEyebrow": "La plataforma",
+    "exploreTitle": "Todo lo que necesita un trader, en un solo lugar",
+    "exploreLead": "Lecciones, calculadoras, contexto de mercado en vivo y análisis diario: cada uno útil por sí solo y mucho mejor en conjunto.",
+    "exploreCta": "Explorar",
+    "exploreSoon": "Muy pronto",
+    "exploreCarouselLabel": "Secciones de la plataforma",
+    "exploreCarouselPrevious": "Secciones anteriores",
+    "exploreCarouselNext": "Secciones siguientes",
+    "exploreLearnTag": "Cursos",
+    "exploreLearnTitle": "Rutas de aprendizaje",
+    "exploreLearnBody": "Cursos estructurados que parten de los principios básicos y construyen un proceso de trading repetible.",
+    "exploreToolsTag": "Calculadoras",
+    "exploreToolsTitle": "Calculadoras de trading",
+    "exploreToolsBody": "Tamaño de posición, valor del pip, margen y beneficio: calculados antes de la operación, no después.",
+    "exploreCalendarTag": "Calendario",
+    "exploreCalendarTitle": "Calendario económico",
+    "exploreCalendarBody": "Cada publicación que mueve un par, con su nivel de impacto y las cifras en cuanto salen.",
+    "exploreNewsTag": "Noticias",
+    "exploreNewsTitle": "Noticias del mercado",
+    "exploreNewsBody": "Qué pasó, por qué importó y qué cambia: escrito para quienes operan, no para quienes leen titulares.",
+    "exploreAnalysisTag": "Análisis",
+    "exploreAnalysisTitle": "Análisis diario",
+    "exploreAnalysisBody": "Desgloses basados en gráficos e ideas de trading de la mesa, publicados a medida que avanza la sesión.",
+    "exploreGlossaryTag": "Referencia",
+    "exploreGlossaryTitle": "Glosario de trading",
+    "exploreGlossaryBody": "Definiciones en lenguaje claro de cada término que verás en un gráfico, enlazadas mientras lees.",
+    "exploreMarketsTag": "Mercados",
+    "exploreMarketsTitle": "Mercados en vivo",
+    "exploreMarketsBody": "Cotizaciones, sesiones y fuerza de divisas, para saber qué hace el mercado antes de abrir un gráfico.",
+    "exploreAboutTag": "Empresa",
+    "exploreAboutTitle": "Quiénes somos",
+    "exploreAboutBody": "Quién escribe este material, cómo se financia el sitio y qué nunca haremos con tu atención."
   },
   "error": {
     "title": "Algo salió mal",
@@ -41,6 +74,9 @@
     "title": "Aún no traducido",
     "body": "Esta página no está disponible en este idioma todavía."
   },
+  "public": {
+    "pagePlaceholder": "Esta página está en construcción. Vuelve pronto."
+  },
   "nav": {
     "signIn": "Iniciar sesión",
     "toggleTheme": "Cambiar tema",
@@ -51,10 +87,12 @@
     "search": "Buscar artículos",
     "backToTop": "Volver arriba",
     "home": "Inicio",
-    "breadcrumb": "Ruta de navegación"
+    "breadcrumb": "Ruta de navegación",
+    "signUp": "Registrarse"
   },
   "footer": {
     "newsletterHeading": "Mantente informado",
+    "newsletterBlurb": "Notas del mercado, nuevas lecciones y herramientas cada semana, directo a tu correo.",
     "getTheApp": "Obtener la aplicación",
     "appPlatform": {
       "ios": "iOS",
@@ -65,7 +103,9 @@
     "newsletterPlaceholder": "tu@ejemplo.com",
     "newsletterLabel": "Correo electrónico",
     "newsletterSubmit": "Suscribirse",
-    "newsletterUnavailable": "La suscripción al boletín estará disponible pronto."
+    "newsletterUnavailable": "La suscripción al boletín estará disponible pronto.",
+    "followUs": "Síguenos",
+    "riskDisclaimerLabel": "Aviso de riesgo"
   },
   "glossary": {
     "title": "Glosario",
@@ -105,14 +145,28 @@
     "shareTwitter": "Compartir en X",
     "shareLinkedin": "Compartir en LinkedIn",
     "copyLink": "Copiar enlace",
-    "linkCopied": "Enlace copiado"
+    "linkCopied": "Enlace copiado",
+    "faqTitle": "Preguntas frecuentes"
   },
   "auth": {
     "signInTitle": "Iniciar sesión",
     "email": "Correo electrónico",
     "password": "Contraseña",
     "submit": "Iniciar sesión",
-    "failed": "Error al iniciar sesión. Verifica tu correo y contraseña."
+    "failed": "Error al iniciar sesión. Verifica tu correo y contraseña.",
+    "signInDescription": "Inicia sesión en tu cuenta de MBFX Learning Center.",
+    "learnersOnly": "Esta cuenta no puede iniciar sesión aquí.",
+    "noAccount": "¿Eres nuevo en MBFX?",
+    "signUpLink": "Crear una cuenta",
+    "signUpTitle": "Crea tu cuenta",
+    "signUpDescription": "Únete a MBFX Learning Center y sigue tu progreso.",
+    "name": "Nombre completo",
+    "passwordHint": "Al menos {count} caracteres.",
+    "signUpSubmit": "Crear cuenta",
+    "signUpFailed": "No pudimos crear tu cuenta. Revisa tus datos e inténtalo de nuevo.",
+    "emailTaken": "Ya existe una cuenta con este correo electrónico.",
+    "haveAccount": "¿Ya tienes una cuenta?",
+    "signInLink": "Iniciar sesión"
   },
   "admin": {
     "navPeople": "Personas",
@@ -369,6 +423,465 @@
     "fieldText": "Texto",
     "fieldDismissible": "Se puede cerrar",
     "fieldPlatform": "Plataforma",
-    "fieldMenu": "Menú"
+    "fieldMenu": "Menú",
+    "website": "Sitio web",
+    "websitePages": "Páginas",
+    "websiteDesigns": "Diseños",
+    "websiteGlobal": "Global",
+    "websiteStyles": "Estilos",
+    "websiteTemplates": "Plantillas",
+    "websiteCards": "Tarjetas",
+    "websiteMedia": "Medios",
+    "websiteRedirects": "Redirecciones",
+    "mediaUpload": "Subir",
+    "mediaSearchPlaceholder": "Buscar medios…",
+    "mediaKindAll": "Todos",
+    "mediaKindImage": "Imágenes",
+    "mediaKindVideo": "Video",
+    "mediaKindAudio": "Audio",
+    "mediaKindDocument": "Documentos",
+    "mediaDetailTitle": "Detalles del archivo",
+    "mediaAltTextLabel": "Texto alternativo",
+    "mediaFolderLabel": "Carpeta",
+    "mediaTagsLabel": "Etiquetas",
+    "mediaTagsHint": "Separadas por comas",
+    "mediaReplace": "Reemplazar archivo",
+    "confirmDeleteMediaTitle": "¿Eliminar este archivo?",
+    "confirmDeleteMediaBody": "Esta acción no se puede deshacer.",
+    "newStyle": "Nuevo estilo",
+    "styleKeyLabel": "Clave",
+    "styleNameLabel": "Nombre",
+    "styleScopeLabel": "Ámbito",
+    "styleConfigLabel": "Configuración (JSON)",
+    "invalidJson": "Esto no es JSON válido.",
+    "usageCount": "En uso",
+    "rename": "Renombrar",
+    "confirmDeleteStyleTitle": "¿Eliminar este estilo?",
+    "confirmDeleteStyleBody": "Esta acción no se puede deshacer.",
+    "confirmDeleteTemplateTitle": "¿Eliminar esta plantilla?",
+    "confirmDeleteTemplateBody": "Esta acción no se puede deshacer. Las páginas ya creadas a partir de ella no se ven afectadas.",
+    "newCardTemplate": "Nueva plantilla de tarjeta",
+    "cardKeyLabel": "Clave",
+    "cardNameLabel": "Nombre",
+    "cardContentTypeLabel": "Tipo de contenido (vacío = cualquiera)",
+    "cardVariantLabel": "Variante",
+    "cardConfigLabel": "Configuración (JSON)",
+    "cardPreview": "Vista previa",
+    "confirmDeleteCardTitle": "¿Eliminar esta plantilla de tarjeta?",
+    "confirmDeleteCardBody": "Esta acción no se puede deshacer.",
+    "newPage": "Nueva página",
+    "pagePath": "Ruta",
+    "pageParent": "Página superior",
+    "noParent": "Sin superior (nivel raíz)",
+    "publish": "Publicar",
+    "unpublish": "Despublicar",
+    "restoreVersion": "Restaurar",
+    "publishedBadge": "Publicado",
+    "draftBadge": "Borrador",
+    "unpublishedChangesBadge": "Cambios sin publicar",
+    "confirmDeletePageTitle": "¿Eliminar esta página?",
+    "confirmDeletePageBody": "La página se ocultará y podrá restaurarse más tarde.",
+    "confirmUnpublishTitle": "¿Despublicar esta página?",
+    "confirmUnpublishBody": "La página pública dejará de mostrarse de inmediato.",
+    "newRedirect": "Nueva redirección",
+    "redirectFromLabel": "Ruta de origen",
+    "redirectToLabel": "Ruta de destino",
+    "redirectStatusCodeLabel": "Código de estado",
+    "versionsTitle": "Versiones",
+    "noVersionsYet": "Aún no publicada",
+    "previewLink": "Vista previa",
+    "noPagesYet": "Todavía no hay páginas",
+    "noPagesHint": "Crea la primera página para empezar.",
+    "globalTabEmpty": "El encabezado, el pie de página y otras partes globales llegarán en una fase posterior.",
+    "designsTabEmpty": "Los diseños por tipo de contenido (noticias, cursos, ...) llegarán en una fase posterior.",
+    "hasUnpublishedChangesShort": "Cambios sin publicar"
+  },
+  "cms": {
+    "blocks": {
+      "common": {
+        "fields": {
+          "spacing": "Espaciado",
+          "size": "Tamaño",
+          "text": "Texto",
+          "align": "Alineación",
+          "label": "Etiqueta",
+          "link": "Enlace",
+          "variant": "Variante de estilo",
+          "columnCount": "Número de columnas",
+          "gap": "Espacio",
+          "title": "Título",
+          "description": "Descripción",
+          "body": "Cuerpo del texto",
+          "icon": "Ícono",
+          "value": "Valor",
+          "prefix": "Prefijo",
+          "suffix": "Sufijo",
+          "image": "Imagen",
+          "autoplay": "Reproducción automática"
+        },
+        "options": {
+          "sm": "Pequeño",
+          "md": "Mediano",
+          "lg": "Grande",
+          "xl": "Extra grande",
+          "default": "Predeterminado",
+          "none": "Ninguno",
+          "alignStart": "Inicio",
+          "alignCenter": "Centro",
+          "count1": "1",
+          "count2": "2",
+          "count3": "3",
+          "count4": "4"
+        }
+      },
+      "section": {
+        "label": "Sección"
+      },
+      "container": {
+        "label": "Contenedor",
+        "options": {
+          "page": "Ancho de página",
+          "wide": "Ancho",
+          "narrow": "Estrecho"
+        }
+      },
+      "heading": {
+        "label": "Encabezado",
+        "fields": {
+          "level": "Nivel de encabezado"
+        },
+        "options": {
+          "h1": "H1",
+          "h2": "H2",
+          "h3": "H3",
+          "h4": "H4",
+          "h5": "H5",
+          "h6": "H6"
+        }
+      },
+      "paragraph": {
+        "label": "Párrafo"
+      },
+      "button": {
+        "label": "Botón",
+        "options": {
+          "default": "Sólido",
+          "outline": "Contorno",
+          "secondary": "Secundario",
+          "ghost": "Fantasma",
+          "xl": "Extra grande"
+        }
+      },
+      "columns": {
+        "label": "Columnas"
+      },
+      "grid": {
+        "label": "Cuadrícula"
+      },
+      "spacer": {
+        "label": "Espaciador"
+      },
+      "divider": {
+        "label": "Divisor"
+      },
+      "rich-text": {
+        "label": "Texto enriquecido"
+      },
+      "image": {
+        "label": "Imagen",
+        "fields": {
+          "alt": "Texto alternativo",
+          "fit": "Ajuste de imagen",
+          "aspectRatio": "Relación de aspecto"
+        },
+        "options": {
+          "cover": "Cubrir",
+          "contain": "Contener",
+          "auto": "Automático",
+          "square": "Cuadrado",
+          "video": "Video (16:9)",
+          "portrait": "Retrato"
+        }
+      },
+      "video": {
+        "label": "Video",
+        "fields": {
+          "poster": "Imagen de póster"
+        }
+      },
+      "badge": {
+        "label": "Insignia",
+        "options": {
+          "default": "Sólido",
+          "secondary": "Secundario",
+          "outline": "Contorno",
+          "eyebrow": "Ceja",
+          "pill": "Píldora"
+        }
+      },
+      "cta-band": {
+        "label": "Banda de llamada a la acción",
+        "options": {
+          "fullWidth": "Ancho completo"
+        }
+      },
+      "icon-card": {
+        "label": "Tarjeta con ícono",
+        "options": {
+          "trending-up": "Tendencia al alza",
+          "shield": "Escudo",
+          "users": "Usuarios",
+          "zap": "Rayo",
+          "globe": "Globo",
+          "book-open": "Libro",
+          "bar-chart": "Gráfico de barras",
+          "dollar-sign": "Signo de dólar"
+        }
+      },
+      "stat-card": {
+        "label": "Tarjeta de estadística"
+      },
+      "process-step": {
+        "label": "Paso del proceso",
+        "fields": {
+          "step": "Número de paso",
+          "isLast": "Último paso (oculta el conector)"
+        }
+      },
+      "faq": {
+        "label": "Preguntas frecuentes",
+        "fields": {
+          "items": "Preguntas y respuestas (JSON)",
+          "itemsHelp": "Arreglo de pares pregunta/respuesta"
+        }
+      },
+      "tabs": {
+        "label": "Pestañas",
+        "fields": {
+          "items": "Pestañas (JSON)",
+          "itemsHelp": "Arreglo de pares etiqueta/contenido"
+        }
+      },
+      "table": {
+        "label": "Tabla",
+        "fields": {
+          "headers": "Encabezados de tabla (JSON)",
+          "rows": "Filas de tabla (JSON)"
+        }
+      },
+      "marquee": {
+        "label": "Marquesina",
+        "fields": {
+          "items": "Elementos de marquesina (JSON)",
+          "itemsHelp": "Arreglo de cadenas",
+          "speed": "Velocidad de desplazamiento"
+        }
+      },
+      "counter": {
+        "label": "Contador"
+      },
+      "newsletter-form": {
+        "label": "Suscripción al boletín",
+        "fields": {
+          "placeholder": "Marcador de posición",
+          "submitLabel": "Etiqueta del botón de envío",
+          "unavailableLabel": "Mensaje de no disponible",
+          "tone": "Tono"
+        },
+        "options": {
+          "default": "Predeterminado",
+          "onFill": "Sobre fondo relleno",
+          "onSecondary": "Sobre fondo secundario"
+        }
+      },
+      "breadcrumb": {
+        "label": "Ruta de navegación"
+      },
+      "widget": {
+        "label": "Widget",
+        "fields": {
+          "widgetKey": "Clave del widget",
+          "config": "Configuración del widget (JSON)"
+        }
+      },
+      "collection": {
+        "label": "Colección",
+        "fields": {
+          "contentType": "Tipo de contenido",
+          "bindingId": "Id de vínculo",
+          "filter": "Filtro (JSON)",
+          "sort": "Clave de orden",
+          "limit": "Límite de elementos",
+          "layout": "Diseño",
+          "cardTemplateId": "Id de plantilla de tarjeta"
+        },
+        "options": {
+          "grid": "Cuadrícula",
+          "list": "Lista",
+          "carousel": "Carrusel"
+        }
+      },
+      "featuredContent": {
+        "label": "Contenido destacado"
+      },
+      "collectionFilter": {
+        "label": "Filtro de colección",
+        "fields": {
+          "filterKey": "Clave de filtro",
+          "style": "Estilo",
+          "options": "Opciones (JSON)"
+        },
+        "options": {
+          "pills": "Píldoras",
+          "dropdown": "Desplegable",
+          "checkboxes": "Casillas"
+        }
+      },
+      "collectionSearch": {
+        "label": "Búsqueda de colección"
+      },
+      "collectionSort": {
+        "label": "Orden de colección",
+        "fields": {
+          "options": "Opciones de orden (JSON)"
+        }
+      },
+      "collectionPagination": {
+        "label": "Paginación de colección",
+        "fields": {
+          "mode": "Modo"
+        },
+        "options": {
+          "numbered": "Numerada",
+          "loadMore": "Cargar más"
+        }
+      }
+    },
+    "builder": {
+      "title": "Compositor",
+      "tree": "Capas",
+      "settings": "Ajustes",
+      "preview": "Vista previa",
+      "addBlock": "Agregar bloque",
+      "searchBlocks": "Buscar bloques…",
+      "noBlocks": "No se encontraron bloques",
+      "groupLayout": "Diseño y estructura",
+      "groupContent": "Contenido que escribes",
+      "groupData": "Datos en vivo",
+      "startFromSection": "Comenzar desde una sección guardada",
+      "duplicate": "Duplicar",
+      "delete": "Eliminar",
+      "moveUp": "Subir",
+      "moveDown": "Bajar",
+      "hide": "Ocultar",
+      "show": "Mostrar",
+      "copy": "Copiar",
+      "paste": "Pegar",
+      "rename": "Renombrar",
+      "setAnchor": "Definir id de anclaje",
+      "replaceWith": "Reemplazar con…",
+      "undo": "Deshacer",
+      "redo": "Rehacer",
+      "tabGeneral": "General",
+      "tabStyle": "Estilo",
+      "tabMotion": "Movimiento",
+      "tabVisibility": "Visibilidad",
+      "tabResponsive": "Responsivo",
+      "empty": "Esta página aún no tiene bloques — agrega uno para comenzar.",
+      "emptySelection": "Selecciona un bloque para editar sus ajustes.",
+      "labelField": "Etiqueta (solo admin)",
+      "anchorField": "Id de anclaje",
+      "visibilityField": "Quién puede ver esto",
+      "requiresFeatureField": "Requiere bandera de función",
+      "visibilityPublic": "Todos",
+      "visibilityAuthenticated": "Usuarios registrados",
+      "visibilityPremium": "Premium (solo personal por ahora)",
+      "visibilityAdmin": "Solo personal",
+      "useStyle": "Usar estilo",
+      "useStyleNone": "— Ninguno —",
+      "saveAsStyle": "Guardar como estilo…",
+      "saveAsTemplate": "Guardar como plantilla…",
+      "saveAsStyleTitle": "Guardar como estilo",
+      "saveAsTemplateTitle": "Guardar como plantilla",
+      "styleKeyLabel": "Clave",
+      "styleNameLabel": "Nombre",
+      "save": "Guardar",
+      "cancel": "Cancelar",
+      "savedDraft": "Borrador guardado",
+      "saving": "Guardando…",
+      "conflictTitle": "Otra persona guardó esta página",
+      "conflictBody": "Tus cambios locales siguen aquí, pero el servidor tiene una versión más reciente. Recárgala para continuar.",
+      "reloadLatest": "Recargar lo último",
+      "gateErrors": "Problemas bloqueantes",
+      "gateWarnings": "Advertencias",
+      "deviceMobile": "Móvil",
+      "deviceTablet": "Tableta",
+      "deviceDesktop": "Escritorio",
+      "linkTypeLabel": "Tipo de enlace",
+      "linkTypeNone": "Sin enlace",
+      "linkTypeUrl": "URL externa",
+      "linkTypeRoute": "Ruta del sitio",
+      "linkTypePage": "Página CMS",
+      "linkTypeAnchor": "Anclaje en esta página",
+      "linkUrlLabel": "URL",
+      "linkNewTab": "Abrir en una pestaña nueva",
+      "linkRouteLabel": "Ruta",
+      "linkPageLabel": "Página",
+      "linkAnchorLabel": "Id de anclaje",
+      "dataPanel": "Datos",
+      "dataPanelEmpty": "Esta página no obtiene datos dinámicos.",
+      "confirmDeleteBlockTitle": "¿Eliminar este bloque?",
+      "confirmDeleteBlockBody": "Esto también elimina todo lo anidado dentro. No se puede deshacer aquí, pero Deshacer puede recuperarlo.",
+      "confirm": "Eliminar",
+      "openBuilder": "Abrir compositor",
+      "mediaChoose": "Elegir",
+      "mediaClear": "Quitar",
+      "mediaPickerTitle": "Elegir medio",
+      "mediaSearch": "Buscar…",
+      "mediaUpload": "Subir",
+      "mediaUploading": "Subiendo…",
+      "mediaEmpty": "No se encontraron archivos",
+      "inherit": "— Heredar —",
+      "background": "Fondo",
+      "backgroundNone": "Ninguno",
+      "backgroundToken": "Color sólido",
+      "backgroundGradient": "Degradado",
+      "backgroundImage": "Imagen",
+      "backgroundVideo": "Video",
+      "overlayTone": "Tono de superposición",
+      "overlayStrength": "Intensidad de superposición",
+      "gradientFrom": "Degradado desde",
+      "gradientTo": "Degradado hasta",
+      "textTone": "Tono de texto",
+      "padding": "Relleno",
+      "gap": "Espacio",
+      "radius": "Radio de esquina",
+      "shadow": "Sombra",
+      "border": "Borde",
+      "width": "Ancho",
+      "entrance": "Animación de entrada",
+      "hover": "Animación al pasar el cursor",
+      "unsavedChanges": "Cambios sin guardar…",
+      "linkedBadge": "Vinculado",
+      "dataPanelCollections": "Colecciones dinámicas",
+      "versionsButton": "Versiones",
+      "translationsButton": "Traducciones",
+      "versionsTitle": "Versiones",
+      "versionsDescription": "Cada instantánea publicada de esta página. Restaurar la carga de nuevo en el borrador para seguir editando — publicar es un paso aparte.",
+      "versionsEmpty": "Esta página nunca se ha publicado.",
+      "restoreAsDraft": "Restaurar como borrador",
+      "discardDraftButton": "Descartar borrador",
+      "confirmRestoreTitle": "¿Restaurar esta versión como borrador?",
+      "confirmRestoreBody": "Tu borrador actual será reemplazado por esta versión. Esto no cambia lo que está publicado.",
+      "confirmDiscardTitle": "¿Descartar el borrador?",
+      "confirmDiscardBody": "Se perderá todo cambio sin publicar — el borrador coincidirá con lo publicado actualmente.",
+      "publishedBy": "Publicado por",
+      "translationsTitle": "Traducciones",
+      "translationsDescription": "Cada campo traducible de la página, junto a cada idioma.",
+      "translationsEmpty": "Esta página aún no tiene texto traducible.",
+      "translationsMissing": "Falta",
+      "translationsBlock": "Bloque",
+      "translationsField": "Campo"
+    }
   }
 }

@@ -17,7 +17,18 @@ function Table({ className, ...props }: React.ComponentProps<"table">) {
 }
 
 function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
-  return <thead data-slot="table-header" className={cn("[&_tr]:border-b", className)} {...props} />;
+  return (
+    <thead
+      data-slot="table-header"
+      // changes-08 #7: the header band is a DIFFERENT surface from the
+      // rows, so a long table never reads as one undifferentiated block.
+      // The row hover tint is cancelled inside the header — a header is
+      // not a row, and letting it light up made the two look identical
+      // exactly when the pointer was over them.
+      className={cn("bg-muted/60 [&_tr]:border-b [&_tr]:hover:bg-transparent", className)}
+      {...props}
+    />
+  );
 }
 
 function TableBody({ className, ...props }: React.ComponentProps<"tbody">) {

@@ -31,3 +31,24 @@ export const setBrandAssetSchema = z.object({
   altText: z.string().trim().max(255).nullable().optional(),
 });
 export type SetBrandAssetInput = z.infer<typeof setBrandAssetSchema>;
+
+// ─── Media v2 (ADR-034) ──────────────────────────────────────
+
+export const mediaKindSchema = z.enum(["IMAGE", "VIDEO", "AUDIO", "DOCUMENT"]);
+export type MediaKindInput = z.infer<typeof mediaKindSchema>;
+
+const mediaTagSchema = z.string().trim().toLowerCase().min(1).max(40);
+
+export const updateMediaMetaSchema = z.object({
+  title: z.string().trim().max(200).nullable().optional(),
+  altText: z.string().trim().max(500).nullable().optional(),
+  folder: z.string().trim().max(300).regex(/^\//, "must be an absolute folder path").optional(),
+  tags: z.array(mediaTagSchema).max(20).optional(),
+});
+export type UpdateMediaMetaInput = z.infer<typeof updateMediaMetaSchema>;
+
+export const listMediaAssetsQuerySchema = z.object({
+  kind: mediaKindSchema.optional(),
+  q: z.string().trim().min(1).max(100).optional(),
+});
+export type ListMediaAssetsQuery = z.infer<typeof listMediaAssetsQuerySchema>;

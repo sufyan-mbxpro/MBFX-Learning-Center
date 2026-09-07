@@ -20,12 +20,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@repo/ui/components/select";
+import { ConfirmDialog } from "@repo/ui/components/confirm-dialog";
 
 export interface SettingFieldsLabels {
   addRow: string;
   removeRow: string;
   emptyList: string;
   selectPlaceholder: string;
+  /** changes-08 #6 — removing a row confirms first. */
+  cancel: string;
+  confirmRemoveTitle: string;
+  confirmRemoveBody: string;
   /** Field label per `labelKey`, resolved from the catalog by the caller. */
   field: Record<string, string>;
 }
@@ -75,7 +80,7 @@ function FieldControl({
     const current = options.find((option) => option.value === value);
     return (
       <Select value={String(value ?? "")} onValueChange={(next) => onChange(next ?? "")}>
-        <SelectTrigger id={id} className="w-full max-w-xs">
+        <SelectTrigger id={id} className="w-full">
           <SelectValue>{current?.label ?? labels.selectPlaceholder}</SelectValue>
         </SelectTrigger>
         <SelectContent>
@@ -107,7 +112,7 @@ function FieldControl({
             : e.target.value,
         )
       }
-      className="max-w-md"
+      className="w-full"
     />
   );
 }
@@ -131,7 +136,7 @@ export function ObjectField({
   const record: Row = typeof value === "object" && value !== null ? (value as Row) : {};
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg border bg-muted/30 p-4">
+    <div className="grid grid-cols-1 gap-x-6 gap-y-3 rounded-lg border bg-muted/30 p-4 md:grid-cols-2 xl:grid-cols-3">
       {def.fields.map((field) => {
         const id = `setting-${settingKey}-${field.name}`;
         return (
@@ -195,7 +200,7 @@ export function ListField({
           {def.fields.map((field) => {
             const id = `setting-${settingKey}-${index}-${field.name}`;
             return (
-              <div key={field.name} className="flex flex-col gap-1.5">
+              <div key={field.name} className="flex min-w-56 flex-1 flex-col gap-1.5">
                 <Label htmlFor={id} className="text-xs">
                   {labels.field[field.labelKey] ?? field.name}
                 </Label>
@@ -216,15 +221,26 @@ export function ListField({
               </div>
             );
           })}
-          <Button
-            type="button"
-            variant="outline"
-            size="icon-sm"
-            aria-label={`${labels.removeRow} ${index + 1}`}
-            onClick={() => onChange(withOrder(rows.filter((_, i) => i !== index)))}
-          >
-            <Trash2 aria-hidden className="size-3.5" />
-          </Button>
+          {/* changes-08 #6: dropping a row loses whatever was typed into
+              it, so it asks — the same confirmation every other remove in
+              the admin shows. */}
+          <ConfirmDialog
+            trigger={
+              <Button
+                type="button"
+                variant="outline"
+                size="icon-sm"
+                aria-label={`${labels.removeRow} ${index + 1}`}
+              >
+                <Trash2 aria-hidden className="size-3.5" />
+              </Button>
+            }
+            title={labels.confirmRemoveTitle}
+            description={labels.confirmRemoveBody}
+            confirmLabel={labels.removeRow}
+            cancelLabel={labels.cancel}
+            onConfirm={() => onChange(withOrder(rows.filter((_, i) => i !== index)))}
+          />
         </div>
       ))}
 

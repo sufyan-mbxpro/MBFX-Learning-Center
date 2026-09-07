@@ -37,3 +37,8 @@ export const db = new Proxy({} as PrismaClient, {
 
 export * from "./generated/client/enums.ts";
 export type * from "./generated/client/models.ts";
+// `Prisma.TransactionClient` — the type of the `tx` callback parameter of
+// `db.$transaction(async (tx) => ...)`. Needed by any @repo/core service
+// (Module 16's cms/* is the first) that factors transaction steps into a
+// separate exported function instead of one inline callback.
+export type { Prisma } from "./generated/client/client.ts";

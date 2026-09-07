@@ -131,7 +131,9 @@ export async function saveThemeAction(input: unknown): Promise<SaveThemeResult> 
     ...parsed,
     layoutTokens: {
       ...parsed.layoutTokens,
-      fontSans: isCuratedFontKey(parsed.layoutTokens.fontSans) ? parsed.layoutTokens.fontSans : "system",
+      fontSans: isCuratedFontKey(parsed.layoutTokens.fontSans)
+        ? parsed.layoutTokens.fontSans
+        : "system",
       fontMono: isCuratedFontKey(parsed.layoutTokens.fontMono)
         ? parsed.layoutTokens.fontMono
         : "systemmono",

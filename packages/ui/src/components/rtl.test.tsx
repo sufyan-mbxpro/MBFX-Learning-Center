@@ -24,6 +24,14 @@ import { ScrollToTop } from "./scroll-to-top.tsx";
 import { Section } from "./section.tsx";
 import { SectionHeading } from "./section-heading.tsx";
 import { StatCard } from "./stat-card.tsx";
+import { AwardCard } from "./award-card.tsx";
+import { AwardGrid } from "./award-grid.tsx";
+import { CheckList } from "./check-list.tsx";
+import { HotspotMap } from "./hotspot-map.tsx";
+import { PageHero } from "./page-hero.tsx";
+import { SplitCallout } from "./split-callout.tsx";
+import { StatBand } from "./stat-band.tsx";
+import { Timeline } from "./timeline.tsx";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./table.tsx";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./tabs.tsx";
 
@@ -220,6 +228,61 @@ describe("logical-properties invariant (RTL-safety) per layout-bearing component
             <AccordionContent>Body copy.</AccordionContent>
           </AccordionItem>
         </Accordion>
+      </div>,
+    );
+    expectNoPhysicalUtilities(container);
+  });
+
+  // About-section primitives (changes-09-plan.md PR 2). SplitCallout's
+  // `reverse` is the interesting one: it swaps columns by ORDER, so the
+  // whole block still mirrors in RTL instead of double-flipping.
+  it("PageHero / SplitCallout / CheckList / StatBand", () => {
+    const { container } = render(
+      <div dir="rtl">
+        <PageHero
+          eyebrow="About"
+          title="About MBFX"
+          lead="Who we are."
+          footnote="Small print."
+          actions={<Button>Start</Button>}
+        />
+        <SplitCallout
+          step={1}
+          eyebrow="Reason 1"
+          title="Structured curriculum"
+          actions={<Button>Go</Button>}
+        >
+          <p>Body copy.</p>
+        </SplitCallout>
+        <SplitCallout title="Reversed" reverse tone="muted" />
+        <CheckList items={["One", "Two"]} columns={2} />
+        <StatBand caption="As of today">
+          <StatCard value={12} suffix="+" label="Courses" />
+        </StatBand>
+      </div>,
+    );
+    expectNoPhysicalUtilities(container);
+  });
+
+  it("Timeline / AwardGrid / HotspotMap", () => {
+    const { container } = render(
+      <div dir="rtl">
+        <Timeline
+          items={[
+            { id: "a", marker: 2024, title: "Founded", body: "Body." },
+            { id: "b", marker: 2025, title: "Grew", body: "Body." },
+          ]}
+          collapsedCount={1}
+          expandLabel="Show"
+          collapseLabel="Close"
+        />
+        <AwardGrid>
+          <AwardCard title="Award" issuer="Body" year={2026} />
+        </AwardGrid>
+        <HotspotMap
+          points={[{ id: "gb", label: "United Kingdom", detail: "Desk", x: 40, y: 30 }]}
+          legendLabel="Where we operate"
+        />
       </div>,
     );
     expectNoPhysicalUtilities(container);

@@ -14,6 +14,9 @@ import {
   deleteArticleTag,
   duplicateArticle,
   publishDueArticles,
+  quickUpdateArticle,
+  saveArticle,
+  setArticleFeatured,
   saveArticleCategoryTranslation,
   saveArticleTagTranslation,
   saveArticleTranslation,
@@ -30,6 +33,8 @@ import {
   createArticleTagSchema,
   saveArticleCategoryTranslationSchema,
   saveArticleTagTranslationSchema,
+  quickEditArticleSchema,
+  saveArticleSchema,
   saveArticleTranslationSchema,
   updateArticleCategorySchema,
   updateArticleMetaSchema,
@@ -37,6 +42,8 @@ import {
   type CreateArticleInput,
   type CreateArticleTagInput,
   type SaveArticleCategoryTranslationInput,
+  type QuickEditArticleInput,
+  type SaveArticleInput,
   type SaveArticleTagTranslationInput,
   type SaveArticleTranslationInput,
   type UpdateArticleCategoryInput,
@@ -77,6 +84,31 @@ export async function transitionArticleAction(
   const status = z.enum(["DRAFT", "SCHEDULED", "PUBLISHED", "ARCHIVED"]).parse(to);
   const scheduledFor = scheduledForIso ? z.coerce.date().parse(scheduledForIso) : undefined;
   await transitionArticle(subject, id.parse(articleId), status, scheduledFor);
+}
+
+/**
+ * The editor v2 header save (changes-07). One action, one service call, one
+ * transaction — replacing the two independent saves the old editor fired.
+ */
+export async function saveArticleAction(input: SaveArticleInput): Promise<void> {
+  const subject = await requireAnyPermission(["analysis.update", "news.manage"]);
+  await saveArticle(subject, saveArticleSchema.parse(input));
+}
+
+export async function setArticleFeaturedAction(
+  articleId: string,
+  isFeatured: boolean,
+): Promise<void> {
+  const subject = await requireAnyPermission(["analysis.update", "news.manage"]);
+  await setArticleFeatured(subject, id.parse(articleId), isFeatured);
+}
+
+export async function quickUpdateArticleAction(
+  articleId: string,
+  input: QuickEditArticleInput,
+): Promise<void> {
+  const subject = await requireAnyPermission(["analysis.update", "news.manage"]);
+  await quickUpdateArticle(subject, id.parse(articleId), quickEditArticleSchema.parse(input));
 }
 
 export async function setArticleActiveAction(articleId: string, isActive: boolean): Promise<void> {

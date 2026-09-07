@@ -1,0 +1,9 @@
+{
+  "bindingId": "main",
+  "filterKey": "category",
+  "style": "pills",
+  "options": [
+    { "value": "market-news", "label": "Market News", "count": 12 },
+    { "value": "central-banks", "label": "Central Banks", "count": 4 }
+  ]
+}

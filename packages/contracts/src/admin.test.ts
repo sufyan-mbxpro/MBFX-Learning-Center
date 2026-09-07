@@ -108,6 +108,39 @@ describe("social link schemas", () => {
     ).toBe(false);
   });
 
+  // ADR-045 — the icon fields.
+  it("accepts a built-in glyph key and a relative uploaded icon path", () => {
+    const parsed = createSocialLinkSchema.parse({
+      platform: "tiktok",
+      label: "TikTok",
+      url: "https://tiktok.com/@x",
+      icon: "tiktok",
+      iconUrl: "/uploads/abc123.svg",
+    });
+    expect(parsed.icon).toBe("tiktok");
+    expect(parsed.iconUrl).toBe("/uploads/abc123.svg");
+  });
+
+  it("lets an admin clear an uploaded icon by sending null", () => {
+    expect(updateSocialLinkSchema.parse({ iconUrl: null }).iconUrl).toBeNull();
+  });
+
+  it("REFUSES an absolute icon URL — a footer icon can never point off-origin", () => {
+    // security.md #9: bytes reach a src attribute only through the upload
+    // pipeline. A hand-crafted post must not be able to turn a social icon
+    // into a third-party request.
+    for (const hostile of [
+      "https://evil.example/pixel.gif",
+      "http://evil.example/pixel.gif",
+      "//evil.example/pixel.gif",
+      "/\\evil.example/pixel.gif",
+      "data:image/svg+xml,<svg/>",
+      "javascript:alert(1)",
+    ]) {
+      expect(updateSocialLinkSchema.safeParse({ iconUrl: hostile }).success).toBe(false);
+    }
+  });
+
   it("update cannot smuggle a platform rename", () => {
     const parsed = updateSocialLinkSchema.parse({ platform: "renamed", label: "x" } as never);
     expect("platform" in parsed).toBe(false);

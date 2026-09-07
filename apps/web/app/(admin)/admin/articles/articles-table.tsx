@@ -8,7 +8,16 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { MoreHorizontal, Newspaper } from "lucide-react";
+import {
+  Eye,
+  FileX,
+  MoreHorizontal,
+  Newspaper,
+  Pencil,
+  SquareArrowOutUpRight,
+  Star,
+  Trash2,
+} from "lucide-react";
 import type { ColumnDef, SortingState, PaginationState, Updater } from "@tanstack/react-table";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
@@ -17,7 +26,9 @@ import { DataTable, type DataTableLabels } from "@repo/ui/components/data-table"
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@repo/ui/components/dropdown-menu";
@@ -27,7 +38,10 @@ import {
   duplicateArticleAction,
   setArticleActiveAction,
   setArticleDeletedAction,
+  setArticleFeaturedAction,
+  transitionArticleAction,
 } from "../_actions/article-actions.ts";
+import { QuickEditDialog, type QuickEditLabels } from "./[id]/quick-edit-dialog.tsx";
 import { ARTICLE_STATUS_TONE, StatusBadge, statusTone } from "../_components/status-badge.tsx";
 import { useServerAction } from "../_hooks/use-server-action.ts";
 import { useUrlFilters } from "../_hooks/use-url-filters.ts";
@@ -43,6 +57,8 @@ export interface ArticleRow {
   statusLabel: string;
   scheduledForLabel: string | null;
   isActive: boolean;
+  isFeatured: boolean;
+  legalTransitions: string[];
   publishedAtLabel: string | null;
   updatedAtLabel: string;
 }
@@ -79,6 +95,16 @@ export interface ArticlesTableLabels {
   cancel: string;
   openActions: string;
   emptyTitle: string;
+  editGroup: string;
+  statusGroup: string;
+  quickEdit: string;
+  fullEditor: string;
+  setAsDraft: string;
+  setFeatured: string;
+  unsetFeatured: string;
+  viewPost: string;
+  featuredCol: string;
+  quick: QuickEditLabels;
 }
 
 function apply<T>(updater: Updater<T>, current: T): T {
@@ -87,11 +113,13 @@ function apply<T>(updater: Updater<T>, current: T): T {
 
 function RowActions({
   row,
+  categories,
   canCreate,
   canDelete,
   labels,
 }: {
   row: ArticleRow;
+  categories: { id: string; name: string }[];
   canCreate: boolean;
   canDelete: boolean;
   labels: ArticlesTableLabels;
@@ -99,7 +127,11 @@ function RowActions({
   const router = useRouter();
   const { run, pending } = useServerAction();
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [quickOpen, setQuickOpen] = useState(false);
 
+  // The reference's colour coding maps onto the existing semantic tokens —
+  // amber for "unpublish", info-blue for "view", destructive for delete. No
+  // literals (code-style.md #1).
   return (
     <div className="flex justify-end">
       <DropdownMenu>
@@ -116,22 +148,65 @@ function RowActions({
           }
         />
         <DropdownMenuContent align="end">
-          <DropdownMenuItem
-            render={<Link href={`/admin/articles/${row.id}`}>{labels.edit}</Link>}
-          />
-          {canCreate && (
-            <DropdownMenuItem
-              onClick={() =>
-                run(async () => {
-                  const id = await duplicateArticleAction(row.id);
-                  router.push(`/admin/articles/${id}`);
-                })
-              }
-            >
-              {labels.duplicate}
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>{labels.editGroup}</DropdownMenuLabel>
+            <DropdownMenuItem onClick={() => setQuickOpen(true)}>
+              <Pencil data-icon="inline-start" aria-hidden />
+              {labels.quickEdit}
             </DropdownMenuItem>
+            <DropdownMenuItem
+              render={
+                <Link href={`/admin/articles/${row.id}`}>
+                  <SquareArrowOutUpRight data-icon="inline-start" aria-hidden />
+                  {labels.fullEditor}
+                </Link>
+              }
+            />
+            {canCreate && (
+              <DropdownMenuItem
+                onClick={() =>
+                  run(async () => {
+                    const id = await duplicateArticleAction(row.id);
+                    router.push(`/admin/articles/${id}`);
+                  })
+                }
+              >
+                {labels.duplicate}
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuGroup>
+
+          <DropdownMenuSeparator />
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>{labels.statusGroup}</DropdownMenuLabel>
+            {/* Only offered when the transition is actually legal — the map,
+                not a guess (ADR-015 #4). The service re-checks the publish
+                permission regardless. */}
+            {row.legalTransitions.includes("DRAFT") && (
+              <DropdownMenuItem onClick={() => run(() => transitionArticleAction(row.id, "DRAFT"))}>
+                <FileX data-icon="inline-start" aria-hidden className="text-warning-interactive" />
+                <span className="text-warning-interactive">{labels.setAsDraft}</span>
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem
+              onClick={() => run(() => setArticleFeaturedAction(row.id, !row.isFeatured))}
+            >
+              <Star data-icon="inline-start" aria-hidden />
+              {row.isFeatured ? labels.unsetFeatured : labels.setFeatured}
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+
+          <DropdownMenuSeparator />
+          {row.slug && (
+            <DropdownMenuItem
+              render={
+                <a href={`/news/${row.slug}`} target="_blank" rel="noreferrer">
+                  <Eye data-icon="inline-start" aria-hidden className="text-info-interactive" />
+                  <span className="text-info-interactive">{labels.viewPost}</span>
+                </a>
+              }
+            />
           )}
-          {canDelete && <DropdownMenuSeparator />}
           {canDelete &&
             (row.deleted ? (
               <DropdownMenuItem onClick={() => run(() => setArticleDeletedAction(row.id, false))}>
@@ -139,11 +214,22 @@ function RowActions({
               </DropdownMenuItem>
             ) : (
               <DropdownMenuItem variant="destructive" onClick={() => setConfirmOpen(true)}>
+                <Trash2 data-icon="inline-start" aria-hidden />
                 {labels.softDelete}
               </DropdownMenuItem>
             ))}
         </DropdownMenuContent>
       </DropdownMenu>
+
+      <QuickEditDialog
+        open={quickOpen}
+        onOpenChange={setQuickOpen}
+        row={row}
+        categories={categories}
+        labels={labels.quick}
+        onSaved={() => router.refresh()}
+      />
+
       <ConfirmDialog
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
@@ -162,6 +248,7 @@ function RowActions({
 
 export function ArticlesTable({
   rows,
+  categories,
   pageCount,
   page,
   pageSize,
@@ -170,9 +257,11 @@ export function ArticlesTable({
   search,
   canCreate,
   canDelete,
+  filters,
   labels,
 }: {
   rows: ArticleRow[];
+  categories: { id: string; name: string }[];
   pageCount: number;
   page: number;
   pageSize: number;
@@ -181,6 +270,9 @@ export function ArticlesTable({
   search: string;
   canCreate: boolean;
   canDelete: boolean;
+  /** Kind / status / category Selects — rendered in the DataTable's own
+   * toolbar so they share one row with the search box (changes-08 #7). */
+  filters?: React.ReactNode;
   labels: ArticlesTableLabels;
 }) {
   const setParams = useUrlFilters();
@@ -223,7 +315,7 @@ export function ArticlesTable({
               {row.original.title ?? labels.untitled}
             </Link>
             <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              {row.original.slug && <code className="truncate">/{row.original.slug}</code>}
+              {row.original.slug && <span className="truncate">/{row.original.slug}</span>}
               {row.original.deleted && (
                 <Badge variant="destructive" className="text-xs">
                   {labels.deleted}
@@ -298,6 +390,21 @@ export function ArticlesTable({
         ),
       },
       {
+        id: "featured",
+        header: labels.featuredCol,
+        meta: { label: labels.featuredCol },
+        enableSorting: false,
+        cell: ({ row }) => (
+          <Switch
+            checked={row.original.isFeatured}
+            aria-label={labels.featuredCol}
+            onCheckedChange={(checked) =>
+              run(() => setArticleFeaturedAction(row.original.id, checked === true))
+            }
+          />
+        ),
+      },
+      {
         id: "actions",
         header: () => <span className="sr-only">{labels.actionsCol}</span>,
         meta: { label: labels.actionsCol },
@@ -306,6 +413,7 @@ export function ArticlesTable({
         cell: ({ row }) => (
           <RowActions
             row={row.original}
+            categories={categories}
             canCreate={canCreate}
             canDelete={canDelete}
             labels={labels}
@@ -313,7 +421,7 @@ export function ArticlesTable({
         ),
       },
     ],
-    [labels, canCreate, canDelete, run],
+    [labels, categories, canCreate, canDelete, run],
   );
 
   return (
@@ -321,6 +429,7 @@ export function ArticlesTable({
       columns={columns}
       data={rows}
       labels={tableLabels}
+      filters={filters}
       pageCount={pageCount}
       pagination={pagination}
       onPaginationChange={(updater) => {

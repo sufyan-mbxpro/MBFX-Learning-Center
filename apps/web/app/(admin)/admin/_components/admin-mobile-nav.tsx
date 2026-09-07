@@ -8,18 +8,26 @@
 import { useState } from "react";
 import { usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
+import { BrandLogo } from "@repo/ui/components/brand-logo";
 import { Button } from "@repo/ui/components/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@repo/ui/components/sheet";
-import { AdminSidebarNav, type AdminNavGroup } from "./admin-sidebar-nav.tsx";
+import { AdminSidebarNav, type AdminNavGroup, type VisitSiteLink } from "./admin-sidebar-nav.tsx";
 
 export function AdminMobileNav({
   groups,
+  visitSite,
   menuLabel,
   closeLabel,
+  logoLight,
+  logoDark,
 }: {
   groups: AdminNavGroup[];
+  visitSite: VisitSiteLink;
   menuLabel: string;
   closeLabel: string;
+  /** Same uploaded brand mark the desktop sidebar shows (ADR-017). */
+  logoLight: string | null;
+  logoDark: string | null;
 }) {
   // Derived open state: the sheet is open only while we're still on the
   // path it was opened on — navigating closes it with no effect needed.
@@ -38,8 +46,19 @@ export function AdminMobileNav({
           }
         />
         <SheetContent side="start" closeLabel={closeLabel} className="w-[var(--width-sidebar)]">
-          <SheetTitle className="px-2.5 text-sm font-semibold">{menuLabel}</SheetTitle>
-          <AdminSidebarNav groups={groups} />
+          {/* SheetTitle is required for the dialog's accessible name even
+              when a logo is what's actually shown — so it stays, visually
+              hidden, and the mark renders beside it. */}
+          <SheetTitle className="px-2.5">
+            <BrandLogo
+              light={logoLight}
+              dark={logoDark}
+              alt={menuLabel}
+              className="h-7"
+              fallback={<span className="text-sm font-semibold">{menuLabel}</span>}
+            />
+          </SheetTitle>
+          <AdminSidebarNav groups={groups} visitSite={visitSite} />
         </SheetContent>
       </Sheet>
     </div>

@@ -1,6 +1,7 @@
 {
   "common": {
-    "siteName": "مركز MBFX للتعلم"
+    "siteName": "مركز MBFX للتعلم",
+    "siteDescription": "تعليم فوركس مجاني وأدوات وتحليلات."
   },
   "home": {
     "placeholder": "الواجهة العامة — محتوى مؤقت أثناء البناء.",
@@ -27,7 +28,39 @@
     "faqQ3": "هل هذه نصيحة مالية؟",
     "faqA3": "لا. كل ما هنا تعليمي. لا شيء في هذا الموقع يُعد توصية بشراء أو بيع أي أداة مالية.",
     "faqQ4": "كم مرة يتم نشر تحليلات جديدة؟",
-    "faqA4": "تُنشر المقالات والتحليلات بانتظام؛ ويظهر أحدثها دائمًا في هذه الصفحة وفي قسم الأخبار."
+    "faqA4": "تُنشر المقالات والتحليلات بانتظام؛ ويظهر أحدثها دائمًا في هذه الصفحة وفي قسم الأخبار.",
+    "exploreEyebrow": "المنصّة",
+    "exploreTitle": "كل ما يحتاجه المتداول في مكان واحد",
+    "exploreLead": "دروس وحاسبات وسياق سوق مباشر وتحليل يومي — كلٌّ منها مفيد بذاته، وأفضل بكثير مجتمعةً.",
+    "exploreCta": "استكشاف",
+    "exploreSoon": "قريبًا",
+    "exploreCarouselLabel": "أقسام المنصّة",
+    "exploreCarouselPrevious": "الأقسام السابقة",
+    "exploreCarouselNext": "الأقسام التالية",
+    "exploreLearnTag": "الدورات",
+    "exploreLearnTitle": "مسارات التعلّم",
+    "exploreLearnBody": "دورات منظّمة تبدأ من المبادئ الأولى وتبني منهج تداول قابلًا للتكرار.",
+    "exploreToolsTag": "الحاسبات",
+    "exploreToolsTitle": "حاسبات التداول",
+    "exploreToolsBody": "حجم الصفقة وقيمة النقطة والهامش والربح — تُحسب قبل الصفقة لا بعدها.",
+    "exploreCalendarTag": "التقويم",
+    "exploreCalendarTitle": "التقويم الاقتصادي",
+    "exploreCalendarBody": "كل إصدار يحرّك زوج العملات، مع درجة تأثيره والأرقام لحظة صدورها.",
+    "exploreNewsTag": "الأخبار",
+    "exploreNewsTitle": "أخبار السوق",
+    "exploreNewsBody": "ماذا حدث ولماذا كان مهمًّا وما الذي يغيّره — مكتوبة لمن يتداول لا لمن يقرأ العناوين.",
+    "exploreAnalysisTag": "التحليل",
+    "exploreAnalysisTitle": "التحليل اليومي",
+    "exploreAnalysisBody": "تحليلات مبنية على الرسوم البيانية وأفكار تداول من المكتب، تُنشر مع تطوّر الجلسة.",
+    "exploreGlossaryTag": "المرجع",
+    "exploreGlossaryTitle": "مسرد التداول",
+    "exploreGlossaryBody": "تعريفات بلغة واضحة لكل مصطلح تصادفه على الرسم البياني، مترابطة أثناء القراءة.",
+    "exploreMarketsTag": "الأسواق",
+    "exploreMarketsTitle": "الأسواق المباشرة",
+    "exploreMarketsBody": "الأسعار وجلسات التداول وقوة العملات، لتعرف حال السوق قبل فتح أي رسم بياني.",
+    "exploreAboutTag": "الشركة",
+    "exploreAboutTitle": "من نحن",
+    "exploreAboutBody": "من يكتب هذه المواد، وكيف يُموَّل الموقع، وما الذي لن نفعله أبدًا باهتمامك."
   },
   "error": {
     "title": "حدث خطأ ما",
@@ -41,6 +74,9 @@
     "title": "لم تتم الترجمة بعد",
     "body": "هذه الصفحة غير متوفرة بهذه اللغة حتى الآن."
   },
+  "public": {
+    "pagePlaceholder": "هذه الصفحة قيد التصميم. تفقدها قريبًا."
+  },
   "nav": {
     "signIn": "تسجيل الدخول",
     "toggleTheme": "تبديل السمة",
@@ -51,10 +87,12 @@
     "search": "البحث في المقالات",
     "backToTop": "العودة إلى الأعلى",
     "home": "الرئيسية",
-    "breadcrumb": "مسار التنقل"
+    "breadcrumb": "مسار التنقل",
+    "signUp": "إنشاء حساب"
   },
   "footer": {
     "newsletterHeading": "ابق على اطلاع",
+    "newsletterBlurb": "ملاحظات الأسواق الأسبوعية والدروس والأدوات الجديدة، مباشرة إلى بريدك.",
     "getTheApp": "احصل على التطبيق",
     "appPlatform": {
       "ios": "iOS",
@@ -65,7 +103,9 @@
     "newsletterPlaceholder": "you@example.com",
     "newsletterLabel": "البريد الإلكتروني",
     "newsletterSubmit": "اشترك",
-    "newsletterUnavailable": "الاشتراك في النشرة الإخبارية قريبًا."
+    "newsletterUnavailable": "الاشتراك في النشرة الإخبارية قريبًا.",
+    "followUs": "تابعنا",
+    "riskDisclaimerLabel": "إخلاء مسؤولية المخاطر"
   },
   "glossary": {
     "title": "المصطلحات",
@@ -99,14 +139,34 @@
     "popularTags": "الوسوم الشائعة",
     "archives": "الأرشيف",
     "subscribeTitle": "اشترك لتصلك آخر المستجدات",
-    "subscribeBody": "تحليلات جديدة وتعليم حول الأسواق، مباشرة إلى بريدك."
+    "subscribeBody": "تحليلات جديدة وتعليم حول الأسواق، مباشرة إلى بريدك.",
+    "shareLabel": "مشاركة",
+    "shareFacebook": "شارك على فيسبوك",
+    "shareTwitter": "شارك على X",
+    "shareLinkedin": "شارك على LinkedIn",
+    "copyLink": "نسخ الرابط",
+    "linkCopied": "تم نسخ الرابط",
+    "faqTitle": "الأسئلة الشائعة"
   },
   "auth": {
     "signInTitle": "تسجيل الدخول",
     "email": "البريد الإلكتروني",
     "password": "كلمة المرور",
     "submit": "تسجيل الدخول",
-    "failed": "فشل تسجيل الدخول. تحقق من بريدك وكلمة المرور."
+    "failed": "فشل تسجيل الدخول. تحقق من بريدك وكلمة المرور.",
+    "signInDescription": "سجّل الدخول إلى حسابك في مركز MBFX التعليمي.",
+    "learnersOnly": "لا يمكن لهذا الحساب تسجيل الدخول من هنا.",
+    "noAccount": "جديد في MBFX؟",
+    "signUpLink": "إنشاء حساب",
+    "signUpTitle": "أنشئ حسابك",
+    "signUpDescription": "انضم إلى مركز MBFX التعليمي وتابع تقدّمك.",
+    "name": "الاسم الكامل",
+    "passwordHint": "{count} أحرف على الأقل.",
+    "signUpSubmit": "إنشاء حساب",
+    "signUpFailed": "تعذّر إنشاء حسابك. تحقق من بياناتك وحاول مرة أخرى.",
+    "emailTaken": "يوجد حساب بهذا البريد الإلكتروني بالفعل.",
+    "haveAccount": "لديك حساب بالفعل؟",
+    "signInLink": "تسجيل الدخول"
   },
   "admin": {
     "navPeople": "الأشخاص",
@@ -363,6 +423,37 @@
     "fieldText": "النص",
     "fieldDismissible": "قابل للإغلاق",
     "fieldPlatform": "المنصة",
-    "fieldMenu": "القائمة"
+    "fieldMenu": "القائمة",
+    "website": "الموقع",
+    "websitePages": "الصفحات",
+    "websiteDesigns": "التصاميم",
+    "websiteGlobal": "عام",
+    "websiteRedirects": "إعادة التوجيه",
+    "newPage": "صفحة جديدة",
+    "pagePath": "المسار",
+    "pageParent": "الصفحة الأم",
+    "noParent": "بدون صفحة أم (المستوى الأعلى)",
+    "publish": "نشر",
+    "unpublish": "إلغاء النشر",
+    "restoreVersion": "استعادة",
+    "publishedBadge": "منشور",
+    "draftBadge": "مسودة",
+    "unpublishedChangesBadge": "تغييرات غير منشورة",
+    "confirmDeletePageTitle": "حذف هذه الصفحة؟",
+    "confirmDeletePageBody": "ستُخفى الصفحة ويمكن استعادتها لاحقًا.",
+    "confirmUnpublishTitle": "إلغاء نشر هذه الصفحة؟",
+    "confirmUnpublishBody": "ستتوقف الصفحة العامة عن الظهور فورًا.",
+    "newRedirect": "إعادة توجيه جديدة",
+    "redirectFromLabel": "من المسار",
+    "redirectToLabel": "إلى المسار",
+    "redirectStatusCodeLabel": "رمز الحالة",
+    "versionsTitle": "الإصدارات",
+    "noVersionsYet": "لم تُنشر بعد",
+    "previewLink": "معاينة",
+    "noPagesYet": "لا توجد صفحات بعد",
+    "noPagesHint": "أنشئ الصفحة الأولى للبدء.",
+    "globalTabEmpty": "الترويسة والتذييل والأجزاء العامة الأخرى ستُضاف في مرحلة لاحقة.",
+    "designsTabEmpty": "تصاميم كل نوع محتوى (الأخبار، الدورات، ...) ستُضاف في مرحلة لاحقة.",
+    "hasUnpublishedChangesShort": "تغييرات غير منشورة"
   }
 }

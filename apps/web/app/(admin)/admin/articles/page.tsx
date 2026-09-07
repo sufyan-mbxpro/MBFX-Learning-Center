@@ -93,12 +93,32 @@ export default async function ArticlesAdminPage({ searchParams }: PageProps<"/ad
     cancel: t("cancel"),
     openActions: t("openActions"),
     emptyTitle: t("noArticles"),
+    editGroup: t("editGroupLabel"),
+    statusGroup: t("statusGroupLabel"),
+    quickEdit: t("quickEdit"),
+    fullEditor: t("fullEditor"),
+    setAsDraft: t("setAsDraft"),
+    setFeatured: t("setFeatured"),
+    unsetFeatured: t("unsetFeatured"),
+    viewPost: t("viewPost"),
+    featuredCol: t("featuredCol"),
+    quick: {
+      title: t("quickEdit"),
+      description: t("editPostDescription"),
+      titleLabel: t("titleLabel"),
+      slugLabel: t("slugLabel"),
+      categoryLabel: t("categoryLabel"),
+      featuredLabel: t("featuredPostLabel"),
+      save: t("save"),
+      cancel: t("cancel"),
+      saved: t("saved"),
+    },
   };
 
   return (
     <AdminPage
       title={t("articles")}
-      width="full"
+      description={t("pageDesc.articles")}
       actions={
         flags.canCreate ? (
           <NewArticleDialog
@@ -121,23 +141,29 @@ export default async function ArticlesAdminPage({ searchParams }: PageProps<"/ad
           articles: t("articles"),
           categories: t("articleCategories"),
           tags: t("articleTags"),
+          media: t("websiteMedia"),
           settings: t("settings"),
         })}
       />
 
-      <ArticlesToolbar
-        categories={categories.map((c) => ({ id: c.id, name: c.name ?? c.id }))}
-        labels={{
-          allKinds: t("allKinds"),
-          allStatuses: t("allStatuses"),
-          allCategories: t("allCategories"),
-          kind: t("kind"),
-          kinds: kindLabels,
-          statuses: statusLabels,
-        }}
-      />
-
+      {/* changes-08 #7: the filters render INSIDE the table's toolbar,
+          on the same row as "Search articles", instead of in a separate
+          bar above it. */}
       <ArticlesTable
+        filters={
+          <ArticlesToolbar
+            categories={categories.map((c) => ({ id: c.id, name: c.name ?? c.id }))}
+            labels={{
+              allKinds: t("allKinds"),
+              allStatuses: t("allStatuses"),
+              allCategories: t("allCategories"),
+              kind: t("kind"),
+              kinds: kindLabels,
+              statuses: statusLabels,
+            }}
+          />
+        }
+        categories={categories.map((c) => ({ id: c.id, name: c.name ?? c.id }))}
         rows={result.rows.map((row) => ({
           id: row.id,
           title: row.title,
@@ -152,6 +178,8 @@ export default async function ArticlesAdminPage({ searchParams }: PageProps<"/ad
               ? dateFormat.format(row.scheduledFor)
               : null,
           isActive: row.isActive,
+          isFeatured: row.isFeatured,
+          legalTransitions: row.legalTransitions,
           publishedAtLabel: row.publishedAt ? dateFormat.format(row.publishedAt) : null,
           updatedAtLabel: dateFormat.format(row.updatedAt),
         }))}

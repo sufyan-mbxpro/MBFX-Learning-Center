@@ -43,3 +43,34 @@ describe("Button — Base UI nativeButton semantics", () => {
     spy.mockRestore();
   });
 });
+
+// changes-10 / ADR-046: the intent variants exist so an action's colour
+// carries its consequence. Pinning them here because the whole point is
+// that "Archive" and "Publish" must NOT resolve to the same classes —
+// a regression that reverts one to `default` is invisible to typecheck.
+describe("Button — intent variants (ADR-046)", () => {
+  const INTENTS = ["success", "warning", "info", "destructive"] as const;
+
+  it.each(INTENTS)("the %s variant tints from its own semantic token", (variant) => {
+    const { getByRole } = render(<Button variant={variant}>Act</Button>);
+    const className = getByRole("button").className;
+    const token = variant === "destructive" ? "destructive" : variant;
+    expect(className).toContain(`bg-${token}/10`);
+    // Labels use the *-interactive derivation @repo/theme contrast-checks
+    // (ADR-003), never the raw fill hue. `destructive` predates that and
+    // keeps its own label token.
+    if (variant !== "destructive") expect(className).toContain(`text-${token}-interactive`);
+  });
+
+  it("no two intents resolve to the same class string", () => {
+    const seen = new Set(
+      [...INTENTS, "default" as const].map((variant) => {
+        const { getByRole } = render(<Button variant={variant}>Act</Button>);
+        const className = getByRole("button").className;
+        cleanup();
+        return className;
+      }),
+    );
+    expect(seen.size).toBe(INTENTS.length + 1);
+  });
+});

@@ -55,3 +55,8 @@ pnpm-debug.log*
 
 # Uploaded media (ADR-017) — local-disk storage driver root, git-ignored
 storage/
+
+# Playwright
+apps/web/e2e/.auth/
+apps/web/test-results/
+apps/web/playwright-report/

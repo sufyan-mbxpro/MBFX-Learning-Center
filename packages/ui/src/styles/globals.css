@@ -494,6 +494,152 @@
     box-shadow: 0 8px 24px -8px color-mix(in oklab, var(--primary) 55%, transparent);
   }
 
+  /* == Public design system: emphasis on hover (ADR-051 §6) =======
+   *
+   * Four utilities the About section leans on. All CSS, all transform or
+   * paint only, all inside the reduced-motion guarantee the base layer
+   * already establishes for durations. */
+
+  /* A card that rises. Distinct from .card-hover, which lifts the RING and
+     is the neutral treatment for every card-like surface: this adds the
+     vertical move and a warmer shadow, for surfaces whose whole job is to
+     invite a click (award cards, mega-menu rows, section tiles). Layered
+     ON TOP of .card-hover rather than replacing it — the two compose. */
+  .hover-lift {
+    transition:
+      transform var(--duration-base) var(--ease-out-quint),
+      box-shadow var(--duration-base) var(--ease-out-quint);
+  }
+  .hover-lift:hover,
+  .hover-lift:focus-visible,
+  .hover-lift:focus-within {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 30px -12px color-mix(in oklab, var(--foreground) 40%, transparent);
+  }
+
+  /* A light sweep across a surface on hover. The pseudo-element is masked by
+     the host's own overflow, so a caller must be relatively positioned and
+     clipped — .sheen sets both itself rather than trusting the call site.
+     translateX has no logical axis, so the RTL direction is flipped by hand,
+     exactly as .reveal-start/.reveal-end already do. */
+  /* Sets `position: relative`, which means it will OVERRIDE a Tailwind
+     `absolute`/`fixed` on the same element — same cascade-layer trap
+     .pulse-ring documents below. Only put .sheen on a statically positioned
+     surface, or set the position after it. */
+  .sheen {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+  }
+  .sheen::after {
+    content: "";
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: 0;
+    inline-size: 60%;
+    z-index: 1;
+    pointer-events: none;
+    background: linear-gradient(
+      100deg,
+      transparent 0%,
+      color-mix(in oklab, var(--primary) 22%, transparent) 50%,
+      transparent 100%
+    );
+    opacity: 0;
+    transform: translateX(-120%);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .sheen::after {
+      transition:
+        transform var(--duration-slow) var(--ease-out-quint),
+        opacity var(--duration-fast) linear;
+    }
+    .sheen:hover::after,
+    .sheen:focus-visible::after,
+    .sheen:focus-within::after {
+      opacity: 1;
+      transform: translateX(280%);
+    }
+    [dir="rtl"] .sheen::after {
+      transform: translateX(120%);
+    }
+    [dir="rtl"] .sheen:hover::after,
+    [dir="rtl"] .sheen:focus-visible::after,
+    [dir="rtl"] .sheen:focus-within::after {
+      transform: translateX(-280%);
+    }
+  }
+
+  /* A chevron/arrow that nudges toward the reading direction when its group
+     is hovered. The host carries `group`; this goes on the glyph. */
+  .hover-arrow {
+    transition: transform var(--duration-base) var(--ease-out-quint);
+  }
+  .group:hover .hover-arrow,
+  .group:focus-visible .hover-arrow,
+  .group:focus-within .hover-arrow {
+    transform: translateX(0.25rem);
+  }
+  [dir="rtl"] .group:hover .hover-arrow,
+  [dir="rtl"] .group:focus-visible .hover-arrow,
+  [dir="rtl"] .group:focus-within .hover-arrow {
+    transform: translateX(-0.25rem);
+  }
+
+  /* An expanding ring, for a map pin that wants to be found. Sits behind its
+     host via a pseudo-element so it costs no extra DOM node per pin, and it
+     runs only while the pin is active — a page of nine permanently pulsing
+     dots is noise, not signal.
+   *
+   * REQUIRES a positioned host, and deliberately does not set `position`
+   * itself. Doing so cost an afternoon: this rule and Tailwind's `.absolute`
+   * live in the same cascade layer with equal specificity, so the later one
+   * wins — and a hand-written utility is always later than the generated
+   * ones. `class="pulse-ring absolute"` silently rendered `position: relative`,
+   * and every map pin dropped out of absolute positioning into normal flow,
+   * stacking down the page in a diagonal instead of landing on its country.
+   * Nothing errored, and the classes read as if they should have worked.
+   *
+   * --primary rather than currentcolor: the host's own text colour is
+   * --primary-foreground (the ink ON the pin), so a currentcolor halo would
+   * be the one hue guaranteed to disappear against the pin it surrounds. */
+  @media (prefers-reduced-motion: no-preference) {
+    .pulse-ring[data-active]::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      background-color: var(--primary);
+      opacity: 0.45;
+      animation: pulse-ring 1.6s var(--ease-out-quint) infinite;
+    }
+  }
+
+  /* == Public design system: carousel track (ADR-018 rule 1) =======
+   *
+   * The scroll container behind `Carousel`. Two things Tailwind has no core
+   * utility for, and both are presentation only — the element scrolls,
+   * snaps and takes keyboard focus with or without this rule, which is what
+   * keeps the no-JS path intact.
+   *
+   * The scrollbar is hidden because the arrows, dots and the peek of the
+   * next card already say "there is more this way", and a horizontal
+   * scrollbar under a row of cards reads as a rendering accident. It is
+   * hidden, never disabled: trackpad, touch, shift+wheel and arrow keys all
+   * still scroll the region.
+   *
+   * `overscroll-behavior-inline: contain` stops a horizontal fling at the
+   * end of the track from being handed to the page (or to the browser's
+   * back gesture), which is the single most common complaint about a
+   * horizontally scrolling section on a trackpad. */
+  .carousel-track {
+    scrollbar-width: none;
+    overscroll-behavior-inline: contain;
+  }
+  .carousel-track::-webkit-scrollbar {
+    display: none;
+  }
+
   /* == Public design system: image wipe (ADR-018 rule 2) ===========
    *
    * ImageReveal's entrance effect — a directional clip-path wipe, distinct
@@ -534,6 +680,17 @@
    level, not inside @layer — @keyframes is not layered, and nesting it in
    one reads as though it were. Transform and opacity only: nothing here
    triggers layout. */
+@keyframes pulse-ring {
+  from {
+    transform: scale(1);
+    opacity: 0.45;
+  }
+  to {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
 @keyframes reveal-fade {
   from {
     opacity: 0;
@@ -683,4 +840,195 @@
     height: 40px;
     transform: translate(48px, 0);
   }
+}
+
+/* Loader entrance + breathing zoom. The mark itself was already animated
+   (brand-loader-* above); this is the wrapper treatment asked for
+   separately — it scales the loader UP as it appears and then breathes,
+   so a pending state reads as "working" at a glance instead of as a small
+   static glyph.
+
+   Two animations on one element: `brand-loader-zoom-in` runs once (the
+   entrance), `brand-loader-pulse` loops (the breathing), delayed so it
+   starts where the entrance lands. Both are pure CSS, which is what keeps
+   ADR-018 rule 1 satisfied for the SiteLoader that uses it — the JS there
+   still only decides WHETHER to show the overlay, never how it looks.
+
+   prefers-reduced-motion is handled by the global reset in @layer base:
+   duration collapses to 0.01ms and iteration-count to 1, so the loader
+   simply appears at its resting size. */
+.brand-loader-zoom {
+  animation:
+    brand-loader-zoom-in var(--duration-slow, 450ms) cubic-bezier(0.34, 1.56, 0.64, 1) both,
+    brand-loader-pulse 2s ease-in-out var(--duration-slow, 450ms) infinite;
+  transform-origin: center;
+}
+
+@keyframes brand-loader-zoom-in {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes brand-loader-pulse {
+  0%,
+  to {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.12);
+  }
+}
+
+/* == Editorial rich-text vocabulary (changes-10, ADR-046) =======
+ *
+ * The class allowlist the article body editor emits and `sanitizeRichText`
+ * permits. It is deliberately a CLOSED set of named classes rather than
+ * inline styles or free Tailwind utilities, for three reasons:
+ *
+ *   1. `sanitizeRichText` keeps `allowedStyles: {}` (security.md #8). An
+ *      author's emphasis survives as `class="ed-tx-warning"`, never as
+ *      `style="color:#c0392b"` — so there is still no path from stored
+ *      content to arbitrary CSS.
+ *   2. Every value resolves to a THEME TOKEN, so an admin who re-brands the
+ *      site re-colours every article ever written, and dark mode keeps
+ *      working. A stored hex would freeze on both counts (code-style.md #1).
+ *   3. A closed set is allowlistable. `allowedClasses` in content.ts pins
+ *      the `ed-*` prefix; anything else is stripped on save.
+ *
+ * Not inside @layer so these beat Tailwind's generated utilities layer when
+ * both land on one element — the container's prose classes must not win over
+ * an author's explicit choice. Applies on BOTH surfaces: the admin editor
+ * renders the same markup the public article body does.
+ */
+.ed-tx-primary {
+  color: var(--primary-interactive);
+}
+.ed-tx-success {
+  color: var(--success-interactive);
+}
+.ed-tx-warning {
+  color: var(--warning-interactive);
+}
+.ed-tx-info {
+  color: var(--info-interactive);
+}
+.ed-tx-danger {
+  color: var(--destructive-interactive);
+}
+.ed-tx-muted {
+  color: var(--muted-foreground);
+}
+
+/* Highlights pair the token's own foreground with a tint of the token, so
+   the contrast pair is one @repo/theme already derives and checks — rather
+   than body text over an arbitrary wash. */
+.ed-hl-primary,
+.ed-hl-success,
+.ed-hl-warning,
+.ed-hl-info,
+.ed-hl-danger,
+.ed-hl-muted {
+  border-radius: var(--radius-sm);
+  padding-inline: 0.2em;
+  padding-block: 0.05em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  color: inherit;
+}
+.ed-hl-primary {
+  background-color: color-mix(in oklch, var(--primary) 22%, transparent);
+}
+.ed-hl-success {
+  background-color: color-mix(in oklch, var(--success) 22%, transparent);
+}
+.ed-hl-warning {
+  background-color: color-mix(in oklch, var(--warning) 30%, transparent);
+}
+.ed-hl-info {
+  background-color: color-mix(in oklch, var(--info) 22%, transparent);
+}
+.ed-hl-danger {
+  background-color: color-mix(in oklch, var(--destructive) 22%, transparent);
+}
+.ed-hl-muted {
+  background-color: var(--muted);
+}
+
+/* Families: two of the three are the theme's own (ADR-039 brand sans,
+   ADR-005 curated mono). The serif is a generic stack — a family name is
+   not a colour literal, and adding a fourth webfont to the public bundle
+   for an occasional pull-quote is not a trade worth making. */
+.ed-ff-sans {
+  font-family: var(--font-sans);
+}
+.ed-ff-serif {
+  font-family: Georgia, "Times New Roman", "Noto Serif", serif;
+}
+.ed-ff-mono {
+  font-family: var(--font-mono);
+}
+
+/* Sizes step the type scale rather than taking a px value, so body copy
+   stays on the same rhythm as every other surface (A5.5). */
+.ed-fs-sm {
+  font-size: var(--text-sm);
+  line-height: var(--text-sm--line-height);
+}
+.ed-fs-base {
+  font-size: var(--text-base);
+  line-height: var(--text-base--line-height);
+}
+.ed-fs-lg {
+  font-size: var(--text-lg);
+  line-height: var(--text-lg--line-height);
+}
+.ed-fs-xl {
+  font-size: var(--text-xl);
+  line-height: var(--text-xl--line-height);
+}
+.ed-fs-2xl {
+  font-size: var(--text-2xl);
+  line-height: var(--text-2xl--line-height);
+}
+
+/* Alignment is LOGICAL (code-style.md #3): an Arabic article aligned
+   "start" aligns right without the author touching anything. `left`/`right`
+   are deliberately not offered. */
+.ed-align-start {
+  text-align: start;
+}
+.ed-align-center {
+  text-align: center;
+}
+.ed-align-end {
+  text-align: end;
+}
+.ed-align-justify {
+  text-align: justify;
+}
+
+/* A derived video embed (see `sanitizeRichText`'s transformTags). The
+   editor stores a URL; the iframe is derived on save from the same
+   whitelist parser the article-level video field uses. */
+.ed-embed {
+  position: relative;
+  margin-block: 1.25rem;
+  width: 100%;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background-color: var(--muted);
+  aspect-ratio: 16 / 9;
+}
+.ed-embed iframe {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  width: 100%;
+  border: 0;
 }

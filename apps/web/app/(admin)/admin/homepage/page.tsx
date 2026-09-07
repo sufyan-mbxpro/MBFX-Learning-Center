@@ -46,7 +46,7 @@ export default async function HomepagePage() {
     }));
 
   return (
-    <AdminPage title={t("homepage")} description={t("homepageSubtitle")} width="lg">
+    <AdminPage title={t("homepage")} description={t("homepageSubtitle")}>
       <div className="flex flex-col gap-6 md:flex-row">
         <SettingsNav heading={t("settingsCategories")} entries={navEntries} />
         <div className="min-w-0 flex-1">

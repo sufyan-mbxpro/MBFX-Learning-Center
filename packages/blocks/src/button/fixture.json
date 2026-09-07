@@ -1,0 +1,6 @@
+{
+  "label": "Start learning",
+  "link": { "type": "ROUTE", "routeKey": "news" },
+  "variant": "default",
+  "size": "default"
+}

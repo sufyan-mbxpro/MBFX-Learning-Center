@@ -14,7 +14,7 @@ export function PageHeaderSkeleton() {
 
 export function TablePageSkeleton({ rows = 8 }: { rows?: number }) {
   return (
-    <div className="flex max-w-5xl flex-col gap-6" aria-busy>
+    <div className="flex w-full flex-col gap-6" aria-busy>
       <PageHeaderSkeleton />
       <div className="flex items-center gap-2">
         <Skeleton className="h-8 w-64" />
@@ -31,9 +31,9 @@ export function TablePageSkeleton({ rows = 8 }: { rows?: number }) {
 
 export function FormPageSkeleton({ fields = 5 }: { fields?: number }) {
   return (
-    <div className="flex max-w-3xl flex-col gap-6" aria-busy>
+    <div className="flex w-full flex-col gap-6" aria-busy>
       <PageHeaderSkeleton />
-      <div className="flex flex-col gap-5 rounded-lg border bg-card p-5">
+      <div className="grid grid-cols-1 gap-5 rounded-lg border bg-card p-5 xl:grid-cols-2">
         {Array.from({ length: fields }, (_, i) => (
           <div key={i} className="flex flex-col gap-1.5">
             <Skeleton className="h-4 w-28" />

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ArrowRight } from "lucide-react";
 import { Button } from "@repo/ui/components/button";
+import { ConfirmDialog } from "@repo/ui/components/confirm-dialog";
 import { Input } from "@repo/ui/components/input";
 import {
   Select,
@@ -39,7 +40,14 @@ export function GlossaryControls({
   termId: string;
   legalTransitions: string[];
   deleted: boolean;
-  labels: { delete: string; restore: string; statusLabels: Record<string, string> };
+  labels: {
+    delete: string;
+    restore: string;
+    cancel: string;
+    confirmDeleteTitle: string;
+    confirmDeleteBody: string;
+    statusLabels: Record<string, string>;
+  };
 }) {
   const { run, pending } = useServerAction();
 
@@ -57,15 +65,33 @@ export function GlossaryControls({
           {labels.statusLabels[to] ?? to}
         </Button>
       ))}
-      <Button
-        variant="destructive"
-        size="xs"
-        disabled={pending}
-        className="ms-auto"
-        onClick={() => run(() => deleteGlossaryTermAction(termId, !deleted))}
-      >
-        {deleted ? labels.restore : labels.delete}
-      </Button>
+      {/* changes-08 #6: deleting asks first, everywhere. Restoring does
+          not — it is the undo, and putting a confirmation in front of the
+          way BACK just makes the destructive path harder to reverse. */}
+      {deleted ? (
+        <Button
+          variant="outline"
+          size="xs"
+          disabled={pending}
+          className="ms-auto"
+          onClick={() => run(() => deleteGlossaryTermAction(termId, false))}
+        >
+          {labels.restore}
+        </Button>
+      ) : (
+        <ConfirmDialog
+          trigger={
+            <Button variant="destructive" size="xs" disabled={pending} className="ms-auto">
+              {labels.delete}
+            </Button>
+          }
+          title={labels.confirmDeleteTitle}
+          description={labels.confirmDeleteBody}
+          confirmLabel={labels.delete}
+          cancelLabel={labels.cancel}
+          onConfirm={() => run(() => deleteGlossaryTermAction(termId, true))}
+        />
+      )}
     </div>
   );
 }
@@ -127,7 +153,7 @@ export function TranslationForm({
       <RichTextEditor value={body} onChange={setBody} labels={labels.editor} />
       <Button
         size="sm"
-        className="self-start"
+        className="self-end"
         disabled={pending || !term || !body}
         onClick={() =>
           run(

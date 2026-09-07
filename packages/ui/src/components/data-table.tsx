@@ -97,6 +97,14 @@ export interface DataTableProps<TData, TValue> {
   pageSizeOptions?: number[];
   /** Richer empty state (icon + CTA); falls back to `labels.noResults`. */
   emptyState?: React.ReactNode;
+  /**
+   * Screen-specific filter controls (status / category / type Selects).
+   * They render INSIDE the toolbar, immediately after the search box, so
+   * search and filters share one horizontal row and wrap together
+   * (changes-08 #7). A page that renders its filters in a separate bar
+   * above the table is the layout this prop exists to replace.
+   */
+  filters?: React.ReactNode;
 }
 
 function toCsv<TData>(rows: Row<TData>[], visibleColumnIds: string[]): string {
@@ -130,6 +138,7 @@ export function DataTable<TData, TValue>({
   isLoading = false,
   pageSizeOptions,
   emptyState,
+  filters,
 }: DataTableProps<TData, TValue>) {
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
@@ -184,7 +193,7 @@ export function DataTable<TData, TValue>({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2" data-slot="data-table-toolbar">
         <Input
           value={searchValue}
           onChange={(e) => setSearchValue(e.target.value)}
@@ -193,6 +202,7 @@ export function DataTable<TData, TValue>({
           className="w-full min-w-0 sm:max-w-64"
           data-slot="data-table-search"
         />
+        {filters}
         <div className="ms-auto flex flex-wrap items-center gap-2">
           {selectedRows.length > 0 && (
             <span className="text-sm text-muted-foreground" data-slot="data-table-selected-count">

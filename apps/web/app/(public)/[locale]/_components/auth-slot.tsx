@@ -12,6 +12,7 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Link } from "@repo/i18n/navigation";
+import { Button } from "@repo/ui/components/button";
 
 type AuthState =
   { status: "loading" } | { status: "anonymous" } | { status: "signed-in"; name: string };
@@ -44,14 +45,22 @@ export function AuthSlot() {
     return <span className="h-5 w-16 animate-pulse rounded bg-muted" aria-hidden />;
   }
 
+  // Both learner entry points (ADR-052). The staff screen at /admin/sign-in
+  // is deliberately absent — the public header advertises no way into the
+  // admin portal.
   if (state.status === "anonymous") {
     return (
-      <Link
-        href="/sign-in"
-        className="text-sm font-medium text-primary-interactive underline-offset-4 hover:underline"
-      >
-        {t("signIn")}
-      </Link>
+      <div className="flex items-center gap-3">
+        <Link
+          href="/sign-in"
+          className="text-sm font-medium text-primary-interactive underline-offset-4 hover:underline"
+        >
+          {t("signIn")}
+        </Link>
+        <Button size="sm" shape="pill" render={<Link href="/sign-up" />}>
+          {t("signUp")}
+        </Button>
+      </div>
     );
   }
 

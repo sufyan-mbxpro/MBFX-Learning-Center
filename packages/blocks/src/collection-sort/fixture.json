@@ -1,0 +1,7 @@
+{
+  "bindingId": "main",
+  "options": [
+    { "value": "newest", "label": "Newest" },
+    { "value": "oldest", "label": "Oldest" }
+  ]
+}

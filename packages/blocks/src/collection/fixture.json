@@ -1,0 +1,8 @@
+{
+  "contentType": "news",
+  "bindingId": "main",
+  "filter": {},
+  "limit": 6,
+  "layout": "grid",
+  "columns": "3"
+}

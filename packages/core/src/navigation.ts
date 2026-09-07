@@ -14,7 +14,9 @@ import { db, type FeatureVisibility } from "@repo/db";
 import { can, type Subject } from "@repo/rbac";
 import { evaluateVisibility } from "@repo/settings";
 import { pickTranslation, type LocaleFallbackInfo } from "@repo/i18n";
-import { isRouteKey, ROUTE_PATHS } from "@repo/contracts";
+import { isRouteKey } from "@repo/contracts";
+import type { LinkTarget } from "@repo/contracts";
+import { resolveStatelessLinkTarget } from "./cms/links.ts";
 
 export interface NavItem {
   id: string;
@@ -108,15 +110,26 @@ export async function invalidateNavigation(): Promise<void> {
   revalidateTag("navigation", { expire: 0 });
 }
 
+/**
+ * Exactly-one rule (contract-enforced on write, Module 09) — the builder is
+ * defensive about bad rows rather than crashing the header. Resolves
+ * through the shared `LinkTarget` resolver (ADR-031 §2, `../cms/links.ts`)
+ * so `ROUTE`/`URL` mapping never drifts between menus and CMS blocks; see
+ * that function's doc comment for why this stays synchronous rather than
+ * calling the full (async, DB-batching) `resolveLinks`.
+ */
 function resolveHref(item: RawMenuItem): { href: string; isExternal: boolean } | null {
-  // Exactly-one rule (contract-enforced on write, Module 09) — the builder
-  // is defensive about bad rows rather than crashing the header.
-  if (item.routeKey && !item.url) {
-    if (!isRouteKey(item.routeKey)) return null;
-    return { href: ROUTE_PATHS[item.routeKey], isExternal: false };
-  }
-  if (item.url && !item.routeKey) return { href: item.url, isExternal: true };
-  return null;
+  const target: LinkTarget | null =
+    item.routeKey && !item.url && isRouteKey(item.routeKey)
+      ? { type: "ROUTE", routeKey: item.routeKey }
+      : item.url && !item.routeKey
+        ? { type: "URL", url: item.url }
+        : null;
+  if (!target) return null;
+
+  const resolved = resolveStatelessLinkTarget(target);
+  if (!resolved || resolved.state !== "ok" || !resolved.href) return null;
+  return { href: resolved.href, isExternal: target.type === "URL" };
 }
 
 function resolveLabel(

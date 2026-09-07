@@ -3,3 +3,7 @@
 export * from "./calculators.ts";
 export * from "./video-embeds.ts";
 export * from "./reading-time.ts";
+export * from "./html-text.ts";
+export * from "./content-analysis.ts";
+export * from "./humanize.ts";
+export * from "./economic-calendar.ts";

@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" width="1200" height="900" role="presentation" aria-hidden="true"><defs>
+<linearGradient id="g-transparency-funding" x1="0" y1="0" x2="1" y2="1">
+<stop offset="0" stop-color="#2E251C"/>
+<stop offset=".55" stop-color="#221C16"/>
+<stop offset="1" stop-color="#14110E"/>
+</linearGradient>
+<radialGradient id="warm-transparency-funding" cx=".5" cy=".5" r=".5">
+<stop offset="0" stop-color="#E8B98C" stop-opacity=".55"/>
+<stop offset="1" stop-color="#E8B98C" stop-opacity="0"/>
+</radialGradient>
+<radialGradient id="cool-transparency-funding" cx=".5" cy=".5" r=".5">
+<stop offset="0" stop-color="#7FA3C4" stop-opacity=".38"/>
+<stop offset="1" stop-color="#7FA3C4" stop-opacity="0"/>
+</radialGradient>
+<linearGradient id="fade-transparency-funding" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#E8B98C" stop-opacity=".5"/>
+<stop offset="1" stop-color="#E8B98C" stop-opacity="0"/>
+</linearGradient>
+<pattern id="grid-transparency-funding" width="64" height="64" patternUnits="userSpaceOnUse">
+<path d="M64 0H0V64" fill="none" stroke="#F5EFE8" stroke-opacity=".05" stroke-width="1"/>
+</pattern>
+<radialGradient id="vig-transparency-funding" cx=".5" cy=".45" r=".75">
+<stop offset=".55" stop-color="#14110E" stop-opacity="0"/>
+<stop offset="1" stop-color="#14110E" stop-opacity=".42"/>
+</radialGradient>
+</defs><rect width="1200" height="900" fill="url(#g-transparency-funding)"/><ellipse cx="201.11" cy="242.74" rx="556.56" ry="434.12" fill="url(#warm-transparency-funding)"/><ellipse cx="992.66" cy="346.18" rx="338.83" ry="264.29" fill="url(#cool-transparency-funding)"/><ellipse cx="333.51" cy="310.45" rx="317.16" ry="247.38" fill="url(#warm-transparency-funding)"/><rect width="1200" height="900" fill="url(#grid-transparency-funding)"/><path d="M144 252 C504 252 552 450 1032 450" fill="none" stroke="#E8B98C" stroke-opacity=".7" stroke-width="26" stroke-linecap="round"/>
+<path d="M144 648 C504 648 552 450 1032 450" fill="none" stroke="#3F5B75" stroke-opacity=".7" stroke-width="18" stroke-linecap="round"/>
+<circle cx="144" cy="252" r="20" fill="#E8B98C"/>
+<circle cx="144" cy="648" r="16" fill="#7FA3C4"/>
+<rect x="1010" y="270" width="44" height="360" rx="22" fill="#F5EFE8" fill-opacity=".85"/><rect width="1200" height="900" fill="url(#vig-transparency-funding)"/></svg>

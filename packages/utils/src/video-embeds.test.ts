@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseVideoUrl } from "./video-embeds.ts";
+import { parseVideoEmbedUrl, parseVideoUrl } from "./video-embeds.ts";
 
 const YT_ID = "dQw4w9WgXcQ";
 
@@ -87,5 +87,60 @@ describe("parseVideoUrl — whitelist rejections", () => {
     `ftp://youtube.com/watch?v=${YT_ID}`,
   ])("rejects %s", (url) => {
     expect(parseVideoUrl(url)).toBeNull();
+  });
+});
+
+// ── changes-10 / ADR-046 ──
+// `parseVideoEmbedUrl` is the gate `sanitizeRichText` puts in front of every
+// stored <iframe>, so its rejections matter more than its acceptances.
+describe("parseVideoEmbedUrl", () => {
+  it.each([
+    ["https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ", "youtube", "dQw4w9WgXcQ"],
+    ["https://player.vimeo.com/video/123456", "vimeo", "123456"],
+    ["https://www.dailymotion.com/embed/video/x7tgad0", "dailymotion", "x7tgad0"],
+  ])("recognises %s", (url, provider, videoId) => {
+    const parsed = parseVideoEmbedUrl(url);
+    expect(parsed?.provider).toBe(provider);
+    expect(parsed?.videoId).toBe(videoId);
+    // Round-trip: what it hands back is what the sanitizer will store, and
+    // that must be OUR derived URL, not the caller's string.
+    expect(parsed?.embedUrl).toBe(url);
+  });
+
+  it.each([
+    [
+      "a watch URL rather than an embed URL",
+      "https://www.youtube-nocookie.com/watch?v=dQw4w9WgXcQ",
+    ],
+    ["the cookie-ful YouTube host", "https://www.youtube.com/embed/dQw4w9WgXcQ"],
+    [
+      "a suffixed look-alike host",
+      "https://www.youtube-nocookie.com.evil.example/embed/dQw4w9WgXcQ",
+    ],
+    ["a prefixed look-alike host", "https://evilwww.youtube-nocookie.com/embed/dQw4w9WgXcQ"],
+    ["http rather than https", "http://www.youtube-nocookie.com/embed/dQw4w9WgXcQ"],
+    ["a traversal in the id", "https://www.youtube-nocookie.com/embed/../../admin"],
+    ["a short id", "https://www.youtube-nocookie.com/embed/abc"],
+    ["a non-numeric Vimeo id", "https://player.vimeo.com/video/notanid"],
+    ["a nested path", "https://player.vimeo.com/video/123456/extra"],
+    ["a javascript: URL", "javascript:alert(1)"],
+    ["a data: URL", "data:text/html,<script>1</script>"],
+    ["empty input", ""],
+    ["raw iframe markup", '<iframe src="https://player.vimeo.com/video/123456"></iframe>'],
+  ])("rejects %s", (_case, input) => {
+    expect(parseVideoEmbedUrl(input)).toBeNull();
+  });
+
+  it("accepts every embedUrl parseVideoUrl derives — the two stay in step", () => {
+    for (const url of [
+      "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+      "https://youtu.be/dQw4w9WgXcQ",
+      "https://vimeo.com/123456",
+      "https://www.dailymotion.com/video/x7tgad0",
+    ]) {
+      const derived = parseVideoUrl(url);
+      expect(derived).not.toBeNull();
+      expect(parseVideoEmbedUrl(derived!.embedUrl)?.videoId).toBe(derived!.videoId);
+    }
   });
 });

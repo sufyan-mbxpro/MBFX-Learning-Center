@@ -1,4 +1,5 @@
 import { Activity } from "lucide-react";
+import { humanizeKey } from "@repo/utils";
 import { Empty, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
 import type { RecentActivityItem } from "@repo/core";
 
@@ -18,12 +19,6 @@ function relativeTime(date: Date, locale: string, now: Date): string {
     if (Math.abs(diff) >= ms) return formatter.format(Math.round(diff / ms), unit);
   }
   return formatter.format(Math.round(diff / 1000), "second");
-}
-
-/** "theme.update" → "Theme update"; entity-scoped actions read fine as-is. */
-function humanizeAction(action: string): string {
-  const spaced = action.replaceAll(".", " ").replaceAll("_", " ");
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
 export function DashboardActivityFeed({
@@ -58,7 +53,7 @@ export function DashboardActivityFeed({
         <li key={item.id} className="flex items-start gap-3">
           <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-primary" aria-hidden />
           <div className="flex min-w-0 flex-1 flex-col">
-            <span className="truncate text-sm text-foreground">{humanizeAction(item.action)}</span>
+            <span className="truncate text-sm text-foreground">{humanizeKey(item.action)}</span>
             <span className="text-xs text-muted-foreground">
               {byLabel} {item.actorName ?? item.actorEmail ?? systemLabel} ·{" "}
               {relativeTime(item.createdAt, locale, now)}

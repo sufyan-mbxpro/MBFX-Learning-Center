@@ -201,3 +201,53 @@ describe("DataTable — column visibility", () => {
     expect(screen.queryByText("1.08")).toBeNull();
   });
 });
+
+describe("DataTable — filters share the search row (changes-08 #7)", () => {
+  it("renders the caller's filters inside the SAME toolbar element as the search box", () => {
+    const { container } = renderTable({
+      filters: (
+        <button type="button" data-testid="kind-filter">
+          All types
+        </button>
+      ),
+    });
+
+    const toolbar = container.querySelector('[data-slot="data-table-toolbar"]');
+    expect(toolbar).not.toBeNull();
+    // The point of the prop: both controls are in one row, not two stacked
+    // bars. Asserting containment (not class strings) is what survives a
+    // restyle.
+    expect(toolbar?.querySelector('[data-slot="data-table-search"]')).not.toBeNull();
+    expect(toolbar?.querySelector('[data-testid="kind-filter"]')).not.toBeNull();
+  });
+
+  it("places the filters after the search box, so the row reads search → filters", () => {
+    const { container } = renderTable({
+      filters: <span data-testid="status-filter">All statuses</span>,
+    });
+    const toolbar = container.querySelector('[data-slot="data-table-toolbar"]')!;
+    const search = toolbar.querySelector('[data-slot="data-table-search"]')!;
+    const filter = toolbar.querySelector('[data-testid="status-filter"]')!;
+    // Node.DOCUMENT_POSITION_FOLLOWING === 4
+    expect(search.compareDocumentPosition(filter) & 4).toBeTruthy();
+  });
+
+  it("omits the slot entirely when a screen has no custom filters", () => {
+    const { container } = renderTable();
+    const toolbar = container.querySelector('[data-slot="data-table-toolbar"]')!;
+    expect(toolbar.querySelector('[data-testid="kind-filter"]')).toBeNull();
+  });
+});
+
+describe("DataTable — the header is a distinct surface (changes-08 #7)", () => {
+  it("gives the header band its own background so it never reads as another row", () => {
+    const { container } = renderTable();
+    const thead = container.querySelector('[data-slot="table-header"]');
+    expect(thead).not.toBeNull();
+    // The rule this encodes: header background ≠ default row background.
+    // Asserted on the class because jsdom computes no cascade.
+    expect(thead?.className).toMatch(/bg-muted/);
+    const bodyRow = container.querySelector('[data-slot="table-body"] [data-slot="table-row"]');
+    expect(bodyRow?.className ?? "").not.toMatch(/bg-muted\/60/);
+  });
+});

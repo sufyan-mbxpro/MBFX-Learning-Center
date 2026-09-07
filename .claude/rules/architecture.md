@@ -46,4 +46,11 @@ rules named below.
 11. Cache Components (`"use cache"` + `cacheTag`/`cacheLife`) per ADR-004
     (Module 02+). `unstable_cache` is the legacy path — do not introduce it.
 12. Tag names are frozen API: `theme`, `settings:{group}`, `navigation`,
-    `rbac:{userId}`. Admin writes invalidate by tag; nothing polls.
+    `rbac:{userId}`, `content` (all content reads), and — added by ADR-025
+    for Module 16 — `page:{id}`, `page-path:{locale}:{path}`,
+    `layout:{contentType}`, `card-template:{id}`, `style-preset:{id}` (ADR-033), and — ADR-029 —
+    `part-data:{partKey}` for global site-part data, which is deliberately
+    **not** tagged `content` so ordinary content churn never invalidates the
+    site shell. Admin writes invalidate by tag; nothing polls. `revalidateTag` always takes its second argument
+    (`{ expire: 0 }`). Never `revalidatePath`, never a route-level
+    `export const revalidate` — both are the legacy path ADR-004 closed.

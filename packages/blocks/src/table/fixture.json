@@ -1,0 +1,7 @@
+{
+  "headers": ["Pair", "Spread"],
+  "rows": [
+    ["EUR/USD", "0.1 pip"],
+    ["GBP/USD", "0.3 pip"]
+  ]
+}

@@ -55,12 +55,13 @@ export default async function ArticleCategoriesPage() {
   };
 
   return (
-    <AdminPage title={t("articleCategories")} width="lg">
+    <AdminPage title={t("articleCategories")} description={t("pageDesc.articleCategories")}>
       <ArticlesSubnav
         items={articlesSubnavItems({
           articles: t("articles"),
           categories: t("articleCategories"),
           tags: t("articleTags"),
+          media: t("websiteMedia"),
           settings: t("settings"),
         })}
       />

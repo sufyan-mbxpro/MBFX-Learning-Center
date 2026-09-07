@@ -118,3 +118,42 @@ export function parseVideoUrl(input: string): ParsedVideo | null {
   }
   return null;
 }
+
+/**
+ * The inverse of the three `embedUrl` shapes `parseVideoUrl` derives, and
+ * the ONLY way an `<iframe>` is allowed to survive `sanitizeRichText`
+ * (changes-10, ADR-046).
+ *
+ * ADR-015 #9 froze "iframes are never stored": the article-level video
+ * field keeps the pasted URL and derives the frame at render. In-body
+ * embeds cannot do that — the body renders through
+ * `dangerouslySetInnerHTML`, so whatever is stored IS what renders. This
+ * function preserves the property that matters instead: nothing an author
+ * typed survives except a provider and an 11-character id, and the src,
+ * the attribute set and the wrapper are all reconstructed from that on
+ * EVERY save. A hand-written `<iframe src="https://evil.example">` in the
+ * HTML source view parses to null and is dropped.
+ */
+export function parseVideoEmbedUrl(input: string): ParsedVideo | null {
+  let url: URL;
+  try {
+    url = new URL(input.trim());
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "https:") return null;
+
+  if (url.hostname === "www.youtube-nocookie.com") {
+    const path = /^\/embed\/([^/?#]+)$/.exec(url.pathname);
+    return path?.[1] ? youtube(path[1], input.trim()) : null;
+  }
+  if (url.hostname === "player.vimeo.com") {
+    const path = /^\/video\/(\d+)$/.exec(url.pathname);
+    return path?.[1] ? vimeo(path[1], input.trim()) : null;
+  }
+  if (url.hostname === "www.dailymotion.com") {
+    const path = /^\/embed\/video\/([^/?#]+)$/.exec(url.pathname);
+    return path?.[1] ? dailymotion(path[1], input.trim()) : null;
+  }
+  return null;
+}

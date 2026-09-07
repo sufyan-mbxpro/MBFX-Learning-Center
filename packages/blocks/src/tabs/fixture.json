@@ -1,0 +1,6 @@
+{
+  "items": [
+    { "label": "Beginner", "content": "Start with the basics." },
+    { "label": "Advanced", "content": "Go deeper into strategy." }
+  ]
+}

@@ -23,7 +23,17 @@ import {
 import { Empty, EmptyDescription, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
 import { Input } from "@repo/ui/components/input";
 import { Label } from "@repo/ui/components/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@repo/ui/components/select";
+import { SOCIAL_GLYPH_NAMES, SocialGlyph } from "@repo/ui/components/social-glyph";
 import { Switch } from "@repo/ui/components/switch";
+import { humanizeKey } from "@repo/utils";
+import { ImageUploadField, type ImageUploadLabels } from "../../_components/image-upload-field.tsx";
 import {
   createSocialLinkAction,
   deleteSocialLinkAction,
@@ -37,6 +47,8 @@ export interface SocialLinkRow {
   platform: string;
   label: string;
   url: string;
+  icon: string;
+  iconUrl: string | null;
   handle: string | null;
   isActive: boolean;
   openInNewTab: boolean;
@@ -61,6 +73,11 @@ export interface SocialLinksLabels {
   actionsCol: string;
   deleteTitle: string;
   deleteConfirm: string;
+  iconCol: string;
+  iconGlyph: string;
+  iconUpload: string;
+  iconUploadHint: string;
+  upload: ImageUploadLabels;
   empty: string;
   search: string;
   columns: string;
@@ -76,6 +93,8 @@ interface FormState {
   platform: string;
   label: string;
   url: string;
+  icon: string;
+  iconUrl: string | null;
   handle: string;
   isActive: boolean;
   openInNewTab: boolean;
@@ -87,6 +106,8 @@ const EMPTY_FORM: FormState = {
   platform: "",
   label: "",
   url: "",
+  icon: "link",
+  iconUrl: null,
   handle: "",
   isActive: true,
   openInNewTab: true,
@@ -119,6 +140,8 @@ export function SocialLinksManager({
       platform: row.platform,
       label: row.label,
       url: row.url,
+      icon: row.icon,
+      iconUrl: row.iconUrl,
       handle: row.handle ?? "",
       isActive: row.isActive,
       openInNewTab: row.openInNewTab,
@@ -132,6 +155,8 @@ export function SocialLinksManager({
     const payload = {
       label: form.label,
       url: form.url,
+      icon: form.icon,
+      iconUrl: form.iconUrl,
       handle: form.handle || undefined,
       isActive: form.isActive,
       openInNewTab: form.openInNewTab,
@@ -174,6 +199,27 @@ export function SocialLinksManager({
 
   const columns = React.useMemo<ColumnDef<SocialLinkRow>[]>(
     () => [
+      {
+        id: "icon",
+        header: () => <span className="sr-only">{labels.iconCol}</span>,
+        meta: { label: labels.iconCol },
+        enableSorting: false,
+        cell: ({ row }) => (
+          <span className="flex size-8 items-center justify-center rounded-full bg-muted text-foreground">
+            {row.original.iconUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={row.original.iconUrl}
+                alt=""
+                aria-hidden
+                className="size-4 object-contain"
+              />
+            ) : (
+              <SocialGlyph name={row.original.icon} />
+            )}
+          </span>
+        ),
+      },
       {
         accessorKey: "label",
         header: labels.title,
@@ -309,6 +355,46 @@ export function SocialLinksManager({
                 onChange={(e) => set("url", e.target.value)}
               />
             </div>
+            {/* changes-08: the icon is chosen, not typed. A built-in glyph
+                covers the common platforms with no upload; an uploaded
+                asset (ADR-045) overrides it, which is what the icon
+                preview shows the moment one is set. */}
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="social-icon">{labels.iconGlyph}</Label>
+              <Select
+                value={form.icon}
+                onValueChange={(next) => set("icon", (next as string) || "link")}
+              >
+                <SelectTrigger id="social-icon" className="w-full">
+                  <SelectValue>
+                    <span className="flex items-center gap-2">
+                      <SocialGlyph name={form.icon} />
+                      {humanizeKey(form.icon)}
+                    </span>
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {SOCIAL_GLYPH_NAMES.map((name) => (
+                    <SelectItem key={name} value={name}>
+                      <span className="flex items-center gap-2">
+                        <SocialGlyph name={name} />
+                        {humanizeKey(name)}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <ImageUploadField
+              id="social-icon-url"
+              label={labels.iconUpload}
+              description={labels.iconUploadHint}
+              value={form.iconUrl}
+              purpose="setting"
+              labels={labels.upload}
+              previewClassName="size-12"
+              onChange={(next) => set("iconUrl", next?.url ?? null)}
+            />
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="social-handle">{labels.handle}</Label>
               <Input

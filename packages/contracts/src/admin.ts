@@ -46,10 +46,34 @@ export const socialLinkPlatformSchema = z
   .max(50)
   .regex(/^[a-z0-9-]+$/, "Lowercase letters, digits and hyphens only");
 
+/**
+ * ADR-045. `icon` names a built-in glyph (same character set as a platform
+ * key); `iconUrl` is an admin-uploaded asset and WINS over `icon`.
+ *
+ * `iconUrl` is a RELATIVE path only — it is written by the upload widget
+ * from what `storeImage()` returned, never typed. Rejecting an absolute
+ * URL here is the same posture as the rest of the upload pipeline
+ * (security.md #9: no arbitrary URL ever enters a src attribute), so a
+ * hand-crafted form post cannot turn a footer icon into a third-party
+ * beacon.
+ */
+export const socialLinkIconUrlSchema = z
+  .string()
+  .trim()
+  .max(500)
+  // A leading "/" is not enough: "//evil.example/x" is PROTOCOL-RELATIVE
+  // (and "/\evil.example/x" is treated the same way by browsers), so both
+  // are absolute off-origin URLs that a naive `^/` check would wave
+  // through. The second character must be neither slash.
+  .regex(/^\/(?![/\\])[^\s]*$/, "Must be a relative upload path")
+  .nullable();
+
 export const createSocialLinkSchema = z.object({
   platform: socialLinkPlatformSchema,
   label: z.string().trim().min(1).max(100),
   url: z.url().max(500),
+  icon: socialLinkPlatformSchema.optional(),
+  iconUrl: socialLinkIconUrlSchema.optional(),
   handle: z.string().trim().max(100).optional(),
   isActive: z.boolean().default(true),
   openInNewTab: z.boolean().default(true),

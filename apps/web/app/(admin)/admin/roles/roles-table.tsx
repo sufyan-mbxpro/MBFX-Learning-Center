@@ -9,6 +9,7 @@ import { useMemo } from "react";
 import { ArrowRight, Shield } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@repo/ui/components/badge";
+import { humanizeKey } from "@repo/utils";
 import { Button } from "@repo/ui/components/button";
 import { DataTable, type DataTableLabels } from "@repo/ui/components/data-table";
 import { Empty, EmptyDescription, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
@@ -93,7 +94,7 @@ export function RolesTable({
               {row.original.name}
             </Link>
             <span className="text-xs text-muted-foreground">
-              {labels.level} {row.original.level} · <code>{row.original.key}</code>
+              {labels.level} {row.original.level} · {humanizeKey(row.original.key)}
             </span>
           </div>
         ),

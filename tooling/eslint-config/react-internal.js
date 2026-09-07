@@ -1,8 +1,7 @@
 import { baseConfig, noColorLiteralRule } from "./base.js";
 
-const noPhysicalSpacingRule = {
-  selector:
-    "JSXAttribute[name.name='className'] Literal[value=/(^|\\s)(pl|pr|ml|mr)-\\d/]",
+export const noPhysicalSpacingRule = {
+  selector: "JSXAttribute[name.name='className'] Literal[value=/(^|\\s)(pl|pr|ml|mr)-\\d/]",
   message:
     "Physical spacing utilities (pl-/pr-/ml-/mr-) are banned — use logical properties (ps-/pe-/ms-/me-) so RTL layouts work without retrofitting.",
 };

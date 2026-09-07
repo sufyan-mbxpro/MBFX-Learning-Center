@@ -136,7 +136,7 @@ export default async function AdminHome({ searchParams }: PageProps<"/admin">) {
     <AdminPage
       title={t("dashboard")}
       description={t("dashboardWelcome")}
-      width="full"
+
       actions={
         <DashboardRangeSelect value={range} label={t("dashboardRange")} labels={rangeLabels} />
       }

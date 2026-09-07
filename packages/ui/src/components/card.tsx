@@ -43,7 +43,14 @@ function Card({
         // `card-hover` (globals.css) is THE one hover treatment every card-
         // like surface shares (changes-02) — AdminSection and the article
         // editor panels use the same utility, so a tweak lands everywhere.
-        "group/card card-hover flex flex-col gap-(--card-spacing) overflow-hidden rounded-xl bg-card py-(--card-spacing) text-sm text-card-foreground ring-1 ring-foreground/10 [--card-spacing:--spacing(4)] has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 data-[size=sm]:[--card-spacing:--spacing(3)] data-[size=sm]:has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl",
+        // `has-[>[data-slot=card-header]:not(:last-child)]:pt-0` is the
+        // mirror of the footer's `has-data-[slot=card-footer]:pb-0`
+        // (ADR-050): a header that carries a band must start at the card's
+        // top edge, not float with a strip of card background above it.
+        // The `:not(:last-child)` half matters — a header-only card (the
+        // settings hub, the glossary spotlight grid) has no band and keeps
+        // its normal top padding.
+        "group/card card-hover flex flex-col gap-(--card-spacing) overflow-hidden rounded-xl bg-card py-(--card-spacing) text-sm text-card-foreground ring-1 ring-foreground/10 [--card-spacing:--spacing(4)] has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 has-[>[data-slot=card-header]:not(:last-child)]:pt-0 data-[size=sm]:[--card-spacing:--spacing(3)] data-[size=sm]:has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl",
         CARD_VARIANT_CLASS[variant],
         className,
       )}
@@ -52,12 +59,18 @@ function Card({
   );
 }
 
+// ADR-050: a header that has content under it is chrome, and reads as
+// chrome — the same `border-b bg-muted/50` band CardFooter has always
+// carried, mirrored. `not-last:` is the whole safety of making it the
+// default: a card whose header IS the card (settings hub, glossary
+// spotlight) would be entirely tinted otherwise, which distinguishes
+// nothing. A band that covers everything is not a band.
 function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card-header"
       className={cn(
-        "group/card-header @container/card-header grid auto-rows-min items-start gap-1 rounded-t-xl px-(--card-spacing) has-data-[slot=card-action]:grid-cols-[1fr_auto] has-data-[slot=card-description]:grid-rows-[auto_auto] [.border-b]:pb-(--card-spacing)",
+        "group/card-header @container/card-header grid auto-rows-min items-start gap-1 rounded-t-xl px-(--card-spacing) not-last:border-b not-last:bg-muted/50 not-last:py-(--card-spacing) has-data-[slot=card-action]:grid-cols-[1fr_auto] has-data-[slot=card-description]:grid-rows-[auto_auto] [.border-b]:pb-(--card-spacing)",
         className,
       )}
       {...props}

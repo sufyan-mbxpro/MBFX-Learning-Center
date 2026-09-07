@@ -49,7 +49,7 @@ export default async function UserDetailPage({ params }: PageProps<"/admin/users
   return (
     <AdminPage
       title={user.name}
-      width="lg"
+      description={t("pageDesc.userDetail")}
       backHref="/admin/users"
       backLabel={t("backToList")}
       meta={

@@ -25,3 +25,11 @@ launches until this module's gate is green and signed off in DEVLOG.
   403/404, never 200** (single-app cross-surface probe).
 - Full CI matrix green; Lighthouse budgets green (the admin-bundle-leak
   backstop); launch checklist appended to DEVLOG and signed off.
+- **`ABOUT_CONTENT_MODE=real` (ADR-051 §1).** The About section ships with a
+  PLACEHOLDER dataset — invented figures, a made-up company history, twelve
+  awards from fictional bodies — because the owner asked for a section that
+  reads as finished before the real content exists. Going to production in
+  `demo` publishes all of it as fact. Check `data-about-content` on
+  `/about`'s `<main>`: it must read `real`. This is the only launch-gate item
+  that is a content claim rather than a technical one, and it is the one a
+  green CI run will not catch.

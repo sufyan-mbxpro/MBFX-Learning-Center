@@ -42,7 +42,15 @@ export function SubNav({
     <nav
       aria-label={ariaLabel}
       className={cn(
-        orientation === "horizontal" ? "flex gap-1 overflow-x-auto" : "flex flex-col gap-1",
+        // Filled, bordered tray — the same treatment TabsList carries, so
+        // a page's section tabs read as one control instead of a row of
+        // links floating on the page background. `w-fit` on the horizontal
+        // strip keeps it hugging its items now that it is visible; the
+        // vertical settings sub-sidebar fills its column instead.
+        "rounded-lg border border-border/60 bg-muted p-1",
+        orientation === "horizontal"
+          ? "flex w-fit max-w-full gap-1 overflow-x-auto"
+          : "flex flex-col gap-1",
         className,
       )}
     >
@@ -54,10 +62,13 @@ export function SubNav({
             href={item.href}
             aria-current={isActive ? "page" : undefined}
             className={cn(
-              "rounded-md px-2.5 py-1.5 text-sm font-medium whitespace-nowrap",
+              // Active = a raised --background pill inside the muted tray.
+              // (It used to be bg-muted on a transparent strip, which is
+              // now the tray's own colour — indistinguishable.)
+              "rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-colors",
               isActive
-                ? "bg-muted text-foreground"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:bg-background/60 hover:text-foreground",
             )}
           >
             {item.label}

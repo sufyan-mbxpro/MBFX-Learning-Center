@@ -16,6 +16,7 @@ import type * as AdminModule from "./admin.ts";
 import type * as EmployeesModule from "./employees.ts";
 import type * as NotificationsModule from "./notifications.ts";
 import type * as SearchModule from "./search.ts";
+import type * as SocialLinksModule from "./social-links.ts";
 
 const dbPackageRoot = fileURLToPath(new URL("../../db", import.meta.url));
 const prismaCli = createRequire(import.meta.url).resolve("prisma/build/index.js");
@@ -28,6 +29,7 @@ let admin: typeof AdminModule;
 let employees: typeof EmployeesModule;
 let notifications: typeof NotificationsModule;
 let search: typeof SearchModule;
+let socialLinks: typeof SocialLinksModule;
 
 async function actorSubject(
   level: number,
@@ -87,6 +89,7 @@ beforeAll(async () => {
   employees = await import("./employees.ts");
   notifications = await import("./notifications.ts");
   search = await import("./search.ts");
+  socialLinks = await import("./social-links.ts");
 
   await db.role.createMany({
     data: [
@@ -282,6 +285,64 @@ describe("social link CRUD", () => {
     for (const action of ["social.create", "social.update", "social.delete"]) {
       expect(await db.auditLog.count({ where: { action, entityId: "tiktok" } })).toBe(1);
     }
+  });
+
+  // ADR-045 — the icon a link renders with.
+  it("defaults the glyph to the platform, and an uploaded icon overrides and clears", async () => {
+    const actor = await actorSubject(80, ["social.manage"]);
+    const platform = `telegram-${Date.now()}`;
+
+    // No icon given: the platform slug IS the default glyph key, so a new
+    // link is never an invisible control in the footer.
+    await admin.createSocialLink(actor.id, platform, {
+      label: "Telegram",
+      url: "https://t.me/mbfx",
+    });
+    let row = await db.socialLink.findUniqueOrThrow({ where: { platform } });
+    expect(row.icon).toBe(platform);
+    expect(row.iconUrl).toBeNull();
+
+    // An uploaded icon is stored alongside the glyph, not instead of it —
+    // clearing the upload has to fall back to something.
+    await admin.updateSocialLink(actor.id, platform, {
+      icon: "telegram",
+      iconUrl: "/uploads/telegram-mark.svg",
+    });
+    row = await db.socialLink.findUniqueOrThrow({ where: { platform } });
+    expect(row.icon).toBe("telegram");
+    expect(row.iconUrl).toBe("/uploads/telegram-mark.svg");
+
+    // null clears the upload; undefined would have left it untouched.
+    await admin.updateSocialLink(actor.id, platform, { iconUrl: null });
+    row = await db.socialLink.findUniqueOrThrow({ where: { platform } });
+    expect(row.iconUrl).toBeNull();
+    expect(row.icon).toBe("telegram");
+
+    // A label-only edit leaves both icon fields exactly as they were.
+    await admin.updateSocialLink(actor.id, platform, { label: "Telegram HQ" });
+    row = await db.socialLink.findUniqueOrThrow({ where: { platform } });
+    expect(row.icon).toBe("telegram");
+    expect(row.iconUrl).toBeNull();
+
+    await admin.deleteSocialLink(actor.id, platform);
+  });
+
+  it("exposes both icon fields to the public footer read", async () => {
+    const actor = await actorSubject(80, ["social.manage"]);
+    const platform = `whatsapp-${Date.now()}`;
+    await admin.createSocialLink(actor.id, platform, {
+      label: "WhatsApp",
+      url: "https://wa.me/1",
+      icon: "whatsapp",
+      iconUrl: "/uploads/wa.svg",
+    });
+
+    const links = await socialLinks.loadActiveSocialLinks();
+    const link = links.find((l) => l.platform === platform);
+    expect(link?.icon).toBe("whatsapp");
+    expect(link?.iconUrl).toBe("/uploads/wa.svg");
+
+    await admin.deleteSocialLink(actor.id, platform);
   });
 });
 

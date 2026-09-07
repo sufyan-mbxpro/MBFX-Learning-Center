@@ -23,10 +23,28 @@ export interface SettingsIndex {
   navEntries: SettingsNavEntry[];
 }
 
+// Website builder (Module 16) is paused, ADR-037: its only settings group
+// (`cms.dataBudget`) is hidden from the hub/sub-nav here. Admin-configurable
+// structural/layout settings are paused too, ADR-038 — the owner wants
+// header/footer/homepage structure handled module-by-module in code, not
+// admin-edited. In both cases the setting rows and their stored values are
+// untouched — anything that still reads them at render time keeps working;
+// only the admin editing screen is unreachable while paused. Drop a key
+// from this set to restore its screen.
+const PAUSED_SETTINGS_GROUPS = new Set(["cms", "layout"]);
+
+// Navigation reordering and homepage section composition are paused too
+// (ADR-038, same reasoning as PAUSED_SETTINGS_GROUPS above) — these aren't
+// settings-registry groups so they need their own switch. Flip back to
+// `true` to restore both entries.
+const STRUCTURAL_DESIGN_ADMIN_UI_ENABLED = false;
+
 export async function loadSettingsIndex(subject: Subject, t: TranslateHas): Promise<SettingsIndex> {
   const canViewSettings = can(subject, "settings.view");
   const settings = canViewSettings ? await loadAllSettings() : [];
-  const groups = [...new Set(settings.map((s) => s.groupName))];
+  const groups = [...new Set(settings.map((s) => s.groupName))].filter(
+    (group) => !PAUSED_SETTINGS_GROUPS.has(group),
+  );
 
   const navEntries: SettingsNavEntry[] = [
     ...groups.map((group) => ({
@@ -37,10 +55,12 @@ export async function loadSettingsIndex(subject: Subject, t: TranslateHas): Prom
       ? [{ href: "/admin/settings/social", label: t("social") }]
       : []),
     ...(can(subject, "features.manage") ? [{ href: "/admin/features", label: t("features") }] : []),
-    ...(can(subject, "navigation.manage")
+    ...(STRUCTURAL_DESIGN_ADMIN_UI_ENABLED && can(subject, "navigation.manage")
       ? [{ href: "/admin/navigation", label: t("navigation") }]
       : []),
-    ...(can(subject, "settings.update") ? [{ href: "/admin/homepage", label: t("homepage") }] : []),
+    ...(STRUCTURAL_DESIGN_ADMIN_UI_ENABLED && can(subject, "settings.update")
+      ? [{ href: "/admin/homepage", label: t("homepage") }]
+      : []),
     ...(can(subject, "theme.update") ? [{ href: "/admin/theme", label: t("theme") }] : []),
   ];
 

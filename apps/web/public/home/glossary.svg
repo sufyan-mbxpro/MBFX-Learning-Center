@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900" width="1440" height="900" role="presentation" aria-hidden="true"><defs>
+<linearGradient id="g-glossary" x1="0" y1="0" x2="1" y2="1">
+<stop offset="0" stop-color="#2E251C"/>
+<stop offset=".55" stop-color="#221C16"/>
+<stop offset="1" stop-color="#14110E"/>
+</linearGradient>
+<radialGradient id="warm-glossary" cx=".5" cy=".5" r=".5">
+<stop offset="0" stop-color="#E8B98C" stop-opacity=".55"/>
+<stop offset="1" stop-color="#E8B98C" stop-opacity="0"/>
+</radialGradient>
+<radialGradient id="cool-glossary" cx=".5" cy=".5" r=".5">
+<stop offset="0" stop-color="#7FA3C4" stop-opacity=".38"/>
+<stop offset="1" stop-color="#7FA3C4" stop-opacity="0"/>
+</radialGradient>
+<linearGradient id="fade-glossary" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#E8B98C" stop-opacity=".5"/>
+<stop offset="1" stop-color="#E8B98C" stop-opacity="0"/>
+</linearGradient>
+<pattern id="grid-glossary" width="64" height="64" patternUnits="userSpaceOnUse">
+<path d="M64 0H0V64" fill="none" stroke="#F5EFE8" stroke-opacity=".05" stroke-width="1"/>
+</pattern>
+<radialGradient id="vig-glossary" cx=".5" cy=".45" r=".75">
+<stop offset=".55" stop-color="#14110E" stop-opacity="0"/>
+<stop offset="1" stop-color="#14110E" stop-opacity=".42"/>
+</radialGradient>
+</defs><rect width="1440" height="900" fill="url(#g-glossary)"/><ellipse cx="950.01" cy="156.63" rx="625.01" ry="487.51" fill="url(#warm-glossary)"/><ellipse cx="915.32" cy="446.75" rx="470.37" ry="366.89" fill="url(#cool-glossary)"/><ellipse cx="901.25" cy="734.89" rx="552.35" ry="430.83" fill="url(#warm-glossary)"/><rect width="1440" height="900" fill="url(#grid-glossary)"/><rect x="259.2" y="198" width="30" height="12" rx="6" fill="#F5EFE8" fill-opacity=".22"/><rect x="259.2" y="265.5" width="30" height="12" rx="6" fill="#F5EFE8" fill-opacity=".22"/><rect x="259.2" y="333" width="44" height="12" rx="6" fill="#E8B98C" fill-opacity=".95"/><rect x="259.2" y="400.5" width="30" height="12" rx="6" fill="#F5EFE8" fill-opacity=".22"/><rect x="259.2" y="468" width="30" height="12" rx="6" fill="#F5EFE8" fill-opacity=".22"/><rect x="259.2" y="535.5" width="30" height="12" rx="6" fill="#F5EFE8" fill-opacity=".22"/><rect x="259.2" y="603" width="30" height="12" rx="6" fill="#F5EFE8" fill-opacity=".22"/><rect x="259.2" y="670.5" width="30" height="12" rx="6" fill="#F5EFE8" fill-opacity=".22"/><rect x="489.6" y="216" width="309.95" height="14" rx="7" fill="#E8B98C" fill-opacity=".9"/>
+<rect x="489.6" y="242" width="419.74" height="9" rx="4.5" fill="#F5EFE8" fill-opacity=".24"/>
+<rect x="489.6" y="257" width="260.24" height="9" rx="4.5" fill="#F5EFE8" fill-opacity=".14"/><rect x="489.6" y="360" width="213.39" height="14" rx="7" fill="#E8B98C" fill-opacity=".55"/>
+<rect x="489.6" y="386" width="539.69" height="9" rx="4.5" fill="#F5EFE8" fill-opacity=".24"/>
+<rect x="489.6" y="401" width="334.61" height="9" rx="4.5" fill="#F5EFE8" fill-opacity=".14"/><rect x="489.6" y="504" width="326.3" height="14" rx="7" fill="#E8B98C" fill-opacity=".55"/>
+<rect x="489.6" y="530" width="493.24" height="9" rx="4.5" fill="#F5EFE8" fill-opacity=".24"/>
+<rect x="489.6" y="545" width="305.81" height="9" rx="4.5" fill="#F5EFE8" fill-opacity=".14"/><rect x="489.6" y="648" width="264.74" height="14" rx="7" fill="#E8B98C" fill-opacity=".55"/>
+<rect x="489.6" y="674" width="404.66" height="9" rx="4.5" fill="#F5EFE8" fill-opacity=".24"/>
+<rect x="489.6" y="689" width="250.89" height="9" rx="4.5" fill="#F5EFE8" fill-opacity=".14"/><rect width="1440" height="900" fill="url(#vig-glossary)"/></svg>

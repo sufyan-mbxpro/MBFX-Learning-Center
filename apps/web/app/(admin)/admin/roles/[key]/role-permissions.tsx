@@ -10,6 +10,7 @@ import { useTransition } from "react";
 import { toast } from "sonner";
 import { Check } from "lucide-react";
 import { Checkbox } from "@repo/ui/components/checkbox";
+import { humanizeKey } from "@repo/utils";
 import { Input } from "@repo/ui/components/input";
 import { setRolePermissionAction, setRolePermissionsAction } from "../../_actions/user-actions.ts";
 
@@ -150,12 +151,14 @@ export function RolePermissions({
                     <Checkbox
                       checked={granted.has(permission.key)}
                       onCheckedChange={(next) => apply([permission.key], next === true)}
-                      aria-label={permission.key}
+                      aria-label={permission.label}
                     />
                   )}
                   <div className="flex min-w-0 flex-col py-0.5">
                     <span className="truncate text-sm">{permission.label}</span>
-                    <code className="truncate text-xs text-muted-foreground">{permission.key}</code>
+                    <span className="truncate text-xs text-muted-foreground">
+                      {humanizeKey(permission.key)}
+                    </span>
                   </div>
                 </li>
               ))}

@@ -63,6 +63,8 @@ export interface AdminSocialLink {
   platform: string;
   label: string;
   url: string;
+  icon: string;
+  iconUrl: string | null;
   handle: string | null;
   isActive: boolean;
   openInNewTab: boolean;
@@ -77,6 +79,8 @@ export async function loadAdminSocialLinks(): Promise<AdminSocialLink[]> {
       platform: true,
       label: true,
       url: true,
+      icon: true,
+      iconUrl: true,
       handle: true,
       isActive: true,
       openInNewTab: true,

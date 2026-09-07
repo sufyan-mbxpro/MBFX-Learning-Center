@@ -1,6 +1,7 @@
 {
   "common": {
-    "siteName": "ایم بی ایف ایکس لرننگ سینٹر"
+    "siteName": "ایم بی ایف ایکس لرننگ سینٹر",
+    "siteDescription": "مفت فاریکس تعلیم، ٹولز اور تجزیے۔"
   },
   "home": {
     "placeholder": "عوامی سائٹ — تعمیر کے دوران عارضی مواد۔",
@@ -27,7 +28,39 @@
     "faqQ3": "کیا یہ مالی مشورہ ہے؟",
     "faqA3": "نہیں۔ یہاں سب کچھ تعلیمی ہے۔ اس سائٹ پر کوئی چیز کسی بھی مالیاتی آلے کو خریدنے یا بیچنے کی سفارش نہیں ہے۔",
     "faqQ4": "نیا تجزیہ کتنی بار شائع ہوتا ہے؟",
-    "faqA4": "مضامین اور تجزیے باقاعدگی سے شائع ہوتے ہیں؛ تازہ ترین ہمیشہ اسی صفحے اور خبروں کے سیکشن میں نظر آتے ہیں۔"
+    "faqA4": "مضامین اور تجزیے باقاعدگی سے شائع ہوتے ہیں؛ تازہ ترین ہمیشہ اسی صفحے اور خبروں کے سیکشن میں نظر آتے ہیں۔",
+    "exploreEyebrow": "پلیٹ فارم",
+    "exploreTitle": "ایک ٹریڈر کو درکار ہر چیز، ایک ہی جگہ",
+    "exploreLead": "اسباق، کیلکولیٹر، براہِ راست مارکیٹ سیاق اور روزانہ تجزیہ — ہر ایک اپنی جگہ مفید، اور مل کر کہیں بہتر۔",
+    "exploreCta": "دیکھیں",
+    "exploreSoon": "جلد آ رہا ہے",
+    "exploreCarouselLabel": "پلیٹ فارم کے حصے",
+    "exploreCarouselPrevious": "پچھلے حصے",
+    "exploreCarouselNext": "اگلے حصے",
+    "exploreLearnTag": "کورسز",
+    "exploreLearnTitle": "سیکھنے کے راستے",
+    "exploreLearnBody": "منظم کورسز جو بنیادی اصولوں سے شروع ہو کر ایک قابلِ تکرار ٹریڈنگ طریقہ کار تک لے جاتے ہیں۔",
+    "exploreToolsTag": "کیلکولیٹر",
+    "exploreToolsTitle": "ٹریڈنگ کیلکولیٹر",
+    "exploreToolsBody": "پوزیشن سائز، پپ ویلیو، مارجن اور منافع — ٹریڈ کے بعد نہیں، پہلے شمار کیے گئے۔",
+    "exploreCalendarTag": "کیلنڈر",
+    "exploreCalendarTitle": "معاشی کیلنڈر",
+    "exploreCalendarBody": "ہر وہ اعلان جو کرنسی جوڑے کو ہلاتا ہے، اس کی اثر درجہ بندی اور فوری اعداد کے ساتھ۔",
+    "exploreNewsTag": "خبریں",
+    "exploreNewsTitle": "مارکیٹ کی خبریں",
+    "exploreNewsBody": "کیا ہوا، کیوں اہم تھا اور کیا بدلتا ہے — ٹریڈ کرنے والوں کے لیے، سرخی پڑھنے والوں کے لیے نہیں۔",
+    "exploreAnalysisTag": "تجزیہ",
+    "exploreAnalysisTitle": "روزانہ تجزیہ",
+    "exploreAnalysisBody": "چارٹ پر مبنی تجزیے اور ڈیسک کے ٹریڈ آئیڈیاز، سیشن کے ساتھ ساتھ شائع ہوتے ہیں۔",
+    "exploreGlossaryTag": "حوالہ",
+    "exploreGlossaryTitle": "ٹریڈنگ لغت",
+    "exploreGlossaryBody": "چارٹ پر ملنے والی ہر اصطلاح کی سادہ زبان میں تعریف، پڑھتے ہوئے باہم مربوط۔",
+    "exploreMarketsTag": "مارکیٹس",
+    "exploreMarketsTitle": "براہِ راست مارکیٹس",
+    "exploreMarketsBody": "ریٹس، ٹریڈنگ سیشنز اور کرنسی کی مضبوطی، تاکہ چارٹ کھولنے سے پہلے مارکیٹ کا حال معلوم ہو۔",
+    "exploreAboutTag": "ادارہ",
+    "exploreAboutTitle": "ہم کون ہیں",
+    "exploreAboutBody": "یہ مواد کون لکھتا ہے، سائٹ کیسے چلتی ہے، اور آپ کی توجہ کے ساتھ ہم کبھی کیا نہیں کریں گے۔"
   },
   "error": {
     "title": "کچھ غلط ہو گیا",
@@ -41,6 +74,9 @@
     "title": "ابھی ترجمہ نہیں ہوا",
     "body": "یہ صفحہ ابھی اس زبان میں دستیاب نہیں ہے۔"
   },
+  "public": {
+    "pagePlaceholder": "یہ صفحہ ابھی تیار کیا جا رہا ہے۔ جلد دوبارہ آئیں۔"
+  },
   "nav": {
     "signIn": "سائن ان",
     "toggleTheme": "تھیم تبدیل کریں",
@@ -51,10 +87,12 @@
     "search": "مضامین تلاش کریں",
     "backToTop": "اوپر واپس جائیں",
     "home": "ہوم",
-    "breadcrumb": "بریڈ کرمب"
+    "breadcrumb": "بریڈ کرمب",
+    "signUp": "رجسٹر کریں"
   },
   "footer": {
     "newsletterHeading": "باخبر رہیں",
+    "newsletterBlurb": "ہفتہ وار مارکیٹ نوٹس، نئے اسباق اور ٹولز، براہِ راست آپ کے ان باکس میں۔",
     "getTheApp": "ایپ حاصل کریں",
     "appPlatform": {
       "ios": "iOS",
@@ -65,7 +103,9 @@
     "newsletterPlaceholder": "you@example.com",
     "newsletterLabel": "ای میل ایڈریس",
     "newsletterSubmit": "سبسکرائب کریں",
-    "newsletterUnavailable": "نیوز لیٹر سبسکرپشن جلد آ رہا ہے۔"
+    "newsletterUnavailable": "نیوز لیٹر سبسکرپشن جلد آ رہا ہے۔",
+    "followUs": "ہمیں فالو کریں",
+    "riskDisclaimerLabel": "خطرے سے متعلق انتباہ"
   },
   "glossary": {
     "title": "لغت",
@@ -99,14 +139,34 @@
     "popularTags": "مقبول ٹیگز",
     "archives": "آرکائیو",
     "subscribeTitle": "تازہ ترین اپ ڈیٹ کے لیے سبسکرائب کریں",
-    "subscribeBody": "نئے تجزیے اور مارکیٹ کی تعلیم، براہِ راست آپ کے ان باکس میں۔"
+    "subscribeBody": "نئے تجزیے اور مارکیٹ کی تعلیم، براہِ راست آپ کے ان باکس میں۔",
+    "shareLabel": "شیئر کریں",
+    "shareFacebook": "فیس بک پر شیئر کریں",
+    "shareTwitter": "X پر شیئر کریں",
+    "shareLinkedin": "LinkedIn پر شیئر کریں",
+    "copyLink": "لنک کاپی کریں",
+    "linkCopied": "لنک کاپی ہو گیا",
+    "faqTitle": "اکثر پوچھے گئے سوالات"
   },
   "auth": {
     "signInTitle": "سائن ان",
     "email": "ای میل",
     "password": "پاس ورڈ",
     "submit": "سائن ان",
-    "failed": "سائن ان ناکام۔ ای میل اور پاس ورڈ چیک کریں۔"
+    "failed": "سائن ان ناکام۔ ای میل اور پاس ورڈ چیک کریں۔",
+    "signInDescription": "اپنے MBFX لرننگ سینٹر اکاؤنٹ میں سائن ان کریں۔",
+    "learnersOnly": "یہ اکاؤنٹ یہاں سائن ان نہیں کر سکتا۔",
+    "noAccount": "MBFX پر نئے ہیں؟",
+    "signUpLink": "اکاؤنٹ بنائیں",
+    "signUpTitle": "اپنا اکاؤنٹ بنائیں",
+    "signUpDescription": "MBFX لرننگ سینٹر میں شامل ہوں اور اپنی پیش رفت دیکھیں۔",
+    "name": "پورا نام",
+    "passwordHint": "کم از کم {count} حروف۔",
+    "signUpSubmit": "اکاؤنٹ بنائیں",
+    "signUpFailed": "ہم آپ کا اکاؤنٹ نہیں بنا سکے۔ اپنی تفصیلات دیکھ کر دوبارہ کوشش کریں۔",
+    "emailTaken": "اس ای میل کے ساتھ اکاؤنٹ پہلے سے موجود ہے۔",
+    "haveAccount": "پہلے سے اکاؤنٹ ہے؟",
+    "signInLink": "سائن ان"
   },
   "admin": {
     "navPeople": "افراد",
@@ -337,6 +397,37 @@
     "fieldText": "متن",
     "fieldDismissible": "بند کیا جا سکتا ہے",
     "fieldPlatform": "پلیٹ فارم",
-    "fieldMenu": "مینو"
+    "fieldMenu": "مینو",
+    "website": "ویب سائٹ",
+    "websitePages": "صفحات",
+    "websiteDesigns": "ڈیزائنز",
+    "websiteGlobal": "عالمی",
+    "websiteRedirects": "ری ڈائریکٹس",
+    "newPage": "نیا صفحہ",
+    "pagePath": "پاتھ",
+    "pageParent": "مرکزی صفحہ",
+    "noParent": "کوئی مرکزی صفحہ نہیں (سب سے اوپر)",
+    "publish": "شائع کریں",
+    "unpublish": "غیر شائع کریں",
+    "restoreVersion": "بحال کریں",
+    "publishedBadge": "شائع شدہ",
+    "draftBadge": "ڈرافٹ",
+    "unpublishedChangesBadge": "غیر شائع شدہ تبدیلیاں",
+    "confirmDeletePageTitle": "یہ صفحہ حذف کریں؟",
+    "confirmDeletePageBody": "صفحہ چھپا دیا جائے گا اور بعد میں بحال کیا جا سکتا ہے۔",
+    "confirmUnpublishTitle": "اس صفحے کو غیر شائع کریں؟",
+    "confirmUnpublishBody": "عوامی صفحہ فوری طور پر دکھنا بند ہو جائے گا۔",
+    "newRedirect": "نئی ری ڈائریکٹ",
+    "redirectFromLabel": "سے پاتھ",
+    "redirectToLabel": "تک پاتھ",
+    "redirectStatusCodeLabel": "اسٹیٹس کوڈ",
+    "versionsTitle": "ورژنز",
+    "noVersionsYet": "ابھی شائع نہیں ہوا",
+    "previewLink": "پیش نظارہ",
+    "noPagesYet": "ابھی کوئی صفحہ نہیں",
+    "noPagesHint": "شروع کرنے کے لیے پہلا صفحہ بنائیں۔",
+    "globalTabEmpty": "ہیڈر، فوٹر اور دیگر عالمی اجزاء بعد کے مرحلے میں شامل ہوں گے۔",
+    "designsTabEmpty": "ہر مواد کی قسم کے ڈیزائن (خبریں، کورسز، ...) بعد کے مرحلے میں شامل ہوں گے۔",
+    "hasUnpublishedChangesShort": "غیر شائع شدہ تبدیلیاں"
   }
 }

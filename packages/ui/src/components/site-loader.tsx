@@ -17,6 +17,7 @@
 import { useEffect, useState } from "react";
 
 import { cn } from "@repo/ui/lib/utils";
+import { Spinner } from "@repo/ui/components/spinner";
 
 const SESSION_KEY = "mbfx:site-loader-shown";
 const HARD_CAP_MS = 900;
@@ -75,7 +76,12 @@ function SiteLoader({ className }: { className?: string }) {
         className,
       )}
     >
-      <span className="size-10 animate-spin rounded-full border-2 border-muted border-t-primary-interactive" />
+      {/* The branded mark, not a plain CSS ring — same Spinner every other
+          pending state uses, at overlay scale, wrapped in the shared
+          zoom-in/breathe treatment (globals.css `.brand-loader-zoom`).
+          Still pure CSS, so ADR-018 rule 1 holds: the JS above decides
+          only WHETHER and HOW LONG, never how it looks. */}
+      <Spinner aria-hidden className="brand-loader-zoom size-20" />
     </div>
   );
 }
