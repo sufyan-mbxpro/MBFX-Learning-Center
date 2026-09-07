@@ -5,6 +5,7 @@
 // /news/tag/*. The /news landing itself opens on `NewsMasthead`, a full
 // banner with artwork: an archive is a filtered view of a section, the
 // section front is the section. The trail is the same component on both.
+import { AmbientMotif } from "@repo/ui/components/ambient-motif";
 import { Container } from "@repo/ui/components/container";
 import { Section } from "@repo/ui/components/section";
 
@@ -22,7 +23,13 @@ export function ListingHeader({
   crumbs?: Crumb[];
 }) {
   return (
-    <Section tone="muted" spacing="sm">
+    // The archives get the same `chart` field as the section front, at a
+    // lower ink: this band is a third the masthead's height, so the same
+    // arrangement sits proportionally closer to the title. The three
+    // positioning classes are what AmbientMotif anchors to and is clipped
+    // by; Section provides none of them.
+    <Section tone="muted" spacing="sm" className="relative isolate overflow-hidden">
+      <AmbientMotif variant="chart" intensity={0.75} />
       <Container className="flex flex-col items-center gap-2 text-center">
         <h1 className="text-display-sm font-semibold">{title}</h1>
         <ListingCrumbs crumbs={crumbs} className="flex justify-center" />

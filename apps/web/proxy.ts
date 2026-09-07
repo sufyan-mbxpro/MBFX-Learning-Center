@@ -38,10 +38,23 @@ function baseCsp(nonce: string | null): string {
     `img-src 'self' data: https:`,
     `font-src 'self'`,
     `connect-src 'self'`,
-    // The only third party we frame: the economic calendar widget
-    // (ADR-050). Video embeds on /news are a known gap in this policy —
-    // they fall back to default-src today and are reported, not blocked.
-    `frame-src 'self' https://www.tradays.com`,
+    // The third parties we frame, and the only ones.
+    //
+    // - The economic calendar widget (ADR-050).
+    // - The three video providers `parseVideoUrl` (@repo/utils) can produce
+    //   an embed URL for. This closes the gap this comment used to record as
+    //   open ("video embeds on /news fall back to default-src"): the
+    //   homepage's learning rail makes video a first-class surface, and a
+    //   report-only policy that does not name these origins would report
+    //   noise during the soak and then break every video the day it is
+    //   enforced.
+    //
+    // These are exactly the origins the parser EMITS — youtube-nocookie
+    // (never youtube.com), player.vimeo.com, dailymotion's embed host — not
+    // the origins a URL may be pasted from. A pasted URL is parsed into one
+    // of these or rejected (security.md #9: never trust the raw URL), so the
+    // allowlist and the parser cannot drift apart in the unsafe direction.
+    `frame-src 'self' https://www.tradays.com https://www.youtube-nocookie.com https://player.vimeo.com https://www.dailymotion.com`,
     `base-uri 'self'`,
     `form-action 'self'`,
     `object-src 'none'`,

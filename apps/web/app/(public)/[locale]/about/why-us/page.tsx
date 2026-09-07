@@ -11,6 +11,7 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { ROUTE_PATHS } from "@repo/contracts";
 import { Link } from "@repo/i18n/navigation";
 import { getSetting, isFeatureVisible } from "@repo/settings";
+import { AmbientMotif } from "@repo/ui/components/ambient-motif";
 import { Button } from "@repo/ui/components/button";
 import { CheckList } from "@repo/ui/components/check-list";
 import { Container } from "@repo/ui/components/container";
@@ -78,6 +79,7 @@ export default async function WhyUsPage({ params }: PageProps<"/[locale]/about/w
     <>
       <PageHero
         backdrop={<AboutBackdrop slot="whyUsHero" />}
+        motif={<AmbientMotif variant="learn" intensity={0.7} />}
         eyebrow={t("whyUs.hero.eyebrow")}
         title={t("whyUs.hero.title")}
         lead={t("whyUs.hero.body")}

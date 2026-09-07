@@ -12,7 +12,7 @@ import "@repo/ui/globals.css";
 // its own <html>, its own stylesheet import, no next-intl/theme context
 // available — deliberately plain, not localized.
 export const metadata: Metadata = {
-  title: "Not Found — MBFX Learning Center",
+  title: "Not Found — MBX Learning Center",
   description: "The page you are looking for does not exist.",
 };
 

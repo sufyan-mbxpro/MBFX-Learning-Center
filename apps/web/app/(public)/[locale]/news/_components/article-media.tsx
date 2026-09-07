@@ -26,7 +26,11 @@ import { cn } from "@repo/ui/lib/utils";
 // shades: that is what makes them correct in both modes (the bug badge.tsx
 // documents for `--primary-subtle`).
 const KIND_PANEL: Record<string, { icon: LucideIcon; wash: string; ink: string }> = {
-  NEWS: { icon: Newspaper, wash: "from-primary/18 via-primary/6", ink: "text-primary-interactive/35" },
+  NEWS: {
+    icon: Newspaper,
+    wash: "from-primary/18 via-primary/6",
+    ink: "text-primary-interactive/35",
+  },
   ANALYSIS: { icon: LineChart, wash: "from-info/18 via-info/6", ink: "text-info-interactive/35" },
   TRADE_IDEA: {
     icon: Lightbulb,
@@ -43,6 +47,7 @@ export function ArticleMedia({
   sizes = "(max-width: 640px) 100vw, 33vw",
   priority = false,
   className,
+  glyphClassName,
 }: {
   entry: ArticleListEntry;
   ratio?: number;
@@ -50,6 +55,12 @@ export function ArticleMedia({
   /** Set on the spotlight's lead card only; every other cover stays lazy. */
   priority?: boolean;
   className?: string;
+  /**
+   * Sizes the fallback panel's glyph. A thumbnail (the compact card's square)
+   * needs a glyph proportional to its own box, not the `size-16` that reads
+   * correctly across a full-width 16/9 cover.
+   */
+  glyphClassName?: string;
 }) {
   if (!entry.coverImageUrl) {
     const panel = KIND_PANEL[entry.kind] ?? FALLBACK_PANEL;
@@ -71,7 +82,12 @@ export function ArticleMedia({
         {/* Scales with the card's own `group` hover, mirroring what
             `.media-zoom` does to a real cover — a card with artwork and a
             card without behave identically under the pointer. */}
-        <Glyph className="relative size-16 transition-transform duration-(--duration-slow) ease-(--ease-out-quint) group-hover:scale-110" />
+        <Glyph
+          className={cn(
+            "relative size-16 transition-transform duration-(--duration-slow) ease-(--ease-out-quint) group-hover:scale-110",
+            glyphClassName,
+          )}
+        />
       </div>
     );
   }

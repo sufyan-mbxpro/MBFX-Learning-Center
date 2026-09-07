@@ -264,7 +264,7 @@ describe("social link CRUD", () => {
     const actor = await actorSubject(80, ["social.manage"]);
     await admin.createSocialLink(actor.id, "tiktok", {
       label: "TikTok",
-      url: "https://tiktok.com/@mbfx",
+      url: "https://tiktok.com/@mbx",
     });
     const created = await db.socialLink.findUniqueOrThrow({ where: { platform: "tiktok" } });
     expect(created.isActive).toBe(true);
@@ -296,7 +296,7 @@ describe("social link CRUD", () => {
     // link is never an invisible control in the footer.
     await admin.createSocialLink(actor.id, platform, {
       label: "Telegram",
-      url: "https://t.me/mbfx",
+      url: "https://t.me/mbx",
     });
     let row = await db.socialLink.findUniqueOrThrow({ where: { platform } });
     expect(row.icon).toBe(platform);

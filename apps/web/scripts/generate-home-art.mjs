@@ -54,8 +54,39 @@ const PIECES = [
   { name: "about", motif: "globe", size: "card" },
 ];
 
+/**
+ * Video posters for the learning showcase, keyed to `_content/home-videos.ts`.
+ *
+ * `wide` (1600×900) rather than `card`, because a video tile is 16:9 — the
+ * shape of the player that replaces it on play. A poster at the wrong ratio
+ * would make the tile jump the moment someone pressed play, which is the one
+ * thing a facade exists to avoid.
+ *
+ * Motifs are chosen to say what the lesson is ABOUT, so the rail reads as a
+ * curriculum rather than six decorative rectangles: the market itself, then
+ * the chart, then risk, then structure, then process, then the trader.
+ */
+const VIDEO_PIECES = [
+  { name: "basics", motif: "globe", size: "wide" },
+  { name: "candlesticks", motif: "candles", size: "wide" },
+  { name: "risk", motif: "gauge", size: "wide" },
+  { name: "levels", motif: "line", size: "wide" },
+  { name: "plan", motif: "path", size: "wide" },
+  { name: "psychology", motif: "flow", size: "wide" },
+];
+
+const VIDEO_OUT_DIR = join(OUT_DIR, "video");
+
 mkdirSync(OUT_DIR, { recursive: true });
 for (const piece of PIECES) {
   writeFileSync(join(OUT_DIR, `${piece.name}.svg`), renderArt(piece));
 }
-console.log(`Wrote ${PIECES.length} files to ${OUT_DIR}`);
+
+mkdirSync(VIDEO_OUT_DIR, { recursive: true });
+for (const piece of VIDEO_PIECES) {
+  writeFileSync(join(VIDEO_OUT_DIR, `${piece.name}.svg`), renderArt(piece));
+}
+
+console.log(
+  `Wrote ${PIECES.length} files to ${OUT_DIR} and ${VIDEO_PIECES.length} to ${VIDEO_OUT_DIR}`,
+);

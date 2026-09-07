@@ -82,7 +82,7 @@ describe("DEMO_ABOUT_FACTS label keys", () => {
   });
 
   it("names no real awarding body or regulator (ADR-051 §4)", () => {
-    // A placeholder that leaks may say something false about MBFX. It must
+    // A placeholder that leaks may say something false about MBX. It must
     // never say something false about somebody else, and the acronyms below
     // are the ones the reference material actually used.
     const REAL_BODIES = ["FCA", "CFTC", "NFA", "ASIC", "CySEC", "MAS", "CIRO", "CIMA", "StoneX"];

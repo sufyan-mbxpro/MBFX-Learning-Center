@@ -34,6 +34,7 @@ import {
   Search,
   SlidersHorizontal,
 } from "lucide-react";
+import type { SaveArticleInput } from "@repo/contracts";
 import { parseVideoUrl } from "@repo/utils";
 import { Button } from "@repo/ui/components/button";
 import { Checkbox } from "@repo/ui/components/checkbox";
@@ -63,6 +64,7 @@ import {
   duplicateArticleAction,
   saveArticleAction,
   setArticleDeletedAction,
+  transitionArticleAction,
 } from "../../_actions/article-actions.ts";
 import {
   StatusBadge,
@@ -183,61 +185,96 @@ export function ArticleEditor({
 
   const canSave = tr.title.trim() !== "" && categoryId !== "" && !videoInvalid;
 
+  const buildPayload = () =>
+    ({
+      articleId: article.id,
+      meta: {
+        kind: kind as "NEWS" | "ANALYSIS" | "TRADE_IDEA",
+        categoryId,
+        tagIds,
+        relatedArticleIds: relatedIds,
+        coverImageUrl: coverImageUrl || null,
+        coverImageAssetId,
+        headerImageUrl: headerImageUrl || null,
+        headerImageAssetId,
+        videoUrl: videoUrl || null,
+        isFeatured,
+        isActive,
+        isPremium,
+        showRelated,
+        relatedCount,
+        source: source || null,
+        sourceUrl: sourceUrl || null,
+      },
+      translation: {
+        articleId: article.id,
+        locale,
+        title: tr.title,
+        slug: tr.slug || undefined,
+        excerpt: tr.excerpt || null,
+        body: tr.body || null,
+        seoTitle: tr.seoTitle || null,
+        seoDescription: tr.seoDescription || null,
+        ogImageUrl: tr.ogImageUrl || null,
+        ogImageAssetId: tr.ogImageAssetId,
+        canonicalUrl: tr.canonicalUrl || null,
+        noIndex: tr.noIndex,
+        focusKeywords: tr.focusKeywords || null,
+        noFollow: tr.noFollow,
+        ogTitle: tr.ogTitle || null,
+        ogDescription: tr.ogDescription || null,
+        twitterCard:
+          tr.twitterCard === "summary" || tr.twitterCard === "summary_large_image"
+            ? tr.twitterCard
+            : null,
+        twitterImageUrl: tr.twitterImageUrl || null,
+        twitterImageAssetId: tr.twitterImageAssetId,
+        faqItems: tr.faqItems.map((f: FaqDraft) => ({
+          ...(f.id ? { id: f.id } : {}),
+          question: f.question,
+          answer: f.answer,
+        })),
+      },
+    }) satisfies SaveArticleInput;
+
+  /**
+   * The screen had TWO publish buttons, each doing half the job: this header
+   * read "Update & Publish" but only ever called `saveArticleAction`, while
+   * the publish panel's "Publish now" only called `transitionArticleAction`.
+   * So saving a draft left it a draft, and publishing with unsaved edits
+   * shipped the LAST-SAVED body to readers. `submitForm` is the one
+   * operation both of them now run.
+   *
+   * The two calls are SEQUENCED, not merged: publishing still goes through
+   * `transitionArticle`, so its own permission gate
+   * (`articleKindPermission(kind, "publish")`) and `assertArticleTransition`
+   * are untouched. That gate was the real reason the panel's comment gave for
+   * keeping them apart, and it survives intact — what does not survive is a
+   * button whose label promised a publish it never performed.
+   */
+  const submitForm = async (
+    thenTransitionTo?: "PUBLISHED" | "SCHEDULED",
+    scheduledForIso?: string,
+  ) => {
+    await saveArticleAction(buildPayload());
+    if (thenTransitionTo) {
+      await transitionArticleAction(article.id, thenTransitionTo, scheduledForIso);
+    }
+  };
+
+  /**
+   * Whether the header's primary button publishes as well as saves — and so
+   * whether it reads "Publish" or "Update". Only from DRAFT: a SCHEDULED post
+   * already has a publish plan, and fixing a typo on one must not quietly
+   * cancel that schedule by going live early.
+   */
+  const headerPublishes =
+    article.status === "DRAFT" && canPublish && article.legalTransitions.includes("PUBLISHED");
+
   const save = () =>
-    run(
-      () =>
-        saveArticleAction({
-          articleId: article.id,
-          meta: {
-            kind: kind as "NEWS" | "ANALYSIS" | "TRADE_IDEA",
-            categoryId,
-            tagIds,
-            relatedArticleIds: relatedIds,
-            coverImageUrl: coverImageUrl || null,
-            coverImageAssetId,
-            headerImageUrl: headerImageUrl || null,
-            headerImageAssetId,
-            videoUrl: videoUrl || null,
-            isFeatured,
-            isActive,
-            isPremium,
-            showRelated,
-            relatedCount,
-            source: source || null,
-            sourceUrl: sourceUrl || null,
-          },
-          translation: {
-            articleId: article.id,
-            locale,
-            title: tr.title,
-            slug: tr.slug || undefined,
-            excerpt: tr.excerpt || null,
-            body: tr.body || null,
-            seoTitle: tr.seoTitle || null,
-            seoDescription: tr.seoDescription || null,
-            ogImageUrl: tr.ogImageUrl || null,
-            ogImageAssetId: tr.ogImageAssetId,
-            canonicalUrl: tr.canonicalUrl || null,
-            noIndex: tr.noIndex,
-            focusKeywords: tr.focusKeywords || null,
-            noFollow: tr.noFollow,
-            ogTitle: tr.ogTitle || null,
-            ogDescription: tr.ogDescription || null,
-            twitterCard:
-              tr.twitterCard === "summary" || tr.twitterCard === "summary_large_image"
-                ? tr.twitterCard
-                : null,
-            twitterImageUrl: tr.twitterImageUrl || null,
-            twitterImageAssetId: tr.twitterImageAssetId,
-            faqItems: tr.faqItems.map((f: FaqDraft) => ({
-              ...(f.id ? { id: f.id } : {}),
-              question: f.question,
-              answer: f.answer,
-            })),
-          },
-        }),
-      { successMessage: labels.saved },
-    );
+    run(() => submitForm(headerPublishes ? "PUBLISHED" : undefined), {
+      successMessage: headerPublishes ? labels.publishedToast : labels.saved,
+    });
 
   const dateFmt = useMemo(() => labels.createdValue, [labels.createdValue]);
 
@@ -249,7 +286,7 @@ export function ArticleEditor({
     // page into horizontal scroll (changes-10 item 9). Each level has to
     // opt out of that separately — fixing only the editor is not enough.
     <div className="flex w-full min-w-0 flex-col gap-4">
-      {/* Sticky header — Cancel / Preview / View Live / Update & Publish. */}
+      {/* Sticky header — Cancel / Preview / View Live / Publish-or-Update. */}
       {/* Sticks BELOW the admin shell’s own sticky header, not under it:
           that header is `sticky top-0 z-30 h-[var(--height-header)]`, so a
           plain `top-0 z-10` here slid the save button behind it and made it
@@ -282,7 +319,7 @@ export function ArticleEditor({
           </Button>
         )}
         <Button size="sm" disabled={pending || !canSave} onClick={save}>
-          {labels.updateAndPublish}
+          {headerPublishes ? labels.publishPost : labels.updatePost}
         </Button>
         <DropdownMenu>
           <DropdownMenuTrigger
@@ -613,6 +650,8 @@ export function ArticleEditor({
             publishedAt={article.publishedAt}
             updatedAt={article.updatedAt}
             canPublish={canPublish}
+            canSave={canSave}
+            submitForm={submitForm}
             labels={labels.publish}
           />
 

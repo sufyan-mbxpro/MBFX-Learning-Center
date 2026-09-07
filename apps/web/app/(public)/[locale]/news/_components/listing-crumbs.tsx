@@ -25,7 +25,11 @@ export interface Crumb {
 // PageHero's own eyebrow and lead already follow, and the same `tone="onFill"`
 // idiom NewsletterForm uses.
 const TONE_CLASS = {
-  page: { rest: "text-muted-foreground", current: "text-foreground", hover: "hover:text-foreground" },
+  page: {
+    rest: "text-muted-foreground",
+    current: "text-foreground",
+    hover: "hover:text-foreground",
+  },
   onFill: { rest: "opacity-70", current: "opacity-100", hover: "hover:opacity-100" },
 } as const;
 
@@ -57,7 +61,10 @@ export async function ListingCrumbs({
           <li key={`${crumb.label}-${index}`} className="flex items-center gap-2">
             {index > 0 && <span aria-hidden>·</span>}
             {crumb.href ? (
-              <Link href={crumb.href} className={cn("link-underline transition-opacity", ink.hover)}>
+              <Link
+                href={crumb.href}
+                className={cn("link-underline transition-opacity", ink.hover)}
+              >
                 {crumb.label}
               </Link>
             ) : (

@@ -7,6 +7,7 @@ import Image from "next/image";
 import { ArrowRight } from "lucide-react";
 import { getSetting } from "@repo/settings";
 import { Link } from "@repo/i18n/navigation";
+import { AmbientMotif } from "@repo/ui/components/ambient-motif";
 import { Button } from "@repo/ui/components/button";
 import { Container } from "@repo/ui/components/container";
 import { Reveal } from "@repo/ui/components/reveal";
@@ -76,6 +77,13 @@ export async function Hero({ locale, variant = "split" }: SectionProps) {
         aria-hidden
         className="bg-dot-grid pointer-events-none absolute inset-0 -z-10 opacity-[0.15] [mask-image:linear-gradient(to_bottom,black,transparent_80%)]"
       />
+      {/* `mixed` on the homepage specifically: this is the one band that
+          introduces the whole platform, so the field carries currency,
+          chart AND learning glyphs rather than the single-subject sets the
+          section fronts use. It rides ON TOP of the dot grid — both are
+          currentColor at single-digit opacity, and the grid's 20px pitch
+          reads as the paper the glyphs are drawn on. */}
+      <AmbientMotif variant="mixed" />
     </>
   );
 

@@ -13,7 +13,7 @@
 //      absent from the page. The pages start shorter than their reference
 //      and grow as the owner fills this in.
 //   2. Nothing quantitative or regulatory lives in the message catalogs.
-//      Catalog strings describe how MBFX works — qualitative, checkable
+//      Catalog strings describe how MBX works — qualitative, checkable
 //      against the product. Numbers and named authorities come from here,
 //      where they are visibly the owner's to supply.
 //
@@ -57,7 +57,7 @@ export interface Award {
 }
 
 /**
- * One jurisdiction MBFX operates in, and the authorities there. `x`/`y` are
+ * One jurisdiction MBX operates in, and the authorities there. `x`/`y` are
  * percentages of the map's box, so the pin math is resolution-independent.
  */
 export interface Jurisdiction {
@@ -99,7 +99,7 @@ export interface AboutFacts {
  * what renders again the moment ABOUT_CONTENT_MODE is "real".
  */
 export const REAL_ABOUT_FACTS: AboutFacts = {
-  // TODO(owner): the year MBFX Learning Center started operating.
+  // TODO(owner): the year MBX Learning Center started operating.
   foundedYear: null,
 
   // TODO(owner): headline figures. Each needs a matching `about.overview.stats.*`
@@ -115,9 +115,9 @@ export const REAL_ABOUT_FACTS: AboutFacts = {
   // thing to render.
   awards: [],
 
-  // TODO(owner): the places MBFX has people, and the teams there. NOT a list
-  // of regulators (ADR-051 §4) — naming an authority MBFX does not answer to
-  // is a misrepresentation of that authority, not just of MBFX. Empty ⇒ no
+  // TODO(owner): the places MBX has people, and the teams there. NOT a list
+  // of regulators (ADR-051 §4) — naming an authority MBX does not answer to
+  // is a misrepresentation of that authority, not just of MBX. Empty ⇒ no
   // map and no legend on /about/security.
   jurisdictions: [],
 

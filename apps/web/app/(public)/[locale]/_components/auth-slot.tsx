@@ -15,7 +15,7 @@ import { Link } from "@repo/i18n/navigation";
 import { Button } from "@repo/ui/components/button";
 
 type AuthState =
-  { status: "loading" } | { status: "anonymous" } | { status: "signed-in"; name: string };
+  { status: "loading" } | { status: "anonymous" } | { status: "learner"; name: string };
 
 export function AuthSlot() {
   const t = useTranslations("nav");
@@ -25,11 +25,17 @@ export function AuthSlot() {
     let cancelled = false;
     fetch("/api/auth/get-session", { headers: { Accept: "application/json" } })
       .then((response) => (response.ok ? response.json() : null))
-      .then((session: { user?: { name?: string } } | null) => {
+      .then((session: { user?: { name?: string; userType?: string } } | null) => {
         if (cancelled) return;
+        // A STAFF session renders as anonymous here. Staff sign in at
+        // /admin/sign-in and belong to the admin surface (ADR-052): putting
+        // "System Administrator" in the public header both advertises the
+        // portal the public site deliberately hides and hands a visitor an
+        // identity chip with nowhere to go. Display-only — the session is
+        // untouched, and /admin still recognizes it.
         setState(
-          session?.user
-            ? { status: "signed-in", name: session.user.name ?? "" }
+          session?.user && session.user.userType !== "STAFF"
+            ? { status: "learner", name: session.user.name ?? "" }
             : { status: "anonymous" },
         );
       })

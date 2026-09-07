@@ -16,7 +16,7 @@ The rule that makes future mobile/desktop cheap: **apps contain routing and rend
 If a piece of logic would need to be rewritten for a React Native screen, it is in the wrong place. Data access, permission checks, validation schemas, theme resolution, and translation loading are all package-level concerns.
 
 ```
-mbfx-learning-center/
+mbx-learning-center/
 ├── apps/
 │   └── web/                        # The one app: public site + admin portal
 │       ├── app/

@@ -3,6 +3,7 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { getBrandAssets } from "@repo/core";
 import { getSetting } from "@repo/settings";
 import { getPathname, Link } from "@repo/i18n/navigation";
+import { AmbientMotif } from "@repo/ui/components/ambient-motif";
 import { BrandLogo } from "@repo/ui/components/brand-logo";
 import { Reveal } from "@repo/ui/components/reveal";
 import { SignInForm } from "./sign-in-form.tsx";
@@ -35,7 +36,11 @@ export default async function SignInPage({ params }: PageProps<"/[locale]/sign-i
   ]);
 
   return (
-    <main className="bg-glow-primary container-page section-lg relative flex flex-1 items-center justify-center overflow-hidden">
+    // `isolate` is added alongside the existing `relative`: without a
+    // stacking context the motif's -z-10 puts it BEHIND this element's
+    // own bg-glow-primary rather than between the glow and the card.
+    <main className="bg-glow-primary container-page section-lg relative isolate flex flex-1 items-center justify-center overflow-hidden">
+      <AmbientMotif variant="currency" intensity={0.8} />
       <Reveal variant="scale" className="flex w-full max-w-sm flex-col gap-6">
         {/* The admin-uploaded logo, same as the header/footer/admin shell —
             a sign-in screen showing the site's NAME while every other
@@ -46,7 +51,7 @@ export default async function SignInPage({ params }: PageProps<"/[locale]/sign-i
             light={brandAssets.logo_light?.url ?? null}
             dark={brandAssets.logo_dark?.url ?? null}
             alt={siteName ?? ""}
-            className="h-10"
+            className="h-14"
             fallback={<span className="text-lg font-semibold tracking-tight">{siteName}</span>}
           />
         </div>

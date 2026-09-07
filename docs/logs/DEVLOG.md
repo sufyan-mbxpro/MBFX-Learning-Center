@@ -9071,3 +9071,1086 @@ The database was never implicated and was checked before the cache was:
 `footer.menuColumns` holds 116 bytes of valid JSON, not the 667-byte payload
 the error names. Footer re-verified after the clean restart — three columns,
 twelve links, 200 on repeated requests.
+
+---
+
+## 2026-09-07 — the homepage design pass gets rendered, and looking at it found a bug (amends the entry above)
+
+Amends **"the homepage gets its design pass"**, whose Verification section
+ends _"Not verified, and stated plainly: nothing was rendered."_ Docker was
+down that session. It came back; the page has now been rendered and looked at
+in four configurations. Append-only, so that entry stands as written — this
+discharges its caveat and corrects one thing it could not have known.
+
+### The composition reached the database without a reset
+
+That entry says the change "needs a reseed to appear at all". It does, and the
+owner explicitly declined `pnpm db:reset` on a populated dev database. The
+seed's `Setting` upsert deliberately never overwrites a `value` (it protects
+admin edits), so a re-seed would not have helped either.
+
+Resolved with a single `Setting.update` on `home.sections` — old value logged
+before, new value logged after, no other row touched, the one-off script
+deleted immediately. `pnpm db:reset` stays the documented path for a fresh
+environment; this is the surgical equivalent for a populated one, and it is
+worth knowing it exists before reaching for the blunt instrument.
+
+### The bug only a screenshot could find
+
+The destination card lifts its icon badge over the media's bottom edge with
+`-mt-12`. The card sets `isolate`, and the media paints after the badge in
+document order — so the badge rendered **underneath the artwork**, with only
+its lower half showing. Fixed by `relative z-10` on that row.
+
+What makes this one worth recording is everything that passed while it was
+broken: `tsc` clean, `eslint` clean, `prettier` clean, all four governance
+scripts OK, `@repo/ui` 100 tests green, the markup correct, the accessibility
+tree correct, and the element genuinely present at the right size in the right
+place. Not one of those can see paint order. A design pass is not verifiable
+by static check, which is the whole argument for rendering it before calling
+it done — and the reason the entry above was right to refuse to.
+
+### What the four viewports show
+
+Structure identical across all four: one carousel, eight slides, eight images,
+**zero dashed stub boxes**, previous-arrow disabled at rest.
+
+- **Light** — the generated motifs read at card size (a route through
+  material, a gauge, a month with a day ringed). `soon` cards carry the
+  outline badge and no hover lift; live ones carry `Explore →`.
+- **Dark** — the artwork's dark ground merges into the dark card instead of
+  sitting on it as a bright rectangle. The strongest argument for generated
+  vector over photography in this slot.
+- **RTL (`/ar`)** — correct with no `[dir]` rule anywhere in this work: cards
+  flow right-to-left, the icon badge sits at the inline start (right), the tag
+  at the inline end, the arrow glyph points left, the arrow group moves right,
+  and the active dot is the rightmost. `scrollIntoView({ inline: "start" })`
+  plus logical utilities, behaving as argued.
+- **Mobile (420px)** — one card with the next peeking, which is the
+  affordance that replaces the autoplay this component deliberately omits.
+
+Console is clean on `/` in light, dark and at mobile width.
+
+### One pre-existing error, not from this work
+
+`/ar` throws `IntlError: MISSING_MESSAGE` for `nav.mega.about.company` and
+`nav.mega.about.howWeWork`, from `MobileNav`. These are among the `nav.mega.*`
+/ `about.*` / `economicCalendar.*` gaps `check:catalog-completeness` already
+warns about for es/ar/ur; they belong to the mega-menu, About and calendar
+work, not the homepage. Invisible in production because `ar` is
+`isActive: false` (ADR-043 #3), and by ADR-043 #4 they must be closed in the
+same PR that ever activates `ar`. Flagged, not fixed — fixing it here would
+have been scope this pass did not own.
+
+### A correction to my own in-session diagnosis
+
+Mid-session a restart produced a wall of `SyntaxError: ... at position 667`
+and 500s on every route, including `/admin/sign-in`. I checked the database
+first (correctly ruling it out — `home.sections` is 973 bytes and parses to
+exactly 14 entries), then concluded the errors had "cleared on their own" when
+the server started serving 200s. That was luck, not a diagnosis. **The entry
+immediately above this one has the real cause and the real fix**: a `-Force`
+kill landing inside a `.next/dev` manifest write, cleared by
+`rm -rf apps/web/.next/dev`. Two lessons, both already stated there and both
+learned the slow way here: prefer a graceful stop to `-Force` on a Next dev
+server, and an orphaned `next dev` child can hold port 3000 while serving
+nothing but 500s, so a healthy-looking port proves nothing.
+
+Also: `pnpm dev` can print `ELIFECYCLE ... exited (-1)` through turbo while
+the underlying `next dev` survives and keeps serving. Turbo's failure line is
+not evidence the server is down — check the port, then check what the port
+actually returns.
+
+### Verification
+
+Re-run against the committed tree: `governance:check` OK, `check:home-sections`
+OK (14 seeded, 7 built, 7 known stubs, 10 with variants),
+`check:catalog-completeness` OK, `check:phantom-deps` OK,
+`check:reserved-paths` OK. `tsc --noEmit` clean, `eslint` clean, `prettier`
+clean, `@repo/ui` 100 tests passing.
+
+Screenshots were taken with a throwaway Playwright script — the chrome-devtools
+profile is still held by another session, as it has been all day. The script
+is deleted; `git status` under `apps/web/` shows no `.tmp*` left behind.
+
+**Still owed to Module 14, unchanged:** axe on the new section, a Lighthouse
+pass on `/` now that it carries its first public client island, and `pnpm build`
+(not run here either).
+
+---
+
+## 2026-09-07 — /news gets its design pass: masthead, spotlight, topic cards, richer article cards, route loaders
+
+Module 12/15, public surface only. The owner asked for the news page to be
+"full rich": loading, hover effects, more cards, a top banner with media, and
+a page loader. Composition is fixed in code, not admin-configurable —
+ADR-042's settled position, the same way the homepage and About passes were
+built. No ADR: nothing here deviates from a locked decision, and the
+precedent for a design pass shipping on a DEVLOG entry alone is the homepage
+and the footer sitemap, both this same day.
+
+### What is on the page now
+
+Masthead → stat band → spotlight → listing + facet sidebar → topic cards →
+subscribe strip. Every band is a component under `news/_components/`; the
+page composes them and owns the three reads that feed them.
+
+- **`NewsMasthead`** — `PageHero` with generated artwork behind the headline,
+  the breadcrumb trail, and two in-page actions (`#latest`, `#topics`). The
+  archives (`/news/category/*`, `/news/tag/*`, `/analysis`) deliberately keep
+  the plain `ListingHeader`: an archive is a filtered VIEW of a section and
+  should read as subordinate to the section front.
+- **`NewsStats`** — articles, topics, months of archive, plus a last-updated
+  line. Derived from the facets the sidebar already reads: no extra query,
+  and nothing on the page can contradict anything else on it. Renders
+  nothing at zero. There is no seeded "500+" here and there must not be one.
+- **`NewsSpotlight`** — one large lead story plus two numbered runners-up.
+  Not `ArticleCards variant="featured"`: that variant makes the first card
+  wider and stops there. Three shapes on a page is a hierarchy; one shape at
+  three sizes is a grid with a big cell.
+- **`NewsTopics`** — the category archive as cards with counts, on a band
+  with its own backdrop. The sidebar keeps its compact list; this band is for
+  the reader who arrived without a story in mind. Accent rotates by POSITION,
+  so a category added in the admin gets a colour with no code change.
+- **`ArticleCards`** — the shared card, so /analysis, the archives, the
+  related strip and the homepage's latest-analysis section all inherit the
+  work.
+
+### The editor's Featured flag finally does something
+
+`Article.isFeatured` has been stored since changes-07 PR 8 and read by
+nothing outside the admin list. `getSpotlightArticles` picks flagged articles
+newest-first and **tops up** with the newest unflagged ones when fewer than
+three are flagged — the top-up is what makes the spotlight part of the
+LAYOUT rather than a band that appears and disappears. An editor who flags
+three gets exactly those three; an editor who flags none gets the three most
+recent, which is what a reader expects from a newsroom front anyway.
+
+`featuredOnly` rides on `ListPublishedArticlesOptions` rather than becoming a
+second query, so the frozen visibility rule (`publicArticleWhere`, Module 15
+SKILL.md) is composed in one place and a featured DRAFT stays invisible like
+any other draft.
+
+Where the flag is SHOWN took a second pass. The spotlight is exactly where
+flagged articles end up, so the grid's Featured badge only ever fires when
+there are more flags than the spotlight can hold — which would have made the
+badge almost unreachable. The lead card's eyebrow now reads "Featured" when
+the story is flagged and "Lead story" when it is an unflagged top-up. The
+label states why the story is there, and both statements are true.
+
+### Excluding the spotlight from the grid, and the floor that took a live database to find
+
+The listing excludes the spotlight's ids so nothing renders twice, and it
+excludes them on EVERY page of the run, not only the page that renders the
+block. Excluding on page 1 alone would shift the window under the reader —
+`total` and the offset come from the same `where`, so page 2 would repeat
+rows page 1 had already pushed past. `getSpotlightArticles` is deterministic
+for a given content set, which is what makes that safe.
+
+**The bug the browser found.** The dev database has three visible EN news
+articles. The spotlight took all three, the listing excluded all three, and
+the page rendered a full-width "Nothing published here yet" underneath three
+stories that were plainly published. Every check was green while it did this:
+tsc, eslint, prettier, catalog completeness. Only rendering it showed it.
+
+Fixed with a floor: below `total > SPOTLIGHT_COUNT` there is no spotlight and
+no exclusion, and the same articles simply appear once, in the grid. A
+section front with too little to say should just be the list. The listing
+band's `muted` tone is now conditional on the spotlight for the same reason —
+with no spotlight it abutted the stat band's own muted surface and read as
+one flat expanse.
+
+### Hover, and where it is allowed to key off
+
+The card vocabulary is the homepage explore carousel's, unchanged: `.card-hover`
+for the shared ring/shadow, `.hover-lift` + `.sheen` for public-surface
+emphasis, a rule sweeping from the inline start (`start-0` + `w-0` → `w-full`,
+so RTL needs no `[dir]` rule), `.media-zoom` on the cover, `.hover-arrow` on
+the read affordance, and the heading's ink following the CARD's hover rather
+than only the link's — on a card this size the pointer is rarely on the words.
+All CSS over server-rendered markup: zero client JS, ADR-018 rule 1.
+
+`group` goes on the card, which is NOT one big link. The title, the category
+chip and the read affordance stay separate targets, so the chip is still
+clickable and the heading is still a real link in a screen reader's list of
+links. The read affordance is `aria-hidden` and unfocusable: the heading above
+it already goes to the same place, and a second link would make every card two
+identical stops in a keyboard tour of the grid.
+
+The sweeping rule lives on a CHILD, never on the card itself — `.card-hover`
+declares its own `transition-property` and, sitting later in `@layer utilities`
+than Tailwind's generated classes, beats a transition utility written in the
+class attribute. On the card it would jump rather than glide.
+
+### A missing cover is now a designed state
+
+`ArticleMedia` renders the editor's cover, or a panel toned by the article's
+KIND (news / analysis / trade idea) with the matching glyph and a dot grid.
+Before this, a card with no cover rendered text-only and a grid of mixed cards
+looked broken rather than varied. This is ADR-047 §3's pattern applied to
+CONTENT rather than chrome, which is the one place the two differ: the page's
+artwork is a code registry, a cover image is data an editor owns. No asset is
+committed for the fallback — it is theme tokens and one glyph, so it costs
+nothing to serve and follows dark mode for free.
+
+### Loaders
+
+Two, and they are different things from the site-wide `SiteLoader` overlay
+(ADR-018 rule 4, a first-visit brand moment):
+
+- `news/loading.tsx` — the listing skeleton, which Next also applies to
+  `/news/category/*` and `/news/tag/*`; all three open with a band, then a
+  grid beside a sidebar.
+- `news/[slug]/loading.tsx` — overrides it for the detail segment, because a
+  grid of card outlines standing in for a page of prose is worse than no
+  skeleton at all. Uneven last-line widths, so a stack of bars reads as prose
+  rather than as a table.
+
+Both mirror the real proportions so nothing jumps, and both are `aria-hidden`:
+Next's own navigation announcement already tells a screen reader the page is
+loading, and announcing forty empty boxes on top of that is noise.
+
+### Artwork and catalog
+
+`apps/web/scripts/generate-news-art.mjs` emits `public/news/{banner,topics}.svg`
+from the shared `scripts/lib/art.mjs` — committed output, byte-deterministic,
+re-run rather than hand-edited. Deliberately only two pieces: the listing's
+real imagery is the ARTICLES' covers, and a generated panel competing with a
+real editorial photograph is a worse page, not a richer one. `banner` reuses
+the `feed` motif the homepage's news destination card carries, so the card
+that points here and the page it lands on are one family.
+
+Twenty new `news.*` keys, written in all four locales rather than left to
+warn — public namespace (ADR-043), same call the footer's three keys made.
+`PageHero` gained a `breadcrumb` slot: its own, because the eyebrow renders
+as a `<p>` and a `<nav>` inside a `<p>` is invalid markup browsers silently
+reparent, which would move the trail out of the hero entirely. The crumb
+trail itself moved to `listing-crumbs.tsx` with a `tone` prop — `onFill` is
+opacity off the band's own foreground, never `--muted-foreground`, which is
+computed against `--background` and carries no contrast guarantee on a brand
+gradient.
+
+### Verification
+
+`prettier --check`, `eslint` (web + core + ui) and `tsc --noEmit` (web, core,
+ui) all clean. `check:catalog-completeness` OK (`en` complete; the es/ar/ur
+warnings are the pre-existing `nav.mega.*` / `about.*` / `economicCalendar.*`
+gaps, and none of the new `news.*` keys are among them).
+`check:phantom-deps` OK, `check:reserved-paths` OK. `@repo/ui` 100 tests pass.
+
+**Live**, at :3000 against the real database. Three visible EN articles is too
+thin to exercise a spotlight, so ten temporary articles were written across
+four categories (two flagged Featured, three with no cover), the page was
+looked at, and every fixture row was deleted afterwards — `source` marker on
+each, count back to 8, the script deleted. Nothing in the repo, and nothing
+left in the database.
+
+- 1440px light — masthead with artwork, stats 13/4/2, lead card carrying
+  FEATURED with its category chip, numbered runner rail, 9 grid cards (12
+  visible minus the 3 spotlighted), three kind-toned fallback panels, four
+  topic cards with live counts.
+- Dark — bands, cards and the FEATURED eyebrow all invert correctly.
+- 390px — everything stacks, `scrollWidth` never exceeds the viewport.
+- `/ar/news` — `dir=rtl`, no horizontal overflow, mirrored sidebar and
+  pagination, Arabic headings from the new keys. The listing itself is empty
+  there because the fixtures were EN-only, which is ADR-007 behaving.
+- Console: 14 errors, all pre-existing `nav.mega.*` MISSING_MESSAGE on `ar`.
+  None from this work.
+
+**A screenshot artifact worth writing down.** A full-page capture shows the
+spotlight and the grid as blank regions. They are not blank — `Reveal` rests
+at `opacity: 0` until its `view()` timeline advances, and a full-page capture
+never scrolls, so nothing ever enters a scrollport. Confirmed by reading the
+DOM: 3 spotlight articles and 13 cards present, at full height, at opacity 0;
+they paint the moment the page is scrolled. Judge a `Reveal`-wrapped section
+from a scrolled viewport shot, never from `fullPage: true`.
+
+**One fix that only a real lead card showed.** The runner-up rail is
+`flex-1` so it matches the lead card's height; top-aligned, that left a third
+of each runner card empty under its text. Centred now, so the extra height
+reads as breathing room rather than as a card that failed to fill.
+
+**Pre-existing, observed, not fixed here:** `/ar/news` renders pagination for
+two pages over an empty grid — the count query does not filter by translation
+availability, so `total` counts rows whose translation the listing then drops
+(ADR-007). It predates this change and belongs with the locale-activation
+work ADR-043 #3 describes. Two `@repo/core` tests fail on the committed tree
+for reasons unrelated to this change: `cms/paths.test.ts` and
+`cms/pages.integration.test.ts` still use "about" as an ordinary static path
+after ADR-047 reserved it (both in the cancelled Website Builder's tree,
+ADR-042), and `navigation.integration.test.ts` cannot reach Docker for
+Testcontainers in this environment. `git diff` shows this change touches
+neither file.
+
+**Still owed to Module 14:** axe on the new bands and a Lighthouse pass on
+`/news` against the public budget — the route now carries a priority LCP
+image and two more image-bearing bands. `pnpm build` not run here.
+
+---
+
+## 2026-09-07 — the brand becomes MBX (rename, no new ADR)
+
+**Module:** cross-cutting (12/15/09/06/01) — owner request, no architectural
+change.
+
+### What shipped
+
+The brand string `MBFX` is now `MBX` everywhere it reaches a screen or is
+carried by our own code. 27 files, mechanical `MBFX→MBX` / `mbfx→mbx`:
+
+- **User-facing copy** — all four catalogs (`en`/`es`/`ar`/`ur`): `siteName`,
+  the auth screens' `signInDescription` / `noAccount` / `signUpDescription`,
+  the whole `about.*` namespace (hero, nav labels, meta titles, timeline,
+  transparency, why-us), and `admin.*`'s staff-portal notice.
+- **Metadata** — `(admin)/layout.tsx`, `(admin-auth)/layout.tsx`,
+  `global-not-found.tsx`.
+- **Seed data** — `seed.ts`'s `ABOUT_NAV` labels ("About MBX", "Why MBX") in
+  both the menu tree and the mega-menu rows. **Needs `pnpm db:seed` (or
+  `db:reset`) to show up** — the labels live in `MenuItemTranslation`, so an
+  already-seeded dev DB keeps the old strings until reseeded.
+- **Client storage keys** — `SIDEBAR_COOKIE` (`mbfx_admin_sidebar` →
+  `mbx_admin_sidebar`) and the site loader's `SESSION_KEY`
+  (`mbfx:site-loader-shown` → `mbx:site-loader-shown`). Both are read through
+  their exported constant, so nothing else needed touching; the practical
+  effect is that one stale cookie is ignored once and the sidebar reverts to
+  expanded on first load.
+- **Demo/placeholder data and comments** — `about-facts.demo.ts`
+  (`support@mbfx.co` → `support@mbx.co`), `about-facts.ts`'s `TODO(owner)`
+  notes, `principles.tsx`, `mega-menu.tsx`'s "the mbfx.co treatment" note,
+  `schema.prisma`'s header.
+- **Tests** — the assertions that carried the brand string moved with it
+  (`mega-menu.test.ts`, `about-primitives.test.tsx`, `rtl.test.tsx`,
+  `public-design-system.test.tsx`, `navigation.integration.test.ts`,
+  `changes01.integration.test.ts`, `about-section.spec.ts`). Both integration
+  fixtures build their own rows rather than reading seed output, so they stay
+  self-consistent.
+- **Live docs** — `claude.md`'s title, `package.json`'s `name`
+  (`mbx-learning-center`), and the repo-tree root in `plan.md` and
+  `MONOREPO_ARCHITECTURE.md`.
+
+### Decisions
+
+1. **Infrastructure identifiers were deliberately left as `mbfx`** (owner's
+   call this session): `DATABASE_URL` in `.env` / `.env.example`, the
+   `mbfx_learning_center` database, `mbfx-mariadb` / `mbfx-redis` in
+   `docker-compose.yml`, the Testcontainers `mbfx_test` databases, and
+   Playwright's `mbfx_e2e`. Renaming them buys nothing a user can see and
+   costs a volume recreate plus a full reseed. They are not brand surface.
+2. **History was not rewritten.** ADR-001/047/048/051 and every prior DEVLOG
+   entry keep `MBFX`, per the append-only rule and "never edit an existing
+   ADR's meaning" — those documents are accurate records of what was decided
+   when the brand was MBFX. `docs/changes/*` are completed change plans and
+   were left alone for the same reason. This entry is the pointer that
+   reconciles them with the current name.
+3. **No ADR.** A brand string is not an architectural decision and this
+   deviates from nothing in plan.md Part F. If the domain or the legal entity
+   changes, that is a different question and gets its own ADR.
+4. **The directory stays `MBFX-Learning-Center`** — cosmetic, and renaming it
+   would break absolute paths in `.env` and the IDE workspace for no gain.
+
+### Test status
+
+`tsc --noEmit` clean across all 13 packages. `eslint` clean on every touched
+package (`@repo/ui`, `@repo/i18n`, `@repo/core`, `@repo/db`, `apps/web`) and
+on `@repo/theme`. `@repo/ui` 100 tests passing, `apps/web` 124 tests passing.
+`check:catalog-completeness` OK (its `es`/`ar`/`ur` warnings are the
+pre-existing ones from the mega-menu/About/calendar work, untouched here).
+`governance:check` OK.
+
+**Not run:** the Testcontainers integration suites and Playwright E2E — both
+need Docker, which was not up this session. Neither carries a brand assertion
+that isn't in its own fixture, so the risk is low, but they are owed.
+
+**Note for whoever reseeds:** `turbo lint` aborted once with a Windows
+`0xC0000409` on `@repo/theme` — a pnpm/turbo concurrency crash, not a lint
+error. The same package lints clean when run directly. Unrelated to this
+change; recorded so the next person doesn't chase it.
+
+---
+
+## 2026-09-07 — the homepage gets a video rail, feature highlights and a news band (Module 12, no new ADR)
+
+**Ask:** "add a video carousel related to forex learning with video on the top
+full page under the menu with full rich effects & hover effects.. also add the
+other feature highlights and add some latest news on the home page as well."
+
+Three new sections, composed in code per ADR-042. No ADR: nothing here
+deviates from a settled decision — the section registry, the media pattern and
+the carousel all already existed, and this uses them as designed. The one
+change with teeth is to the CSP, covered below.
+
+### `learning_videos` — the rail that opens the page
+
+Seeded at order 1, so it is the first thing under the menu, ahead of the hero.
+A full-bleed `tone="inverted"` band (the theme's own `--secondary`, no
+literal), which is what makes it read as a cinematic shelf rather than a
+fourth card grid. The hero and its `<h1>` sit immediately below it.
+
+Six 16:9 tiles in the existing `Carousel`, two-and-a-peek on desktop. Hover
+choreography is all existing utilities — `.hover-lift`, `.sheen`,
+`.media-zoom` on the poster, and the play disc scaling on `group-hover`.
+
+**`_content/home-videos.ts` ships with every `url` null, and that is the
+design, not an unfinished edge.** A video URL is a factual claim: it asserts
+that a specific recording exists and teaches a specific thing. Inventing
+eleven-character YouTube ids would fabricate exactly that, and the ids would
+resolve to whatever happens to occupy them. So the file follows the About
+section's rule (ADR-047 §3): the surface renders complete without the claim,
+and the claim is a one-line data edit away. A null renders the finished poster
+tile with a "Recording soon" badge and NO play affordance — the same posture
+`explore-destinations.ts` takes for routes that do not exist. Nobody is
+invited to press a button that cannot do anything.
+
+Posters are generated art, six new `wide` (16:9) pieces from
+`generate-home-art.mjs` under `public/home/video/`. 16:9 and not the explore
+rail's 16:10 deliberately: it is the shape of the player that replaces it, so
+pressing play never reflows the rail. Re-running the generator reproduced the
+eight existing card pieces byte-identically, which is the determinism claim
+that file makes about itself, now actually exercised.
+
+`parseVideoUrl` runs on the SERVER. The tile receives a derived `embedUrl` or
+null and has no third code path, so a raw URL never reaches an iframe `src`
+(security.md #9). A malformed id is rejected by the parser and lands in the
+"coming soon" state rather than emitting a broken embed.
+
+### `Carousel` gains a `tone` prop — a correctness switch, not a preference
+
+Dropping the carousel onto an inverted band exposed a real bug before it
+shipped: its controls use `--border` and `--primary-interactive`, both derived
+for legibility against `--background`. On `--secondary` the dots are very
+nearly invisible. `tone="inverted"` swaps them for opacities of
+`--secondary-foreground`, which is derived readable ON `--secondary` by
+construction (ADR-003) — the idiom the footer already uses throughout for the
+same surface. Two tests pin both palettes, including that the
+background-derived tokens are ABSENT rather than merely overridden (twMerge
+would keep both and the winner would be a coin flip).
+
+The same trap caught the heading: `SectionHeading`'s eyebrow is
+`text-primary-interactive` and its lead `text-muted-foreground`, so this
+section hand-writes its heading in `--secondary-foreground` instead of reusing
+it. That is a deliberate non-reuse, and the reason is in a comment at the call
+site so it does not read as an oversight.
+
+### `feature_highlights` and `latest_news`
+
+`feature_highlights`: six `IconCard`s on a muted band — commitments about HOW
+material is written ("risk is part of the lesson", "no signals, no hype"), and
+pointedly not a single metric. Nothing is gated on `about-facts.ts` because
+nothing here asserts a fact; the moment a number is wanted in this section it
+belongs behind that gate. `interactive` is forced on even though the cards are
+not links, which is an exception to IconCard's own rule — the whole block
+responds to the pointer and no card in it is a link, so nothing is promised
+inconsistently. Stated at the call site rather than left to be rediscovered.
+
+`latest_news`: `latest-analysis.tsx`'s sibling, same cached read, same
+`ArticleCards`, same feature gate — the only difference is `kinds: ["NEWS"]`
+against the other's ANALYSIS + TRADE_IDEA. Splitting them is what lets the
+page make "what happened" and "what we make of it" as two distinct promises.
+`showKind` stays off: every card is the same kind by construction, so a row of
+identical "News" chips would be noise.
+
+### CSP: a gap closed, deliberately
+
+`frame-src` was `self` plus the Tradays calendar host, with a comment
+recording video embeds on /news as a known open gap falling through to
+`default-src`. Video is now a first-class homepage surface, so the gap is
+closed: the three origins `parseVideoUrl` EMITS are named — `youtube-nocookie`
+(never youtube.com), `player.vimeo.com`, `www.dailymotion.com`. These are the
+origins the parser produces, not the origins a URL may be pasted from, so the
+allowlist and the parser cannot drift apart in the unsafe direction. The
+policy remains Report-Only; this is about the soak reporting signal rather
+than noise, and about not breaking every video the day it is enforced.
+
+### Verification
+
+`check:home-sections` OK (17 seeded, 10 built, 7 known stubs, 13 with
+variants). `check:catalog-completeness` OK — 46 new `home.*` keys in all four
+catalogs, `en` complete and the three inactive locales translated rather than
+left to warn. `check:phantom-deps`, `check:reserved-paths`,
+`governance:check` all OK. `eslint` clean on `@repo/ui` and `@repo/web`,
+`tsc --noEmit` clean workspace-wide after `next typegen`, `prettier --check`
+clean. Tests: `@repo/ui` 102 (2 new), `@repo/contracts` 158, `@repo/utils` 145.
+
+**Rendered and looked at**, in light, dark, `/ar` and at 420px: two carousels,
+six video tiles, six "Recording soon" badges, six highlight cards, zero dashed
+stubs. Console clean in light, dark and mobile. RTL is correct with no `[dir]`
+rule in any of this work — heading and tile copy right-aligned, the "All
+courses" arrow pointing left, the badge at the inline end, cards flowing
+right-to-left and the active dot rightmost.
+
+**The play path was exercised end to end**, not assumed. One entry was
+temporarily pointed at the repo's own test fixture id, and the result checked
+before reverting: exactly one play button appeared (the other five stayed
+inert), its label was the interpolated `Play: {title}`, the click swapped in
+an iframe whose `src` was the DERIVED `youtube-nocookie` embed URL and not the
+pasted `youtu.be` one — the security property holding in practice — and zero
+`frame-src` violations were reported, confirming the CSP addition. The
+temporary URL is reverted; `home-videos.ts` ships all-null.
+
+### Two things not fixed here
+
+`/ar` still throws `IntlError: MISSING_MESSAGE` for `nav.mega.about.*` from
+`MobileNav` — pre-existing, belongs to the mega-menu/About/calendar catalogs,
+invisible in production because `ar` is `isActive: false`, and required by
+ADR-043 #4 to be closed in whatever PR activates `ar`.
+
+The `SyntaxError: ... at position 667` recurred on the first requests after a
+restart and then cleared on its own. **This corrects the entry above that
+attributed it to a `.next/dev` manifest corrupted by a `-Force` kill:**
+`.next/dev` was deleted entirely before this restart and the error still
+appeared, so a corrupt cache is not the whole cause. A `JSON.parse` spy
+installed via `NODE_OPTIONS` caught nothing once the server was warm, which
+places it during first compile rather than in application code. Still
+unexplained, still self-clearing, still not from this work — recorded so the
+next session does not re-derive the wrong answer from the same symptom.
+
+**Owed to Module 14, unchanged:** axe on the three new sections, and a
+Lighthouse pass on `/` — which now opens with a full-bleed band above the
+hero, so the LCP element has moved and the budget genuinely needs re-measuring.
+`pnpm build` was not run.
+
+---
+
+## 2026-09-07 — /news, second pass: the stat band goes, the page becomes sections, and the archives stop dead-ending
+
+Amends the entry above. Owner review of the rendered page, three changes
+asked for and one removal:
+
+1. **Remove the stat band.** "Articles published / Topics covered / Months of
+   archive" is gone, and its four catalog keys with it, in all four locales.
+   It was honest — every figure was derived from the facets — but on a
+   newsroom front it answered a question no reader was asking. A number is
+   not content.
+2. **Divide the page by category.** Latest news across all categories stays
+   at the top; below it, one band per category carrying that category's
+   newest stories.
+3. **Give the archives their taxonomy.** Clicking a category now lands on a
+   page that shows the other categories as cards and the tags that occur in
+   what you are reading, instead of a grid that ends at its last article.
+4. **Highlight featured news.** Asked for mid-pass.
+
+### The page, top to bottom
+
+    masthead → spotlight (Featured first) → LATEST, all categories together
+    → one band PER CATEGORY → every topic as a tile → subscribe
+
+The general feed is first because most readers arrive without a section in
+mind. The per-category bands follow, for the reader who only follows one of
+them. The tile band closes the page and is NOT a duplicate of the bands above
+it: it lists every category, including those with too few articles to have
+earned a band, which is exactly the set the bands cannot show.
+
+Only the section FRONT gets the composed bands. Page 2 of an archive is a
+different reading task — a reader who is paging has already chosen the
+chronological feed — and a search is a third one again.
+
+### `getCategoryDigests`, and the exclusion I wrote twice
+
+New cached service, one read for the whole block, per-category queries run in
+PARALLEL — four sequential round trips on a route with a Lighthouse budget is
+exactly what that budget is for. A category earns a band by having at least
+two visible articles; the floor lives in the service, so the component
+renders what it is given and never second-guesses it. It re-checks against
+what actually rendered rather than against the count that predicted it,
+because a count includes articles whose translation does not resolve in this
+locale (ADR-007).
+
+The bands were first written to exclude the spotlight's ids, by analogy with
+the general feed. **The browser said no.** Excluding them left bands
+rendering two cards into a three-track grid, the empty cell reading as a
+failed load — and it made the band lie: a "Market News" section that silently
+omits the newest Market News story is not the section, it is the section
+minus whatever the spotlight took. Reverted: a story appearing in both Top
+stories and its own category band is how a newspaper front works, and the two
+placements say different things about it. The general feed still excludes
+them, because there "Latest news" sits directly under the block it would
+repeat.
+
+### Facets learned a category scope, asymmetrically
+
+`ArticleFacetOptions.categoryId` scopes `tags`, `archives` and `latest` to one
+category while leaving `categories` global with global counts. The asymmetry
+is the point and it is documented on the type: the scoped facets describe what
+the reader is looking at, while the category list is how they LEAVE it. A
+category rail showing only the current category would be a rail with one
+destination, and "3 articles" on a category card has to mean three in that
+category — not three in the intersection of two filters. The tag archive
+therefore does not scope at all: a tag cuts across categories.
+
+### The archives
+
+Both category and tag pages now open with the breadcrumb trail, the archive
+kind, the title and a real count, and close with `ArchiveTaxonomy` — every
+category as a card plus the tag chips. The category page also carries its own
+tags as a refinement row directly under the header, above the articles,
+because that row narrows what follows while the band at the foot is for
+leaving.
+
+`CategoryCards` is one component shared by the /news tile band and both
+archives. The current category renders as a statement rather than a
+destination: it keeps the ring and a full-width accent bar, gains "You are
+here" and `aria-current="page"`, and **drops every hover affordance** — a card
+that lifts under the pointer and then navigates nowhere new promises an
+interaction it does not have. Same reasoning for the active tag chip, which is
+a filled `Badge` and not a link to the page it is already on.
+
+### Featured, made visible
+
+A flagged article now takes the design system's own `featured` Card variant —
+the 2px `--primary-interactive` border over a `bg-primary/10` tint — so it is
+distinguishable from across the grid, before the Star badge on its cover is
+legible. That variant already existed and was reachable only as "the first
+card of a featured grid", which is a POSITION, not an editorial decision.
+
+Behind a `highlightFeatured` prop, default on, and the reason it is a prop is
+worth keeping: a category archive where every article is flagged would be a
+wall of tinted cards, at which point the treatment distinguishes nothing.
+Emphasis only reads as emphasis against something unemphasised.
+
+### Verification
+
+`prettier --check`, `eslint` (web + core), `tsc --noEmit` (web + core) clean.
+`check:catalog-completeness` OK, `check:phantom-deps` OK,
+`check:reserved-paths` OK. The es/ar/ur warnings are the pre-existing
+`nav.mega.*` / `about.*` / `economicCalendar.*` gaps; no `news.*` key is among
+them.
+
+**Live** at :3000 against the real database, twelve temporary articles across
+four categories (four flagged, so three fill the spotlight and the fourth
+lands in the grid — the only way to see the featured CARD treatment, which the
+spotlight itself never shows). All twelve deleted afterwards; count back to 8;
+the fixture script deleted.
+
+- `/news` — stat band gone; h2 order reads Top stories → Latest news → Market
+  News → Central Banks → Technical Analysis → Trade Ideas → Browse by topic.
+  Four "View all" links, four bands of three cards each, four featured cards
+  carrying the bordered variant and the Star badge.
+- `/news/category/market-news` — trail, "Category", title, "6 articles", the
+  category's seven tags as chips, featured cards highlighted, and "Keep
+  exploring" at the foot with Market News marked "You are here" and the other
+  three linked.
+- `/news/tag/fed` — same shape; the Fed chip carries `aria-current="page"`
+  and no category tile is marked current, which is correct for a tag.
+- No horizontal overflow at any width checked.
+
+**Worth carrying forward:** the browser had the last word on both real
+decisions this pass — the empty grid cell and the missing newest story. Both
+were invisible to tsc, eslint and every repo check, and both were obvious
+within a second of looking at the page.
+
+**Still owed to Module 14, unchanged:** axe on the new bands and a Lighthouse
+pass on `/news` — the route now carries a priority LCP image and, on the
+front, four more image-bearing bands. `pnpm build` not run here.
+
+### Addendum, same day — the news band becomes a lead-plus-listing split
+
+**Ask:** "in the main page do not show the full page news, it should be one
+feature news on half page & other should be right side listing."
+
+`latest_news` gains a `split` variant, now its seeded default (`limit` 5 →
+one lead plus up to four beside it). It is the section's OWN layout, not an
+`ArticleCards` variant, so the contract reads
+`["split", "standard", "featured", "compact"]` — the other three still pass
+straight through, and the band can be reverted to a plain grid by changing one
+word in the descriptor.
+
+The layout composes the two variants that already existed rather than adding a
+fourth to the shared renderer: the lead is `featured` in the left column, the
+rest are `compact` in the right. `compact` is media-less by construction,
+which is exactly what makes the right column read as a listing beside the lead
+instead of a second, smaller grid of cards competing with it.
+
+Two details that are load-bearing rather than decorative. `items-start` on the
+grid — without it the right column stretches to the lead's height and its last
+row floats away from the rest. And the two-column class is CONDITIONAL on
+there being a `rest`: a single-article day collapses to just the lead at full
+width rather than rendering a half-empty grid with a hole beside it.
+
+**Verified rendered.** Desktop computes `grid-template-columns: 644px 644px`
+in both light and dark — genuinely half and half — and 388px (single column,
+stacked) at 420px wide. Lead carries its cover image, listing carries none, as
+intended.
+
+Two things found while looking, neither of them this change:
+
+- **Two of the four PUBLISHED `NEWS` articles have no `ArticleTranslation`
+  row at all**, so they render nowhere on the site — not here, not on `/news`.
+  `getPublishedArticles` filters them out correctly; this is content data, not
+  a bug. It is why the right-hand listing currently shows one item rather than
+  four, and it will fix itself the moment those two get an `en` translation.
+- A desktop capture showed the lead's cover image as an empty panel while
+  mobile showed it fine. That was a **screenshot race**, not a defect — the
+  element shot fired before the image finished decoding. Re-captured after
+  waiting on `HTMLImageElement.complete` and the cover is present in both
+  modes. Recorded because "the image is missing on desktop only" is exactly
+  the kind of false lead that costs an hour.
+
+`check:home-sections` OK (17 seeded, 10 built), `check:catalog-completeness`
+OK, `prettier --check` clean, `tsc --noEmit` clean, `@repo/contracts` 158
+passing. No new catalog keys — the split reuses the four `latestNews*` strings
+the section already had.
+
+## 2026-09-07 — the public header stops showing the staff identity (Module 08, no new ADR)
+
+**Shipped:** `apps/web/app/(public)/[locale]/_components/auth-slot.tsx` now
+treats a `STAFF` session as anonymous, so the public header renders the two
+learner entry points — Sign in and the pill CTA — instead of the signed-in
+staff name. The header CTA label (`nav.signUp` in `en.json`) reads **"Join
+us"**; the key is unchanged and the three inactive locales keep their existing
+values.
+
+**Why.** Signing in at `/admin/sign-in` and then visiting `/` put "System
+Administrator" in the public header. Two problems with that, one cosmetic and
+one not:
+
+- It advertises the admin portal on a surface that deliberately links to
+  neither `/admin` nor the staff sign-in screen (ADR-052). The chip named a
+  staff account to anyone standing behind the screen.
+- It was a dead end. The account menu is Module 12 work that hasn't landed, so
+  the chip was a name with nowhere to go — and a staff account has no learner
+  account area to go to in the first place.
+
+A signed-in LEARNER still gets the name chip; that path is unchanged and is
+still the placeholder it was.
+
+**Not a security change.** `session.user.userType` is read here from
+`/api/auth/get-session` for DISPLAY only, and the integration suite already
+records that this field can be stale (`auth.integration.test.ts` — a session
+minted before a `userType` change keeps the old value). Stale is harmless for
+a header chip: the boundaries are the proxy gate, the admin layout's
+`loadSubject` re-check against the live user row, and `requirePermission()` in
+every action. None of them are touched. Worst case on a stale read is that a
+just-promoted staff member briefly still sees their name on the public header.
+
+`pnpm lint` and `pnpm typecheck` clean workspace-wide;
+`check:catalog-completeness` OK (its warnings are the pre-existing `ar`/`es`/
+`ur` gaps for the About and economic-calendar namespaces, unrelated). No new
+catalog keys.
+
+## 2026-09-07 — the article editor: publish becomes one operation (Module 15, ADR-053), and each panel header becomes a band (Module 15, under ADR-050)
+
+Two owner reports on the News edit screen, taken in the order they arrived.
+
+### 1. Every card header gets its accent as a band
+
+**Ask:** "there should be the change or highlight the background header color
+of each card" — naming Content, Publish and Categories.
+
+Every panel on the screen already composes one shell, `_panels/editor-section.tsx`,
+so this is a single change point and not nine. The shell already carried a
+six-tone `accent` vocabulary (ADR-046), but the accent was spent entirely on a
+32px icon tile — on a card the width of the page that is not enough colour to
+navigate by, which is exactly the complaint. The header row now carries
+`bg-{accent}/8` with a matching `border-b-{accent}/15`, and the icon tiles move
+from `/10` to `/15` plus a `/25` ring so they do not dissolve into the band
+they now sit on. `neutral` uses `bg-muted/60` and a solid `bg-background` tile.
+
+`rounded-t-lg` on the header is load-bearing, not decorative: the section is
+`rounded-lg border` with no `overflow-hidden` (deliberately — popovers open out
+of these panels), so an untinted-until-now header squared off the two top
+corners the moment it got a background.
+
+This is the same intent as **ADR-050** (a card's header is chrome, not more
+content) applied to the one card shell on this screen that is not `@repo/ui`'s
+`Card`. It diverges from that ADR's §2 in one respect, deliberately: ADR-050
+takes its colour from `CardFooter`'s `bg-muted/50` because a generic card has
+no accent, whereas `EditorSection` already has one per section and using it is
+the whole point. No new token, no colour literal.
+
+**Verified rendered**, both modes, signed in as the seeded admin against the
+dev server. Computed styles confirm six distinct bands resolving through the
+theme — e.g. Content `oklab(0.684 0.041 0.084 / 0.08)`, SEO
+`oklab(0.384 -0.033 -0.121 / 0.08)`, Post Settings
+`oklab(0.789 0.061 0.158 / 0.08)` — and the neutral band re-resolving from
+`oklab(0.979 … / 0.6)` in light to `oklab(0.264 … / 0.6)` in dark, which is
+what proves the dark path is actually being taken. The chromatic tokens are
+mode-invariant in this theme, so those five values are identical in both; the
+8% overlay reads correctly against `bg-card` either way.
+
+One thing seen while looking, not fixed here and not caused by this change:
+`--success` and `--info` are both blue in the seeded theme, so the Publish and
+Tags bands (success) sit in the same family as SEO/FAQ/Related (info). The
+icon tiles have always had this; the band only makes it easier to notice. A
+theme-token question for Module 02, not an editor one.
+
+### 2. The two publish buttons were two halves of one operation — ADR-053
+
+**Ask:** "There are 2 publish buttons, one is only publish & 1 is update &
+publish button — these should perform same functionalities."
+
+They were never duplicates. The header's **"Update & Publish"** called only
+`saveArticleAction` and never touched the status — the label was simply false,
+and a draft stayed a draft behind a "Saved" toast. The publish panel's
+**"Publish now"** called only `transitionArticleAction` and read no form state,
+so with unsaved edits on screen it put the **last-saved** body in front of
+readers. Two bugs, both invisible to lint, tsc and every repo check, and both
+of which look like success from the author's chair.
+
+`submitForm(thenTransitionTo?, scheduledForIso?)` in `article-editor.tsx` is
+now the one operation both buttons run: save the payload, then make the
+lifecycle move. The calls are **sequenced, not merged** — `transitionArticle`
+keeps its own `articleKindPermission(kind, "publish")` gate and
+`assertArticleTransition`, so the reasoning in `publish-panel.tsx`'s old header
+comment is preserved even though its conclusion is reversed. Its stated fear,
+"every autosave-shaped action could publish", describes a screen that does not
+exist: `save` has exactly one `onClick` and there is no autosave here.
+
+The header button's label is now state-aware, which is the owner's choice
+between the two options put to them: **"Publish"** on a DRAFT the actor may
+publish, **"Update"** otherwise. `SCHEDULED` deliberately reads "Update" —
+`SCHEDULED → PUBLISHED` is legal, so the literal rule would have made fixing a
+typo on a scheduled post silently cancel its schedule and go live. Publishing
+early stays an explicit "Publish now".
+
+Only the two reader-facing transitions save first. DRAFT and ARCHIVED take
+content _down_; writing the author's unsaved edits into a post they are
+archiving is a surprise with no upside. Because PUBLISHED and SCHEDULED now
+save, they are disabled when `canSave` is false — previously they were
+clickable and would publish a post with no title. That is a behaviour change
+beyond the report, and it is intended.
+
+Catalog: `admin.updateAndPublish` → `admin.updatePost` / `admin.publishPost` /
+`admin.publishedToast`. Admin namespace, so `en.json` only (ADR-043 #2).
+
+**Verified end to end against the running app and the database, not the form.**
+On a DRAFT the header read "Publish" and was disabled with no title; typing one
+enabled it (which also settles that React _does_ hydrate under Playwright
+against the dev server — the failure diagnosed in `e2e/auth.setup.ts` is
+specific to the E2E harness, and that is a lead worth having when someone picks
+that blocker back up). One click then took the row from
+`{status: Draft, title: ""}` to `{status: Published, title: "Publish-path probe …"}`,
+with the header button relabelling itself to "Update" — both halves, one click.
+The title's presence was re-read from the server's own HTML rather than the
+form. On a published post the header read "Update" and the panel offered only
+Revert to draft / Archive.
+
+**Dev-data footprint, stated rather than left to be discovered:** the probe ran
+on `cmtrhvtat000m2suc7bs88ljh`, one of several leftover "(untitled)" draft rows
+in the dev database. It was reverted to Draft afterwards and is back in its
+original status, but it now carries the title `Publish-path probe 1788801206795`
+and the slug derived from it. It is junk test data and safe to delete.
+
+**Tests:** `pnpm typecheck` clean; `eslint` clean on every touched path;
+`check:catalog-completeness` OK (its `ar`/`es`/`ur` warnings are the
+pre-existing public-namespace gaps, untouched by this admin-only change);
+`prettier --write` applied. `e2e/admin/article-editor.spec.ts` now matches the
+header button on an anchored `/^(Publish|Update)$/` so it cannot catch "Publish
+now" — still `fixme`, on the auth-hydration blocker that predates this work.
+`pnpm build` not run.
+
+## 2026-09-07 — the homepage's news rail gets thumbnails (Module 12/15, no new ADR)
+
+The `latest_news` section's right column read as a sidebar of headlines rather
+than as articles: `ArticleCards`' `compact` variant was media-less by
+construction, so beside a lead card with a 21/9 cover it looked like navigation.
+It now carries a 5rem square thumbnail at the inline start.
+
+`compact` has exactly one caller (`_sections/latest-news.tsx`), so this is a
+change to the homepage rail and nothing else — the /news listing, the archives
+and the related strip all use `standard`/`featured` and are untouched.
+
+What the thumbnail deliberately does NOT get: the Featured badge (at 5rem it
+would cover the picture it sits on) and the top rule / lift / sheen hover set
+(those belong to a card with a cover, not to a list row). It keeps the existing
+`ArticleMedia` fallback, so a coverless article gets the kind-toned panel here
+too rather than an empty square — the whole point of ADR-047 §3's pattern.
+
+Two supporting changes. `ArticleMedia` takes an optional `glyphClassName`: the
+fallback panel's `size-16` glyph is sized for a full-width cover and swamps an
+80px box, so the rail passes `size-7`. And the compact text column takes
+`min-w-0` with a `line-clamp-3` title — compact is a flex ROW with two children
+now, and without those a long headline pushes the thumbnail out of the row.
+
+**Tests:** `pnpm typecheck --filter=@repo/web` clean; `pnpm lint
+--filter=@repo/web` clean; `prettier --check` clean on all three touched files.
+No test asserted the compact variant's media, so nothing needed updating; not
+run in a browser.
+
+## 2026-09-07 — the admin gets its own type scale (Modules 07/09, ADR-054)
+
+**This started as a font bug and turned out not to be one.** The owner reported
+that the site was on Geist and asked for Outfit. A repo-wide grep for `geist`
+across `.ts/.tsx/.css/.js/.mjs/.json` returns zero hits, there is no `geist`
+dependency, and nothing is in the lockfile — ADR-039 landed Outfit yesterday
+and the chain (`@fontsource-variable/outfit` → `--font-outfit` →
+`--brand-font-sans` → `--font-sans` → Tailwind → `body`) is intact.
+
+The Geist that is genuinely on the page belongs to Next.js itself. Every Geist
+asset in the tree lives under `next/dist/next-devtools/server/font/`, the
+`__nextjs-Geist` face is defined in `next/compiled/next-devtools/index.js`, and
+the one element rendering in it is `<nextjs-portal>` — the dev-overlay custom
+element, whose shadow root opens `:host { all: initial }` and which does not
+exist in a production build. Filtering DevTools' Network tab to fonts shows
+`/__nextjs_font/geist-latin.woff2` and reads as proof; it is the overlay.
+
+Establishing that took a measurement, not a computed-style read, because
+`getComputedStyle(el).fontFamily` reports `outfit` whether or not the file
+loaded. Forcing an element to the metric fallback and re-measuring separates
+the two: `/` h1 442.4px in Outfit vs 419.4px fallback vs 454.9px Arial;
+`/admin/articles` h1 137.0 / 139.1 / 151.8. Different widths, different
+outlines, Outfit is on the glass. `document.fonts` confirms
+`{family: "outfit", status: "loaded"}` and the woff2 200s at 32KB.
+
+**The real complaint was size.** The admin lives at the bottom of the scale —
+114 `text-xs` (11px) and 97 `text-sm` (12px) across `app/(admin)/**`, against
+3 `text-2xl`. Outfit is geometric; circular bowls and a single-storey `g` do
+not resolve at 11px. The page `h1` was 20px, smaller than the public site's
+body copy. So the admin was in Outfit and could not look it.
+
+### What shipped (ADR-054)
+
+The scale is declared once, in `@theme inline` in `@repo/ui`'s `globals.css`,
+and both surfaces import that one stylesheet — so raising `--text-sm` would
+have redesigned the public site (60 + 61 call sites) on the day its design pass
+landed. The fix had to be surface-scoped.
+
+**The obvious way does not work, and this is the finding worth keeping:**
+`@theme inline` substitutes values into utilities at build time. `.text-xs`
+compiles to a literal `font-size: 11px` — verified against the live CSSOM, not
+assumed — so redeclaring `--text-xs` on a container inside the admin is inert.
+There is no `var()` left to intercept. A surface-scoped scale requires putting
+the indirection back into the `@theme` declaration itself.
+
+So: `--type-*` in `:root` is now the reader's scale and the source of truth (the
+same ten pairs, moved location not value); each `@theme` step reads
+`var(--ui-x, var(--type-x))`; `--ui-*` is never defined in `:root`, so every
+public utility still compiles to exactly what it did. `.type-scale-admin`
+defines `--ui-*` and goes on `<html>` in both admin roots via
+`ADMIN_TYPE_SCALE_CLASS` — a constant, not a literal typed twice, because a
+misspelt class fails silently by rendering the reader scale, which looks like
+the ADR regressing rather than like a typo.
+
+Admin: xs 11→12, sm 12→13, md 13→14, base 14→15, lg 16→18, xl 18→20,
+2xl 20→24, 3xl 24→28, 4xl 28→32, 5xl 32→36.
+
+**All ten steps, not the seven the admin renders.** The first cut stopped at
+`2xl` on the reasoning that `3xl`–`5xl` have zero occurrences under
+`app/(admin)`. Probing the running admin caught it: that left `--ui-2xl` (24px)
+equal to the reader's `--type-3xl` (24px), so the first screen to reach for
+`text-3xl` as "bigger than the page title" would have got no increase — a dead
+rung, silent, findable only by measuring. Six more lines removed the edge.
+
+`.ed-fs-*` was repointed from `--text-*` to `--type-*`. It is the one class set
+that renders on both surfaces — in the editor and in the published article —
+and it carries the AUTHOR's chosen size. On `--text-*` it would have picked up
+the admin override and the editor would have stopped previewing what the reader
+gets.
+
+`--brand-base-font-size` is untouched: it is a DB-backed layout token behind
+ADR-038's paused editor, almost no admin text inherits it, and routing a design
+decision through it would be a second source of truth.
+
+One in-scope straggler: `faq-panel.tsx` hardcoded `text-[11px]`, which the bump
+left stranded below the new floor — now `text-xs`.
+
+### Two hardcoded sizes deliberately left alone
+
+- `notification-bell.tsx` `text-[0.625rem]` (10px) — a count that sits in an
+  `h-4 min-w-4` pill. "99+" at 12px would not fit; a micro-badge is genuinely
+  sub-scale.
+- `button.tsx` `size="sm"` `text-[0.8rem]` (12.8px) — **shared with the public
+  site**, so changing it breaks this ADR's guarantee. Worth naming: the bump
+  inverts a relationship, admin `sm` buttons were 0.8px above body text and are
+  now 0.2px below it. Both differences are invisible, so this is recorded, not
+  fixed. Whoever wants it aligned should decide the public half on purpose.
+- `admin/website/**` `text-[0.65rem]` — Module 16, cancelled (ADR-042), exempt
+  from admin conventions by ADR-044. Untouched.
+
+### Tests
+
+New, and mutation-checked rather than assumed — both halves of this mechanism
+fail silently, so each was broken on purpose to confirm the test bites:
+reverting `--text-xs` to a literal (admin class goes inert) and leaking
+`--ui-sm` into `:root` (public silently grows) each turn exactly one test red,
+and both are green again restored.
+
+- `packages/ui/src/styles/type-scale.test.ts` (39) — asserts the compiled
+  contract against `globals.css`: every step resolves through
+  `var(--ui-*, var(--type-*))`, `--ui-*` appears nowhere outside the admin
+  block, both scales are strictly ascending, every admin step exceeds its
+  reader counterpart, and `.ed-fs-*` reads `--type-*`.
+- `apps/web/app/type-scale.test.ts` (4) — the class is on both admin roots and
+  on neither public root, and `curatedFontVariables` survives beside it.
+
+**Results:** `pnpm typecheck` 13/13. `pnpm lint` 13/13. `pnpm turbo test
+--concurrency=1` 11/12 — `@repo/core` fails 21, of which 20 are
+`Could not find a working container runtime strategy` (Testcontainers wants
+Docker, not running here) and the 21st is a `ReservedPathError: "about"` in
+`cms/publish.integration.test.ts`, also Docker-gated and from the pre-existing
+dirty tree; both predate this change and neither touches anything it changed.
+`apps/web` 128/128. Note `pnpm test` at full concurrency OOMs this machine
+(13 parallel vitest instances) — `--concurrency=1` is the workaround, and that
+is an environment limit, not a repo one.
+
+**Live verification** on the running app, both modes: `/` unchanged at every
+generated step (xs 11/16, sm 12/18, base 14/22, lg 16/24, xl 18/26, 2xl 20/28,
+3xl 24/32) with `--ui-sm` undefined and no `type-scale-admin` on `<html>`;
+`/admin/articles` and `/admin/users` at h1 24/32, body-table-sidebar-input
+13/20, badge 12px, with eight portalled overlays open in dark mode, no
+horizontal overflow on either, and no non-Outfit family anywhere but
+`<nextjs-portal>`.
+
+**`pnpm build` could not be validated in this environment, and that is not a
+hedge — it is three failures with three environmental causes.** Attempt 1 died
+prerendering `/admin/sign-in` on `P2039 pool timeout: failed to retrieve a
+connection from pool after 10793ms (active=0 idle=0 limit=10)` in
+`loadActiveTheme` — the build worker competing with the running dev server for
+MariaDB. Attempts 2 and 3 died in V8 (`node::OnFatalError`, exit 134 and
+3221226505), attempt 3 even with `--max-old-space-size=6144`. The machine had
+1.5–1.7 GB free of 16 GB, with Chrome at 2.6 GB and node at 1.5 GB.
+
+What that leaves verified is the part this change actually owns: **the
+production Tailwind pass completed and emitted the right CSS** before the
+prerender stage crashed. Read out of `.next/static/chunks/*.css`:
+`.text-xs{font-size:var(--ui-xs,var(--type-xs))`, `--type-sm:12px` in `:root`,
+and the full `.type-scale-admin{--ui-xs:12px;--ui-xs-lh:16px;--ui-sm:13px;…}`
+block. So the indirection survives the production compile, which is the one
+thing a build could have told us that dev could not.
+
+Worth flagging for whoever picks this up: the last five DEVLOG entries all
+record "`pnpm build` not run", so the build has not been green in this tree for
+some time and its state is unknown independently of this change. Re-run it on a
+machine with headroom (or with the dev server stopped) before trusting it.
+
+## 2026-09-07 — the favicon BrandAsset row stops leaking into the `<link>` (Modules 09/12, no new ADR)
+
+**Symptom:** every public and admin page logged a React console error —
+"React does not recognize the `altText` prop on a DOM element" — reported
+against `/about`, but nothing under `app/(public)/**` mentions `altText`. The
+About section's own imagery is deliberately `alt=""` (ADR-047 §3), so the
+warning had nothing to do with the page it was noticed on.
+
+**Cause:** both root layouts built their metadata as
+`icons: brandAssets.favicon ? { icon: brandAssets.favicon } : undefined`.
+`getBrandAssets()` returns a `BrandAssetView` — `{ key, url, altText,
+mimeType }` — and Next renders an icon descriptor by spreading its fields onto
+the `<link>`. So `altText` and `mimeType` went out as DOM attributes on every
+document that read a favicon upload, which is every page on both surfaces. It
+was only visible once an admin had uploaded a favicon; the static
+`public/favicon.ico` fallback goes through a different path and is clean.
+
+**Fix:** `apps/web/app/_lib/favicon.ts` — `faviconIcons()` maps the row to the
+descriptor Next actually wants (`url`, and `mimeType` → `type`, dropped when
+null) and returns `undefined` with no upload. Both
+`app/(public)/[locale]/layout.tsx` and `app/(admin)/layout.tsx` call it. One
+helper rather than two inline object literals, because the same row shape
+reaches the same API from two route groups and the next surface that needs a
+favicon should not have to rediscover this.
+
+**Tests:** `apps/web/app/_lib/favicon.test.ts`, new — asserts the emitted
+descriptor is exactly `{ url, type }`, that `altText`/`key`/`mimeType` are
+absent (testing.md #2: the regression test ships with the fix), that a null
+MIME type is dropped rather than emitted as `type={null}`, and that no upload
+yields `undefined`. 3/3 green. `pnpm --filter web typecheck` clean.
+
+**Live verification** on the running dev server: `GET /about` 200, and the
+uploaded favicon's link in the RSC payload is now
+`{"rel":"icon","href":"/uploads/…jpg","type":"image/jpeg"}` — previously
+`{…,"altText":null,"mimeType":"image/jpeg"}`. `pnpm build` not run (the
+environment limits recorded in the ADR-054 entry are unchanged).
+
+**Noticed, not fixed:** the public client payload still carries the whole
+`admin.*` message namespace (`mediaAltTextLabel` and its neighbours are in
+`/about`'s HTML). That is a bundle-weight question for Module 14's Lighthouse
+budgets, not part of this fix, and it is not a security issue — the strings are
+catalog labels, not data.

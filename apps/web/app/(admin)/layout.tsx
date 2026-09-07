@@ -8,8 +8,10 @@ import { getBrandAssets, loadOwnProfile } from "@repo/core";
 import { loadSubject } from "@repo/rbac";
 import { buildThemeStyleSheet, getActiveTheme } from "@repo/theme";
 import { curatedFontVariables } from "@repo/ui/fonts";
+import { ADMIN_TYPE_SCALE_CLASS } from "@repo/ui/lib/type-scale";
 import { ThemeProvider } from "@repo/ui/components/theme-provider";
 import { AdminShell } from "./admin/_components/admin-shell.tsx";
+import { faviconIcons } from "../_lib/favicon.ts";
 import "@repo/ui/globals.css";
 
 // Root layout for the ADMIN surface — one of two root layouts in this app
@@ -58,10 +60,10 @@ export const instant = false;
 export async function generateMetadata(): Promise<Metadata> {
   const brandAssets = await getBrandAssets();
   return {
-    title: "MBFX Admin",
-    description: "MBFX Learning Center — admin portal.",
+    title: "MBX Admin",
+    description: "MBX Learning Center — admin portal.",
     robots: { index: false, follow: false },
-    icons: brandAssets.favicon ? { icon: brandAssets.favicon } : undefined,
+    icons: faviconIcons(brandAssets.favicon),
   };
 }
 
@@ -93,7 +95,7 @@ export default async function AdminRootLayout({ children }: LayoutProps<"/">) {
     // surface too, changes-01).
     <html
       lang="en"
-      className={`h-full antialiased ${curatedFontVariables}`}
+      className={`h-full antialiased ${ADMIN_TYPE_SCALE_CLASS} ${curatedFontVariables}`}
       suppressHydrationWarning
     >
       {/* suppressHydrationWarning: browser extensions (e.g. ColorZilla's

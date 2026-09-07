@@ -18,6 +18,7 @@ import { ROUTE_PATHS } from "@repo/contracts";
 import { Link } from "@repo/i18n/navigation";
 import { ECONOMIC_CALENDAR_ATTRIBUTION_URL, economicCalendarWidgetUrl } from "@repo/utils";
 import { getSetting, isFeatureVisible } from "@repo/settings";
+import { AmbientMotif } from "@repo/ui/components/ambient-motif";
 import { Button } from "@repo/ui/components/button";
 import { CheckList } from "@repo/ui/components/check-list";
 import { Container } from "@repo/ui/components/container";
@@ -124,6 +125,9 @@ export default async function EconomicCalendarPage({
   return (
     <main className="flex flex-col">
       <PageHero
+        // No backdrop artwork on this hero, so the motif is the only
+        // texture in the band and runs at full arrangement ink.
+        motif={<AmbientMotif variant="chart" />}
         eyebrow={t("heroEyebrow")}
         title={t("title")}
         lead={t("intro")}

@@ -81,7 +81,13 @@ export interface EditorLabels {
   confirm: string;
   previewDraft: string;
   viewLive: string;
-  updateAndPublish: string;
+  /** The header's primary button says what the click will DO: "Publish"
+   * while the post is an unpublished draft the actor may publish, "Update"
+   * once it is live (or when they may not publish). Both run the same
+   * save-then-publish submit — see article-editor.tsx. */
+  updatePost: string;
+  publishPost: string;
+  publishedToast: string;
   openActions: string;
   duplicate: string;
   softDelete: string;

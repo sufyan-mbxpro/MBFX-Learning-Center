@@ -12,12 +12,15 @@
 import type { ComponentType } from "react";
 import type { HomeSectionKey } from "@repo/contracts";
 import { Explore } from "./explore.tsx";
+import { FeatureHighlights } from "./feature-highlights.tsx";
 import { Faq } from "./faq.tsx";
 import { GlossarySpotlight } from "./glossary-spotlight.tsx";
 import { Hero } from "./hero.tsx";
 import { LatestAnalysis } from "./latest-analysis.tsx";
+import { LatestNews } from "./latest-news.tsx";
 import { Newsletter } from "./newsletter.tsx";
 import { RiskDisclaimer } from "./risk-disclaimer.tsx";
+import { VideoShowcase } from "./video-showcase.tsx";
 
 /** What every section component receives — the descriptor, resolved. */
 export interface SectionProps {
@@ -30,8 +33,11 @@ export interface SectionProps {
 export const SECTION_COMPONENTS: Partial<
   Record<HomeSectionKey | string, ComponentType<SectionProps>>
 > = {
+  learning_videos: VideoShowcase,
   hero: Hero,
   explore_platform: Explore,
+  feature_highlights: FeatureHighlights,
+  latest_news: LatestNews,
   latest_analysis: LatestAnalysis,
   glossary_spotlight: GlossarySpotlight,
   newsletter: Newsletter,

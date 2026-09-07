@@ -5,6 +5,7 @@ import { BookOpen } from "lucide-react";
 import { getPublishedGlossary } from "@repo/core";
 import { Link } from "@repo/i18n/navigation";
 import { getSetting, isFeatureVisible } from "@repo/settings";
+import { AmbientMotif } from "@repo/ui/components/ambient-motif";
 import { Container } from "@repo/ui/components/container";
 import { Empty, EmptyDescription, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
 import { Reveal } from "@repo/ui/components/reveal";
@@ -42,7 +43,14 @@ export default async function GlossaryPage({ params }: PageProps<"/[locale]/glos
 
   return (
     <>
-      <Section spacing="sm" tone="muted">
+      {/* `relative isolate overflow-hidden` is what `AmbientMotif` needs to
+          anchor to, be clipped by, and not escape from — Section provides
+          none of the three on its own. `learn` is the arrangement: the
+          glossary is the teaching surface of the site, so the field is
+          books and compasses with a little market vocabulary, not a
+          trading floor. */}
+      <Section spacing="sm" tone="muted" className="relative isolate overflow-hidden">
+        <AmbientMotif variant="learn" />
         <Container>
           <Reveal variant="up">
             <header className="flex flex-col gap-1.5">

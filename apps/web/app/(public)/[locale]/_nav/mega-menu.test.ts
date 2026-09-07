@@ -97,8 +97,8 @@ function child(routeKey: keyof typeof ROUTE_PATHS, label: string): MegaResolvabl
 
 describe("resolveMegaMenuPanel — binding the spec to live menu rows", () => {
   const ABOUT_CHILDREN = [
-    child("about", "About MBFX"),
-    child("about-why-us", "Why MBFX"),
+    child("about", "About MBX"),
+    child("about-why-us", "Why MBX"),
     child("about-transparency", "How we operate"),
     child("about-security", "Security & trust"),
     child("about-support", "Support"),
@@ -107,7 +107,7 @@ describe("resolveMegaMenuPanel — binding the spec to live menu rows", () => {
   it("groups the seeded children into the registry's columns, in registry order", () => {
     const resolved = resolveMegaMenuPanel(MEGA_MENU_PANELS.about, ABOUT_CHILDREN);
     expect(resolved.columns.map((c) => c.key)).toEqual(["company", "howWeWork", "help"]);
-    expect(resolved.columns[0]?.items.map((i) => i.item.label)).toEqual(["About MBFX", "Why MBFX"]);
+    expect(resolved.columns[0]?.items.map((i) => i.item.label)).toEqual(["About MBX", "Why MBX"]);
     expect(resolved.viewAll?.href).toBe("/about");
   });
 
@@ -115,7 +115,7 @@ describe("resolveMegaMenuPanel — binding the spec to live menu rows", () => {
     const resolved = resolveMegaMenuPanel(MEGA_MENU_PANELS.about, ABOUT_CHILDREN);
     const first = resolved.columns[0]?.items[0];
     expect(first?.icon).toBeDefined();
-    expect(first?.item.title).toBe("About MBFX description");
+    expect(first?.item.title).toBe("About MBX description");
   });
 
   // The guarantee that matters operationally: a page added to the seed
@@ -129,7 +129,7 @@ describe("resolveMegaMenuPanel — binding the spec to live menu rows", () => {
   });
 
   it("skips a column whose children are all missing, instead of rendering an empty heading", () => {
-    const resolved = resolveMegaMenuPanel(MEGA_MENU_PANELS.about, [child("about", "About MBFX")]);
+    const resolved = resolveMegaMenuPanel(MEGA_MENU_PANELS.about, [child("about", "About MBX")]);
     expect(resolved.columns.map((c) => c.key)).toEqual(["company"]);
   });
 
@@ -139,8 +139,8 @@ describe("resolveMegaMenuPanel — binding the spec to live menu rows", () => {
       columns: [{ key: "c", titleKey: "mega.about.company", routeKeys: ["about-why-us"] }],
     };
     const resolved = resolveMegaMenuPanel(spec, ABOUT_CHILDREN.slice(0, 2));
-    expect(resolved.features.map((f) => f.item.label)).toEqual(["About MBFX"]);
-    expect(resolved.columns[0]?.items.map((i) => i.item.label)).toEqual(["Why MBFX"]);
+    expect(resolved.features.map((f) => f.item.label)).toEqual(["About MBX"]);
+    expect(resolved.columns[0]?.items.map((i) => i.item.label)).toEqual(["Why MBX"]);
   });
 
   it("returns no view-all target when the spec omits one", () => {

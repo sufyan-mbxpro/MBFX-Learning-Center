@@ -11,8 +11,8 @@ import { expect, test } from "@playwright/test";
 // change a red build.
 
 const PAGES = [
-  { path: "/about", heading: "Learn the markets with MBFX", nav: "About MBFX" },
-  { path: "/about/why-us", heading: "Why learn the markets here", nav: "Why MBFX" },
+  { path: "/about", heading: "Learn the markets with MBX", nav: "About MBX" },
+  { path: "/about/why-us", heading: "Why learn the markets here", nav: "Why MBX" },
   { path: "/about/transparency", heading: "How we operate", nav: "How we operate" },
   { path: "/about/security", heading: "Security and trust", nav: "Security & trust" },
   { path: "/about/support", heading: "How we support you", nav: "Support" },
@@ -28,7 +28,7 @@ test.describe("the five About pages", () => {
 
       // The strip is a <nav> of its own, so this cannot accidentally match
       // the header's primary navigation.
-      const sectionNav = page.getByRole("navigation", { name: "About MBFX" });
+      const sectionNav = page.getByRole("navigation", { name: "About MBX" });
       await expect(sectionNav.getByRole("link", { name: page_.nav })).toHaveAttribute(
         "aria-current",
         "page",
@@ -38,7 +38,7 @@ test.describe("the five About pages", () => {
 
   test("every sub-nav destination is reachable from every page", async ({ page }) => {
     await page.goto("/about");
-    const sectionNav = page.getByRole("navigation", { name: "About MBFX" });
+    const sectionNav = page.getByRole("navigation", { name: "About MBX" });
     await expect(sectionNav.getByRole("link")).toHaveCount(PAGES.length);
 
     await sectionNav.getByRole("link", { name: "Support" }).click();

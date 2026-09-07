@@ -202,7 +202,7 @@ export async function SiteFooter({ locale }: { locale: string }) {
                     light={brandAssets.logo_dark?.url ?? null}
                     dark={brandAssets.logo_light?.url ?? null}
                     alt={siteName ?? ""}
-                    className="h-8"
+                    className="h-11"
                     fallback={<span className="text-xl font-semibold">{siteName}</span>}
                   />
                 </Link>

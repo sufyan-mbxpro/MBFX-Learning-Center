@@ -12,6 +12,7 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { ROUTE_PATHS } from "@repo/contracts";
 import { Link } from "@repo/i18n/navigation";
 import { getSetting } from "@repo/settings";
+import { AmbientMotif } from "@repo/ui/components/ambient-motif";
 import { Button } from "@repo/ui/components/button";
 import { CheckList } from "@repo/ui/components/check-list";
 import { Container } from "@repo/ui/components/container";
@@ -54,6 +55,7 @@ export default async function TransparencyPage({
       <PageHero
         eyebrow={t("transparency.hero.eyebrow")}
         backdrop={<AboutBackdrop slot="transparencyHero" />}
+        motif={<AmbientMotif variant="chart" intensity={0.7} />}
         title={t("transparency.hero.title")}
         lead={t("transparency.hero.body")}
         actions={

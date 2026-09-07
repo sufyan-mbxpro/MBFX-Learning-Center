@@ -20,7 +20,7 @@ import { AdminSidebarNav, type AdminNavGroup, type VisitSiteLink } from "./admin
 import { SignOutButton } from "./sign-out-button.tsx";
 
 /** Read by the admin layout on the server; written here on toggle. */
-export const SIDEBAR_COOKIE = "mbfx_admin_sidebar";
+export const SIDEBAR_COOKIE = "mbx_admin_sidebar";
 
 export interface AdminSidebarLabels {
   brand: string;
@@ -72,7 +72,7 @@ export function AdminSidebar({
       )}
     >
       <div
-        className={cn("mb-4 flex h-8 items-center gap-2", collapsed ? "justify-center" : "ps-2.5")}
+        className={cn("mb-4 flex h-10 items-center gap-2", collapsed ? "justify-center" : "ps-2.5")}
       >
         {!collapsed && (
           <div className="flex min-w-0 flex-1 items-center">
@@ -80,7 +80,7 @@ export function AdminSidebar({
               light={logoLight}
               dark={logoDark}
               alt={labels.brand}
-              className="h-7"
+              className="h-9"
               fallback={<p className="truncate text-sm font-semibold">{labels.brand}</p>}
             />
           </div>

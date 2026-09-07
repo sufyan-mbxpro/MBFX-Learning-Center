@@ -54,7 +54,7 @@ export function AdminMobileNav({
               light={logoLight}
               dark={logoDark}
               alt={menuLabel}
-              className="h-7"
+              className="h-9"
               fallback={<span className="text-sm font-semibold">{menuLabel}</span>}
             />
           </SheetTitle>

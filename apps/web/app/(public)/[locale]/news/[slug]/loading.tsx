@@ -33,18 +33,11 @@ export default function ArticleLoading() {
             {/* Uneven widths on the last line of each block: a stack of
                 identical full-width bars reads as a table, not as prose. */}
             <div className="flex flex-col gap-3">
-              {[
-                "w-full",
-                "w-full",
-                "w-11/12",
-                "w-full",
-                "w-4/5",
-                "w-full",
-                "w-full",
-                "w-2/3",
-              ].map((width, index) => (
-                <Skeleton key={index} className={`h-4 ${width}`} />
-              ))}
+              {["w-full", "w-full", "w-11/12", "w-full", "w-4/5", "w-full", "w-full", "w-2/3"].map(
+                (width, index) => (
+                  <Skeleton key={index} className={`h-4 ${width}`} />
+                ),
+              )}
             </div>
           </div>
 

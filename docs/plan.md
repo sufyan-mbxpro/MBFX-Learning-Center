@@ -98,7 +98,7 @@ Permissions are seeded for capabilities with **no backing models yet**: `analysi
 These files are created in Phase 0, **before any feature code**, and the standing rule is: _read the relevant governance files before implementing each module; append to logs/memory after; never overwrite history._
 
 ```
-mbfx-learning-center/
+mbx-learning-center/
 ├── claude.md                      # Project instructions & architecture summary (source of truth for agents)
 ├── .claude/
 │   ├── rules/

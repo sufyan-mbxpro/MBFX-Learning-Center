@@ -21,6 +21,9 @@ import { z } from "zod";
  * variant class of bug this exists to kill.
  */
 export const HOME_SECTION_VARIANTS = {
+  // The video rail that opens the page: `carousel` is the scroll-snap shelf,
+  // `grid` lays the same tiles out statically.
+  learning_videos: ["carousel", "grid"],
   hero: ["centered", "split", "background"],
   // "Explore the platform" — one card per destination the site offers.
   // `carousel` is the scroll-snap track; `grid` lays the same cards out
@@ -29,6 +32,11 @@ export const HOME_SECTION_VARIANTS = {
   learning_paths: ["default", "elevated", "bordered", "featured"],
   featured_lessons: ["default", "elevated", "bordered", "featured"],
   popular_tools: ["default", "elevated", "bordered", "featured"],
+  feature_highlights: ["grid", "compact"],
+  // `split` is this section's own layout (one lead at half width, a compact
+  // listing beside it) and is not an ArticleCards variant; the other three
+  // pass straight through to it, so the section can still be a plain grid.
+  latest_news: ["split", "standard", "featured", "compact"],
   latest_analysis: ["standard", "featured", "compact"],
   glossary_spotlight: ["chips", "grid"],
   forex_rates: ["marquee", "grid"],
@@ -54,8 +62,11 @@ export function isKnownHomeSectionKey(key: string): key is HomeSectionKey {
  * cross-surface import.
  */
 export const HOME_SECTION_BUILT_KEYS = [
+  "learning_videos",
   "hero",
   "explore_platform",
+  "feature_highlights",
+  "latest_news",
   "latest_analysis",
   "glossary_spotlight",
   "newsletter",

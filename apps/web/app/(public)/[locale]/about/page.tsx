@@ -17,6 +17,7 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { ROUTE_PATHS } from "@repo/contracts";
 import { Link } from "@repo/i18n/navigation";
 import { getSetting } from "@repo/settings";
+import { AmbientMotif } from "@repo/ui/components/ambient-motif";
 import { Button } from "@repo/ui/components/button";
 import { Container } from "@repo/ui/components/container";
 import { CtaBand } from "@repo/ui/components/cta-band";
@@ -54,6 +55,7 @@ export default async function AboutPage({ params }: PageProps<"/[locale]/about">
     <>
       <PageHero
         backdrop={<AboutBackdrop slot="overviewHero" />}
+        motif={<AmbientMotif variant="learn" intensity={0.7} />}
         eyebrow={t("overview.hero.eyebrow")}
         title={t("overview.hero.title")}
         lead={t("overview.hero.body")}

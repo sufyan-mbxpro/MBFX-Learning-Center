@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" width="1600" height="900" role="presentation" aria-hidden="true"><defs>
+<linearGradient id="g-levels" x1="0" y1="0" x2="1" y2="1">
+<stop offset="0" stop-color="#2E251C"/>
+<stop offset=".55" stop-color="#221C16"/>
+<stop offset="1" stop-color="#14110E"/>
+</linearGradient>
+<radialGradient id="warm-levels" cx=".5" cy=".5" r=".5">
+<stop offset="0" stop-color="#E8B98C" stop-opacity=".55"/>
+<stop offset="1" stop-color="#E8B98C" stop-opacity="0"/>
+</radialGradient>
+<radialGradient id="cool-levels" cx=".5" cy=".5" r=".5">
+<stop offset="0" stop-color="#7FA3C4" stop-opacity=".38"/>
+<stop offset="1" stop-color="#7FA3C4" stop-opacity="0"/>
+</radialGradient>
+<linearGradient id="fade-levels" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#E8B98C" stop-opacity=".5"/>
+<stop offset="1" stop-color="#E8B98C" stop-opacity="0"/>
+</linearGradient>
+<pattern id="grid-levels" width="64" height="64" patternUnits="userSpaceOnUse">
+<path d="M64 0H0V64" fill="none" stroke="#F5EFE8" stroke-opacity=".05" stroke-width="1"/>
+</pattern>
+<radialGradient id="vig-levels" cx=".5" cy=".45" r=".75">
+<stop offset=".55" stop-color="#14110E" stop-opacity="0"/>
+<stop offset="1" stop-color="#14110E" stop-opacity=".42"/>
+</radialGradient>
+</defs><rect width="1600" height="900" fill="url(#g-levels)"/><ellipse cx="1164.61" cy="244.39" rx="495.79" ry="386.72" fill="url(#warm-levels)"/><ellipse cx="663.44" cy="521.4" rx="316.17" ry="246.61" fill="url(#cool-levels)"/><ellipse cx="1212.16" cy="690.64" rx="605.57" ry="472.34" fill="url(#warm-levels)"/><rect width="1600" height="900" fill="url(#grid-levels)"/><path d="M144 584.74 L221.18 542.04 L298.35 541.94 L375.53 537.8 L452.71 522.5 L529.88 504.46 L607.06 474.36 L684.24 477.43 L761.41 525.5 L838.59 502.83 L915.76 541.53 L992.94 585.74 L1070.12 611.43 L1147.29 626.51 L1224.47 613 L1301.65 608.7 L1378.82 587.21 L1456 528.52 L1456 900 L144 900 Z" fill="url(#fade-levels)" fill-opacity=".9"/>
+<path d="M144 584.74 L221.18 542.04 L298.35 541.94 L375.53 537.8 L452.71 522.5 L529.88 504.46 L607.06 474.36 L684.24 477.43 L761.41 525.5 L838.59 502.83 L915.76 541.53 L992.94 585.74 L1070.12 611.43 L1147.29 626.51 L1224.47 613 L1301.65 608.7 L1378.82 587.21 L1456 528.52" fill="none" stroke="#E8B98C" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+<line x1="992.94" y1="108" x2="992.94" y2="585.74" stroke="#F5EFE8" stroke-opacity=".3" stroke-width="2" stroke-dasharray="8 8"/>
+<circle cx="992.94" cy="585.74" r="14" fill="#E8B98C" fill-opacity=".25"/>
+<circle cx="992.94" cy="585.74" r="7" fill="#F5EFE8"/><rect width="1600" height="900" fill="url(#vig-levels)"/></svg>

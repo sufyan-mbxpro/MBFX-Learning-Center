@@ -40,6 +40,7 @@ export async function ArticleCards({
   showKind = false,
   showAuthor = false,
   variant = "standard",
+  highlightFeatured = true,
 }: {
   entries: ArticleListEntry[];
   locale: string;
@@ -47,6 +48,15 @@ export async function ArticleCards({
   /** Gated by `articles.showAuthor` at the call site, like the detail page. */
   showAuthor?: boolean;
   variant?: string;
+  /**
+   * Give articles the editor flagged Featured the tinted, bordered card.
+   *
+   * On by default, and off for exactly one caller: a category archive whose
+   * every article is flagged would be a wall of tinted cards, at which point
+   * the treatment distinguishes nothing. Emphasis only reads as emphasis
+   * against something unemphasised.
+   */
+  highlightFeatured?: boolean;
 }) {
   const t = await getTranslations("news");
   const dateFormat = new Intl.DateTimeFormat(locale, { dateStyle: "medium" });
@@ -68,7 +78,6 @@ export async function ArticleCards({
       <ul className={GRID_CLASS[resolved]}>
         {entries.map((entry, index) => {
           const featuredFirst = resolved === "featured" && index === 0;
-          const showMedia = resolved !== "compact";
 
           return (
             <li
@@ -76,7 +85,16 @@ export async function ArticleCards({
               className={cn(featuredFirst && "sm:col-span-2", resolved === "compact" && "w-full")}
             >
               <Card
-                variant={featuredFirst ? "featured" : "default"}
+                // A flagged article carries the design system's own `featured`
+                // treatment — the 2px `--primary-interactive` border over a
+                // `bg-primary/10` tint — so it is distinguishable at a glance
+                // from across the grid, before the Featured badge on its cover
+                // is legible. That variant exists precisely for this and was
+                // previously reachable only as "the first card of a featured
+                // grid", which is a position, not an editorial decision.
+                variant={
+                  featuredFirst || (highlightFeatured && entry.isFeatured) ? "featured" : "default"
+                }
                 className={cn(
                   // `group` (unnamed) is what every hover effect below keys
                   // off, so the whole card answers the pointer even though it
@@ -104,7 +122,29 @@ export async function ArticleCards({
                   />
                 )}
 
-                {showMedia && (
+                {resolved === "compact" ? (
+                  // The rail beside the homepage lead used to be text-only,
+                  // which made a list of headlines read as a sidebar rather
+                  // than as articles. A square thumbnail is enough to say
+                  // "these are stories too" without competing with the lead
+                  // card's 21/9 cover. `shrink-0` keeps it square when a
+                  // long headline pushes on the row; the Featured badge is
+                  // deliberately absent — at 5rem it would cover the picture.
+                  <Link
+                    href={`/news/${entry.slug}`}
+                    tabIndex={-1}
+                    aria-hidden
+                    className="relative block w-20 shrink-0"
+                  >
+                    <ArticleMedia
+                      entry={entry}
+                      ratio={1}
+                      sizes="80px"
+                      glyphClassName="size-7"
+                      className="rounded-md"
+                    />
+                  </Link>
+                ) : (
                   <Link
                     href={`/news/${entry.slug}`}
                     tabIndex={-1}
@@ -116,7 +156,7 @@ export async function ArticleCards({
                       ratio={featuredFirst ? 21 / 9 : 16 / 9}
                       sizes={featuredFirst ? "100vw" : "(max-width: 640px) 100vw, 33vw"}
                     />
-                    {entry.isFeatured && (
+                    {highlightFeatured && entry.isFeatured && (
                       // The editor's Featured flag, finally visible to the
                       // reader it was always for. On the media rather than in
                       // the badge row below: that row carries taxonomy the
@@ -134,7 +174,13 @@ export async function ArticleCards({
                 )}
 
                 <div
-                  className={cn("flex flex-1 flex-col gap-2", resolved === "compact" ? "p-0" : "p-5")}
+                  className={cn(
+                    "flex flex-1 flex-col gap-2",
+                    // `min-w-0` is what stops a long headline from pushing
+                    // the thumbnail out of the row now that compact is a
+                    // flex ROW with two children rather than one.
+                    resolved === "compact" ? "min-w-0 p-0" : "p-5",
+                  )}
                 >
                   {(showKind || entry.category) && (
                     <div className="flex flex-wrap items-center gap-2">
@@ -162,7 +208,10 @@ export async function ArticleCards({
                       resolved !== "compact" && "group-hover:text-primary-interactive",
                     )}
                   >
-                    <Link href={`/news/${entry.slug}`} className="link-underline">
+                    <Link
+                      href={`/news/${entry.slug}`}
+                      className={cn("link-underline", resolved === "compact" && "line-clamp-3")}
+                    >
                       {entry.title}
                     </Link>
                   </h3>

@@ -231,12 +231,12 @@ describe("SiteLoader — ADR-018 rule 4: bounded, skippable, once per session", 
     stubBrowser();
     const { container } = render(<SiteLoader />);
     expect(container.querySelector("[data-slot=site-loader]")).not.toBeNull();
-    expect(sessionStorage.getItem("mbfx:site-loader-shown")).toBe("1");
+    expect(sessionStorage.getItem("mbx:site-loader-shown")).toBe("1");
   });
 
   it("does not show again once the session is marked", () => {
     stubBrowser();
-    sessionStorage.setItem("mbfx:site-loader-shown", "1");
+    sessionStorage.setItem("mbx:site-loader-shown", "1");
     const { container } = render(<SiteLoader />);
     expect(container.querySelector("[data-slot=site-loader]")).toBeNull();
   });

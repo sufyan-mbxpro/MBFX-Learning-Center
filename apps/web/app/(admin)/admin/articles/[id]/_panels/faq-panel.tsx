@@ -216,7 +216,7 @@ export function FaqPanel({
                         isOpen && "rotate-180",
                       )}
                     />
-                    <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-info/10 text-[11px] font-semibold text-info-interactive tabular-nums">
+                    <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-info/10 text-xs font-semibold text-info-interactive tabular-nums">
                       {index + 1}
                     </span>
                     <span className="min-w-0 flex-1 truncate font-medium">{item.question}</span>

@@ -94,6 +94,48 @@ describe("Carousel — controls", () => {
   });
 });
 
+describe("Carousel — control tone", () => {
+  // The `tone` prop is a CORRECTNESS switch, not a preference: the default
+  // palette (--border, --primary-interactive) is derived for legibility
+  // against --background, and on a `Section tone="inverted"` band the dots go
+  // very nearly invisible. Pinning both palettes here because a regression
+  // that quietly reverts one to the other is invisible to typecheck and to
+  // every other test in this file.
+  function dotClasses(container: HTMLElement) {
+    return [...container.querySelectorAll("ul:last-of-type button")]
+      .flatMap((el) => [...el.classList])
+      .join(" ");
+  }
+
+  it("the default surface uses the background-derived palette", () => {
+    const { container } = render(
+      <Carousel label="L" previousLabel="P" nextLabel="N">
+        <div>a</div>
+        <div>b</div>
+      </Carousel>,
+    );
+    const classes = dotClasses(container);
+    expect(classes).toContain("bg-primary-interactive");
+    expect(classes).toContain("bg-border");
+    expect(classes).not.toContain("bg-secondary-foreground");
+  });
+
+  it("an inverted band uses --secondary-foreground, which is derived readable on it", () => {
+    const { container } = render(
+      <Carousel label="L" previousLabel="P" nextLabel="N" tone="inverted">
+        <div>a</div>
+        <div>b</div>
+      </Carousel>,
+    );
+    const classes = dotClasses(container);
+    expect(classes).toContain("bg-secondary-foreground");
+    // The tokens computed against --background must be entirely absent, not
+    // merely overridden — twMerge would keep both and the loser is a coin flip.
+    expect(classes).not.toContain("bg-primary-interactive");
+    expect(classes).not.toContain("bg-border");
+  });
+});
+
 describe("Carousel — RTL", () => {
   it("emits no physical-direction utilities (code-style.md #3)", () => {
     const { container } = renderCarousel();

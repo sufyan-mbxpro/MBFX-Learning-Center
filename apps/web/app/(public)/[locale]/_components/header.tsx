@@ -80,7 +80,7 @@ export async function SiteHeader({ locale }: { locale: string }) {
               light={brandAssets.logo_light?.url ?? null}
               dark={brandAssets.logo_dark?.url ?? null}
               alt={siteName ?? ""}
-              className="h-8"
+              className="h-11"
               fallback={<span className="text-lg font-semibold tracking-tight">{siteName}</span>}
             />
           </Link>

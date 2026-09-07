@@ -102,7 +102,17 @@ export async function NewsSpotlight({
 
               <div className="flex flex-1 flex-col gap-3 p-6">
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="eyebrow">{t("leadStory")}</Badge>
+                  {/* Which label depends on WHY this story is here. A flagged
+                      article says "Featured" — the editor's word for it, and
+                      the only place a reader ever sees that flag, since the
+                      spotlight is exactly where flagged articles end up and
+                      the grid's own Featured badge therefore only fires when
+                      there are more flags than the spotlight can hold. An
+                      unflagged top-up says "Lead story", which is a claim
+                      about position and is true of it. */}
+                  <Badge variant="eyebrow">
+                    {lead.isFeatured ? t("featuredBadge") : t("leadStory")}
+                  </Badge>
                   {lead.category && (
                     <Badge
                       variant="pill"
@@ -134,7 +144,14 @@ export async function NewsSpotlight({
             <ol className="flex flex-col gap-4">
               {runners.map((entry, index) => (
                 <li key={entry.articleId} className="flex-1">
-                  <article className="group card-hover hover-lift relative flex h-full items-start gap-4 rounded-2xl bg-card p-4 ring-1 ring-foreground/10 hover:ring-primary/25">
+                  {/* `items-center`, not `items-start`: the rail stretches to
+                      match the lead card beside it (`flex-1` on the li), and
+                      top-aligned content left a third of each card empty
+                      under the text — visible only against a real lead card,
+                      not in isolation. Centred, the extra height reads as
+                      breathing room rather than as a card that failed to
+                      fill. */}
+                  <article className="group card-hover hover-lift relative flex h-full items-center gap-4 rounded-2xl bg-card p-4 ring-1 ring-foreground/10 hover:ring-primary/25">
                     <Link
                       href={`/news/${entry.slug}`}
                       tabIndex={-1}
@@ -175,7 +192,7 @@ export async function NewsSpotlight({
 
                     <ArrowRight
                       aria-hidden
-                      className="hover-arrow mt-1 size-4 shrink-0 text-primary-interactive rtl:rotate-180"
+                      className="hover-arrow size-4 shrink-0 text-primary-interactive rtl:rotate-180"
                     />
                   </article>
                 </li>

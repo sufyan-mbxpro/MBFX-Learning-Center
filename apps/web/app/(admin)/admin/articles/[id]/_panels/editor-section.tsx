@@ -18,13 +18,35 @@ import { cn } from "@repo/ui/lib/utils";
 
 export type SectionAccent = "primary" | "success" | "warning" | "info" | "danger" | "neutral";
 
+// The header band. The icon tile alone was carrying the accent, which is
+// ~32px of colour on a card the width of the page — at a glance the nine
+// panels still read as nine grey rectangles. Tinting the whole header row
+// turns the accent into a band the eye can catch while scrolling, and gives
+// the title and its description a surface of their own, so the chrome/field
+// split the rule draws is reinforced by colour instead of resting on one
+// hairline.
+//
+// The tint stays at /8 with a /15 rule: it has to sit UNDER foreground text
+// at the body's contrast in BOTH modes, so it marks the section without
+// becoming a second surface competing with the fields below it.
+const ACCENT_HEADER: Record<SectionAccent, string> = {
+  primary: "border-b-primary/15 bg-primary/8",
+  success: "border-b-success/15 bg-success/8",
+  warning: "border-b-warning/15 bg-warning/8",
+  info: "border-b-info/15 bg-info/8",
+  danger: "border-b-destructive/15 bg-destructive/8",
+  neutral: "bg-muted/60",
+};
+
+// Tiles now sit ON the band, so they carry a ring and a heavier fill: at the
+// old /10 against a /8 header the icon would have dissolved into it.
 const ACCENT_MEDIA: Record<SectionAccent, string> = {
-  primary: "bg-primary/10 text-primary-interactive",
-  success: "bg-success/10 text-success-interactive",
-  warning: "bg-warning/10 text-warning-interactive",
-  info: "bg-info/10 text-info-interactive",
-  danger: "bg-destructive/10 text-destructive",
-  neutral: "bg-muted text-muted-foreground",
+  primary: "bg-primary/15 text-primary-interactive ring-1 ring-primary/25",
+  success: "bg-success/15 text-success-interactive ring-1 ring-success/25",
+  warning: "bg-warning/15 text-warning-interactive ring-1 ring-warning/25",
+  info: "bg-info/15 text-info-interactive ring-1 ring-info/25",
+  danger: "bg-destructive/15 text-destructive ring-1 ring-destructive/25",
+  neutral: "bg-background text-muted-foreground ring-1 ring-border",
 };
 
 export function EditorSection({
@@ -62,7 +84,14 @@ export function EditorSection({
         className,
       )}
     >
-      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 border-b p-4">
+      <div
+        className={cn(
+          // `rounded-t-lg` matches the section's own radius: without it the
+          // tint squares off the two corners the border rounds.
+          "flex flex-wrap items-start justify-between gap-x-4 gap-y-2 rounded-t-lg border-b p-4",
+          ACCENT_HEADER[accent],
+        )}
+      >
         <div className="flex min-w-0 items-start gap-3">
           {Icon && (
             <span

@@ -387,8 +387,21 @@ const SETTINGS = [
       // `variant`/`limit` are optional (changes-03-plan.md §5.1): a section
       // with one sensible layout simply omits them. Every variant named here
       // is validated against HOME_SECTION_VARIANTS in @repo/contracts.
-      { key: "hero", enabled: true, order: 1, variant: "split" },
-      { key: "explore_platform", enabled: true, order: 2, variant: "carousel" },
+      // The video rail opens the page, directly under the header — a
+      // full-bleed inverted band, so the first thing below the menu reads as
+      // a shelf of lessons rather than another card grid. The hero keeps the
+      // <h1> immediately after it.
+      { key: "learning_videos", enabled: true, order: 1, variant: "carousel", limit: 6 },
+      { key: "hero", enabled: true, order: 2, variant: "split" },
+      { key: "explore_platform", enabled: true, order: 3, variant: "carousel" },
+      { key: "feature_highlights", enabled: true, order: 4, variant: "grid", limit: 6 },
+      // News before analysis: "what happened" reads before "what we make of
+      // it", and the two are separate sections precisely so the homepage can
+      // make both promises distinctly (see latest-news.tsx).
+      { key: "latest_news", enabled: true, order: 5, variant: "split", limit: 5 },
+      { key: "latest_analysis", enabled: true, order: 6, variant: "standard", limit: 3 },
+      { key: "glossary_spotlight", enabled: true, order: 7, variant: "chips", limit: 8 },
+
       // The seven keys below are seeded but DISABLED, and that is the point:
       // nothing is built behind them, so enabling one renders the dashed
       // "Coming soon" placeholder. Seven of those between the real sections
@@ -400,18 +413,22 @@ const SETTINGS = [
       // HOME_SECTION_STUB_KEYS: a key that vanishes from the seed becomes a
       // stale stub entry and fails the check. Enabling one is a one-word
       // edit the day its component lands.
-      { key: "learning_paths", enabled: false, order: 3, variant: "elevated", limit: 3 },
-      { key: "forex_rates", enabled: false, order: 4, variant: "marquee" },
-      { key: "latest_analysis", enabled: true, order: 5, variant: "standard", limit: 3 },
-      { key: "economic_events", enabled: false, order: 6, limit: 5 },
-      { key: "popular_tools", enabled: false, order: 7, variant: "default", limit: 4 },
-      { key: "glossary_spotlight", enabled: true, order: 8, variant: "chips", limit: 8 },
-      { key: "featured_lessons", enabled: false, order: 9, variant: "default", limit: 3 },
-      { key: "market_sentiment", enabled: false, order: 10 },
-      { key: "trading_sessions", enabled: false, order: 11 },
-      { key: "newsletter", enabled: true, order: 12, variant: "full-width" },
-      { key: "faq", enabled: true, order: 13, variant: "accordion", limit: 6 },
-      { key: "risk_disclaimer", enabled: true, order: 14 },
+      //
+      // Grouped together at the tail rather than interleaved: `order` is what
+      // the page sorts on, so a disabled row's number is inert, and holding
+      // them in one block is what makes "everything from here down is not
+      // built yet" true by reading rather than by cross-referencing.
+      { key: "learning_paths", enabled: false, order: 8, variant: "elevated", limit: 3 },
+      { key: "forex_rates", enabled: false, order: 9, variant: "marquee" },
+      { key: "economic_events", enabled: false, order: 10, limit: 5 },
+      { key: "popular_tools", enabled: false, order: 11, variant: "default", limit: 4 },
+      { key: "featured_lessons", enabled: false, order: 12, variant: "default", limit: 3 },
+      { key: "market_sentiment", enabled: false, order: 13 },
+      { key: "trading_sessions", enabled: false, order: 14 },
+
+      { key: "newsletter", enabled: true, order: 15, variant: "full-width" },
+      { key: "faq", enabled: true, order: 16, variant: "accordion", limit: 6 },
+      { key: "risk_disclaimer", enabled: true, order: 17 },
     ],
     "JSON",
     "Homepage sections",
@@ -893,14 +910,14 @@ export async function seed(db: PrismaClient) {
     children: [
       {
         routeKey: "about",
-        label: "About MBFX",
+        label: "About MBX",
         title: "Who we are and what we teach",
         icon: "building-2",
         sortOrder: 1,
       },
       {
         routeKey: "about-why-us",
-        label: "Why MBFX",
+        label: "Why MBX",
         title: "Five reasons this is worth your time",
         icon: "badge-check",
         sortOrder: 2,
@@ -1028,8 +1045,8 @@ export async function seed(db: PrismaClient) {
       key: "footer_company",
       name: "Company",
       items: [
-        { routeKey: "about", label: "About MBFX", requiresFeature: null },
-        { routeKey: "about-why-us", label: "Why MBFX", requiresFeature: null },
+        { routeKey: "about", label: "About MBX", requiresFeature: null },
+        { routeKey: "about-why-us", label: "Why MBX", requiresFeature: null },
         { routeKey: "about-transparency", label: "How We Operate", requiresFeature: null },
         { routeKey: "about-security", label: "Security & Trust", requiresFeature: null },
         { routeKey: "about-support", label: "Support", requiresFeature: null },

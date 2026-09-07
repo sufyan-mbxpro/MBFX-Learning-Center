@@ -43,6 +43,7 @@ const HERO_TONE_CLASS = {
 
 function PageHero({
   backdrop,
+  motif,
   breadcrumb,
   eyebrow,
   title,
@@ -80,6 +81,18 @@ function PageHero({
    * headline (ADR-051 §5's generated pieces are).
    */
   backdrop?: React.ReactNode;
+  /**
+   * A decorative ambient layer — `AmbientMotif` — painted between the
+   * backdrop and the copy.
+   *
+   * Its own slot rather than something folded into `backdrop`, for two
+   * reasons. The backdrop is clamped to 25% opacity for artwork that would
+   * otherwise eat the tone's contrast; the motif already carries its own
+   * much lower ink and would come out invisible under a second multiplier.
+   * And the two compose — the news masthead runs generated art AND a chart
+   * motif — which a single slot cannot express.
+   */
+  motif?: React.ReactNode;
   /** Small print that belongs to the headline claim, not to the page body. */
   footnote?: React.ReactNode;
   align?: keyof typeof ALIGN_CLASS;
@@ -105,6 +118,7 @@ function PageHero({
           {backdrop}
         </div>
       )}
+      {motif}
       <Container className={cn("grid items-center gap-10", media && "lg:grid-cols-2")}>
         <div className={cn("flex flex-col gap-5", ALIGN_CLASS[align])}>
           {breadcrumb}

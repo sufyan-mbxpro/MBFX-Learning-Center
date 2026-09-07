@@ -1,6 +1,6 @@
 {
   "common": {
-    "siteName": "MBFX Learning Center",
+    "siteName": "MBX Learning Center",
     "siteDescription": "Free forex education, tools, and analysis."
   },
   "home": {
@@ -60,7 +60,53 @@
     "exploreMarketsBody": "Rates, trading sessions and currency strength, so you know what the market is doing before you open a chart.",
     "exploreAboutTag": "Company",
     "exploreAboutTitle": "Who we are",
-    "exploreAboutBody": "Who writes this material, how the site is funded, and what we will never do with your attention."
+    "exploreAboutBody": "Who writes this material, how the site is funded, and what we will never do with your attention.",
+    "videoEyebrow": "Watch and learn",
+    "videoTitle": "Start with the six that matter",
+    "videoLead": "Short lessons that build in order — what the market is, how to read it, and how to size a trade before you place one.",
+    "videoAll": "All courses",
+    "videoPlay": "Play: {title}",
+    "videoSoon": "Recording soon",
+    "videoCarouselLabel": "Learning videos",
+    "videoCarouselPrevious": "Previous videos",
+    "videoCarouselNext": "More videos",
+    "videoBasicsTitle": "What the forex market actually is",
+    "videoBasicsBody": "Who trades currencies, why a pair has two prices, and what you are really buying when you buy EUR/USD.",
+    "videoBasicsLevel": "Start here",
+    "videoCandlesticksTitle": "Reading a candlestick chart",
+    "videoCandlesticksBody": "Open, high, low, close — and what a single candle can and cannot tell you about the next one.",
+    "videoCandlesticksLevel": "Beginner",
+    "videoRiskTitle": "Position sizing and risk",
+    "videoRiskBody": "Deciding what a trade may cost you before you take it, and the arithmetic that turns that decision into a lot size.",
+    "videoRiskLevel": "Essential",
+    "videoLevelsTitle": "Support, resistance and structure",
+    "videoLevelsBody": "Why price hesitates in the same places twice, how to mark a level honestly, and when a level has stopped mattering.",
+    "videoLevelsLevel": "Intermediate",
+    "videoPlanTitle": "Building a trading plan",
+    "videoPlanBody": "Turning a setup you like into written rules — entry, invalidation, target and the days you do not trade at all.",
+    "videoPlanLevel": "Intermediate",
+    "videoPsychologyTitle": "Why good plans get abandoned",
+    "videoPsychologyBody": "The predictable moments where discipline fails, and the small process changes that make failing harder.",
+    "videoPsychologyLevel": "Advanced",
+    "highlightsEyebrow": "How we teach",
+    "highlightsTitle": "Built to be understood, not to impress",
+    "highlightsLead": "Six commitments that shape every lesson, article and definition on this site.",
+    "highlightPlainLanguageTitle": "Plain language first",
+    "highlightPlainLanguageBody": "Jargon is defined the first time it appears, and linked to the glossary every time after.",
+    "highlightWorkedExamplesTitle": "Worked examples",
+    "highlightWorkedExamplesBody": "Numbers are shown being calculated, not asserted — so you can reproduce them on your own trade.",
+    "highlightRiskIncludedTitle": "Risk is part of the lesson",
+    "highlightRiskIncludedBody": "Never a footnote. If material shows a way to enter, it shows what happens when the trade is wrong.",
+    "highlightFreeToReadTitle": "Free, no account needed",
+    "highlightFreeToReadBody": "Every lesson, article and glossary entry is readable without signing up or handing over an email.",
+    "highlightMultilingualTitle": "Built multilingual",
+    "highlightMultilingualBody": "The site is written to be translated, right down to reading direction — not bolted on afterwards.",
+    "highlightNoHypeTitle": "No signals, no hype",
+    "highlightNoHypeBody": "We teach a process and publish analysis. We do not sell tips, and nothing here is advice to trade.",
+    "latestNews": "Latest news",
+    "latestNewsEyebrow": "The newsroom",
+    "latestNewsLead": "What moved, and why it mattered — written for people who trade.",
+    "latestNewsAll": "All news"
   },
   "error": {
     "title": "Something went wrong",
@@ -96,7 +142,7 @@
       },
       "viewAll": "View all"
     },
-    "signUp": "Sign up"
+    "signUp": "Join us"
   },
   "footer": {
     "newsletterHeading": "Stay in the loop",
@@ -571,7 +617,9 @@
     "hasUnpublishedChangesShort": "Unpublished changes",
     "editPostDescription": "Update your blog post content and settings",
     "viewLive": "View Live",
-    "updateAndPublish": "Update & Publish",
+    "updatePost": "Update",
+    "publishPost": "Publish",
+    "publishedToast": "Published",
     "postUrlLabel": "Post URL",
     "wordsLabel": "Words",
     "charactersLabel": "Characters",
@@ -755,7 +803,7 @@
     "confirmArchiveArticleBody": "It comes off the public site immediately. You can bring it back to draft afterwards.",
     "signIn": {
       "title": "Staff sign in",
-      "description": "This portal is for MBFX staff accounts.",
+      "description": "This portal is for MBX staff accounts.",
       "email": "Email",
       "password": "Password",
       "submit": "Sign in",
@@ -802,7 +850,27 @@
     "shareLinkedin": "Share on LinkedIn",
     "copyLink": "Copy link",
     "linkCopied": "Link copied",
-    "faqTitle": "Frequently asked questions"
+    "faqTitle": "Frequently asked questions",
+    "heroEyebrow": "Newsroom",
+    "heroBrowse": "Read the latest",
+    "heroTopics": "Browse topics",
+    "featuredBadge": "Featured",
+    "readArticle": "Read article",
+    "leadStory": "Lead story",
+    "spotlightEyebrow": "In focus",
+    "spotlightTitle": "Top stories",
+    "latestEyebrow": "All coverage",
+    "latestTitle": "Latest news",
+    "latestLead": "Every story from our desk, newest first.",
+    "topicsEyebrow": "Topics",
+    "topicsTitle": "Browse by topic",
+    "topicsLead": "Jump straight to the coverage you follow.",
+    "topicsCount": "{count, plural, one {# article} other {# articles}}",
+    "topicsCta": "View topic",
+    "categoryCurrent": "You are here",
+    "categoryViewAll": "View all",
+    "exploreTitle": "Keep exploring",
+    "exploreLead": "Other topics from the newsroom, and the tags running through them."
   },
   "economicCalendar": {
     "title": "Economic calendar",
@@ -862,12 +930,12 @@
     "password": "Password",
     "submit": "Sign in",
     "failed": "Sign-in failed. Check your email and password.",
-    "signInDescription": "Sign in to your MBFX Learning Center account.",
+    "signInDescription": "Sign in to your MBX Learning Center account.",
     "learnersOnly": "This account can't sign in here.",
-    "noAccount": "New to MBFX?",
+    "noAccount": "New to MBX?",
     "signUpLink": "Create an account",
     "signUpTitle": "Create your account",
-    "signUpDescription": "Join MBFX Learning Center and track what you learn.",
+    "signUpDescription": "Join MBX Learning Center and track what you learn.",
     "name": "Full name",
     "passwordHint": "At least {count} characters.",
     "signUpSubmit": "Create account",
@@ -1266,20 +1334,20 @@
   },
   "about": {
     "nav": {
-      "sectionLabel": "About MBFX",
-      "aboutUs": "About MBFX",
-      "whyUs": "Why MBFX",
+      "sectionLabel": "About MBX",
+      "aboutUs": "About MBX",
+      "whyUs": "Why MBX",
       "transparency": "How we operate",
       "security": "Security & trust",
       "support": "Support"
     },
     "meta": {
-      "aboutUsTitle": "About MBFX",
-      "aboutUsDescription": "Who we are, what we teach, and how the MBFX Learning Center works.",
-      "whyUsTitle": "Why MBFX",
-      "whyUsDescription": "The five things that make the MBFX Learning Center worth your time.",
+      "aboutUsTitle": "About MBX",
+      "aboutUsDescription": "Who we are, what we teach, and how the MBX Learning Center works.",
+      "whyUsTitle": "Why MBX",
+      "whyUsDescription": "The five things that make the MBX Learning Center worth your time.",
       "transparencyTitle": "How we operate",
-      "transparencyDescription": "Where our data comes from, how we deliver it, and how MBFX is funded.",
+      "transparencyDescription": "Where our data comes from, how we deliver it, and how MBX is funded.",
       "securityTitle": "Security & trust",
       "securityDescription": "How we protect your account, your data, and your learning record.",
       "supportTitle": "Support",
@@ -1293,9 +1361,9 @@
     },
     "overview": {
       "hero": {
-        "eyebrow": "About MBFX",
-        "title": "Learn the markets with MBFX",
-        "body": "The MBFX Learning Center is where we explain how trading actually works — in plain language, with worked examples, and without pretending anything is risk-free.",
+        "eyebrow": "About MBX",
+        "title": "Learn the markets with MBX",
+        "body": "The MBX Learning Center is where we explain how trading actually works — in plain language, with worked examples, and without pretending anything is risk-free.",
         "primaryCta": "Start learning",
         "secondaryCta": "Browse the glossary"
       },
@@ -1350,7 +1418,7 @@
         "entries": {
           "founded": {
             "title": "Ten lessons and a spreadsheet",
-            "body": "MBFX starts as a set of evening classes for friends who kept asking the same questions about leverage. The first curriculum fits on one page."
+            "body": "MBX starts as a set of evening classes for friends who kept asking the same questions about leverage. The first curriculum fits on one page."
           },
           "curriculum": {
             "title": "A curriculum, not a blog",
@@ -1418,12 +1486,12 @@
       },
       "payments": {
         "title": "Deposit and withdrawal options",
-        "lead": "Accepted methods for funding an MBFX account."
+        "lead": "Accepted methods for funding an MBX account."
       },
       "learnMore": {
         "title": "Want to know more?",
         "whyUs": "What makes this different from the hundred other places you could learn.",
-        "transparency": "Where our data comes from and how MBFX pays for all this.",
+        "transparency": "Where our data comes from and how MBX pays for all this.",
         "support": "Talk to a person when a lesson or a platform question needs one."
       },
       "cta": {
@@ -1434,7 +1502,7 @@
     },
     "whyUs": {
       "hero": {
-        "eyebrow": "Why MBFX",
+        "eyebrow": "Why MBX",
         "title": "Why learn the markets here",
         "body": "Anyone can publish a chart with an arrow on it. Here is what we do differently — and what we will never do.",
         "primaryCta": "Start learning",
@@ -1448,7 +1516,7 @@
         "noSignals": "We never sell trading signals, tips, or strategies described as guaranteed.",
         "afterTheMove": "Analysis explains a move that has already happened. It is never dressed up as a forecast of the next one.",
         "riskInline": "Risk warnings sit with the content they apply to, not only in the footer.",
-        "ownProducts": "Where a lesson refers to MBFX products, it says so plainly instead of implying neutrality."
+        "ownProducts": "Where a lesson refers to MBX products, it says so plainly instead of implying neutrality."
       },
       "reasons": {
         "eyebrow": "Five reasons",
@@ -1507,7 +1575,7 @@
       },
       "funding": {
         "title": "How the Learning Center is funded",
-        "body": "The Learning Center is published by MBFX. It does not charge for access and it does not carry advertising. Where a lesson or an article refers to an MBFX product, it says so rather than implying neutrality."
+        "body": "The Learning Center is published by MBX. It does not charge for access and it does not carry advertising. Where a lesson or an article refers to an MBX product, it says so rather than implying neutrality."
       },
       "notDoing": {
         "title": "What we don't do",
@@ -1567,7 +1635,7 @@
       },
       "jurisdictions": {
         "title": "Where our people are",
-        "lead": "MBFX is built by a distributed team. These are the places our curriculum, editorial, engineering and support work is done from.",
+        "lead": "MBX is built by a distributed team. These are the places our curriculum, editorial, engineering and support work is done from.",
         "legend": "Locations and the teams based there",
         "places": {
           "london": "London, United Kingdom",

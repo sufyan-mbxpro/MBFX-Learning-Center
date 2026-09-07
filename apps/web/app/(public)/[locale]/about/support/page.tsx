@@ -20,6 +20,7 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { ROUTE_PATHS } from "@repo/contracts";
 import { Link } from "@repo/i18n/navigation";
 import { getSetting, isFeatureVisible } from "@repo/settings";
+import { AmbientMotif } from "@repo/ui/components/ambient-motif";
 import { Button } from "@repo/ui/components/button";
 import { Container } from "@repo/ui/components/container";
 import { CtaBand } from "@repo/ui/components/cta-band";
@@ -88,6 +89,7 @@ export default async function SupportPage({ params }: PageProps<"/[locale]/about
     <>
       <PageHero
         backdrop={<AboutBackdrop slot="supportHero" />}
+        motif={<AmbientMotif variant="learn" intensity={0.7} />}
         eyebrow={t("support.hero.eyebrow")}
         title={t("support.hero.title")}
         lead={t("support.hero.body")}

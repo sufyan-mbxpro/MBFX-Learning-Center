@@ -158,7 +158,7 @@ function MegaMenuColumn({
   );
 }
 
-/** One row: icon, bold label, one-line description — the mbfx.co treatment. */
+/** One row: icon, bold label, one-line description — the mbx.co treatment. */
 function MegaMenuLink({
   icon: Icon,
   title,

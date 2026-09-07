@@ -19,8 +19,8 @@
 // One rule constrains the invention, and it is ADR-051 §4: figures, dates and
 // history are made up freely, but **no real outside organisation is named**.
 // Award issuers below are fictional bodies, and the map is presented as where
-// MBFX's own teams and learners are — never as a list of regulators MBFX
-// answers to. A placeholder that leaks says something false about MBFX; it
+// MBX's own teams and learners are — never as a list of regulators MBX
+// answers to. A placeholder that leaks says something false about MBX; it
 // must never say something false about somebody else.
 //
 // Map coordinates are percentages of the artwork's box under the same
@@ -104,7 +104,7 @@ export const DEMO_ABOUT_FACTS: AboutFacts = {
   ],
 
   // FICTIONAL awarding bodies (ADR-051 §4). Do not swap these for real ones
-  // without an award MBFX can evidence.
+  // without an award MBX can evidence.
   awards: [
     {
       titleKey: "overview.awards.items.bestEducation",
@@ -168,7 +168,7 @@ export const DEMO_ABOUT_FACTS: AboutFacts = {
     },
   ],
 
-  // Where MBFX's own people are — NOT regulators (ADR-051 §4). `bodies` holds
+  // Where MBX's own people are — NOT regulators (ADR-051 §4). `bodies` holds
   // the teams at each location, which is what the legend renders.
   jurisdictions: [
     {
@@ -236,7 +236,7 @@ export const DEMO_ABOUT_FACTS: AboutFacts = {
   support: {
     channels: [
       { kind: "hours", value: "Sunday 22:00 – Friday 21:00 UTC" },
-      { kind: "email", value: "support@mbfx.co" },
+      { kind: "email", value: "support@mbx.co" },
       { kind: "phone", value: "+44 20 7946 0321" },
       { kind: "whatsapp", value: "+44 7700 900321" },
     ],

@@ -1,6 +1,6 @@
 // packages/db/prisma/schema.prisma
 //
-// MariaDB schema — MBFX Learning Center
+// MariaDB schema — MBX Learning Center
 // Covers: auth, RBAC, employees, settings, theming, i18n, navigation, content.
 // Ported from docs/reference/schema.prisma with the A4/A5.4 review fixes
 // (plan.md) and the auth-table shape locked by ADR-001.

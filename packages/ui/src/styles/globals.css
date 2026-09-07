@@ -87,27 +87,39 @@
   --font-sans: var(--brand-font-sans);
   --font-mono: var(--brand-font-mono);
 
-  /* A5.5 — size/line-height pairs. */
-  --text-xs: 11px;
-  --text-xs--line-height: 16px;
-  --text-sm: 12px;
-  --text-sm--line-height: 18px;
-  --text-md: 13px;
-  --text-md--line-height: 20px;
-  --text-base: 14px;
-  --text-base--line-height: 22px;
-  --text-lg: 16px;
-  --text-lg--line-height: 24px;
-  --text-xl: 18px;
-  --text-xl--line-height: 26px;
-  --text-2xl: 20px;
-  --text-2xl--line-height: 28px;
-  --text-3xl: 24px;
-  --text-3xl--line-height: 32px;
-  --text-4xl: 28px;
-  --text-4xl--line-height: 36px;
-  --text-5xl: 32px;
-  --text-5xl--line-height: 40px;
+  /* A5.5 — size/line-height pairs, now one indirection deep (ADR-054).
+     `@theme inline` SUBSTITUTES these values into every utility at build
+     time, so `.text-xs` compiles to a literal `font-size: 11px` and a
+     redeclared `--text-xs` further down the tree is inert — there is no
+     var() left to intercept. Routing each step through
+     `var(--ui-x, var(--type-x))` puts one back, which is what lets the
+     admin run a larger scale off a single class.
+
+     `--type-*` (in :root, below) is the reader's scale and the source of
+     truth. `--ui-*` is deliberately NEVER defined in :root — only
+     `.type-scale-admin` sets it — so every public surface falls through
+     the fallback and compiles to exactly the value it always did. Same
+     indirection the colour tokens above use, applied to type. */
+  --text-xs: var(--ui-xs, var(--type-xs));
+  --text-xs--line-height: var(--ui-xs-lh, var(--type-xs-lh));
+  --text-sm: var(--ui-sm, var(--type-sm));
+  --text-sm--line-height: var(--ui-sm-lh, var(--type-sm-lh));
+  --text-md: var(--ui-md, var(--type-md));
+  --text-md--line-height: var(--ui-md-lh, var(--type-md-lh));
+  --text-base: var(--ui-base, var(--type-base));
+  --text-base--line-height: var(--ui-base-lh, var(--type-base-lh));
+  --text-lg: var(--ui-lg, var(--type-lg));
+  --text-lg--line-height: var(--ui-lg-lh, var(--type-lg-lh));
+  --text-xl: var(--ui-xl, var(--type-xl));
+  --text-xl--line-height: var(--ui-xl-lh, var(--type-xl-lh));
+  --text-2xl: var(--ui-2xl, var(--type-2xl));
+  --text-2xl--line-height: var(--ui-2xl-lh, var(--type-2xl-lh));
+  --text-3xl: var(--ui-3xl, var(--type-3xl));
+  --text-3xl--line-height: var(--ui-3xl-lh, var(--type-3xl-lh));
+  --text-4xl: var(--ui-4xl, var(--type-4xl));
+  --text-4xl--line-height: var(--ui-4xl-lh, var(--type-4xl-lh));
+  --text-5xl: var(--ui-5xl, var(--type-5xl));
+  --text-5xl--line-height: var(--ui-5xl-lh, var(--type-5xl-lh));
 
   /* NO named spacing scale (--spacing-sm etc.), deliberately — the
      reference globals.css defined one, and it's a live Tailwind v4
@@ -213,6 +225,70 @@
        these two are constants — not namespaced here for the reason above. */
     --container-wide: 1600px;
     --container-narrow: 768px;
+
+    /* The READER's type scale (ADR-054) — the source of truth every
+       --text-* step falls back to, and the sizes the public site and a
+       published article render at. These are the values that used to sit
+       literally in @theme; they moved location, not magnitude, so every
+       public surface renders pixel-identically. */
+    --type-xs: 11px;
+    --type-xs-lh: 16px;
+    --type-sm: 12px;
+    --type-sm-lh: 18px;
+    --type-md: 13px;
+    --type-md-lh: 20px;
+    --type-base: 14px;
+    --type-base-lh: 22px;
+    --type-lg: 16px;
+    --type-lg-lh: 24px;
+    --type-xl: 18px;
+    --type-xl-lh: 26px;
+    --type-2xl: 20px;
+    --type-2xl-lh: 28px;
+    --type-3xl: 24px;
+    --type-3xl-lh: 32px;
+    --type-4xl: 28px;
+    --type-4xl-lh: 36px;
+    --type-5xl: 32px;
+    --type-5xl-lh: 40px;
+  }
+
+  /* The ADMIN's type scale (ADR-054). Applied to <html> in both admin root
+     layouts via ADMIN_TYPE_SCALE_CLASS — never in :root, so it cannot leak
+     onto a public render.
+
+     Why the admin needs its own: it lives at the bottom of the scale
+     (114 text-xs + 97 text-sm across app/(admin), against 3 text-2xl), and
+     Outfit is a geometric sans whose character — circular bowls, a
+     single-storey g — does not resolve at 11px. The page h1 was smaller
+     than the public site's body copy.
+
+     ALL ten steps are overridden, including the three the admin does not
+     currently render. Stopping at 2xl left --ui-2xl (24px) equal to the
+     reader's --type-3xl (24px), so the first admin screen to reach for
+     text-3xl would have got no increase at all — a silent dead step. A
+     complete, strictly-ascending scale has no such edge. */
+  .type-scale-admin {
+    --ui-xs: 12px;
+    --ui-xs-lh: 16px;
+    --ui-sm: 13px;
+    --ui-sm-lh: 20px;
+    --ui-md: 14px;
+    --ui-md-lh: 21px;
+    --ui-base: 15px;
+    --ui-base-lh: 24px;
+    --ui-lg: 18px;
+    --ui-lg-lh: 26px;
+    --ui-xl: 20px;
+    --ui-xl-lh: 28px;
+    --ui-2xl: 24px;
+    --ui-2xl-lh: 32px;
+    --ui-3xl: 28px;
+    --ui-3xl-lh: 36px;
+    --ui-4xl: 32px;
+    --ui-4xl-lh: 40px;
+    --ui-5xl: 36px;
+    --ui-5xl-lh: 44px;
   }
 
   * {
@@ -674,6 +750,63 @@
       }
     }
   }
+
+  /* == Public design system: ambient forex motif ===================
+   *
+   * The drifting field of trading glyphs behind a band's copy
+   * (`AmbientMotif`). The component decides which glyph goes where; the two
+   * rules below are the guarantees that must hold no matter what it decides,
+   * which is why they live here and not at any call site.
+   *
+   * `.motif-field` masks the CENTRE out. Copy sits mid-band, so the field
+   * fades to nothing across the middle and returns toward the edges — a
+   * glyph physically cannot paint behind a headline even if a future
+   * arrangement puts one there. The ellipse is wider than it is tall
+   * because a hero is wider than it is tall; a circular mask would clear
+   * the headline and then clip the corner glyphs the effect is made of.
+   * black/transparent are mask KEYWORDS, not brand colour — a mask reads
+   * alpha only, so no token could be meaningful here.
+   *
+   * `-webkit-mask-image` is still required for Safari < 15.4, which is
+   * inside the support floor the ImageReveal fallback path already assumes.
+   */
+  .motif-field {
+    -webkit-mask-image: radial-gradient(
+      ellipse 62% 72% at 50% 50%,
+      transparent 0%,
+      transparent 24%,
+      black 78%
+    );
+    mask-image: radial-gradient(
+      ellipse 62% 72% at 50% 50%,
+      transparent 0%,
+      transparent 24%,
+      black 78%
+    );
+  }
+
+  /* One glyph. Deliberately declares NO `position` — `.pulse-ring` above
+     documents what happens when a hand-written utility fights a Tailwind
+     one in the same layer, and the component relies on `absolute` winning.
+     `will-change` is omitted on purpose: a dozen permanently-promoted
+     layers on a public route costs more memory than the drift saves.
+     Transform only, so nothing here triggers layout. */
+  .motif-glyph {
+    --motif-shift-x: var(--motif-drift-x, 0px);
+  }
+  /* translateX has no logical axis, so the drift direction is flipped by
+     hand under RTL — the same technique .reveal-start/.reveal-end and
+     .image-wipe already use. The POSITION mirrors on its own: the component
+     places glyphs with inset-inline-start. */
+  [dir="rtl"] .motif-glyph {
+    --motif-shift-x: calc(var(--motif-drift-x, 0px) * -1);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .motif-glyph {
+      animation: motif-drift var(--motif-duration, 28s) var(--motif-delay, 0s) ease-in-out infinite
+        alternate;
+    }
+  }
 }
 
 /* Keyframes for the reveal and marquee utilities above. Deliberately at top
@@ -688,6 +821,21 @@
   to {
     transform: scale(2.4);
     opacity: 0;
+  }
+}
+
+/* AmbientMotif's drift. `alternate` in the animation shorthand means this
+   pair is also the return leg, so the field eases back and forth rather
+   than snapping home at the end of every cycle. translate3d rather than
+   translate: the z hint keeps each glyph on the compositor, which is what
+   makes a dozen simultaneous infinite animations free on a public route. */
+@keyframes motif-drift {
+  from {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  to {
+    transform: translate3d(var(--motif-shift-x, 0px), var(--motif-drift-y, -12px), 0)
+      rotate(var(--motif-spin, 0deg));
   }
 }
 
@@ -975,26 +1123,32 @@
 }
 
 /* Sizes step the type scale rather than taking a px value, so body copy
-   stays on the same rhythm as every other surface (A5.5). */
+   stays on the same rhythm as every other surface (A5.5).
+
+   These read --type-* (the READER's scale) and NOT --text-*, deliberately
+   (ADR-054 #5). This is the one class set that renders on both surfaces —
+   inside the editor, and in the published article — and it carries the
+   AUTHOR's chosen size. On --text-* it would pick up the admin's larger
+   scale and the editor would stop previewing what the reader gets. */
 .ed-fs-sm {
-  font-size: var(--text-sm);
-  line-height: var(--text-sm--line-height);
+  font-size: var(--type-sm);
+  line-height: var(--type-sm-lh);
 }
 .ed-fs-base {
-  font-size: var(--text-base);
-  line-height: var(--text-base--line-height);
+  font-size: var(--type-base);
+  line-height: var(--type-base-lh);
 }
 .ed-fs-lg {
-  font-size: var(--text-lg);
-  line-height: var(--text-lg--line-height);
+  font-size: var(--type-lg);
+  line-height: var(--type-lg-lh);
 }
 .ed-fs-xl {
-  font-size: var(--text-xl);
-  line-height: var(--text-xl--line-height);
+  font-size: var(--type-xl);
+  line-height: var(--type-xl-lh);
 }
 .ed-fs-2xl {
-  font-size: var(--text-2xl);
-  line-height: var(--text-2xl--line-height);
+  font-size: var(--type-2xl);
+  line-height: var(--type-2xl-lh);
 }
 
 /* Alignment is LOGICAL (code-style.md #3): an Arabic article aligned

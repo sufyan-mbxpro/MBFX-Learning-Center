@@ -32,6 +32,28 @@ import { Children } from "react";
 import { Button } from "@repo/ui/components/button";
 import { cn } from "@repo/ui/lib/utils";
 
+// Control palettes per surface. See the `tone` prop's doc comment for why
+// this is a correctness concern rather than a decorative one.
+const CONTROL_TONE = {
+  default: {
+    button: "outline",
+    dot: "bg-border hover:bg-primary-interactive/60",
+    dotActive: "bg-primary-interactive",
+  },
+  inverted: {
+    button: "ghost",
+    dot: "bg-secondary-foreground/25 hover:bg-secondary-foreground/50",
+    dotActive: "bg-secondary-foreground",
+  },
+} as const;
+
+// The arrows on an inverted band: a tinted disc with the derived foreground,
+// mirroring the footer's social buttons. Kept out of Button's own variants —
+// this is one surface's treatment, not a new variant every call site should
+// be offered.
+const INVERTED_BUTTON_CLASS =
+  "bg-secondary-foreground/10 text-secondary-foreground ring-1 ring-secondary-foreground/20 ring-inset hover:bg-secondary-foreground/20 hover:text-secondary-foreground";
+
 function Carousel({
   label,
   previousLabel,
@@ -43,6 +65,7 @@ function Carousel({
    */
   slideLabels,
   itemClassName = "w-[82%] sm:w-[58%] lg:w-[calc((100%-2.5rem)/3)]",
+  tone = "default",
   className,
   children,
   ...props
@@ -53,10 +76,26 @@ function Carousel({
   slideLabels?: readonly string[];
   /** Per-slide width. Defaults to "one and a bit" → three across on desktop. */
   itemClassName?: string;
+  /**
+   * Which surface the controls sit on.
+   *
+   * Not a styling preference — a correctness switch. The default palette
+   * (`--border`, `--primary-interactive`, Button's `outline`) is derived for
+   * legibility against `--background`. Dropped onto a `Section tone="inverted"`
+   * band those tokens are computed against the wrong surface, and the dots in
+   * particular go very nearly invisible.
+   *
+   * `inverted` swaps them for opacities of `--secondary-foreground`, which is
+   * derived readable ON `--secondary` by construction (ADR-003) — the same
+   * idiom the footer uses throughout for exactly this reason.
+   */
+  tone?: keyof typeof CONTROL_TONE;
   children: ReactNode;
 }) {
   const slides = Children.toArray(children);
   const count = slides.length;
+  const palette = CONTROL_TONE[tone];
+  const inverted = tone === "inverted";
 
   const trackRef = useRef<HTMLUListElement>(null);
   const itemsRef = useRef<(HTMLLIElement | null)[]>([]);
@@ -162,9 +201,10 @@ function Carousel({
         <div className="flex gap-2">
           <Button
             type="button"
-            variant="outline"
+            variant={palette.button}
             size="icon-lg"
             shape="pill"
+            className={inverted ? INVERTED_BUTTON_CLASS : undefined}
             aria-label={previousLabel}
             disabled={atStart}
             onClick={() => goTo(active - perPage)}
@@ -173,9 +213,10 @@ function Carousel({
           </Button>
           <Button
             type="button"
-            variant="outline"
+            variant={palette.button}
             size="icon-lg"
             shape="pill"
+            className={inverted ? INVERTED_BUTTON_CLASS : undefined}
             aria-label={nextLabel}
             disabled={atEnd}
             onClick={() => goTo(active + perPage)}
@@ -185,10 +226,11 @@ function Carousel({
         </div>
 
         {/*
-          Dots are the jump control; the bar behind them is the position
-          readout. `bg-primary-interactive` and not `bg-primary` — both are
-          thin elements, which is exactly what ADR-018 rule 5 reserves the
-          derived sibling for.
+          Dots are both the position readout and the jump control. On the
+          default surface the active one is `--primary-interactive`, never raw
+          `--primary`: a 6px dot is a thin element, which is exactly what
+          ADR-018 rule 5 reserves the derived sibling for. On an inverted band
+          neither is safe — see the `tone` prop.
         */}
         <ul className="flex flex-1 items-center gap-2">
           {slides.map((_, index) => (
@@ -199,8 +241,9 @@ function Carousel({
                 aria-current={index === active ? "true" : undefined}
                 onClick={() => goTo(index)}
                 className={cn(
-                  "h-1.5 rounded-full bg-border transition-all duration-(--duration-base) ease-(--ease-out-quint) hover:bg-primary-interactive/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-                  index === active ? "w-8 bg-primary-interactive" : "w-3",
+                  "h-1.5 rounded-full transition-all duration-(--duration-base) ease-(--ease-out-quint) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                  palette.dot,
+                  index === active ? cn("w-8", palette.dotActive) : "w-3",
                 )}
               />
             </li>

@@ -12,6 +12,7 @@ import { ScrollToTop } from "@repo/ui/components/scroll-to-top";
 import { SiteLoader } from "@repo/ui/components/site-loader";
 import { SiteFooter } from "./_components/footer.tsx";
 import { SiteHeader } from "./_components/header.tsx";
+import { faviconIcons } from "../../_lib/favicon.ts";
 import { ThemeProvider } from "@repo/ui/components/theme-provider";
 import "@repo/ui/globals.css";
 
@@ -42,7 +43,7 @@ export async function generateMetadata({ params }: LayoutProps<"/[locale]">): Pr
   return {
     title: t("siteName"),
     description: t("siteDescription"),
-    icons: brandAssets.favicon ? { icon: brandAssets.favicon } : undefined,
+    icons: faviconIcons(brandAssets.favicon),
   };
 }
 

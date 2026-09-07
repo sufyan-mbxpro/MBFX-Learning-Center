@@ -19,7 +19,7 @@ import { useEffect, useState } from "react";
 import { cn } from "@repo/ui/lib/utils";
 import { Spinner } from "@repo/ui/components/spinner";
 
-const SESSION_KEY = "mbfx:site-loader-shown";
+const SESSION_KEY = "mbx:site-loader-shown";
 const HARD_CAP_MS = 900;
 const FADE_MS = 200;
 

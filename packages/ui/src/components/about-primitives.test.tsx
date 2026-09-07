@@ -168,8 +168,8 @@ describe("HotspotMap", () => {
 
 describe("PageHero", () => {
   it("renders the h1, and omits the media column when no media is supplied", () => {
-    const { container } = render(<PageHero title="About MBFX" lead="Who we are." />);
-    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("About MBFX");
+    const { container } = render(<PageHero title="About MBX" lead="Who we are." />);
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("About MBX");
     expect(container.querySelector("[data-slot=container]")?.className).not.toContain(
       "lg:grid-cols-2",
     );
@@ -179,7 +179,7 @@ describe("PageHero", () => {
     render(
       <PageHero
         eyebrow="About"
-        title="About MBFX"
+        title="About MBX"
         actions={<button type="button">Start learning</button>}
         footnote="Figures are illustrative."
       />,

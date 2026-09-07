@@ -12,6 +12,14 @@ import { VIEWER_EMAIL, VIEWER_PASSWORD } from "../global-setup.ts";
 // changes-07 plan criteria 14–16. One deep journey plus the denial, rather
 // than five shallow clicks (testing.md "Judgment calls").
 
+/**
+ * The editor header's primary button says what the click will do: "Publish"
+ * while the post is a draft the actor may publish, "Update" once it is live.
+ * Anchored so it never matches the publish panel's "Publish now" — which runs
+ * the same save-then-publish operation, but is a different button.
+ */
+const HEADER_SAVE = /^(Publish|Update)$/;
+
 test.describe.fixme("article editor v2", () => {
   test("criterion 14 — edit every panel, save once, and the DB reflects all of it", async ({
     page,
@@ -34,7 +42,7 @@ test.describe.fixme("article editor v2", () => {
     // … and a per-ARTICLE field, to prove meta and translation commit together.
     await page.getByRole("switch", { name: "Featured Post" }).click();
 
-    await page.getByRole("button", { name: "Update & Publish" }).click();
+    await page.getByRole("button", { name: HEADER_SAVE }).click();
 
     // Assert against the DATABASE, not the form we just typed into.
     await expect.poll(() => seededArticle().seoTitle, { timeout: 15_000 }).toBe(newSeoTitle);
@@ -53,7 +61,7 @@ test.describe.fixme("article editor v2", () => {
 
     // Restore the flag so re-runs start from the same state.
     await page.getByRole("switch", { name: "Featured Post" }).click();
-    await page.getByRole("button", { name: "Update & Publish" }).click();
+    await page.getByRole("button", { name: HEADER_SAVE }).click();
     await expect
       .poll(() => seededArticle().article.isFeatured, { timeout: 15_000 })
       .toBe(before.article.isFeatured);
@@ -62,13 +70,13 @@ test.describe.fixme("article editor v2", () => {
   test("the sticky save button stays clickable when the page is scrolled", async ({ page }) => {
     // Regression test for the bug live verification caught: the editor's
     // sticky header used `top-0`, which slid it UNDER the admin shell's own
-    // sticky header, leaving Update & Publish covered and unclickable.
+    // sticky header, leaving the save button covered and unclickable.
     // Every other check in the repo passed while this was broken.
     const article = seededArticle();
     await page.goto(`/admin/articles/${article.articleId}`);
     await page.mouse.wheel(0, 1200);
 
-    const save = page.getByRole("button", { name: "Update & Publish" });
+    const save = page.getByRole("button", { name: HEADER_SAVE });
     await expect(save).toBeVisible();
 
     const covered = await save.evaluate((el) => {
@@ -76,7 +84,7 @@ test.describe.fixme("article editor v2", () => {
       const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
       return !(top === el || el.contains(top));
     });
-    expect(covered, "Update & Publish is covered by another element").toBe(false);
+    expect(covered, "the header save button is covered by another element").toBe(false);
   });
 
   test("criterion 16 — the row menu's Set Featured writes to the DB", async ({ page }) => {

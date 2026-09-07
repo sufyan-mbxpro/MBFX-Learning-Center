@@ -4,6 +4,7 @@ import { NextIntlClientProvider } from "next-intl";
 import { getMessages } from "next-intl/server";
 import { buildThemeStyleSheet, getActiveTheme } from "@repo/theme";
 import { curatedFontVariables } from "@repo/ui/fonts";
+import { ADMIN_TYPE_SCALE_CLASS } from "@repo/ui/lib/type-scale";
 import { ThemeProvider } from "@repo/ui/components/theme-provider";
 import "@repo/ui/globals.css";
 
@@ -27,7 +28,7 @@ import "@repo/ui/globals.css";
 export const instant = false;
 
 export const metadata: Metadata = {
-  title: "MBFX Admin",
+  title: "MBX Admin",
   robots: { index: false, follow: false },
 };
 
@@ -43,7 +44,7 @@ export default async function AdminAuthRootLayout({ children }: LayoutProps<"/">
   return (
     <html
       lang="en"
-      className={`h-full antialiased ${curatedFontVariables}`}
+      className={`h-full antialiased ${ADMIN_TYPE_SCALE_CLASS} ${curatedFontVariables}`}
       suppressHydrationWarning
     >
       <body className="min-h-full" suppressHydrationWarning>

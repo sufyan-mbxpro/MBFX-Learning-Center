@@ -3,11 +3,22 @@
 // Publishing Schedule (changes-07 §1.2 item 7), including the reference's
 // quick presets.
 //
-// Lifecycle transitions are deliberately NOT part of the header's single save:
-// publishing is a state machine with its own permission gate
-// (`articleKindPermission(kind, "publish")`), and folding it into a content
-// save would mean every autosave-shaped action could publish. The reference
-// separates them the same way.
+// Publishing and saving are ONE operation from here on. They used to be two
+// buttons that each did half of it — this panel's "Publish now" flipped the
+// status without saving the open form (so it shipped the last-saved body to
+// readers), while the header's "Update & Publish" saved without ever
+// publishing. Both now run the editor's `submitForm`: save, then transition.
+//
+// The gate that the earlier split existed to protect is untouched. The two
+// calls are SEQUENCED, not merged: the transition still goes through
+// `transitionArticle` and its own `articleKindPermission(kind, "publish")`
+// check, so no save can publish on behalf of an actor who may not. The fear
+// recorded here — "every autosave-shaped action could publish" — was about a
+// save that publishes implicitly; there is no autosave on this screen, and
+// both paths are an explicit click on a button that names what it does.
+//
+// SCHEDULED saves first for the same reason PUBLISHED does: scheduling the
+// post the author is looking at should queue what is on screen.
 //
 // changes-10 item 1: the four transitions used to render as four identical
 // outline buttons, so "Publish now" and "Archive" were distinguishable only
@@ -54,8 +65,9 @@ export interface PublishLabels {
 /**
  * Colour carries consequence (ADR-046): going live is positive, coming back
  * off is a caution, archiving destroys the public URL. `default` is
- * deliberately absent — the header's "Update & Publish" is this screen's one
- * primary action, and a second solid button beside it would compete.
+ * deliberately absent — the header's Publish/Update is this screen's one
+ * primary action, and a second solid button beside it would compete, even
+ * though "Publish now" and the header button now run the same operation.
  */
 const TRANSITION_VARIANT: Record<string, "success" | "info" | "warning" | "destructive"> = {
   PUBLISHED: "success",
@@ -98,6 +110,8 @@ export function PublishPanel({
   publishedAt,
   updatedAt,
   canPublish,
+  canSave,
+  submitForm,
   labels,
 }: {
   articleId: string;
@@ -106,6 +120,15 @@ export function PublishPanel({
   publishedAt: string | null;
   updatedAt: string;
   canPublish: boolean;
+  /** The editor's own save validity. A transition that saves first cannot run
+   * while the form is incomplete, exactly as the header button cannot. */
+  canSave: boolean;
+  /** The editor's save, optionally followed by a lifecycle move — the single
+   * operation this panel and the header button share. */
+  submitForm: (
+    thenTransitionTo?: "PUBLISHED" | "SCHEDULED",
+    scheduledForIso?: string,
+  ) => Promise<void>;
   labels: PublishLabels;
 }) {
   const [scheduleFor, setScheduleFor] = useState("");
@@ -118,14 +141,19 @@ export function PublishPanel({
 
   const preset = (fn: () => Date) => () => setScheduleFor(toLocalInput(fn()));
 
-  const transition = (to: string) =>
-    run(() =>
-      transitionArticleAction(
-        articleId,
-        to,
-        to === "SCHEDULED" ? new Date(scheduleFor).toISOString() : undefined,
-      ),
+  /** The two transitions that put content in front of readers save the open
+   * form first; DRAFT and ARCHIVED take content DOWN, so saving into them
+   * would only be a surprise. */
+  const savesFirst = (to: string) => to === "PUBLISHED" || to === "SCHEDULED";
+
+  const transition = (to: string) => {
+    const scheduledForIso = to === "SCHEDULED" ? new Date(scheduleFor).toISOString() : undefined;
+    return run(() =>
+      savesFirst(to)
+        ? submitForm(to as "PUBLISHED" | "SCHEDULED", scheduledForIso)
+        : transitionArticleAction(articleId, to, scheduledForIso),
     );
+  };
 
   return (
     <EditorSection
@@ -184,7 +212,11 @@ export function PublishPanel({
               key={to}
               variant={TRANSITION_VARIANT[to] ?? "outline"}
               size="sm"
-              disabled={pending || (to === "SCHEDULED" && scheduleFor === "")}
+              disabled={
+                pending ||
+                (to === "SCHEDULED" && scheduleFor === "") ||
+                (savesFirst(to) && !canSave)
+              }
               onClick={() => (to === "ARCHIVED" ? setArchiveOpen(true) : transition(to))}
             >
               {Icon && <Icon data-icon="inline-start" aria-hidden />}

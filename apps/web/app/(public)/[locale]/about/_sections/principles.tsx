@@ -3,7 +3,7 @@
 // These are the only claims on this page that are not gated by
 // ABOUT_FACTS, and deliberately so: each one describes how the Learning
 // Center is written, which is checkable against the content itself. None
-// of them asserts a number, a regulator, or anything about MBFX beyond
+// of them asserts a number, a regulator, or anything about MBX beyond
 // this site (ADR-047 §2).
 import { getTranslations } from "next-intl/server";
 import { CheckList } from "@repo/ui/components/check-list";

@@ -17,6 +17,7 @@
 import { ArrowDown } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 
+import { AmbientMotif } from "@repo/ui/components/ambient-motif";
 import { Button } from "@repo/ui/components/button";
 import { PageHero } from "@repo/ui/components/page-hero";
 
@@ -31,6 +32,11 @@ export async function NewsMasthead() {
       // `priority` on this one piece: it is the LCP candidate on the route.
       // Every other image on the page — article covers included — stays lazy.
       backdrop={<NewsBackdrop slot="banner" priority />}
+      // Composed WITH the artwork, not instead of it: the generated
+      // banner is a soft wash and the glyph field is line art, so they
+      // occupy different frequencies. Dialled down because this band
+      // already carries a photograph-weight backdrop.
+      motif={<AmbientMotif variant="chart" intensity={0.7} />}
       breadcrumb={<ListingCrumbs crumbs={[{ label: t("title") }]} tone="onFill" />}
       eyebrow={t("heroEyebrow")}
       title={t("title")}

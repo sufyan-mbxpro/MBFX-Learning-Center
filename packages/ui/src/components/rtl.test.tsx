@@ -241,7 +241,7 @@ describe("logical-properties invariant (RTL-safety) per layout-bearing component
       <div dir="rtl">
         <PageHero
           eyebrow="About"
-          title="About MBFX"
+          title="About MBX"
           lead="Who we are."
           footnote="Small print."
           actions={<Button>Start</Button>}

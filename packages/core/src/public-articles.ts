@@ -270,6 +270,86 @@ export async function getSpotlightArticles(
   return loadSpotlightArticles(locale, options);
 }
 
+export interface CategoryDigest {
+  category: { id: string; name: string; slug: string; count: number };
+  entries: ArticleListEntry[];
+}
+
+/**
+ * What the /news front shows under its general listing: each category with
+ * its own newest articles, so the page reads as a newspaper's sections rather
+ * than as one undifferentiated stream.
+ *
+ * One cached read for the whole block. The per-category queries run in
+ * PARALLEL — a page that ran them in sequence would put four round trips on
+ * the critical path of a route that carries a Lighthouse budget.
+ *
+ * Categories with fewer than `minimum` visible articles are dropped. A
+ * "section" of one card is not a section, it is a card with a heading over
+ * it, and an editor should not have to think about that — a category earns a
+ * band by having enough in it.
+ */
+export async function loadCategoryDigests(
+  locale: string,
+  options: {
+    kinds: ArticleKind[];
+    perCategory: number;
+    categoryLimit?: number;
+    minimum?: number;
+    /**
+     * Ids to leave out. The /news front does NOT use this for its bands —
+     * see the note at that call site — but a caller that renders a digest
+     * directly beneath the same articles will want it.
+     */
+    excludeIds?: string[];
+  },
+): Promise<CategoryDigest[]> {
+  const { kinds, perCategory } = options;
+  const minimum = options.minimum ?? 2;
+
+  const facets = await loadArticleFacets(locale, { kinds, latestCount: 1 });
+  const eligible = facets.categories
+    .filter((category) => category.count >= minimum)
+    .slice(0, options.categoryLimit ?? 4);
+  if (eligible.length === 0) return [];
+
+  const pages = await Promise.all(
+    eligible.map((category) =>
+      loadPublishedArticles(locale, {
+        kinds,
+        page: 0,
+        perPage: perCategory,
+        categoryId: category.id,
+        ...(options.excludeIds?.length ? { excludeIds: options.excludeIds } : {}),
+      }),
+    ),
+  );
+
+  // A category can still come back short here — its count includes articles
+  // whose translation does not resolve in this locale (ADR-007), and the
+  // spotlight may have taken one. Re-check against what actually rendered
+  // rather than against the count that predicted it.
+  return eligible
+    .map((category, index) => ({ category, entries: pages[index]?.entries ?? [] }))
+    .filter((digest) => digest.entries.length >= minimum);
+}
+
+export async function getCategoryDigests(
+  locale: string,
+  options: {
+    kinds: ArticleKind[];
+    perCategory: number;
+    categoryLimit?: number;
+    minimum?: number;
+    excludeIds?: string[];
+  },
+): Promise<CategoryDigest[]> {
+  "use cache";
+  cacheTag("content");
+  cacheLife({ revalidate: 300 });
+  return loadCategoryDigests(locale, options);
+}
+
 export interface ArticleView {
   articleId: string;
   kind: ArticleKind;
@@ -735,15 +815,38 @@ export interface ArticleFacets {
   latest: ArticleListEntry[];
 }
 
+/**
+ * Facet options.
+ *
+ * `categoryId` scopes the view WITHOUT hiding the section's index, and the
+ * asymmetry is deliberate: `tags`, `archives` and `latest` describe the
+ * articles currently being looked at, while `categories` stays global with
+ * global counts because it is how a reader LEAVES the category they are in.
+ * A category rail that showed only the current category would be a rail with
+ * one destination.
+ */
+export interface ArticleFacetOptions {
+  kinds: ArticleKind[];
+  latestCount?: number;
+  tagLimit?: number;
+  categoryId?: string;
+}
+
 export async function loadArticleFacets(
   locale: string,
-  options: { kinds: ArticleKind[]; latestCount?: number; tagLimit?: number } = {
+  options: ArticleFacetOptions = {
     kinds: [ArticleKind.NEWS, ArticleKind.ANALYSIS, ArticleKind.TRADE_IDEA],
   },
 ): Promise<ArticleFacets> {
   const now = new Date();
   const kinds = options.kinds;
-  const visible = { ...publicArticleWhere(now), kind: { in: kinds } };
+  const visible = {
+    ...publicArticleWhere(now),
+    kind: { in: kinds },
+    ...(options.categoryId ? { categoryId: options.categoryId } : {}),
+  };
+
+  const sectionVisible = { ...publicArticleWhere(now), kind: { in: kinds } };
 
   const [ctx, categories, tags, dated, latest] = await Promise.all([
     localeContext(),
@@ -751,7 +854,10 @@ export async function loadArticleFacets(
       where: { isActive: true },
       include: {
         translations: { select: { locale: true, name: true, slug: true } },
-        _count: { select: { articles: { where: visible } } },
+        // Deliberately `sectionVisible`, not `visible`: the category counts
+        // describe the whole section even when the caller scoped the rest of
+        // the facets to one category.
+        _count: { select: { articles: { where: sectionVisible } } },
       },
       orderBy: { sortOrder: "asc" },
     }),
@@ -771,7 +877,12 @@ export async function loadArticleFacets(
       where: visible,
       select: { publishedAt: true, scheduledFor: true },
     }),
-    loadPublishedArticles(locale, { kinds, page: 0, perPage: options.latestCount ?? 3 }),
+    loadPublishedArticles(locale, {
+      kinds,
+      page: 0,
+      perPage: options.latestCount ?? 3,
+      ...(options.categoryId ? { categoryId: options.categoryId } : {}),
+    }),
   ]);
 
   function localize(
@@ -814,7 +925,7 @@ export async function loadArticleFacets(
 
 export async function getArticleFacets(
   locale: string,
-  options?: { kinds: ArticleKind[]; latestCount?: number; tagLimit?: number },
+  options?: ArticleFacetOptions,
 ): Promise<ArticleFacets> {
   "use cache";
   cacheTag("content");

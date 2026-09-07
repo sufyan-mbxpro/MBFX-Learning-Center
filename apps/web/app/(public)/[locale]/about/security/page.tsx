@@ -22,6 +22,7 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { ROUTE_PATHS } from "@repo/contracts";
 import { Link } from "@repo/i18n/navigation";
 import { getSetting } from "@repo/settings";
+import { AmbientMotif } from "@repo/ui/components/ambient-motif";
 import { Button } from "@repo/ui/components/button";
 import { CheckList } from "@repo/ui/components/check-list";
 import { Container } from "@repo/ui/components/container";
@@ -64,6 +65,7 @@ export default async function SecurityPage({ params }: PageProps<"/[locale]/abou
     <>
       <PageHero
         backdrop={<AboutBackdrop slot="securityHero" />}
+        motif={<AmbientMotif variant="currency" intensity={0.7} />}
         eyebrow={t("security.hero.eyebrow")}
         title={t("security.hero.title")}
         lead={t("security.hero.body")}

@@ -27,7 +27,7 @@ export default async function AdminSignInPage() {
             light={brandAssets.logo_light?.url ?? null}
             dark={brandAssets.logo_dark?.url ?? null}
             alt={siteName ?? ""}
-            className="h-10"
+            className="h-14"
             fallback={<span className="text-lg font-semibold tracking-tight">{siteName}</span>}
           />
         </div>

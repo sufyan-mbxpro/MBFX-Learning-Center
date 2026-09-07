@@ -331,8 +331,8 @@ describe("the About parent and its five children, as the seed writes them", () =
     // ride on MenuItemTranslation.title, so a child with no title would
     // silently render a description-less row rather than fail.
     const children = [
-      { routeKey: "about", label: "About MBFX", title: "Who we are and what we teach" },
-      { routeKey: "about-why-us", label: "Why MBFX", title: "Five reasons" },
+      { routeKey: "about", label: "About MBX", title: "Who we are and what we teach" },
+      { routeKey: "about-why-us", label: "Why MBX", title: "Five reasons" },
       { routeKey: "about-transparency", label: "How we operate", title: "Data and funding" },
       { routeKey: "about-security", label: "Security & trust", title: "Account and data" },
       { routeKey: "about-support", label: "Support", title: "Reach a human" },
