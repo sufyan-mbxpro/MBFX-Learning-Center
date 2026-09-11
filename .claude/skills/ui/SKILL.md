@@ -64,6 +64,14 @@ hold 4.5:1 exactly up to that tint.
 - `Table` has one `density` for the whole table (`default` p-4 / `compact`
   px-2.5 py-2 11px) set on `<table>`; `DataTable` defaults to `compact`
   (ADR-072 §9). Never pad an individual cell to fake a density.
+- **Type is a component, not a class string** (task constraint 7): page and
+  section headings, descriptions, metric labels and values, meta lines and
+  micro-headings come from `typography.tsx`. `render` swaps the tag, never
+  the recipe.
+- **Card has no header band** (ADR-075, superseding ADR-050's). Compose
+  Header/Content/Footer and let `--card-spacing` pad them; never pad a card
+  part by hand. A screen header is `PageHeader` (description required), a
+  dashboard metric is `MetricCard`, a sidebar row is `NavItem`.
 - A view switcher above a list is `ViewChips` (a toggle group), not Tabs —
   nothing there owns a panel. Filters above something other than a
   DataTable use `FilterBar`; inside a DataTable they go in `filters`.

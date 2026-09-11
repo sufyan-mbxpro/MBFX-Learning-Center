@@ -10759,3 +10759,96 @@ The header row still never takes the row hover.
 
   The compact-density group variant is proven to resolve from the `<table>`
   attribute.
+
+## 2026-09-11 — changes-20 Phase 3 group 4: cards, type roles, page header, breadcrumbs, nav items (Module 07, ADR-075)
+
+The last component group. It needed one ADR, because the reference
+contradicts an accepted one.
+
+### ADR-075 — the card loses its header band
+
+ADR-050 (2026-09-07) made `CardHeader` a `border-b bg-muted/50` band
+whenever content follows it, matching the band `CardFooter` already had.
+The reference is shadcn `default` (ADR-074), whose card has no band at
+either end:
+
+- `rounded-lg border bg-card shadow-sm`
+- header `p-6`
+- content `p-6 pt-0`
+
+The approved `tokens.md` §6.11 specifies exactly that and lists the band as
+today's behaviour that changes. ADR-072 makes §6 binding, but reversing an
+accepted ADR still needs its own record. **ADR-075** supersedes ADR-050 §1–§2
+only; its decision that `article-sidebar.tsx`'s Panel is built on Card
+stands. ADR-050's header is marked partially superseded (header lines only).
+
+### What changed (`@repo/ui`)
+
+- **Card** (ADR-075):
+  - `rounded-lg`, a 1px border, `shadow-sm`. It was `rounded-xl` with a
+    ring.
+  - The rhythm is 24px through the one `--card-spacing` variable (16px at
+    `size="sm"`). That reproduces the reference's header and content
+    geometry with no call-site restructuring.
+  - No header band and no footer band.
+  - `CardTitle` is the reference's 24px semibold tight title, stepping to
+    16px in a small card.
+  - The shared `.card-hover` stays (changes-02).
+- **`typography.tsx`** (new): the §2.3 type roles as components (task
+  constraint 7): `PageTitle`, `PageTitleCompact` (24px with a 24px icon),
+  `PageDescription`, `SectionTitle`, `SectionTitleCompact` (16px bold with
+  a muted icon), `SubText`, `StatLabel`, `StatValue`, `StatUnit`,
+  `MetaText`, `MicroHeading`. Each owns its default tag and recipe, and
+  `render` swaps the tag without restyling.
+- **`PageHeader`** (new): title and description at the start, actions at
+  the end, wrapping. The description prop is required, so ADR-044 #8 holds
+  by construction. An `icon` switches to the compact title; `status` sits
+  beside the description.
+- **`MetricCard`** (new): the reference's dashboard metric. A label and icon
+  row, a bold tabular figure with unit, a meta line with a trend glyph, an
+  optional 11px detail line, and a footer pinned to the bottom. It is
+  composed from Card and the type roles, so it cannot drift from them. It
+  is distinct from the public animated `StatCard`.
+- **`Breadcrumb`** (new, the captured recipe): muted 14px trail, 6→10px
+  gaps, a 14px chevron separator mirrored in RTL, the current page in
+  foreground with `aria-current`. Links compose the router through
+  `render`.
+- **`NavItem` / `NavItemGroup`** (new): the reference's sidebar row.
+  - 40px tall, the `nav` 13px step, medium weight, 16px icon.
+  - Hover and active on `--accent` (dark mode resolves that to muted, as the
+    reference's own `dark:bg-muted` does). `active` sets `aria-current`.
+  - A `trailing` slot for a CountBadge and chevron; the group indents
+    `ps-4`.
+  - It renders as a link or a button through `render`.
+- **Progress** gains `size` `xs` / `sm` / `default` (4 / 6 / 8px). The
+  track was already `bg-muted` (Q15).
+
+### Verified
+
+- `@repo/ui`: **327/327**. The new `layout-anatomy.test.tsx` covers:
+  - the Card surface, rhythm variable, absent band and title scale
+  - every type role's tag and recipe, plus `render` swapping
+  - PageHeader layout and its compact form
+  - the MetricCard parts
+  - Progress sizes
+  - Breadcrumb logical/RTL separator and `aria-current`
+  - NavItem height, type step, accent states, trailing layout and button
+    rendering
+- `@repo/web`: **285/285**. `typecheck` and `lint` clean on `@repo/ui` and
+  `@repo/web` (one `import type` fix in `typography.tsx`).
+- **Live**: the homepage's Cards render with a border, not a ring, at 6px
+  corners on the stored 4px base.
+  - Its cards carry call-site padding overrides (0 / 12px) and use no
+    header, so the Card anatomy was also measured by mounting its compiled
+    classes: 24px padding and gap, a transparent header with no bottom
+    border, 24px inline padding on header and content, a 6px title gap, a
+    24px/600 title at −0.6px tracking, and a 16px rhythm and title at
+    `size="sm"`.
+
+### Found, not fixed here (Phase 5)
+
+- The homepage cards override the card rhythm at the call site (0 / 12px
+  padding). Phase 5 replaces those with the card's own parts.
+- Admin dashboard, learn-progress and settings-hub card titles are now
+  24px. Phase 5 decides per screen where the compact `size="sm"` title is
+  meant.

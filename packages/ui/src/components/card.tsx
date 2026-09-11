@@ -2,20 +2,31 @@ import * as React from "react";
 
 import { cn } from "@repo/ui/lib/utils";
 
+// changes-20 / ADR-075 — the reference's card (tokens.md §6.11, capture-2):
+// rounded-lg, a 1px border, shadow-sm, and a 24px rhythm; no band on the
+// header or the footer (superseding ADR-050's band).
+//
+// The rhythm lives in ONE variable, --card-spacing: the card's block
+// padding, the gap between its parts, and each part's inline padding. That
+// reproduces the reference's `p-6` header + `p-6 pt-0` content exactly, so a
+// call site composes Header/Content/Footer and never pads a part by hand.
+// `size="sm"` is the 16px rhythm for compact tiles.
+//
 // Public design system additions (changes-03-plan.md §4.2). "elevated"'s
 // resting/hover shadow is a data-attribute rule in globals.css, not a
 // `hover:shadow-card-hover` utility class here — that utility would compile
 // ABOVE .card-hover's own hover rule in the stylesheet (Tailwind's
 // generated layer sits at this file's `@import "tailwindcss"` line) and
 // silently lose, the same reordering trap Container's wide/narrow classes
-// document. "bordered"/"featured" use the `border` property instead of
-// `ring`, deliberately: card-hover's `:hover` rule already owns
-// `--tw-ring-color`, so a variant-specific ring color would revert to the
-// generic one on hover; `border` shares no custom property with it.
+// document. "featured" uses the `border` property instead of `ring`,
+// deliberately: card-hover's `:hover` rule already owns `--tw-ring-color`,
+// so a variant-specific ring color would revert to the generic one on hover;
+// `border` shares no custom property with it.
 const CARD_VARIANT_CLASS = {
   default: "",
   elevated: "",
-  bordered: "border border-border",
+  // Kept for call-site compatibility; every card is bordered now.
+  bordered: "",
   // bg-primary/10, not --primary-subtle: the card's own text still uses
   // text-card-foreground, computed for legibility against --card/
   // --background. --primary-subtle is a fixed near-white tint that stays
@@ -41,16 +52,8 @@ function Card({
       data-variant={variant}
       className={cn(
         // `card-hover` (globals.css) is THE one hover treatment every card-
-        // like surface shares (changes-02) — AdminSection and the article
-        // editor panels use the same utility, so a tweak lands everywhere.
-        // `has-[>[data-slot=card-header]:not(:last-child)]:pt-0` is the
-        // mirror of the footer's `has-data-[slot=card-footer]:pb-0`
-        // (ADR-050): a header that carries a band must start at the card's
-        // top edge, not float with a strip of card background above it.
-        // The `:not(:last-child)` half matters — a header-only card (the
-        // settings hub, the glossary spotlight grid) has no band and keeps
-        // its normal top padding.
-        "group/card card-hover flex flex-col gap-(--card-spacing) overflow-hidden rounded-xl bg-card py-(--card-spacing) text-sm text-card-foreground ring-1 ring-foreground/10 [--card-spacing:--spacing(4)] has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 has-[>[data-slot=card-header]:not(:last-child)]:pt-0 data-[size=sm]:[--card-spacing:--spacing(3)] data-[size=sm]:has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl",
+        // like surface shares (changes-02); ADR-075 §4 keeps it.
+        "group/card card-hover flex flex-col gap-(--card-spacing) overflow-hidden rounded-lg border bg-card py-(--card-spacing) text-sm text-card-foreground shadow-sm [--card-spacing:--spacing(6)] has-[>img:first-child]:pt-0 data-[size=sm]:[--card-spacing:--spacing(4)] *:[img:first-child]:rounded-t-lg *:[img:last-child]:rounded-b-lg",
         CARD_VARIANT_CLASS[variant],
         className,
       )}
@@ -59,18 +62,12 @@ function Card({
   );
 }
 
-// ADR-050: a header that has content under it is chrome, and reads as
-// chrome — the same `border-b bg-muted/50` band CardFooter has always
-// carried, mirrored. `not-last:` is the whole safety of making it the
-// default: a card whose header IS the card (settings hub, glossary
-// spotlight) would be entirely tinted otherwise, which distinguishes
-// nothing. A band that covers everything is not a band.
 function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card-header"
       className={cn(
-        "group/card-header @container/card-header grid auto-rows-min items-start gap-1 rounded-t-xl px-(--card-spacing) not-last:border-b not-last:bg-muted/50 not-last:py-(--card-spacing) has-data-[slot=card-action]:grid-cols-[1fr_auto] has-data-[slot=card-description]:grid-rows-[auto_auto] [.border-b]:pb-(--card-spacing)",
+        "group/card-header @container/card-header grid auto-rows-min items-start gap-1.5 px-(--card-spacing) has-data-[slot=card-action]:grid-cols-[1fr_auto] has-data-[slot=card-description]:grid-rows-[auto_auto]",
         className,
       )}
       {...props}
@@ -83,7 +80,7 @@ function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-title"
       className={cn(
-        "text-base leading-snug font-medium group-data-[size=sm]/card:text-sm",
+        "text-2xl leading-none font-semibold tracking-tight group-data-[size=sm]/card:text-base",
         className,
       )}
       {...props}
@@ -105,7 +102,10 @@ function CardAction({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card-action"
-      className={cn("col-start-2 row-span-2 row-start-1 self-start justify-self-end", className)}
+      className={cn(
+        "col-start-2 row-span-2 row-start-1 flex items-center gap-2 self-start justify-self-end",
+        className,
+      )}
       {...props}
     />
   );
@@ -121,10 +121,7 @@ function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card-footer"
-      className={cn(
-        "flex items-center rounded-b-xl border-t bg-muted/50 p-(--card-spacing)",
-        className,
-      )}
+      className={cn("flex items-center px-(--card-spacing)", className)}
       {...props}
     />
   );

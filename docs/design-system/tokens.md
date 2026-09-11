@@ -383,6 +383,16 @@ accessible variant closest to the reference look.
     the tonal status is `danger`)
   - `CountBadge` (new)
   - Avatar (`shape="square"`)
+- **Group 4 (layout), built 2026-09-11:**
+  - Card per **ADR-075**: rounded-lg, border, `shadow-sm`, a 24px rhythm (16px
+    at `size="sm"`), no header or footer band, 24px titles.
+  - The §2.3 type roles in `typography.tsx`: `PageTitle`,
+    `PageTitleCompact`, `PageDescription`, `SectionTitle`,
+    `SectionTitleCompact`, `SubText`, `StatLabel`, `StatValue`, `StatUnit`,
+    `MetaText`, `MicroHeading`.
+  - New components: `PageHeader`, `MetricCard`, `Breadcrumb` and `NavItem`
+    (with `NavItemGroup`).
+  - Progress gains `size` xs/sm/default (4/6/8px).
 - **Group 3 (data), built 2026-09-11:**
   - Table: a `density` of default (`p-4`, 14px) or compact (`px-2.5 py-2`,
     11px), set on `<table>`; muted 48px header cells.

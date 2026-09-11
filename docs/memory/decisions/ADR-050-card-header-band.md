@@ -1,10 +1,10 @@
 # ADR-050: A card's header is a band, not flush copy — and the one card that hand-rolled itself joins the design system
 
-**Status:** Accepted
+**Status:** Accepted — §1–§2 (the header band) superseded; the Panel-on-Card decision stands
 **Date:** 2026-09-07
 **Module:** 07 (`@repo/ui` design system), applied in 12 (public site) and 09 (admin shell)
 **Supersedes:** —
-**Superseded by:** —
+**Superseded by:** ADR-075 (in part)
 
 ## Context
 
