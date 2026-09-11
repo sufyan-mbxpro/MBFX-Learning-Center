@@ -140,8 +140,9 @@
 
   /* Overlay scrim behind dialogs/sheets — same literal-value exception as
      the shadows below: a neutral scrim is not brandable and is mode-
-     independent by design (a light wash over dark UI looks broken). */
-  --color-overlay: rgb(0 0 0 / 0.1);
+     independent by design (a light wash over dark UI looks broken). 80% is
+     the reference's value (capture 2, ADR-074); it was 10%. */
+  --color-overlay: rgb(0 0 0 / 0.8);
 
   /* Elevation (ADR-072) — the reference's values, which are Tailwind v3's
      scale: `sm` is a card at rest, `md` a floating menu/popover, `lg` a

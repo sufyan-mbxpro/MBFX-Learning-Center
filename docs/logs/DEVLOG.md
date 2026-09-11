@@ -10579,3 +10579,91 @@ capture-2.md` holds the method, the table and the verbatim recipes, and
   Geometry: 16px checkbox, 44×24 switch, 80px textarea, 32px start inset on
   select items. The radii measure 2px/4px because the stored `Theme` row is
   still the pre-ADR-072 4px base; it is still not reseeded.
+
+## 2026-09-11 — changes-20 Phase 3 group 2: the overlays (Module 07, ADR-074)
+
+Group 2 restyles every overlay against capture 2 (`tokens.md` §6.14). Nothing
+here needed a new decision; ADR-074 already records the scrim and the
+accessible deviations.
+
+### What changed (`@repo/ui`)
+
+- **The scrim.** `--color-overlay` goes from 10% to **`rgb(0 0 0 / 0.8)`**,
+  the reference's `bg-black/80`. The backdrop blur the base-nova port added
+  is dropped because the reference has none.
+- **Dialog.**
+  - A 512px (`max-w-lg`) bordered card on the page background: `p-6`,
+    `gap-4`, `shadow-lg`, full-bleed on mobile, `rounded-lg` from `sm` up.
+  - It scrolls itself (`max-h-dvh overflow-y-auto`). The reference lacks
+    this, and dropping it would be a regression, not fidelity. It also
+    replaces the old arbitrary `max-h-[calc(…)]` and `max-w-[calc(…)]`.
+  - The corner close is the reference's bare 16px glyph at 70% opacity,
+    `top-4 end-4`, not a ghost button. It is exported as
+    `OVERLAY_CLOSE_CLASS` and shared with Sheet.
+  - The title is `text-lg font-semibold tracking-tight`, the header is
+    centred below `sm`, and the footer is a plain
+    `flex-col-reverse → sm:flex-row sm:justify-end`. The old muted,
+    negative-margin footer band is gone.
+  - `DialogFooter`'s optional close button takes a `closeLabel` instead of
+    a hardcoded "Close".
+- **AlertDialog.** The Dialog's card exactly, with no corner close (a
+  confirmation must be answered). Its unused `size` and `Media` slots are
+  removed: zero call sites, and the reference has neither. `ConfirmDialog`
+  already confirms with `variant="destructive"`, so its action is now the
+  solid red.
+- **Sheet.** Background card with `p-6` and `shadow-lg`; side panels
+  `w-3/4 sm:max-w-sm` with a logical edge border; the shared corner close;
+  an 18px semibold title; the reference's footer arrangement.
+- **DropdownMenu.**
+  - A bordered card with `rounded-sm` items at `px-2 py-1.5`, a semibold
+    `text-sm` label, and a `bg-muted` separator.
+  - Check and radio indicators are at the **start** (`ps-8`, `start-2`);
+    the radio indicator is a filled dot.
+  - A destructive item uses `--destructive-interactive` on a /10 wash
+    (ADR-073); it was the raw red.
+- **Command** (the ⌘K palette). The reference's recipe: a `border-b` search
+  row, a half-opacity glyph, an `h-11` input, a 300px list (`max-h-75`),
+  `rounded-sm` items highlighted in the warm `--accent`, and
+  `text-xs font-medium` muted group headings.
+- **Popover** (new, Base UI): `w-72 rounded-md border p-4 shadow-md`.
+- **Toast (Sonner).** The reference's toast mapped onto Sonner's variables
+  and `classNames`: page-background card, `border-border`, `shadow-lg`,
+  `text-sm font-semibold` title, muted description, primary action, muted
+  cancel, `bottom-right`, 420px wide.
+  - The owner's uncommitted `useTheme` import change (ADR-064) in the same
+    file is kept out of the commit.
+- **Alert.**
+  - Destructive text is `--destructive-interactive` (ADR-074 §3).
+  - The layout is the reference's absolute top-start icon with `ps-7`
+    content. That replaces the arbitrary `grid-cols-[0_1fr]` /
+    `calc(var(--spacing)*4)` tracks, which the Phase 6 lint would reject.
+
+### Verified
+
+- `@repo/ui`: **288/288**. The new `overlays-anatomy.test.tsx` renders every
+  overlay OPEN and pins:
+  - the scrim token
+  - the Dialog, AlertDialog and Sheet cards
+  - the bare corner close
+  - dropdown items and label, the start indicator, the tint-safe
+    destructive item
+  - the Popover card and the Command anatomy
+  - the Alert ink and its absence of arbitrary tracks
+  - the Sonner card, position and surface variable (jsdom needed a
+    `matchMedia` stub)
+- `@repo/web`: **285/285**. `typecheck` and `lint` clean on `@repo/ui` and
+  `@repo/web`.
+- **Live** (dev server, 390×844 phone viewport): opening the public mobile
+  nav, which is a real Sheet, measures:
+  - 24px padding
+  - scrim `rgba(0,0,0,0.8)`
+  - the bare close at top 16 / end 16, 70% opacity
+  - an 18px/600 title
+
+### Found, not fixed here (Phase 5, call sites)
+
+- The public mobile-nav Sheet passes its own width (90%, not 3/4), and its
+  accessible title "Open menu" renders as a visible centred heading.
+- Its accordion rows and plain links sit at different start insets.
+- These are composition at the call site, which is exactly what Phase 5
+  migrates.
