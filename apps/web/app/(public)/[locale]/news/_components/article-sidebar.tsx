@@ -104,10 +104,17 @@ export async function ArticleSidebar({
                     />
                   </Link>
                 )}
-                <div className="flex flex-col gap-1">
+                {/* `min-w-0 flex-1`: a flex child's minimum width is its
+                    content, so without it one unbreakable run in a headline
+                    pushed the column past the card edge, where the card's
+                    `overflow-hidden` clipped it mid-word (found in the
+                    changes-20 Phase 6 browser pass, once ADR-075's 24px card
+                    rhythm narrowed the sidebar). `wrap-break-word` lets that
+                    run break instead. */}
+                <div className="flex min-w-0 flex-1 flex-col gap-1">
                   <Link
                     href={`/news/${entry.slug}`}
-                    className="link-underline line-clamp-2 text-sm leading-snug font-medium"
+                    className="link-underline line-clamp-2 text-sm leading-snug font-medium wrap-break-word"
                   >
                     {entry.title}
                   </Link>

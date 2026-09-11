@@ -55,7 +55,7 @@ export default function LearnLoading() {
       {/* The filter toolbar. */}
       <Section spacing="sm">
         <Container className="flex flex-col gap-4">
-          <Skeleton className="shimmer h-[4.5rem] w-full rounded-2xl" />
+          <Skeleton className="shimmer h-18 w-full rounded-2xl" />
           <div className="flex flex-wrap gap-1.5">
             {Array.from({ length: 4 }, (_, index) => (
               <Skeleton key={index} className="shimmer h-8 w-24 rounded-full" />
@@ -71,7 +71,7 @@ export default function LearnLoading() {
             <Skeleton className="shimmer h-9 w-48" />
             <Skeleton className="shimmer h-5 w-full max-w-lg" />
           </div>
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {Array.from({ length: 4 }, (_, index) => (
               <CourseCardSkeleton key={index} />
             ))}

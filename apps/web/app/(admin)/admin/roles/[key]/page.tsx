@@ -72,7 +72,7 @@ export default async function RoleDetailPage({ params }: PageProps<"/admin/roles
       }
     >
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
-        <AdminSection title={t("roleProfile")} className="lg:w-72 lg:shrink-0">
+        <AdminSection title={t("roleProfile")} cardClassName="lg:w-72 lg:shrink-0">
           <dl className="flex flex-col gap-3 text-sm">
             <div>
               <dt className="text-muted-foreground">{t("roleKey")}</dt>
@@ -93,7 +93,7 @@ export default async function RoleDetailPage({ params }: PageProps<"/admin/roles
           </dl>
         </AdminSection>
 
-        <AdminSection title={t("permissionsCol")} className="min-w-0 flex-1">
+        <AdminSection title={t("permissionsCol")} cardClassName="min-w-0 flex-1">
           <RolePermissions
             roleKey={role.key}
             groups={matrix.groups}

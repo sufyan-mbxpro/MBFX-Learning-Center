@@ -282,10 +282,10 @@ export function ArticleEditor({
     <div className="flex w-full min-w-0 flex-col gap-4">
       {/* Sticky header — Cancel / Preview / View Live / Publish-or-Update. */}
       {/* Sticks BELOW the admin shell’s own sticky header, not under it:
-          that header is `sticky top-0 z-30 h-[var(--height-header)]`, so a
+          that header is `sticky top-0 z-30 h-(--height-header)`, so a
           plain `top-0 z-10` here slid the save button behind it and made it
           unclickable once the page scrolled. Caught in live verification. */}
-      <div className="sticky top-[var(--height-header)] z-20 -mx-1 flex flex-wrap items-center justify-end gap-2 border-b bg-background/95 px-1 py-3 backdrop-blur">
+      <div className="sticky top-(--height-header) z-20 -mx-1 flex flex-wrap items-center justify-end gap-2 border-b bg-background/95 px-1 py-3 backdrop-blur">
         {/* Colour is assigned by consequence, not by prominence (ADR-046):
             Cancel discards nothing and stays neutral; Preview is
             informational; the save is the one primary action on the screen.
@@ -356,7 +356,7 @@ export function ArticleEditor({
       {/* `minmax(0, 1fr)` rather than `1fr` — see the min-w-0 note above.
           `1fr` is shorthand for `minmax(auto, 1fr)`, which is exactly the
           track that grows to fit its widest child. */}
-      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
+      <div className="grid grid-cols-1 min-w-0 gap-4 lg:grid-cols-(--grid-main-aside-wide)">
         {/* ── Left column ─────────────────────────────────── */}
         <div className="flex min-w-0 flex-col gap-4">
           <EditorSection

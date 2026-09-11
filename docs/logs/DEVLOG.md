@@ -14272,3 +14272,383 @@ reference. Per the owner's Q13 decision it is admin-only, English-only and
   No committed code references them yet, so committing this page alone
   would leave `main` failing to build until those are committed. The commit
   waits on the owner's choice.
+
+## 2026-09-11 — changes-20 Phase 5: the screens adopt the design system (Modules 07/09/12, no new ADR)
+
+The owner committed the outstanding work (`2c0feda`, which also carries
+Phase 4), and the two remaining blockers were cleared:
+
+- **The database is reseeded.** `pnpm db:seed` rewrote the default `Theme`
+  row. A read-only query confirms the ADR-072 values (input border `#7F8FA5`,
+  dark background `#020817`, 6px radius). The page kept serving the old
+  tokens for a while because the theme read is `"use cache"` with a one-hour
+  life, and the seed writes the database without invalidating the `theme`
+  tag. It is live now (`--input:#7F8FA5`, `--radius:6px` on `/glossary`).
+  Expect the same lag after any future reseed: restart `pnpm dev` or save
+  the theme once.
+- **The kitchen sink is deleted** (`admin/%5Fdev`). `/admin/design-system`
+  replaced it in Phase 4; the UI skill's two references are updated.
+
+The brief lists no phases, so Phase 5's scope was written down first as a
+PR checklist: `docs/changes/changes-20-phase-5-plan.md`. It collects every
+"Found, not fixed here (Phase 5)" hand-off from the Phase 2–4 entries and
+every local component that duplicated a Phase 3 one.
+
+### 5.1 The admin frame is `@repo/ui`
+
+Each change is made once, in a wrapper, and every screen follows:
+
+- **`AdminPage` / `AdminPageHeading` compose `PageHeader`** (34 screens): the
+  30px bold title and 16px description, with status chips (`meta`) beside
+  the description as the reference places them. `PageHeader` gains
+  `titleRender` so a screen whose h1 lives elsewhere can render an h2.
+- **`AdminSection` is a `Card`** (12 files): the 24px rhythm replaces the
+  hand-typed `p-5`, and the title is `SectionTitle`, CardTitle's recipe as a
+  real `<h2>`. A new `cardClassName` separates card sizing (`lg:w-72`) from
+  content layout, and profile and role detail are updated for it.
+- **Breadcrumbs** are `Breadcrumb*`: chevron separators mirrored in RTL.
+  Unmapped segments now go through `humanizeKey` instead of rendering raw
+  (ADR-044 #5), and the learn, media, video and design-system segments are
+  labelled.
+- **The sidebar** uses `NavItem` (40px rows, the `nav` step, `--accent`
+  states). The collapsed rail stays icon-only with `aria-label`, and group
+  headings are `MicroHeading`. The shell follows §3.1: a 64px logo band, a
+  `px-3` scroll area, a `p-4` footer with a full-width outline sign-out, and
+  main at `lg:p-8`.
+- **Stat tiles are `MetricCard`.** Icons use each hue's `-interactive` ink,
+  since a raw hue on a thin glyph broke ADR-018 rule 5. The trend moved into
+  the meta line.
+- **The local `FilterBar` is deleted.** All eight DataTable screens now use
+  `FilterBarRow`.
+- **Token references use the `(--x)` form, never `[var(--x)]`**, in the
+  shell, the mobile nav, the article editor and the public header.
+
+**ADR-075's card-title calls, made:**
+
+| Screen           | Cards                        | Title                                             |
+| ---------------- | ---------------------------- | ------------------------------------------------- |
+| Dashboard        | growth chart, article status | `SectionTitleCompact` with an icon                |
+| Dashboard        | recent activity              | full title (the reference's "Live Activity Feed") |
+| Learn → Progress | the four analytics cards     | `SectionTitleCompact`                             |
+| Settings hub     | category tiles               | `Card size="sm"`                                  |
+
+The dashboard's ring-drawn link tiles are now `Card size="sm"`. Learn →
+Progress's hand-built `<table>` is now `@repo/ui`'s `Table`, edge to edge in
+its card (§3.2).
+
+### 5.2 Admin screens
+
+- The media library and media picker searches are `SearchInput`. The
+  library's field also gained the `aria-label` it was missing.
+- The bell's hand-built red badge with `text-[0.625rem]` is `CountBadge`,
+  capped at 999+ as in the reference.
+
+### 5.3 Public call sites
+
+- **Mobile nav sheet:**
+  - The Sheet's own width and padding apply; the sheet no longer sets
+    `w-[min(22rem,90vw)]` or a second `p-4`.
+  - The "Open menu" title is `sr-only`. It still names the dialog but no
+    longer repeats the trigger as a heading.
+  - Accordion rows and plain links start at the same inset.
+- **The lesson contents sheet** likewise uses the Sheet's own width and
+  padding.
+- **`ArticleCards`, the homepage news rails and /news:** the call-site
+  `gap-0 py-0` / `p-5` / `p-3` padding is gone.
+  - `Card` now drops its top padding for a `data-slot="card-media"` first
+    child, not only a bare `<img>`.
+  - A standard card is cover plus `CardContent`; a compact row is a
+    `size="sm"` card.
+  - The hover sweep moved after the body, so the cover stays the first
+    child.
+- **CourseCard level chips** sit on an opaque `bg-background` ground. The
+  /10 tint composited over artwork (3.9–4.1:1 in dark mode, Phase 3); on the
+  page background it composites onto the surface ADR-073 derives against.
+- The glossary and course-shelf searches are `SearchInput`; their clear
+  buttons are unchanged.
+
+### Verified
+
+- `@repo/ui`: **330/330**. New assertions: `PageHeader`'s `titleRender`
+  swaps the tag and keeps the recipe, `Card`'s `card-media` rule, and the
+  CourseCard chip ground.
+- `@repo/web`: **464/464**, including the new
+  `admin-page-conventions.test.ts` (172 cases):
+  - every live admin screen passes a title AND a description. The paused
+    and cancelled surfaces are excluded, as in ADR-044;
+  - the wrappers compose `PageHeader`, `Card`, `NavItem`, `Breadcrumb` and
+    `MetricCard`;
+  - no local `filter-bar.tsx`;
+  - no `[var(--x)]` token references. On its first run it caught the
+    article editor's sticky bar, which is fixed rather than excluded.
+- `typecheck` clean (`@repo/web`, `@repo/ui`); `lint` clean on every touched
+  file.
+- **Live:**
+  - `/`, `/news`, `/glossary`, `/learn` and `/learn/forex` all answer 200.
+  - `/news` renders 4 `card-media` covers, and the compiled CSS carries
+    `:has(> [data-slot="card-media"]:first-child)`.
+  - `/glossary` renders the `SearchInput`.
+  - `/admin` answers with the STAFF-gate redirect.
+  - The admin screens need a staff session, so their visual check is the
+    owner's, as in Phase 4.
+
+### Found, not fixed here
+
+- **The Accordion was never restyled in Phase 3.** It still carries
+  base-nova's `ring-3 ring-ring/50` focus and `hover:underline`, where
+  §6.14 specifies the 2px offset ring. That is a component-group fix.
+- **The media picker's header band** (`bg-primary/8`) is a tint step
+  ADR-073 retired (/10 rest, /15 hover) and a band ADR-075 removed from
+  cards. It is the dialog's own chrome, so it is left for a conscious
+  decision rather than changed silently.
+- **The remaining arbitrary values** are grid templates
+  (`lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]`, 7 admin editors),
+  transition lists and viewport heights (`min-h-[50vh]`). None has a token
+  equivalent, so Phase 6 has to allow-list or name them before its lint can
+  ban `-[…]`.
+
+### Owed
+
+- The owner's visual pass on the admin screens (staff session).
+- The post-Phase-5 public spacing pass (ADR-072 §7), then Phase 6 (lint).
+
+## 2026-09-11 — changes-20 Phase 6: the design system is enforced; the Phase 5 leftovers are fixed; phones stop scrolling sideways (Modules 07/09/12, no new ADR)
+
+The owner asked for Phase 5's three "found, not fixed" items first, then the
+next phase. All three are fixed, and Phase 6 (enforcement) followed.
+ADR-072 §10 had already decided the ban and the allowed `(--token)` form, so
+no new ADR was needed; the conventions are code-style #21–#23.
+
+### The Phase 5 leftovers
+
+- **Accordion.** Its recipe was fetched from shadcn's registry, the
+  capture-2 method (ADR-074), and it corrects the earlier note:
+  `hover:underline` **is** the reference's, not a leftover. The real
+  differences were a divider under _every_ item, a `py-4` centred trigger,
+  one chevron turning 180° (it had swapped two icons), `pb-4` content, and
+  the focus ring: base-nova's `ring-3 ring-ring/50` becomes our 2px offset
+  ring. The mobile nav opts out of the divider (`border-b-0`), because each
+  of its sections is its own one-item accordion and a rule under some rows
+  would split one list into two.
+- **The media picker's header band** goes. A dialog's header in §6.14 has no
+  band, and this was the one modal that borrowed `EditorSection`'s. The
+  editor's own section bands stay: they are a separate changes-10 decision,
+  and they carry foreground text rather than tonal ink on a Card, so neither
+  ADR-073 nor ADR-075 retires them. One real ADR-073 miss was fixed on the
+  way: a warning note used `-interactive` ink on `bg-warning/8`, below the
+  /10 step the ink is derived against.
+- **Arbitrary values: 113 → 0.** The inventory used the lint's own rule, so
+  the two cannot disagree: a class whose bracket CLOSES it is a value, and a
+  bracket followed by `:` or `/` is a variant (see the lint below). The
+  replacements, in order of preference:
+  - **The scale:** `aspect-4/3`, `opacity-14`, `hover:scale-103`, `z-2`,
+    `h-180`/`h-208`/`h-232`/`h-18`, `w-43/50`, `before:-top-2.5`.
+  - **Design-system steps:** `text-3xs`, a new `text-display-numeral` (the
+    SplitCallout step figure, set as artwork), and `tracking-caps`, which
+    unifies the footer's 0.12em and 0.14em.
+  - **The plain `transition` utility** for every colour/shadow/transform
+    list; `transition-shadow` for `[box-shadow]`.
+  - **Named layout tokens** in `globals.css` `:root`, read as `(--name)`:
+    `--grid-main-aside`/`-wide`, `--grid-2-1`, `--grid-3-2` (which also
+    absorbs `1.55fr_1fr` and `3fr_2fr`), `--grid-intro-main`,
+    `--grid-rail-main`, `--grid-menu-main`, `--grid-label-value`, the card
+    header's `--grid-fill-auto`/`--grid-auto-auto`,
+    `--width-panel`/`-compact`, `--width-slide-2`/`-3`,
+    `--height-half-screen`, `--height-scroll-panel`,
+    `--safe-area-bottom`/`-3`, and `--transition-size`/`-geometry`. They
+    live in `:root`, not `@theme`, for the namespace-collision reason the
+    file already documents.
+  - **The empty-content classes on `before:`/`after:` are deleted**
+    outright: Tailwind v4's pseudo-element variants supply `content`
+    themselves. Verified in the browser: the course and quiz cards'
+    stretched links still render `content: ""` over the whole card.
+  - **`content-placeholder`** is the one real `@utility`, because `attr()`
+    cannot travel through a custom property.
+
+### Phase 6: the lint
+
+- **`noArbitraryValueRule`** (react-internal config, so `@repo/ui`,
+  `@repo/blocks` and `apps/web`) flags a `Literal` or `TemplateElement`
+  holding a class whose bracket closes it. It deliberately does not flag
+  arbitrary variants (`data-[side=top]:`, `has-[>img:first-child]:`,
+  `group-data-[size=sm]/card:`), which shadcn's own recipes are built from,
+  nor `(--token)` references or `[--x:…]` custom-property definitions.
+  - Tests are exempt, because a guard has to name the class it forbids.
+  - The Website Builder and homepage composer are exempt
+    (`retainedSurfacesRule`), the same scope as ADR-057's rule.
+  - A probe file confirmed it flags `w-[150px]`, `lg:grid-cols-[…]` and a
+    template literal, and passes every variant form.
+- **`noOtherIconLibraries`** (base config): `react-icons`, heroicons, Radix,
+  Tabler, Phosphor, Feather, FontAwesome, MUI and Iconify imports fail.
+  - `adminComboboxRule` replaces `no-restricted-imports` wholesale, so it
+    re-lists the ban.
+  - A probe in `app/(admin)` confirmed both rules fire through that
+    override.
+
+### The phone-width browser pass, and the bug it kept finding
+
+Chrome DevTools, then Playwright when this session had no DevTools, probed
+16 public routes at 390 and 1440px. Each check measured whether the page
+scrolls sideways and which element, outside any clipping ancestor, causes
+it.
+
+- **The same bug, three times.** The homepage's news rail was a 1307px
+  track in a 460px list; the /news spotlight overflowed by 85px; the /news
+  page grid by 8px. All three are `grid lg:grid-cols-…` with no base
+  columns. Below the breakpoint that is one implicit `auto` track sized to
+  its items' min-content, and Chrome reports a `line-clamp` excerpt's
+  min-content as its unwrapped width. None of it was from this work: the
+  excerpts and grids were untouched.
+  - **Fix everywhere, not per file.** All 90 grids of that shape now state
+    `grid-cols-1` (`minmax(0, 1fr)` in v4: the same column, but it cannot
+    outgrow its container). The footer's runtime-picked link grid was left
+    alone.
+  - **`grid-base.test.ts` guards it** (code-style #23), including a test
+    that the detector itself fires.
+- **The Reveal wobble.** A `Reveal variant="end"` rests 1.5rem toward the
+  inline end until it scrolls in (ADR-018), so /about/\* and
+  /economic-calendar scrolled 8px sideways on a phone.
+  - The public layout's content wrapper now has `overflow-x-clip`.
+  - `clip`, not `hidden`, keeps it from being a scroll container, and the
+    browser confirmed it: the glossary letter bar pins at 64px and the learn
+    section bar at 65px after a 1600px scroll. The /news sidebar stops where
+    its column ends, bottom 858 = parent 858, which is correct.
+- **A clipped headline.** The /news "Latest posts" row had no `min-w-0`, so
+  a long headline ran past the card (row 270px, content 332px) and
+  `overflow-hidden` cut it mid-word. ADR-075's 24px card rhythm, which
+  narrowed that card, exposed it. Fixed, with `article-sidebar.test.ts` as
+  the regression test.
+- **Result:** every route is at 0px overflow at both widths.
+  `/economic-calendar` cannot be framed (its third-party embed), so it was
+  checked by direct navigation.
+
+### Verified
+
+- `@repo/ui` **334/334**, run in batches (the full run crashes Node on this
+  machine). `accordion` anatomy is new, and `type-scale.test.ts` passes
+  with the new display step.
+- `@repo/web` **469/469**: `grid-base.test.ts` and `article-sidebar.test.ts`
+  are new.
+- `typecheck` clean (`@repo/web`, `@repo/ui`, `@repo/blocks`); `eslint .`
+  clean in all three with both new rules on; Prettier clean on every touched
+  file.
+- **Live:** the named utilities resolve in the browser. The `lg:` grids
+  compute to 777.6/518.4px (3:2) and 960/320px (20rem). `tracking-caps` is
+  2.24px at 16px, `h-180` is 720px, the numeral is 160px, and both
+  transition lists apply. A cover card has 0 top padding with its cover
+  flush to the border.
+
+### Note for the owner
+
+The dev server exited mid-pass: a sweep compiled 15 routes back to back. It
+was restarted in the background from the Claude session to finish the
+check. If you run `pnpm dev` in your own terminal, stop that one first or
+the ports will collide.
+
+### Owed
+
+- The admin screens still need a visual check with a staff session.
+- Commit (not done; awaiting the owner).
+
+## 2026-09-11 — changes-20: the admin visual pass, and the Sign out button that never signed anyone out (Modules 07/09/04, no new ADR)
+
+Phase 6 owed an admin visual check "with a staff session". It is done: every
+admin screen at 1440px and the shell, lists, detail pages and editors at 390px
+(device emulation), in the running app. The session came from the seeded dev
+account, signed in from the shell so the password never entered the
+transcript; every session this pass created was revoked afterwards (see
+below).
+
+### What the pass confirmed
+
+At 1440px, all 21 sidebar screens, 4 editors and the detail pages had 0px
+overflow, exactly one h1, a description, and a sensible breadcrumb. The new
+frame renders as specified: the 30/16px header, `MetricCard`s, compact chart
+titles, 40px `NavItem` rows, the chevron breadcrumb and the compact
+`DataTable`. `/admin/roles/super_admin` reads "Super Admin" (ADR-044 #5). The
+named grid tokens resolve in the editors: 2:1 at 731/366px, and the article
+editor's wide aside at 352px.
+
+### Found and fixed (each with its regression test)
+
+- **Sign out did not sign out. Security, and it predates changes-20.**
+  - Four call sites POSTed `/api/auth/sign-out` with no body: the sidebar
+    button, the profile menu, the **ADR-041 idle timeout**, and
+    `signOutSilently` (ADR-052's wrong-surface turn-away).
+  - Better Auth answers that with **415** and leaves the session valid. This
+    was reproduced against the running handler: 415, then `get-session`
+    still returned the session.
+  - So every sign-out navigated away from a live session. The database shows
+    the footprint: **about 110 unexpired sessions** accumulated since
+    2026-09-07.
+  - Fix: one `signOut()` in `app/_lib/credentials.ts` that sends
+    `content-type: application/json` with `{}` and reports `response.ok`.
+    `signOutSilently` and all three admin call sites use it; the two whose
+    local handler is also named `signOut` import it as `endSession`.
+  - Verified end to end: clicking the real button revoked the session
+    (`get-session` returned none, and `/admin` with the old cookie redirected
+    with 307 to sign-in).
+  - `credentials.test.ts` pins the request and fails if any other file
+    hand-writes the sign-out call.
+- **Toolbar dropdowns were 40px beside a 36px search** (Users, and every
+  `DataTable` filter).
+  - New `@repo/ui` `ControlSizeProvider` / `useControlSize`
+    (`control-size.tsx`). `DataTable` wraps its `filters` slot in `sm`, and
+    `Combobox` reads the context; an explicit `size` still wins.
+  - No call site changed. The media library's hand-built toolbar now uses
+    `FilterBarRow` plus the provider.
+- **Every dropdown clipped a long value mid-letter** ("Pending
+  verificatior").
+  - The value slot was `flex` plus `line-clamp-1`. `line-clamp` needs a
+    `-webkit-box`, `flex` replaced it, and the clamp was inert.
+  - `SelectValue` and the Combobox value are now truncating blocks, and
+    option content is inline.
+  - The user-detail status, role and permission pickers also dropped their
+    fixed `w-44/48/56` (code-style #10: a form field flexes; only a toolbar
+    filter declares a width).
+- **The breadcrumb printed record ids** ("zwV2IP9bE6Ff…", against ADR-044
+  #5) and **linked "Learning" to `/admin/learn`**, which 404s.
+  - An id segment now reads `admin.breadcrumbDetail` ("Details").
+  - Page-less segments are listed in `GROUP_SEGMENTS` and render as text. A
+    test walks the admin tree and fails on any page-less folder missing from
+    the list.
+- **`/admin/design-system` rendered three h1s.** Its `PageHeader` specimens
+  now pass `titleRender={<h2 />}`.
+  - It also logged "runtime data in `generateMetadata()`" on every load. It
+    was the one admin page that reads nothing, so it was never
+    request-scoped. It now `await connection()`s, the dashboard's pattern,
+    and the console is clean.
+- **At 390px:**
+  - The top bar was 74px too wide. `Button`'s `shrink-0` held the ⌘K
+    trigger at 256px and pushed the theme toggle and avatar off-screen; it is
+    now `shrink`.
+  - The article editor's four SEO tabs made a 414px tray. `TabsList` now
+    scrolls within itself (`max-w-full overflow-x-auto`, start-justified).
+  - The media toolbar did not wrap: 116px of overflow.
+  - All three are now at 0px, as are the dashboard, the course editor, the
+    theme, the role detail, the progress page, the design-system board and
+    the user list.
+
+### Session hygiene
+
+- The browser session was signed out through the fixed request.
+- The two script-created sessions (user agent `node`, created today) were
+  deleted by exactly that filter.
+- **The ~110 older sessions are left alone.** They are yours, from before
+  the fix: `pnpm db:reset` or a targeted delete clears them if you want a
+  clean table.
+
+### Verified
+
+- `@repo/web` **480/480**. New tests cover the sign-out request and its
+  single call site, the breadcrumb id and group segments, the design-system
+  h1 and connection guard, and the top-bar shrink.
+- `@repo/ui` **337/337** (18 files, run in batches). New tests cover the
+  toolbar control size, the ellipsis value slot and the scrolling tab tray.
+- `typecheck` and `eslint .` clean on `@repo/web` and `@repo/ui`; Prettier
+  clean on every touched file; `governance:check` OK.
+
+### Owed
+
+- Commit (awaiting the owner).
+- Unchanged from before: axe, Lighthouse and E2E belong to Module 14.

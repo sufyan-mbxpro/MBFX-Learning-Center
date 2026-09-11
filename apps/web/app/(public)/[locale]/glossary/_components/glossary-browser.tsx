@@ -18,9 +18,9 @@
 // page under the reader every time a term is published.
 import { useDeferredValue, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Search, X } from "lucide-react";
+import { X } from "lucide-react";
 import { Link } from "@repo/i18n/navigation";
-import { Input } from "@repo/ui/components/input";
+import { SearchInput } from "@repo/ui/components/search-input";
 import { Empty, EmptyDescription, EmptyTitle } from "@repo/ui/components/empty";
 import { cn } from "@repo/ui/lib/utils";
 
@@ -94,17 +94,14 @@ export function GlossaryBrowser({
           {t("searchLabel")}
         </label>
         <div className="relative max-w-md">
-          <Search
-            aria-hidden
-            className="pointer-events-none absolute inset-inline-start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-          />
-          <Input
+          {/* SearchInput owns the glyph and its inset; pe-9 leaves room for
+              the clear button, a sibling in this same positioned box. */}
+          <SearchInput
             id="glossary-search"
-            type="search"
             value={query}
             placeholder={t("searchPlaceholder")}
             onChange={(event) => setQuery(event.target.value)}
-            className="ps-9 pe-9"
+            className="pe-9"
           />
           {query !== "" && (
             <button
@@ -139,7 +136,7 @@ export function GlossaryBrowser({
               <a
                 key={letter}
                 href={`#glossary-${letter === "#" ? "hash" : letter}`}
-                className="flex size-7 items-center justify-center rounded-md text-sm font-medium text-muted-foreground transition-[background-color,color,transform] duration-(--duration-fast) hover:scale-110 hover:bg-primary/10 hover:text-primary-interactive"
+                className="flex size-7 items-center justify-center rounded-md text-sm font-medium text-muted-foreground transition duration-(--duration-fast) hover:scale-110 hover:bg-primary/10 hover:text-primary-interactive"
               >
                 {letter}
               </a>
@@ -173,7 +170,7 @@ export function GlossaryBrowser({
               className="flex scroll-mt-32 flex-col gap-3"
             >
               <h2 className="border-b pb-1 text-xl font-semibold">{letter}</h2>
-              <ul className="grid gap-3 sm:grid-cols-2">
+              <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {(byLetter.get(letter) ?? []).map((entry) => (
                   <li key={entry.termId} className="flex flex-col gap-0.5">
                     <Link

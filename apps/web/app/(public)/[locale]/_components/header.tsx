@@ -65,7 +65,7 @@ export async function SiteHeader({ locale }: { locale: string }) {
         <TopBar phone={topBar.phone} promoText={topBar.promoText} promoUrl={topBar.promoUrl} />
       )}
       <header className="bg-glow-primary relative isolate border-b border-border/70 bg-background/95 shadow-sm backdrop-blur-md">
-        <Container className="flex h-[var(--height-header)] items-center gap-3 md:gap-6">
+        <Container className="flex h-(--height-header) items-center gap-3 md:gap-6">
           {/* Below lg the nav lives behind the hamburger; same rows. */}
           <MobileNav items={navItems} menuLabel={t("openMenu")} />
 
@@ -74,7 +74,7 @@ export async function SiteHeader({ locale }: { locale: string }) {
               other theme-aware surface; falls back to the site name. */}
           <Link
             href="/"
-            className="flex shrink-0 items-center truncate transition-transform duration-(--duration-base) ease-(--ease-out-quint) hover:scale-[1.03]"
+            className="flex shrink-0 items-center truncate transition-transform duration-(--duration-base) ease-(--ease-out-quint) hover:scale-103"
           >
             <BrandLogo
               light={brandAssets.logo_light?.url ?? null}

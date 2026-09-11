@@ -161,12 +161,12 @@ export default async function LessonPage({
       <Section spacing="md">
         {/* `pb-24` below md leaves room for the pinned LessonNav; from md the
           bar is in normal flow and the padding is not needed. */}
-        <Container className="grid gap-8 pb-24 md:grid-cols-[minmax(0,16rem)_minmax(0,1fr)] md:items-start md:pb-0">
+        <Container className="grid grid-cols-1 gap-8 pb-24 md:grid-cols-(--grid-rail-main) md:items-start md:pb-0">
           {/* Sidebar from md; a Sheet below it (§9.3). Both render the SAME
             CurriculumWithProgress — see lesson-contents-sheet.tsx. */}
           <aside className="hidden md:sticky md:top-24 md:flex md:flex-col md:gap-3">
             <p className="text-sm font-semibold">{t("lesson.contents")}</p>
-            <div className="max-h-[60vh] overflow-y-auto">
+            <div className="max-h-(--height-scroll-panel) overflow-y-auto">
               <CurriculumWithProgress sections={sections} defaultOpenSectionIds={openSectionIds} />
             </div>
 

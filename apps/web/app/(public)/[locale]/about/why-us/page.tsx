@@ -95,7 +95,7 @@ export default async function WhyUsPage({ params }: PageProps<"/[locale]/about/w
       />
 
       <Section spacing="lg">
-        <Container className="grid gap-10 lg:grid-cols-[minmax(0,24rem)_1fr] lg:gap-16">
+        <Container className="grid grid-cols-1 gap-10 lg:grid-cols-(--grid-intro-main) lg:gap-16">
           <Reveal variant="up">
             <SectionHeading
               eyebrow={t("whyUs.commitments.eyebrow")}

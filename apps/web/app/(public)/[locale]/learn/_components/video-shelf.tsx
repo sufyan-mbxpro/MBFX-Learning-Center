@@ -86,7 +86,7 @@ export function VideoShelf({
             <EmptyDescription>{t("videos.noneBody")}</EmptyDescription>
           </Empty>
         ) : (
-          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {topics.map((topic, index) => {
               const href = `${basePath}/${topic.slug}`;
               return (
@@ -188,7 +188,7 @@ function Chip({
       // markup follows the difference in what they do.
       aria-current={active ? "page" : undefined}
       className={cn(
-        "inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-sm font-medium ring-1 transition-[background-color,color,box-shadow,transform] duration-(--duration-base) ease-(--ease-out-quint) focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
+        "inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-sm font-medium ring-1 transition duration-(--duration-base) ease-(--ease-out-quint) focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
         active
           ? cn(
               "shadow-sm",

@@ -70,7 +70,7 @@ export default async function AnalysisPage({
       />
 
       <Section spacing="md">
-        <Container className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <Container className="grid grid-cols-1 gap-10 lg:grid-cols-(--grid-main-aside)">
           <div className="flex flex-col gap-8">
             {q && (
               <p className="text-sm text-muted-foreground">

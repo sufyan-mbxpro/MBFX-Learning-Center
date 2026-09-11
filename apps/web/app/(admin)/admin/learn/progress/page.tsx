@@ -8,7 +8,16 @@ import {
   loadQuizAnalytics,
 } from "@repo/core";
 import { requirePermission } from "@repo/rbac";
-import { Card, CardContent, CardHeader, CardTitle } from "@repo/ui/components/card";
+import { Card, CardContent, CardDescription, CardHeader } from "@repo/ui/components/card";
+import { SectionTitleCompact, SubText } from "@repo/ui/components/typography";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@repo/ui/components/table";
 import { Empty, EmptyDescription, EmptyTitle } from "@repo/ui/components/empty";
 import { AdminPage } from "../../_components/admin-page.tsx";
 import { DashboardStatCard } from "../../_components/dashboard-stat-card.tsx";
@@ -54,7 +63,7 @@ export default async function LearnProgressPage() {
         </Empty>
       ) : (
         <div className="flex flex-col gap-6">
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             <DashboardStatCard
               icon={Users}
               label={t("analytics.activeLearners")}
@@ -93,10 +102,10 @@ export default async function LearnProgressPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>{t("analytics.coursesTitle")}</CardTitle>
-              <p className="text-sm text-muted-foreground">{t("analytics.coursesDescription")}</p>
+              <SectionTitleCompact>{t("analytics.coursesTitle")}</SectionTitleCompact>
+              <CardDescription>{t("analytics.coursesDescription")}</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-0">
               <AnalyticsTable
                 headers={[
                   t("analytics.colCourse"),
@@ -122,13 +131,13 @@ export default async function LearnProgressPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>{t("analytics.dropOffTitle")}</CardTitle>
+              <SectionTitleCompact>{t("analytics.dropOffTitle")}</SectionTitleCompact>
               {/* The description says what "drop-off" means here, because the
                   word is used loosely elsewhere and the number is only useful
                   if you know it counts opened-and-not-finished. */}
-              <p className="text-sm text-muted-foreground">{t("analytics.dropOffDescription")}</p>
+              <CardDescription>{t("analytics.dropOffDescription")}</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-0">
               <AnalyticsTable
                 headers={[
                   t("analytics.colLesson"),
@@ -154,10 +163,10 @@ export default async function LearnProgressPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>{t("analytics.quizzesTitle")}</CardTitle>
-              <p className="text-sm text-muted-foreground">{t("analytics.quizzesDescription")}</p>
+              <SectionTitleCompact>{t("analytics.quizzesTitle")}</SectionTitleCompact>
+              <CardDescription>{t("analytics.quizzesDescription")}</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-0">
               <AnalyticsTable
                 headers={[
                   t("analytics.colQuiz"),
@@ -183,13 +192,13 @@ export default async function LearnProgressPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>{t("analytics.unhelpfulTitle")}</CardTitle>
+              <SectionTitleCompact>{t("analytics.unhelpfulTitle")}</SectionTitleCompact>
               {/* D28's whole justification, on screen: counters would answer
                   "what is the ratio now"; rows answer "which lessons got worse
                   after the rewrite". */}
-              <p className="text-sm text-muted-foreground">{t("analytics.unhelpfulDescription")}</p>
+              <CardDescription>{t("analytics.unhelpfulDescription")}</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-0">
               <AnalyticsTable
                 headers={[
                   t("analytics.colLesson"),
@@ -219,11 +228,11 @@ export default async function LearnProgressPage() {
 }
 
 /**
- * A plain table, wrapped so the four above cannot drift apart.
- *
- * `overflow-x-auto` on the wrapper rather than the page: five numeric columns
- * fit on a laptop and not on a narrow admin sidebar layout, and a page that
- * scrolls sideways is a worse answer than a table that does.
+ * A plain `Table` (default density), wrapped so the four above cannot
+ * drift apart. It sits edge to edge in its card — the reference's
+ * table-in-card has no content padding (tokens.md §3.2), so the cells' own
+ * 16px is the inset — and scrolls sideways inside the card rather than
+ * making the page do it.
  */
 function AnalyticsTable({
   headers,
@@ -235,48 +244,36 @@ function AnalyticsTable({
   emptyLabel: string;
 }) {
   if (rows.length === 0) {
-    return <p className="text-sm text-muted-foreground">{emptyLabel}</p>;
+    return <SubText className="px-(--card-spacing)">{emptyLabel}</SubText>;
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b text-start">
-            {headers.map((header, index) => (
-              <th
-                key={header}
-                scope="col"
+    <Table>
+      <TableHeader>
+        <TableRow>
+          {headers.map((header, index) => (
+            <TableHead key={header} scope="col" className={index === 0 ? undefined : "text-end"}>
+              {header}
+            </TableHead>
+          ))}
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {rows.map((row) => (
+          <TableRow key={row.key}>
+            {row.cells.map((cell, index) => (
+              <TableCell
+                key={index}
                 className={
-                  index === 0
-                    ? "py-2 pe-3 text-start font-medium text-muted-foreground"
-                    : "py-2 pe-3 text-end font-medium text-muted-foreground"
+                  index === 0 ? "font-medium" : "text-end tabular-nums text-muted-foreground"
                 }
               >
-                {header}
-              </th>
+                {cell}
+              </TableCell>
             ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.key} className="border-b last:border-0">
-              {row.cells.map((cell, index) => (
-                <td
-                  key={index}
-                  className={
-                    index === 0
-                      ? "py-2 pe-3 font-medium"
-                      : "py-2 pe-3 text-end tabular-nums text-muted-foreground"
-                  }
-                >
-                  {cell}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
   );
 }

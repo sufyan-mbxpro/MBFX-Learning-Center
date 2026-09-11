@@ -309,7 +309,7 @@ export async function AdminShell({
         }}
       />
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex h-[var(--height-header)] items-center gap-3 border-b bg-background/95 px-4 backdrop-blur md:gap-4 md:px-6">
+        <header className="sticky top-0 z-30 flex h-(--height-header) items-center gap-3 border-b bg-background/95 px-4 backdrop-blur md:gap-4 md:px-6">
           <AdminMobileNav
             groups={groups}
             visitSite={visitSite}
@@ -362,7 +362,7 @@ export async function AdminShell({
         <div className="border-b px-4 py-2 md:px-6">
           <AdminBreadcrumbs />
         </div>
-        <main className="flex-1 p-4 md:p-6">{children}</main>
+        <main className="flex-1 p-4 md:p-6 lg:p-8">{children}</main>
       </div>
     </div>
   );

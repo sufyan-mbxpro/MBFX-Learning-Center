@@ -41,7 +41,7 @@ function SplitCallout({
       className={className}
       {...props}
     >
-      <Container className="grid items-center gap-10 lg:grid-cols-2">
+      <Container className="grid grid-cols-1 items-center gap-10 lg:grid-cols-2">
         <Reveal variant={reverse ? "end" : "start"} className={cn(reverse && "lg:order-2")}>
           {media ?? (
             // No image supplied (ADR-047 §3). A gradient panel, never a
@@ -50,10 +50,10 @@ function SplitCallout({
             // graphic rather than a slot waiting for a photograph.
             <div
               aria-hidden
-              className="flex aspect-[4/3] w-full items-center justify-center rounded-2xl bg-gradient-to-br from-primary-subtle to-muted"
+              className="flex aspect-4/3 w-full items-center justify-center rounded-2xl bg-gradient-to-br from-primary-subtle to-muted"
             >
               {step !== undefined && (
-                <span className="text-[10rem] leading-none font-semibold text-primary/20">
+                <span className="text-display-numeral leading-none font-semibold text-primary/20">
                   {step}
                 </span>
               )}

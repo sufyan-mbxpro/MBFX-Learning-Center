@@ -204,7 +204,7 @@ export function QuizCard({
               accessible name is the quiz's name and nothing else. */}
           <a
             href={href}
-            className="transition-colors duration-(--duration-base) after:absolute after:inset-0 after:z-0 after:content-[''] group-hover/quiz:text-primary-interactive focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+            className="transition-colors duration-(--duration-base) after:absolute after:inset-0 after:z-0 group-hover/quiz:text-primary-interactive focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
           >
             {title}
           </a>
@@ -319,7 +319,7 @@ function ScoreMeter({
       >
         <span
           className={cn(
-            "absolute inset-y-0 start-0 rounded-full transition-[width] duration-(--duration-slow) ease-(--ease-out-quint)",
+            "absolute inset-y-0 start-0 rounded-full transition-(--transition-size) duration-(--duration-slow) ease-(--ease-out-quint)",
             METER_FILL[tone],
           )}
           style={{ width: `${fill}%` }}

@@ -27,7 +27,7 @@ import { Empty, EmptyDescription, EmptyMedia, EmptyTitle } from "@repo/ui/compon
 import { Label } from "@repo/ui/components/label";
 import { duplicateLessonAction, setLessonDeletedAction } from "../../_actions/learn-actions.ts";
 import { AdminCombobox } from "../../_components/combobox.tsx";
-import { FilterBar } from "../../_components/filter-bar.tsx";
+import { FilterBarRow } from "@repo/ui/components/filter-bar";
 import {
   CONTENT_STATUS_TONE,
   StatusBadge,
@@ -337,7 +337,7 @@ export function LessonsTable({
       getRowId={(row) => row.id}
       {...tableProps}
       filters={
-        <FilterBar>
+        <FilterBarRow>
           <AdminCombobox
             aria-label={labels.courseLabel}
             className="w-44"
@@ -375,7 +375,7 @@ export function LessonsTable({
             />
             {labels.outdatedOnly}
           </Label>
-        </FilterBar>
+        </FilterBarRow>
       }
       emptyState={
         <Empty className="border-none">

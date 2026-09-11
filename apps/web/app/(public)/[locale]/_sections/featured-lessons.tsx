@@ -56,7 +56,7 @@ export async function FeaturedLessons({ locale, limit }: SectionProps) {
           lead={t("featuredLessons.description")}
         />
         <Reveal variant="up">
-          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {openers.map(({ course, lesson }) => (
               <li key={lesson.id}>
                 <Link

@@ -133,3 +133,28 @@ these.
     it renders its own `<script>` and defers execution past first paint.
     Give the injected script the request's `x-nonce` on the dynamic admin
     surfaces, the way `#brand-tokens` already does (security.md #14).
+
+## Design system (changes-20, ADR-072)
+
+21. **No arbitrary Tailwind values** (ADR-072 §10). A class whose bracket
+    closes it — `w-[150px]`, `lg:grid-cols-[1fr_20rem]` — fails lint
+    (`noArbitraryValueRule`, react-internal config). In order of preference:
+    the scale (`w-37.5`, `h-180`, `aspect-4/3`, `opacity-15`, `z-2`), a
+    design-system step (`text-3xs`, `tracking-caps`), or a **named token** in
+    the "Layout tokens" block of `@repo/ui` `globals.css`, read as a reference
+    (`lg:grid-cols-(--grid-main-aside)`). A new value is added there once, not
+    inlined. Still allowed: arbitrary **variants** (`data-[side=top]:`,
+    `has-[>img:first-child]:`), `(--token)` references, and custom-property
+    definitions (`[--card-spacing:--spacing(6)]`). Tests are exempt (a guard
+    names the class it forbids), and so are the retained Website Builder and
+    homepage composer (ADR-042/038).
+22. **lucide-react is the only icon library.** Any other icon package fails
+    lint (`noOtherIconLibraries`, base config). Brand marks go through
+    `SocialGlyph` (ADR-045).
+23. **A responsive grid states its one-column base.** Write
+    `grid grid-cols-1 lg:grid-cols-2`, never `grid lg:grid-cols-2`. Below the
+    breakpoint the bare form is one implicit `auto` track, which sizes to its
+    items' min-content, and Chrome reports a line-clamped excerpt's min-content
+    as its unwrapped width, so the page scrolls sideways on a phone.
+    `grid-cols-1` is `minmax(0, 1fr)` and cannot outgrow its container.
+    Guarded by `apps/web/app/grid-base.test.ts`.

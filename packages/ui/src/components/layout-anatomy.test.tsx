@@ -67,6 +67,18 @@ describe("Card (ADR-075)", () => {
     );
   });
 
+  it("drops its top padding for a full-bleed cover: a bare img OR a card-media wrapper", () => {
+    // The linked cover (changes-20 Phase 5, ArticleCards) is a wrapper, not
+    // an <img>, so the img-only rule alone left it padded — or padded by hand.
+    const { container } = renderCard();
+    expect(tokens(container.querySelector("[data-slot=card]"))).toEqual(
+      expect.arrayContaining([
+        "has-[>img:first-child]:pt-0",
+        "has-[>[data-slot=card-media]:first-child]:pt-0",
+      ]),
+    );
+  });
+
   it("has no header band (superseding ADR-050) and no footer band", () => {
     const { container } = renderCard();
     const header = container.querySelector("[data-slot=card-header]");
@@ -137,6 +149,15 @@ describe("PageHeader (tokens.md §6.12)", () => {
     render(<PageHeader title="Announcements" description="Broadcasts" icon={<svg />} />);
     expect(tokens(screen.getByRole("heading", { level: 1 }))).toContain("text-2xl");
     expect(tokens(screen.getByText("Broadcasts"))).toContain("text-sm");
+  });
+
+  it("titleRender swaps the tag, never the recipe (a settings screen's h2)", () => {
+    render(<PageHeader title="General" description="Site basics" titleRender={<h2 />} />);
+    expect(screen.queryByRole("heading", { level: 1 })).toBeNull();
+    const heading = screen.getByRole("heading", { level: 2, name: "General" });
+    expect(tokens(heading)).toEqual(
+      expect.arrayContaining(["text-3xl", "font-bold", "tracking-tight"]),
+    );
   });
 });
 

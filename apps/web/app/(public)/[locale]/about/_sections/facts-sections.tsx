@@ -131,7 +131,7 @@ export async function Payments({ locale }: { locale: string }) {
           {ABOUT_FACTS.payments.map((method, index) => (
             <li
               key={method}
-              className="reveal reveal-scale rounded-full bg-muted px-4 py-2 text-sm font-medium text-foreground ring-1 ring-transparent transition-[background-color,box-shadow] duration-(--duration-base) hover:bg-card hover:shadow-sm hover:ring-primary/25"
+              className="reveal reveal-scale rounded-full bg-muted px-4 py-2 text-sm font-medium text-foreground ring-1 ring-transparent transition duration-(--duration-base) hover:bg-card hover:shadow-sm hover:ring-primary/25"
               style={{
                 animationDelay: `${Math.min(index, 7) * 50}ms`,
                 transitionDelay: `${Math.min(index, 7) * 50}ms`,

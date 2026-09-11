@@ -11,7 +11,7 @@ import { useState } from "react";
 import { Check, Link2 } from "lucide-react";
 
 const LINK_CLASS =
-  "rounded-md border bg-card px-2.5 py-1 text-xs transition-[background-color,transform] duration-(--duration-fast) hover:-translate-y-0.5 hover:bg-primary/10 hover:text-primary-interactive";
+  "rounded-md border bg-card px-2.5 py-1 text-xs transition duration-(--duration-fast) hover:-translate-y-0.5 hover:bg-primary/10 hover:text-primary-interactive";
 
 export function ShareRow({
   title,

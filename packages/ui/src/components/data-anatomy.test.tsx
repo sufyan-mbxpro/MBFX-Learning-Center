@@ -3,6 +3,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ColumnDef } from "@tanstack/react-table";
+import { Combobox } from "./combobox.tsx";
 import { DataTable, type DataTableLabels } from "./data-table.tsx";
 import { FilterBar, FilterBarItem, FilterBarRow } from "./filter-bar.tsx";
 import {
@@ -113,6 +114,48 @@ describe("DataTable (ADR-072 §9, tokens.md §6.10)", () => {
         density={density}
       />,
     );
+
+  it("sizes the dropdowns in its filter slot to the 36px toolbar, not the 40px form default", () => {
+    // Admin visual pass: the Users toolbar rendered a 36px search beside 40px
+    // filters. The toolbar now sets the size once (control-size.tsx).
+    const opts = [
+      { value: "", label: "All types" },
+      { value: "a", label: "A" },
+    ];
+    render(
+      <>
+        <DataTable
+          columns={columns}
+          data={[{ id: "1", name: "Ada" }]}
+          labels={labels}
+          pageCount={1}
+          pagination={{ pageIndex: 0, pageSize: 15 }}
+          onPaginationChange={vi.fn()}
+          sorting={[]}
+          onSortingChange={vi.fn()}
+          globalFilter=""
+          onGlobalFilterChange={vi.fn()}
+          filters={
+            <>
+              <Combobox aria-label="In toolbar" options={opts} value="" onValueChange={vi.fn()} />
+              <Combobox
+                aria-label="Explicit"
+                size="xs"
+                options={opts}
+                value=""
+                onValueChange={vi.fn()}
+              />
+            </>
+          }
+        />
+        <Combobox aria-label="In a form" options={opts} value="" onValueChange={vi.fn()} />
+      </>,
+    );
+    const size = (name: string) => screen.getByRole("combobox", { name }).getAttribute("data-size");
+    expect(size("In toolbar")).toBe("sm");
+    expect(size("In a form")).toBe("default");
+    expect(size("Explicit")).toBe("xs");
+  });
 
   it("is COMPACT by default — the reference's Users Directory", () => {
     const { container } = renderDataTable();
@@ -227,6 +270,24 @@ describe("Tabs (tokens.md §6.8)", () => {
         "data-active:shadow-sm",
       ]),
     );
+  });
+
+  it("scrolls a tray that outgrows its container instead of widening the page", () => {
+    // Regression (admin phone-width pass): four SEO tabs made a 414px tray on
+    // a 390px screen. Start-justified, so a scrolled tray keeps its first tab
+    // reachable.
+    render(
+      <Tabs defaultValue="a">
+        <TabsList>
+          <TabsTrigger value="a">A</TabsTrigger>
+        </TabsList>
+      </Tabs>,
+    );
+    const list = screen.getByRole("tablist");
+    expect(tokens(list)).toEqual(
+      expect.arrayContaining(["max-w-full", "overflow-x-auto", "no-scrollbar", "justify-start"]),
+    );
+    expect(tokens(list)).not.toContain("justify-center");
   });
 });
 

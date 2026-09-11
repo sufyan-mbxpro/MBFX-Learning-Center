@@ -56,7 +56,7 @@ export default function NewsLoading() {
 
       {/* The stat band. */}
       <Section spacing="sm" tone="muted">
-        <Container className="grid gap-6 sm:grid-cols-3">
+        <Container className="grid grid-cols-1 gap-6 sm:grid-cols-3">
           {Array.from({ length: 3 }, (_, index) => (
             <div key={index} className="flex flex-col items-center gap-2">
               <Skeleton className="h-9 w-20" />
@@ -70,7 +70,7 @@ export default function NewsLoading() {
       <Section spacing="md">
         <Container className="flex flex-col gap-8">
           <Skeleton className="h-9 w-64" />
-          <div className="grid gap-6 lg:grid-cols-[1.55fr_1fr]">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-(--grid-3-2)">
             <div className="flex flex-col gap-3 overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/10">
               <Skeleton className="aspect-video w-full rounded-none" />
               <div className="flex flex-col gap-3 p-6 pt-0">
@@ -86,7 +86,7 @@ export default function NewsLoading() {
                   key={index}
                   className="flex flex-1 items-start gap-4 rounded-2xl bg-card p-4 ring-1 ring-foreground/10"
                 >
-                  <Skeleton className="aspect-[4/3] w-28 shrink-0 rounded-lg" />
+                  <Skeleton className="aspect-4/3 w-28 shrink-0 rounded-lg" />
                   <div className="flex flex-1 flex-col gap-2">
                     <Skeleton className="h-4 w-20" />
                     <Skeleton className="h-4 w-full" />
@@ -101,9 +101,9 @@ export default function NewsLoading() {
 
       {/* The listing: grid beside the facet sidebar. */}
       <Section spacing="md">
-        <Container className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <Container className="grid grid-cols-1 gap-10 lg:grid-cols-(--grid-main-aside)">
           <div className="flex flex-col gap-8">
-            <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
               {Array.from({ length: 6 }, (_, index) => (
                 <CardSkeleton key={index} />
               ))}

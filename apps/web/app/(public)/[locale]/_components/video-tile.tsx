@@ -115,7 +115,7 @@ export function VideoTile({
       type="button"
       onClick={() => setPlaying(true)}
       aria-label={playLabel}
-      className="group hover-lift sheen relative block aspect-video w-full overflow-hidden rounded-2xl bg-secondary text-start ring-1 ring-foreground/10 transition-[box-shadow] duration-(--duration-base) hover:ring-primary/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      className="group hover-lift sheen relative block aspect-video w-full overflow-hidden rounded-2xl bg-secondary text-start ring-1 ring-foreground/10 transition-shadow duration-(--duration-base) hover:ring-primary/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
     >
       {media}
       {/* The play control. `--primary` as a large filled disc is exactly what

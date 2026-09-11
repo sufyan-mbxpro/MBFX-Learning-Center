@@ -2,10 +2,18 @@
 // page-header rhythm and card treatment stay consistent across screens —
 // and change in ONE place when the design evolves — instead of living as
 // eight slightly-diverging copies of the same class strings.
+//
+// changes-20 Phase 5: both are now thin adapters over `@repo/ui` — the
+// heading is `PageHeader` (the reference's 30px title + 16px description),
+// the section is `Card`. What stays here is only what needs the app: the
+// back link (`next/link`) and the full-width page stack (ADR-040).
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { cn } from "@repo/ui/lib/utils";
 import { Button } from "@repo/ui/components/button";
+import { Card, CardContent, CardHeader } from "@repo/ui/components/card";
+import { PageHeader } from "@repo/ui/components/page-header";
+import { SectionTitle } from "@repo/ui/components/typography";
 
 /**
  * The title / description / actions block, on its own so the settings
@@ -20,10 +28,17 @@ export function AdminPageHeading({
   actions,
   backHref,
   backLabel,
-  as: Tag = "h1",
+  as = "h1",
 }: {
   title: string;
+  /**
+   * Required on every live screen (ADR-044 #8, guarded by
+   * `admin-page-conventions.test.ts`); optional in the type only for the
+   * paused and cancelled surfaces (ADR-038/042), which are not brought up
+   * to conventions.
+   */
   description?: string;
+  /** Status chips — rendered beside the description, as the reference does. */
   meta?: React.ReactNode;
   actions?: React.ReactNode;
   backHref?: string;
@@ -32,23 +47,22 @@ export function AdminPageHeading({
   as?: "h1" | "h2";
 }) {
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-2">
       {backHref && backLabel && (
         <div>
-          <Button variant="ghost" size="sm" className="-ms-2" render={<Link href={backHref} />}>
+          <Button variant="ghost" size="sm" className="-ms-3" render={<Link href={backHref} />}>
             <ArrowLeft data-icon="inline-start" aria-hidden className="rtl:rotate-180" />
             {backLabel}
           </Button>
         </div>
       )}
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <div className="flex min-w-0 flex-wrap items-center gap-3">
-          <Tag className="text-2xl font-semibold tracking-tight">{title}</Tag>
-          {meta}
-        </div>
-        {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
-      </div>
-      {description && <p className="text-sm text-muted-foreground">{description}</p>}
+      <PageHeader
+        title={title}
+        description={description}
+        status={meta}
+        actions={actions}
+        titleRender={as === "h2" ? <h2 /> : undefined}
+      />
     </div>
   );
 }
@@ -64,9 +78,9 @@ export function AdminPage({
   children,
 }: {
   title: string;
-  /** Muted one-liner under the title (replaces the per-page -mt-4 hacks). */
+  /** Muted one-liner under the title — see AdminPageHeading. */
   description?: string;
-  /** Inline after the title — status badges and the like. */
+  /** Status chips beside the description. */
   meta?: React.ReactNode;
   /** End-aligned action cluster — "New X" buttons and the like. */
   actions?: React.ReactNode;
@@ -95,21 +109,35 @@ export function AdminPage({
   );
 }
 
+/**
+ * A titled block of a screen: the reference's card (ADR-075) — Card's own
+ * 24px rhythm pads it, so nothing here pads by hand. `className` lands on
+ * the content, which is where every call site's layout (`gap-3`,
+ * `items-center`, `flex-row`) belongs; `cardClassName` sizes the card
+ * itself in a row (`lg:w-72`, `flex-1`).
+ */
 export function AdminSection({
   title,
   className,
+  cardClassName,
   children,
 }: {
   title?: string;
   className?: string;
+  cardClassName?: string;
   children: React.ReactNode;
 }) {
   return (
-    <section
-      className={cn("card-hover flex flex-col gap-4 rounded-lg border bg-card p-5", className)}
-    >
-      {title && <h2 className="text-lg font-semibold capitalize">{title}</h2>}
-      {children}
-    </section>
+    <Card className={cardClassName}>
+      {title && (
+        // SectionTitle is CardTitle's recipe as an <h2>: a screen's
+        // sections are headings in its outline, which CardTitle's <div>
+        // is not.
+        <CardHeader>
+          <SectionTitle>{title}</SectionTitle>
+        </CardHeader>
+      )}
+      <CardContent className={cn("flex flex-col gap-4", className)}>{children}</CardContent>
+    </Card>
   );
 }

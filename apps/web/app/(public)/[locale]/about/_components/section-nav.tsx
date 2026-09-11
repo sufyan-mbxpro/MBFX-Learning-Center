@@ -55,7 +55,7 @@ export function SectionNav({ items, ariaLabel }: { items: SectionNavItem[]; aria
                       // On a strip where one entry is already filled, a
                       // hover that only changes text colour is invisible
                       // next to it.
-                      "group flex items-center gap-2 rounded-full px-3 py-2 text-sm font-medium whitespace-nowrap ring-1 ring-transparent transition-[background-color,color,box-shadow] duration-(--duration-base) ease-(--ease-out-quint) focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
+                      "group flex items-center gap-2 rounded-full px-3 py-2 text-sm font-medium whitespace-nowrap ring-1 ring-transparent transition duration-(--duration-base) ease-(--ease-out-quint) focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
                       isActive
                         ? "bg-background text-foreground shadow-sm ring-border"
                         : "text-muted-foreground hover:bg-background hover:text-foreground hover:shadow-sm hover:ring-primary/25",

@@ -274,7 +274,7 @@ export function QuizEditor({
   const canSave = state.title.trim() !== "" && state.questions.length > 0;
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] lg:items-start">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-(--grid-2-1) lg:items-start">
       <div className="flex min-w-0 flex-col gap-6">
         <EditorSection
           title={t("quizzes.detailsSection")}
@@ -307,7 +307,7 @@ export function QuizEditor({
           description={t("quizzes.settingsDescription")}
         >
           <div className="flex flex-col gap-4">
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="quiz-pass">{t("quizzes.passingScore")}</Label>
                 <Input
@@ -559,7 +559,7 @@ function QuestionCard({
         />
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor={`q-${index}-type`}>{t("quizzes.questionType")}</Label>
           <AdminCombobox

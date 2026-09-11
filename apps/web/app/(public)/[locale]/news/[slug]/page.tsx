@@ -193,7 +193,7 @@ export default async function ArticlePage({ params }: PageProps<"/[locale]/news/
       <ListingHeader title={view.title} crumbs={[{ label: view.title }]} />
 
       <Section spacing="md">
-        <Container className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <Container className="grid grid-cols-1 gap-10 lg:grid-cols-(--grid-main-aside)">
           <div className="flex flex-col gap-6">
             <Reveal variant="scale">
               {video ? (
@@ -301,7 +301,7 @@ export default async function ArticlePage({ params }: PageProps<"/[locale]/news/
                     <li key={tag.slug}>
                       <Link
                         href={`/news/tag/${tag.slug}`}
-                        className="rounded-md border bg-card px-2.5 py-1 text-xs transition-[background-color,transform] duration-(--duration-fast) hover:-translate-y-0.5 hover:bg-primary/10 hover:text-primary-interactive"
+                        className="rounded-md border bg-card px-2.5 py-1 text-xs transition duration-(--duration-fast) hover:-translate-y-0.5 hover:bg-primary/10 hover:text-primary-interactive"
                       >
                         {tag.name}
                       </Link>

@@ -37,7 +37,7 @@ import {
   DialogTitle,
 } from "@repo/ui/components/dialog";
 import { Empty, EmptyTitle } from "@repo/ui/components/empty";
-import { Input } from "@repo/ui/components/input";
+import { SearchInput } from "@repo/ui/components/search-input";
 import { Spinner } from "@repo/ui/components/spinner";
 import { Tabs, TabsList, TabsTrigger } from "@repo/ui/components/tabs";
 import { cn } from "@repo/ui/lib/utils";
@@ -129,16 +129,13 @@ export function MediaPickerDialog({
       {/* Wider than the default dialog, and deliberately: the thumbnails ARE
           the content here, and at `max-w-3xl` with four columns each one was
           about 150px — too small to tell two chart screenshots apart, which
-          is the whole job of the screen. `gap-0 p-0` hands the padding to the
-          two regions below so the header can be a full-bleed band; the
-          popup's own `overflow-y-auto` clips it to the rounded corners. */}
-      <DialogContent className="max-w-5xl gap-0 p-0" closeLabel={t("close")}>
-        {/* The same tinted band `EditorSection` uses, for the same reason it
-            was introduced there: a header that shares its surface with the
-            body reads as more grey rectangle. `primary` is the accent because
-            picking media is the dialog's one purpose — no hex literals, and
-            one accent vocabulary across the admin (code-style.md #1). */}
-        <DialogHeader className="border-b border-b-primary/15 bg-primary/8 px-4 py-3">
+          is the whole job of the screen. Padding and header are the Dialog's
+          own (changes-20, tokens.md §6.14): it used to borrow EditorSection's
+          tinted band, which made it the one modal in the admin that did not
+          look like the others — a dialog header has no band in the
+          reference. */}
+      <DialogContent className="max-w-5xl" closeLabel={t("close")}>
+        <DialogHeader>
           <DialogTitle>{title ?? t("mediaPickerTitle")}</DialogTitle>
           <DialogDescription>{t("dialogDesc.mediaPicker")}</DialogDescription>
         </DialogHeader>
@@ -150,7 +147,7 @@ export function MediaPickerDialog({
             component state. A field whose picker is never opened still
             costs no request. */}
         {open && (
-          <div className="p-4">
+          <div>
             <MediaPickerBody
               onSelect={onSelect}
               onOpenChange={onOpenChange}
@@ -317,7 +314,7 @@ function MediaPickerBody({
         )}
       </div>
 
-      <Input
+      <SearchInput
         ref={searchRef}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
@@ -365,7 +362,7 @@ function MediaPickerBody({
           {/* Taller and one column wider than the dialog used to allow: at
               `max-h-96` the grid showed barely two rows, so paging through a
               category meant scrolling a 24rem window inside a 48rem box. */}
-          <ul className="grid max-h-[60vh] grid-cols-2 gap-3 overflow-y-auto sm:grid-cols-3 lg:grid-cols-5">
+          <ul className="grid max-h-(--height-scroll-panel) grid-cols-2 gap-3 overflow-y-auto sm:grid-cols-3 lg:grid-cols-5">
             {browser.items.map((asset) => (
               <li key={asset.id}>
                 <AssetButton asset={asset} onPick={pick} />

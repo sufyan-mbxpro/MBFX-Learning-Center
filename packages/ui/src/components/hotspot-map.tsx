@@ -63,7 +63,7 @@ function HotspotMap({
   return (
     <div
       data-slot="hotspot-map"
-      className={cn("grid gap-8 lg:grid-cols-[3fr_2fr] lg:items-center", className)}
+      className={cn("grid grid-cols-1 gap-8 lg:grid-cols-(--grid-3-2) lg:items-center", className)}
       {...props}
     >
       <div
@@ -71,7 +71,7 @@ function HotspotMap({
         className="w-full overflow-hidden rounded-2xl bg-muted/60 p-4 ring-1 ring-foreground/5"
       >
         <div className="relative w-full">
-          {mapSlot ?? <div className="aspect-[2/1] w-full" />}
+          {mapSlot ?? <div className="aspect-2/1 w-full" />}
           {points.map((point, index) => (
             <span
               key={point.id}
@@ -100,7 +100,7 @@ function HotspotMap({
               onMouseLeave={() => setActiveId(null)}
               onFocus={() => setActiveId(point.id)}
               onBlur={() => setActiveId(null)}
-              className="group/place flex w-full items-start gap-3 rounded-xl p-3 text-start ring-1 ring-transparent transition-[background-color,box-shadow] duration-(--duration-base) focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none data-active:bg-muted data-active:ring-primary/25"
+              className="group/place flex w-full items-start gap-3 rounded-xl p-3 text-start ring-1 ring-transparent transition duration-(--duration-base) focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none data-active:bg-muted data-active:ring-primary/25"
             >
               <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary-interactive transition-colors duration-(--duration-base) group-data-active/place:bg-primary group-data-active/place:text-primary-foreground">
                 {index + 1}

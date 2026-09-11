@@ -80,14 +80,18 @@ export async function NewsSpotlight({
         <SectionHeading eyebrow={t("spotlightEyebrow")} title={t("spotlightTitle")} />
 
         <Reveal variant="up">
-          <div className="grid gap-6 lg:grid-cols-[1.55fr_1fr]">
+          {/* `grid-cols-1` below lg, not the implicit `auto` track: the lead's
+              line-clamped excerpt reports its UNWRAPPED width as min-content,
+              so an auto track grew past a phone screen (85px of sideways
+              scroll at 390px — changes-20 Phase 6 browser pass). */}
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-(--grid-3-2)">
             {/* The lead. `article` + a heading link, not a card-sized <a>:
                 the same reason ArticleCards gives — one link per destination
                 keeps a keyboard tour of the page from doubling. */}
             <article className="group card-hover hover-lift sheen relative isolate flex flex-col overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/10 hover:ring-primary/25">
               <span
                 aria-hidden
-                className="pointer-events-none absolute top-0 start-0 z-20 h-1 w-0 bg-primary transition-[width] duration-(--duration-slow) ease-(--ease-out-quint) group-hover:w-full"
+                className="pointer-events-none absolute top-0 start-0 z-20 h-1 w-0 bg-primary transition-(--transition-size) duration-(--duration-slow) ease-(--ease-out-quint) group-hover:w-full"
               />
               <Link href={`/news/${lead.slug}`} tabIndex={-1} aria-hidden className="block">
                 <ArticleMedia

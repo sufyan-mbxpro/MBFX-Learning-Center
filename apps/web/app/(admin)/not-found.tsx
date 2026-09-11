@@ -9,7 +9,7 @@ import { Empty, EmptyContent, EmptyMedia, EmptyTitle } from "@repo/ui/components
 export default async function AdminNotFound() {
   const [t, tAdmin] = await Promise.all([getTranslations("notFound"), getTranslations("admin")]);
   return (
-    <div className="flex min-h-[50vh] flex-col items-center justify-center p-8">
+    <div className="flex min-h-(--height-half-screen) flex-col items-center justify-center p-8">
       <Empty className="w-full max-w-md border-none">
         <EmptyMedia>
           <SearchX aria-hidden />

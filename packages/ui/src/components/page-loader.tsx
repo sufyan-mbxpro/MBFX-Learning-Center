@@ -14,7 +14,7 @@ function PageLoader({ label, className }: { label: string; className?: string })
       role="status"
       aria-live="polite"
       className={cn(
-        "flex min-h-[50vh] flex-1 flex-col items-center justify-center gap-5 text-muted-foreground",
+        "flex min-h-(--height-half-screen) flex-1 flex-col items-center justify-center gap-5 text-muted-foreground",
         className,
       )}
     >

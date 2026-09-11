@@ -672,7 +672,7 @@ export function DesignSystem() {
           </Section>
 
           <Section id="inputs">
-            <div className="grid max-w-3xl gap-6 md:grid-cols-2">
+            <div className="grid grid-cols-1 max-w-3xl gap-6 md:grid-cols-2">
               <div className="flex flex-col gap-2">
                 <Label htmlFor="ds-input">{s("fieldLabel")}</Label>
                 <Input id="ds-input" placeholder={s("fieldPlaceholder")} />
@@ -724,7 +724,7 @@ export function DesignSystem() {
               primitives. Ten options cross the searchable threshold; three
               stay a plain Select. Both triggers are full width. */}
           <Section id="dropdowns">
-            <div className="grid max-w-3xl gap-6 md:grid-cols-2">
+            <div className="grid grid-cols-1 max-w-3xl gap-6 md:grid-cols-2">
               <div className="flex flex-col gap-2">
                 <Label htmlFor="ds-pair">{s("pairLabel")}</Label>
                 <AdminCombobox
@@ -1163,8 +1163,11 @@ export function DesignSystem() {
 
           <Section id="layout">
             <Row label={humanizeKey("pageHeader")}>
+              {/* Specimens, so their titles are h2: the page's own header is
+                  its one h1 (`titleRender` swaps the tag, not the recipe). */}
               <div className="w-full">
                 <PageHeader
+                  titleRender={<h2 />}
                   title={s("pageTitle")}
                   description={s("pageDescription")}
                   status={
@@ -1187,13 +1190,14 @@ export function DesignSystem() {
               </div>
               <div className="w-full">
                 <PageHeader
+                  titleRender={<h2 />}
                   title={s("cardTitle")}
                   description={s("cardDescription")}
                   icon={<Megaphone aria-hidden />}
                 />
               </div>
             </Row>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
               <MetricCard
                 label={s("metricLabel")}
                 icon={<Users aria-hidden className="text-muted-foreground" />}
@@ -1222,7 +1226,7 @@ export function DesignSystem() {
                 footer={<Progress size="xs" value={60} />}
               />
             </div>
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <Card>
                 <CardHeader>
                   <CardTitle>{s("cardTitle")}</CardTitle>

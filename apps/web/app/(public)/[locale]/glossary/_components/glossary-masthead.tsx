@@ -79,7 +79,7 @@ export async function GlossaryMasthead({
       {featured && (
         <Section spacing="sm" tone="muted">
           <Container>
-            <div className="grid gap-4 md:grid-cols-2">{featured}</div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">{featured}</div>
           </Container>
         </Section>
       )}

@@ -5,6 +5,7 @@
 // settings shortcut, sign out.
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { signOut as endSession } from "../../../_lib/credentials.ts";
 import { LogOut, Settings, UserRound } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@repo/ui/components/avatar";
 import { Button } from "@repo/ui/components/button";
@@ -79,7 +80,7 @@ export function ProfileMenu({
         <DropdownMenuItem
           variant="destructive"
           onClick={async () => {
-            await fetch("/api/auth/sign-out", { method: "POST" });
+            await endSession();
             router.push("/");
             router.refresh();
           }}

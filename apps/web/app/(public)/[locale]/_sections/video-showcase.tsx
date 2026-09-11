@@ -84,7 +84,7 @@ export async function VideoShowcase({
       <span aria-hidden className="bg-glow-primary pointer-events-none absolute inset-0 -z-10" />
       <span
         aria-hidden
-        className="bg-dot-grid pointer-events-none absolute inset-0 -z-10 opacity-[0.18] [mask-image:linear-gradient(to_bottom,black,transparent_85%)]"
+        className="bg-dot-grid pointer-events-none absolute inset-0 -z-10 opacity-18 [mask-image:linear-gradient(to_bottom,black,transparent_85%)]"
       />
 
       <Container className="flex flex-col gap-(--section-gap)">
@@ -127,7 +127,7 @@ export async function VideoShowcase({
 
         <Reveal variant="up">
           {variant === "grid" ? (
-            <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            <ul className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
               {tiles.map((tile, index) => (
                 <li key={shown[index]?.key}>{tile}</li>
               ))}
@@ -143,7 +143,7 @@ export async function VideoShowcase({
               slideLabels={shown.map((video) =>
                 t(`video${catalogKey(video.key)}Title` as "videoBasicsTitle"),
               )}
-              itemClassName="w-[86%] sm:w-[64%] lg:w-[calc((100%-1.25rem)/2)]"
+              itemClassName="w-43/50 sm:w-16/25 lg:w-(--width-slide-2)"
               tone="inverted"
             >
               {tiles}

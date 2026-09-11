@@ -4,6 +4,7 @@
 // base-nova 32px, or reintroduces a raw-hue ink, is invisible to typecheck.
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "./accordion.tsx";
 import { Avatar, AvatarFallback } from "./avatar.tsx";
 import { Badge } from "./badge.tsx";
 import { Button } from "./button.tsx";
@@ -143,6 +144,17 @@ describe("Select trigger (tokens.md §6.3)", () => {
   ] as const)("size %s", (size, expected) => {
     render(trigger(size));
     expect(tokens(screen.getByRole("combobox"))).toEqual(expect.arrayContaining([...expected]));
+  });
+
+  it("ends a long value in an ellipsis instead of clipping it mid-letter", () => {
+    // Regression (admin visual pass): the value slot was `flex` + `line-clamp-1`.
+    // line-clamp needs a -webkit-box, `flex` replaced it, and the clamp was
+    // inert — "Pending verification" rendered as "Pending verificatior".
+    const { container } = render(trigger());
+    const value = container.querySelector("[data-slot=select-value]");
+    expect(tokens(value)).toEqual(expect.arrayContaining(["block", "min-w-0", "truncate"]));
+    expect(tokens(value)).not.toContain("flex");
+    expect(cls(screen.getByRole("combobox"))).not.toContain("line-clamp");
   });
 
   it("is the Input's box: md radius, --input border, page background", () => {
@@ -384,5 +396,62 @@ describe("Avatar (tokens.md §6.7)", () => {
       </Avatar>,
     );
     expect(container.firstElementChild?.getAttribute("data-shape")).toBe("square");
+  });
+});
+
+describe("Accordion (capture-2 method: shadcn default)", () => {
+  const renderOpen = () =>
+    render(
+      <Accordion defaultValue={["a"]}>
+        <AccordionItem value="a">
+          <AccordionTrigger>Who we are</AccordionTrigger>
+          <AccordionContent>Body copy.</AccordionContent>
+        </AccordionItem>
+        <AccordionItem value="b">
+          <AccordionTrigger>What we do</AccordionTrigger>
+          <AccordionContent>More copy.</AccordionContent>
+        </AccordionItem>
+      </Accordion>,
+    );
+
+  it("rules off EVERY item, the last included", () => {
+    const { container } = renderOpen();
+    const items = container.querySelectorAll("[data-slot=accordion-item]");
+    expect(items).toHaveLength(2);
+    for (const item of items) expect(tokens(item)).toContain("border-b");
+  });
+
+  it("is the reference's trigger: py-4, centred, underline on hover, our 2px offset ring", () => {
+    renderOpen();
+    const trigger = screen.getByRole("button", { name: "Who we are" });
+    expect(tokens(trigger)).toEqual(
+      expect.arrayContaining([
+        "py-4",
+        "items-center",
+        "font-medium",
+        "hover:underline",
+        "focus-visible:ring-2",
+        "focus-visible:ring-ring",
+        "focus-visible:ring-offset-2",
+      ]),
+    );
+    // The base-nova 3px half-strength ring is gone.
+    expect(tokens(trigger)).not.toContain("focus-visible:ring-3");
+    expect(tokens(trigger)).not.toContain("focus-visible:ring-ring/50");
+  });
+
+  it("has ONE chevron that turns when its item is open", () => {
+    renderOpen();
+    const trigger = screen.getByRole("button", { name: "Who we are" });
+    const icons = trigger.querySelectorAll("[data-slot=accordion-trigger-icon]");
+    expect(icons).toHaveLength(1);
+    expect(tokens(icons[0] ?? null)).toContain("group-aria-expanded/accordion-trigger:rotate-180");
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("pads the open content pb-4", () => {
+    renderOpen();
+    const inner = screen.getByText("Body copy.");
+    expect(tokens(inner)).toContain("pb-4");
   });
 });

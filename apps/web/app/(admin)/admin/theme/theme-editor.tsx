@@ -304,7 +304,7 @@ export function ThemeEditor({
           </TabsContent>
         )}
 
-        <TabsContent value="modes" className="grid gap-6 pt-4 md:grid-cols-2">
+        <TabsContent value="modes" className="grid grid-cols-1 gap-6 pt-4 md:grid-cols-2">
           <section className="card-hover flex flex-col gap-3 rounded-lg border p-4">
             <h3 className="text-sm font-semibold">{labels.lightSurface}</h3>
             {surfaceEditor(light, setLight, "light")}

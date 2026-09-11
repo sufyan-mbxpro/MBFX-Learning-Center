@@ -66,13 +66,18 @@ export function AdminSidebar({
     // scrolls independently.
     <aside
       data-collapsed={collapsed ? "" : undefined}
+      // tokens.md §3.1: a 64px logo band, a px-3 scroll area and a p-4
+      // footer, each band ruled off — the reference's sidebar.
       className={cn(
-        "sticky top-0 hidden h-dvh shrink-0 flex-col border-e bg-card py-4 transition-[width] duration-200 ease-out md:flex",
-        collapsed ? "w-16 px-2" : "w-[var(--width-sidebar)] px-4",
+        "sticky top-0 hidden h-dvh shrink-0 flex-col border-e bg-background transition-(--transition-size) duration-200 ease-in-out md:flex",
+        collapsed ? "w-16" : "w-(--width-sidebar)",
       )}
     >
       <div
-        className={cn("mb-4 flex h-10 items-center gap-2", collapsed ? "justify-center" : "ps-2.5")}
+        className={cn(
+          "flex min-h-16 items-center gap-2 border-b",
+          collapsed ? "justify-center px-2" : "px-4",
+        )}
       >
         {!collapsed && (
           <div className="flex min-w-0 flex-1 items-center">
@@ -87,7 +92,7 @@ export function AdminSidebar({
         )}
         <Button
           variant="ghost"
-          size="icon"
+          size="icon-xs"
           onClick={toggle}
           aria-label={collapsed ? labels.expand : labels.collapse}
           aria-expanded={!collapsed}
@@ -103,11 +108,13 @@ export function AdminSidebar({
         </Button>
       </div>
 
-      <AdminSidebarNav groups={groups} collapsed={collapsed} visitSite={visitSite} />
+      <div className={cn("flex min-h-0 flex-1 flex-col py-2", collapsed ? "px-2" : "px-3")}>
+        <AdminSidebarNav groups={groups} collapsed={collapsed} visitSite={visitSite} />
+      </div>
 
-      <div className="mt-4 flex flex-col gap-2 border-t pt-4">
+      <div className={cn("flex flex-col gap-2 border-t", collapsed ? "p-2" : "p-4")}>
         {!collapsed && (
-          <div className="px-2.5">
+          <div>
             <p className="truncate text-sm font-medium">{userName}</p>
             <p className="truncate text-xs text-muted-foreground">{email}</p>
           </div>

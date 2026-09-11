@@ -99,7 +99,7 @@ export function AccentCard({
       <span
         aria-hidden
         className={cn(
-          "pointer-events-none absolute top-0 start-0 h-1 w-0 transition-[width] duration-300 ease-out group-hover:w-full",
+          "pointer-events-none absolute top-0 start-0 h-1 w-0 transition-(--transition-size) duration-300 ease-out group-hover:w-full",
           accent.bar,
         )}
       />

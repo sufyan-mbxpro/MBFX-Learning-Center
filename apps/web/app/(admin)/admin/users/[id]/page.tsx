@@ -80,9 +80,9 @@ export default async function UserDetailPage({ params }: PageProps<"/admin/users
         ) : undefined
       }
     >
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <AdminSection title={t("personalInformation")}>
-          <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2 text-sm">
+          <dl className="grid grid-cols-(--grid-label-value) gap-x-6 gap-y-2 text-sm">
             <dt className="text-muted-foreground">{t("nameCol")}</dt>
             <dd>{user.name}</dd>
             <dt className="text-muted-foreground">{t("emailCol")}</dt>

@@ -32,7 +32,7 @@ function Progress({
       >
         <ProgressPrimitive.Indicator
           data-slot="progress-indicator"
-          className="block h-full rounded-full bg-primary transition-[width] duration-300 ease-out data-[status=indeterminate]:w-1/3 data-[status=indeterminate]:animate-pulse"
+          className="block h-full rounded-full bg-primary transition-(--transition-size) duration-300 ease-out data-[status=indeterminate]:w-1/3 data-[status=indeterminate]:animate-pulse"
         />
       </ProgressPrimitive.Track>
     </ProgressPrimitive.Root>

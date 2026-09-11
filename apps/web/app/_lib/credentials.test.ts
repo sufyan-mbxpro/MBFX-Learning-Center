@@ -7,6 +7,8 @@ import {
   isAdminPath,
   resolveRedirect,
   signInWithPassword,
+  signOut,
+  signOutSilently,
   signUpWithPassword,
 } from "./credentials.ts";
 
@@ -169,4 +171,47 @@ describe("isAdminPath", () => {
       expect(isAdminPath(path)).toBe(false);
     },
   );
+});
+
+describe("signOut — the one sign-out request", () => {
+  // Regression (changes-20 admin visual pass): every call site POSTed with no
+  // body, Better Auth answered 415 and the session stayed valid, so Sign out,
+  // the profile menu and the ADR-041 idle timeout all left a live session.
+  it("sends a JSON body, which is what Better Auth actually honours", async () => {
+    const fetchMock = mockFetch(jsonResponse(true, { success: true }));
+    await expect(signOut()).resolves.toBe(true);
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("/api/auth/sign-out");
+    expect(init.method).toBe("POST");
+    expect(new Headers(init.headers).get("content-type")).toBe("application/json");
+    expect(init.body).toBe("{}");
+  });
+
+  it("reports a refused sign-out instead of pretending it landed", async () => {
+    mockFetch(jsonResponse(false, {}));
+    await expect(signOut()).resolves.toBe(false);
+  });
+
+  it("signOutSilently goes through the same request and swallows a network failure", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Promise.reject(new Error("offline"))),
+    );
+    await expect(signOutSilently()).resolves.toBeUndefined();
+  });
+
+  it("no other file hand-writes the sign-out request", async () => {
+    const { readFileSync, readdirSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const walk = (dir: string): string[] =>
+      readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+        const p = resolve(dir, e.name);
+        if (e.isDirectory()) return e.name === "node_modules" ? [] : walk(p);
+        return /\.(tsx?)$/.test(e.name) && !/\.test\./.test(e.name) ? [p] : [];
+      });
+    const offenders = walk(resolve(process.cwd(), "app"))
+      .filter((p) => !p.endsWith("credentials.ts"))
+      .filter((p) => readFileSync(p, "utf8").includes('"/api/auth/sign-out"'));
+    expect(offenders).toEqual([]);
+  });
 });

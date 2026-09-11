@@ -31,7 +31,7 @@ export default function AboutLoading() {
             <Skeleton className="h-5 w-20" />
             <Skeleton className="h-9 w-full max-w-md" />
           </div>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 6 }, (_, index) => (
               <Skeleton key={index} className="h-44 w-full rounded-xl" />
             ))}

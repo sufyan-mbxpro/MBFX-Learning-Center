@@ -32,7 +32,7 @@ export default function GlossaryTopicsLoading() {
 
       <Section spacing="md">
         <Container>
-          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 6 }, (_, index) => (
               <li key={index}>
                 <Skeleton className="h-36 w-full rounded-xl" />

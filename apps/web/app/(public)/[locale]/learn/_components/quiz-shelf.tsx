@@ -153,7 +153,7 @@ export function QuizShelf({ quizzes, basePath }: { quizzes: QuizCardView[]; base
             </Button>
           </Empty>
         ) : (
-          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {visible.map((quiz, index) => {
               const result = byQuizId.get(quiz.id);
               return (
@@ -262,7 +262,7 @@ function Chip({
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-sm font-medium ring-1 transition-[background-color,color,box-shadow,transform] duration-(--duration-base) ease-(--ease-out-quint) focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
+        "inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-sm font-medium ring-1 transition duration-(--duration-base) ease-(--ease-out-quint) focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
         active
           ? // A tone the chip shares with its cards' badges, so pressing one is
             // visibly what produced the other. "All topics" has no tone and

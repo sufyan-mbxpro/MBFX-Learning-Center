@@ -20,7 +20,7 @@ export default function LessonLoading() {
   return (
     <div aria-hidden>
       <Section spacing="md">
-        <Container className="grid gap-8 pb-24 md:grid-cols-[minmax(0,16rem)_minmax(0,1fr)] md:items-start md:pb-0">
+        <Container className="grid grid-cols-1 gap-8 pb-24 md:grid-cols-(--grid-rail-main) md:items-start md:pb-0">
           {/* The contents rail — hidden below md, exactly as the real one is. */}
           <aside className="hidden md:flex md:flex-col md:gap-3">
             <Skeleton className="shimmer h-4 w-24" />

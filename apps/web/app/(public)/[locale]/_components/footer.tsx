@@ -93,7 +93,7 @@ const LINK_GRID_CLASS: Record<number, string> = {
 function ColumnHeading({ id, children }: { id: string; children: React.ReactNode }) {
   return (
     <h2 id={id} className="text-secondary-foreground">
-      <span className="text-xs font-semibold tracking-[0.14em] uppercase">{children}</span>
+      <span className="text-xs font-semibold tracking-caps uppercase">{children}</span>
       {/* Short rule under the heading. currentcolor, so it inherits the
           band's own legible ink instead of asking a brand token to work on
           a surface it was never derived against. */}
@@ -159,7 +159,7 @@ export async function SiteFooter({ locale }: { locale: string }) {
           visual. */}
       <div
         aria-hidden
-        className="bg-dot-grid pointer-events-none absolute inset-0 opacity-[0.15] [mask-image:linear-gradient(to_bottom,black,transparent_70%)]"
+        className="bg-dot-grid pointer-events-none absolute inset-0 opacity-15 [mask-image:linear-gradient(to_bottom,black,transparent_70%)]"
       />
       {/* Ambient brand wash — the one large-area use of --primary this band
           allows (the same utility the header uses). Sits UNDER the dot grid
@@ -183,7 +183,7 @@ export async function SiteFooter({ locale }: { locale: string }) {
               eight. Keeping the links beside the brand rather than in a band
               of their own is what stops three columns from floating in
               1400px of empty secondary. */}
-          <div className="grid gap-x-8 gap-y-12 pt-14 pb-10 lg:grid-cols-12 lg:gap-x-12">
+          <div className="grid grid-cols-1 gap-x-8 gap-y-12 pt-14 pb-10 lg:grid-cols-12 lg:gap-x-12">
             <Reveal variant="up" className="lg:col-span-4">
               <div className="flex flex-col items-start gap-5">
                 {/* Uploaded logo (ADR-017) via the shared BrandLogo, with
@@ -196,7 +196,7 @@ export async function SiteFooter({ locale }: { locale: string }) {
                     the shared component. */}
                 <Link
                   href="/"
-                  className="flex w-fit items-center truncate transition-transform duration-(--duration-base) ease-(--ease-out-quint) hover:scale-[1.03]"
+                  className="flex w-fit items-center truncate transition-transform duration-(--duration-base) ease-(--ease-out-quint) hover:scale-103"
                 >
                   <BrandLogo
                     light={brandAssets.logo_dark?.url ?? null}
@@ -215,7 +215,7 @@ export async function SiteFooter({ locale }: { locale: string }) {
 
                 {footerSocials.length > 0 && (
                   <div className="flex flex-col gap-3">
-                    <p className="text-xs font-semibold tracking-[0.14em] text-secondary-foreground/70 uppercase">
+                    <p className="text-xs font-semibold tracking-caps text-secondary-foreground/70 uppercase">
                       {t("followUs")}
                     </p>
                     <ul className="flex flex-wrap items-center gap-2.5">
@@ -228,7 +228,7 @@ export async function SiteFooter({ locale }: { locale: string }) {
                             // its own paired --primary-foreground ink, which
                             // IS contrast-guaranteed (readableOn in
                             // @repo/theme). Rule 5 permits exactly this.
-                            className="flex size-10 items-center justify-center rounded-full bg-secondary-foreground/10 text-secondary-foreground ring-1 ring-secondary-foreground/15 transition-[background-color,color,transform,box-shadow] duration-(--duration-base) ease-(--ease-out-quint) ring-inset hover:-translate-y-0.5 hover:scale-105 hover:bg-primary hover:text-primary-foreground hover:shadow-lg focus-visible:-translate-y-0.5 focus-visible:bg-primary focus-visible:text-primary-foreground"
+                            className="flex size-10 items-center justify-center rounded-full bg-secondary-foreground/10 text-secondary-foreground ring-1 ring-secondary-foreground/15 transition duration-(--duration-base) ease-(--ease-out-quint) ring-inset hover:-translate-y-0.5 hover:scale-105 hover:bg-primary hover:text-primary-foreground hover:shadow-lg focus-visible:-translate-y-0.5 focus-visible:bg-primary focus-visible:text-primary-foreground"
                             {...(link.openInNewTab
                               ? { target: "_blank", rel: "noopener noreferrer" }
                               : {})}
@@ -279,7 +279,7 @@ export async function SiteFooter({ locale }: { locale: string }) {
                                     [dir] rule of its own. */}
                                 <span
                                   aria-hidden
-                                  className="h-px w-0 shrink-0 bg-current opacity-70 transition-[width,margin] duration-(--duration-base) ease-(--ease-out-quint) group-hover/link:me-2 group-hover/link:w-3 group-focus-visible/link:me-2 group-focus-visible/link:w-3"
+                                  className="h-px w-0 shrink-0 bg-current opacity-70 transition-(--transition-size) duration-(--duration-base) ease-(--ease-out-quint) group-hover/link:me-2 group-hover/link:w-3 group-focus-visible/link:me-2 group-focus-visible/link:w-3"
                                 />
                                 <span className="truncate">{item.label}</span>
                               </NavLink>
@@ -342,7 +342,7 @@ export async function SiteFooter({ locale }: { locale: string }) {
                   room to travel, and the form is not competing with the
                   sitemap for the same eye. */}
               <div className="sheen rounded-2xl bg-secondary-foreground/[0.06] p-6 ring-1 ring-secondary-foreground/12 ring-inset sm:p-7">
-                <div className="relative z-[2] flex flex-col gap-5 md:flex-row md:items-center md:justify-between md:gap-10">
+                <div className="relative z-2 flex flex-col gap-5 md:flex-row md:items-center md:justify-between md:gap-10">
                   <div className="flex flex-col gap-1.5 md:max-w-lg">
                     <p className="text-base font-semibold text-secondary-foreground">
                       {t("newsletterHeading")}
@@ -373,7 +373,7 @@ export async function SiteFooter({ locale }: { locale: string }) {
               // here a regulator expects to find, and an unlabelled run of
               // 11px prose reads as boilerplate nobody meant to be read.
               <div className="rounded-xl border-s-2 border-secondary-foreground/25 bg-secondary-foreground/[0.04] px-4 py-3.5">
-                <p className="text-xs font-semibold tracking-[0.12em] text-secondary-foreground/70 uppercase">
+                <p className="text-xs font-semibold tracking-caps text-secondary-foreground/70 uppercase">
                   {t("riskDisclaimerLabel")}
                 </p>
                 <p className="mt-1.5 text-xs leading-relaxed text-secondary-foreground/75">

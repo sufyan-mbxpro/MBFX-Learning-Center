@@ -30,7 +30,7 @@ export async function GlossarySpotlight({ locale, variant = "chips", limit }: Se
         />
         <Reveal variant="up">
           {variant === "grid" ? (
-            <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {shown.map((entry) => (
                 <li key={entry.termId}>
                   {/* Card is a plain element (no `render` polymorphism —

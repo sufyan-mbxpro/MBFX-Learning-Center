@@ -44,11 +44,16 @@ function SelectGroup({ className, ...props }: SelectPrimitive.Group.Props) {
   );
 }
 
+// A truncating BLOCK, not a flex row. It used to be `flex` plus
+// `line-clamp-1`, but line-clamp only works on a -webkit-box and `flex`
+// replaced that display, so the clamp was inert: a long value was clipped
+// mid-letter with no ellipsis, on every dropdown (admin visual pass, the
+// user-status control). An icon beside the value sits inline instead.
 function SelectValue({ className, ...props }: SelectPrimitive.Value.Props) {
   return (
     <SelectPrimitive.Value
       data-slot="select-value"
-      className={cn("flex flex-1 text-start", className)}
+      className={cn("block min-w-0 flex-1 truncate text-start", className)}
       {...props}
     />
   );
@@ -66,11 +71,7 @@ function SelectTrigger({
     <SelectPrimitive.Trigger
       data-slot="select-trigger"
       data-size={size}
-      className={cn(
-        selectTriggerVariants({ size }),
-        "w-fit *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-1.5",
-        className,
-      )}
+      className={cn(selectTriggerVariants({ size }), "w-fit", className)}
       {...props}
     >
       {children}

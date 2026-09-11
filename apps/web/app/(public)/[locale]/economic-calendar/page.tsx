@@ -181,7 +181,7 @@ export default async function EconomicCalendarPage({
                 title={t("frameTitle")}
                 loading="lazy"
                 referrerPolicy="strict-origin-when-cross-origin"
-                className="h-[45rem] w-full [color-scheme:light] sm:h-[52rem] lg:h-[58rem]"
+                className="h-180 w-full [color-scheme:light] sm:h-208 lg:h-232"
               />
             </div>
           </Reveal>
@@ -220,7 +220,7 @@ export default async function EconomicCalendarPage({
               lead={t("legendIntro")}
             />
           </Reveal>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {impacts.map((impact, index) => (
               <Reveal key={impact.key} variant="up" delay={index * 60}>
                 <AccentCard icon={impact.icon} tone={impact.tone} title={impact.label}>
@@ -241,7 +241,7 @@ export default async function EconomicCalendarPage({
               lead={t("columnsLead")}
             />
           </Reveal>
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             {columns.map((column, index) => (
               <Reveal key={column.key} variant="up" delay={index * 60}>
                 <AccentCard icon={column.icon} tone={column.tone} title={column.label}>
@@ -278,7 +278,7 @@ export default async function EconomicCalendarPage({
           <Reveal variant="up">
             <SectionHeading eyebrow={t("notesEyebrow")} title={t("notesTitle")} />
           </Reveal>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Reveal variant="up">
               <AccentCard icon={CalendarClock} tone="info" title={t("timezoneTitle")}>
                 {t("timezoneBody")}

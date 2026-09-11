@@ -19,7 +19,7 @@ import {
 import { Label } from "@repo/ui/components/label";
 import { createArticleAction } from "../_actions/article-actions.ts";
 import { AdminCombobox } from "../_components/combobox.tsx";
-import { FilterBar } from "../_components/filter-bar.tsx";
+import { FilterBarRow } from "@repo/ui/components/filter-bar";
 import { useServerAction } from "../_hooks/use-server-action.ts";
 import { useUrlFilters } from "../_hooks/use-url-filters.ts";
 
@@ -44,7 +44,7 @@ export function ArticlesToolbar({
   const setParams = useUrlFilters();
 
   return (
-    <FilterBar>
+    <FilterBarRow>
       <AdminCombobox
         aria-label={labels.kind}
         className="w-40"
@@ -78,7 +78,7 @@ export function ArticlesToolbar({
           ...categories.map((category) => ({ value: category.id, label: category.name })),
         ]}
       />
-    </FilterBar>
+    </FilterBarRow>
   );
 }
 

@@ -189,7 +189,7 @@ export function TopicEditor({
         </div>
       </div>
 
-      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
+      <div className="grid grid-cols-1 min-w-0 gap-4 lg:grid-cols-(--grid-main-aside)">
         <div className="flex min-w-0 flex-col gap-4">
           <EditorSection
             title={labels.detailsSection}

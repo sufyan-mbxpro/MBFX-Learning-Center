@@ -7,7 +7,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { Bell } from "lucide-react";
-import { Badge } from "@repo/ui/components/badge";
+import { CountBadge } from "@repo/ui/components/count-badge";
 import { Button } from "@repo/ui/components/button";
 import {
   DropdownMenu,
@@ -65,14 +65,8 @@ export function NotificationBell({
         render={
           <Button variant="ghost" size="icon" aria-label={labels.openMenu} className="relative">
             <Bell className="size-4.5" />
-            {unreadCount > 0 && (
-              <Badge
-                variant="destructive"
-                className="absolute -top-0.5 -end-0.5 h-4 min-w-4 px-1 text-[0.625rem]"
-              >
-                {unreadCount > 99 ? "99+" : unreadCount}
-              </Badge>
-            )}
+            {/* Hides itself at zero; the reference caps the bell at 999+. */}
+            <CountBadge count={unreadCount} max={999} placement="corner" />
           </Button>
         }
       />

@@ -38,6 +38,9 @@ import {
 import { Empty, EmptyTitle } from "@repo/ui/components/empty";
 import { Spinner } from "@repo/ui/components/spinner";
 import { Input } from "@repo/ui/components/input";
+import { SearchInput } from "@repo/ui/components/search-input";
+import { ControlSizeProvider } from "@repo/ui/components/control-size";
+import { FilterBarRow } from "@repo/ui/components/filter-bar";
 import { Label } from "@repo/ui/components/label";
 import { Tabs, TabsList, TabsTrigger } from "@repo/ui/components/tabs";
 import { ALL_MEDIA_CATEGORIES, MEDIA_CATEGORIES, folderForCategory } from "@repo/contracts";
@@ -398,42 +401,50 @@ export function MediaLibrary({
             ))}
           </TabsList>
         </Tabs>
-        <div className="flex items-center gap-2">
-          <AdminCombobox
-            className="w-44"
-            value={category}
-            onValueChange={(value) => setCategory(value as CategoryFilter)}
-            options={categoryOptions}
-            aria-label={labels.categoryLabel}
-          />
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={labels.searchPlaceholder}
-            className="w-56"
-          />
-          {canUpload && (
-            <>
-              <input
-                ref={uploadInputRef}
-                type="file"
-                className="hidden"
-                multiple
-                onChange={(e) => {
-                  onUploadFilesChosen(e.target.files);
-                  e.target.value = "";
-                }}
-              />
-              <Button
-                size="sm"
-                disabled={upload.active}
-                onClick={() => uploadInputRef.current?.click()}
-              >
-                {labels.upload}
-              </Button>
-            </>
-          )}
-        </div>
+        {/* A toolbar, so it is built like one: FilterBarRow wraps instead of
+            pushing the page 116px wide on a phone, and the size context makes
+            the category filter the same 36px as the search and button beside
+            it (admin phone-width pass: it was 40px and would not wrap). */}
+        <ControlSizeProvider size="sm">
+          <FilterBarRow>
+            <AdminCombobox
+              className="w-44"
+              value={category}
+              onValueChange={(value) => setCategory(value as CategoryFilter)}
+              options={categoryOptions}
+              aria-label={labels.categoryLabel}
+            />
+            <SearchInput
+              size="sm"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={labels.searchPlaceholder}
+              aria-label={labels.searchPlaceholder}
+              wrapperClassName="w-56"
+            />
+            {canUpload && (
+              <>
+                <input
+                  ref={uploadInputRef}
+                  type="file"
+                  className="hidden"
+                  multiple
+                  onChange={(e) => {
+                    onUploadFilesChosen(e.target.files);
+                    e.target.value = "";
+                  }}
+                />
+                <Button
+                  size="sm"
+                  disabled={upload.active}
+                  onClick={() => uploadInputRef.current?.click()}
+                >
+                  {labels.upload}
+                </Button>
+              </>
+            )}
+          </FilterBarRow>
+        </ControlSizeProvider>
       </div>
 
       {/* One row per queued file: a batch that half-failed has to say WHICH

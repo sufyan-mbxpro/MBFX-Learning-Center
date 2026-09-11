@@ -78,7 +78,7 @@ export default async function TransparencyPage({
       </SplitCallout>
 
       <Section spacing="lg" tone="muted">
-        <Container className="grid gap-10 lg:grid-cols-[minmax(0,24rem)_1fr] lg:gap-16">
+        <Container className="grid grid-cols-1 gap-10 lg:grid-cols-(--grid-intro-main) lg:gap-16">
           <Reveal variant="up">
             <SectionHeading
               title={t("transparency.delivery.title")}
@@ -104,7 +104,7 @@ export default async function TransparencyPage({
       </SplitCallout>
 
       <Section spacing="lg" tone="muted">
-        <Container className="grid gap-10 lg:grid-cols-[minmax(0,24rem)_1fr] lg:gap-16">
+        <Container className="grid grid-cols-1 gap-10 lg:grid-cols-(--grid-intro-main) lg:gap-16">
           <Reveal variant="up">
             <SectionHeading
               title={t("transparency.notDoing.title")}
@@ -120,7 +120,7 @@ export default async function TransparencyPage({
       {/* The worked example, as the page's one piece of arithmetic — the
           same "show the numbers" claim the copy makes, made visible. */}
       <Section spacing="lg">
-        <Container className="grid items-center gap-10 lg:grid-cols-2">
+        <Container className="grid grid-cols-1 items-center gap-10 lg:grid-cols-2">
           <Reveal variant="up" className="flex flex-col gap-4">
             <h2 className="text-display-sm font-semibold text-balance">
               {t("transparency.example.title")}

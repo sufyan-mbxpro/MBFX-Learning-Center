@@ -34,7 +34,7 @@ import {
   duplicateGlossaryTermAction,
 } from "../_actions/content-actions.ts";
 import { AdminCombobox } from "../_components/combobox.tsx";
-import { FilterBar } from "../_components/filter-bar.tsx";
+import { FilterBarRow } from "@repo/ui/components/filter-bar";
 import {
   CONTENT_STATUS_TONE,
   StatusBadge,
@@ -387,7 +387,7 @@ export function GlossaryTable({
         // ADR-044 #9: filters live in the table's toolbar, not a bar above it.
         // ADR-057 §3: each declares its own width, because full width is the
         // form-field default and would take the whole row.
-        <FilterBar>
+        <FilterBarRow>
           <AdminCombobox
             aria-label={labels.statusLabel}
             className="w-40"
@@ -412,7 +412,7 @@ export function GlossaryTable({
             onValueChange={setTrack}
             options={[{ value: "", label: labels.allTracks }, ...trackOptions]}
           />
-        </FilterBar>
+        </FilterBarRow>
       }
     />
   );

@@ -41,6 +41,7 @@ import {
 import { cn } from "@repo/ui/lib/utils";
 import { Button } from "@repo/ui/components/button";
 import { SearchInput } from "@repo/ui/components/search-input";
+import { ControlSizeProvider } from "@repo/ui/components/control-size";
 import { Skeleton } from "@repo/ui/components/skeleton";
 import {
   DropdownMenu,
@@ -224,7 +225,9 @@ export function DataTable<TData, TValue>({
           wrapperClassName="sm:max-w-80 sm:flex-1"
           data-slot="data-table-search"
         />
-        {filters}
+        {/* The toolbar is 36px throughout (tokens.md §3.2): filters default
+            to `sm` to match the search beside them. */}
+        <ControlSizeProvider size="sm">{filters}</ControlSizeProvider>
         <div className="ms-auto flex flex-wrap items-center gap-2">
           {selectedRows.length > 0 && (
             <span className="text-sm text-muted-foreground" data-slot="data-table-selected-count">

@@ -64,7 +64,7 @@ function Carousel({
    * props cross the server/client boundary — a function is not serializable.
    */
   slideLabels,
-  itemClassName = "w-[82%] sm:w-[58%] lg:w-[calc((100%-2.5rem)/3)]",
+  itemClassName = "w-41/50 sm:w-29/50 lg:w-(--width-slide-3)",
   tone = "default",
   className,
   children,

@@ -48,7 +48,7 @@ function NavRow({
   // On touch there is no hover, so :active carries it — a row that gives no
   // feedback until the page changes reads as a dead tap.
   const className =
-    "group/row flex items-start gap-3 rounded-xl p-2.5 ring-1 ring-transparent transition-[background-color,box-shadow] duration-(--duration-base) hover:bg-muted hover:ring-primary/25 focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none active:bg-muted";
+    "group/row flex items-start gap-3 rounded-xl p-2.5 ring-1 ring-transparent transition duration-(--duration-base) hover:bg-muted hover:ring-primary/25 focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none active:bg-muted";
   const content = (
     <>
       {Icon && (
@@ -107,12 +107,16 @@ export function MobileNav({ items, menuLabel }: { items: MobileNavItem[]; menuLa
             </Button>
           }
         />
-        <SheetContent side="start" className="w-[min(22rem,90vw)] overflow-y-auto">
-          <SheetHeader>
+        {/* The Sheet owns its width (`w-3/4 sm:max-w-sm`) and its 24px
+            padding, so neither is restated here. The title names the dialog
+            for assistive tech only: on screen it would repeat the trigger's
+            "Open menu" as a heading over the menu it opened. */}
+        <SheetContent side="start" className="overflow-y-auto">
+          <SheetHeader className="sr-only">
             <SheetTitle>{menuLabel}</SheetTitle>
           </SheetHeader>
 
-          <nav className="flex flex-col gap-1 p-4" aria-label={menuLabel}>
+          <nav className="flex flex-col gap-1" aria-label={menuLabel}>
             {items.map((item) => {
               if (item.children.length === 0) {
                 return <NavRow key={item.id} item={item} onNavigate={close} />;
@@ -123,8 +127,13 @@ export function MobileNav({ items, menuLabel }: { items: MobileNavItem[]; menuLa
 
               return (
                 <Accordion key={item.id}>
-                  <AccordionItem value={item.id}>
-                    <AccordionTrigger className="text-sm font-semibold">
+                  {/* border-b-0: the menu is one list of rows, not a divided
+                      FAQ — a rule under the sections and none under the plain
+                      links beside them would read as two different lists. */}
+                  <AccordionItem value={item.id} className="border-b-0">
+                    {/* px-2.5 = NavRow's own inset, so a section heading and
+                        a plain link start on the same line. */}
+                    <AccordionTrigger className="px-2.5 text-sm font-semibold">
                       {item.label}
                     </AccordionTrigger>
                     {/* AccordionContent underlines every descendant link
@@ -136,7 +145,7 @@ export function MobileNav({ items, menuLabel }: { items: MobileNavItem[]; menuLa
                         {resolved
                           ? resolved.columns.map((column) => (
                               <div key={column.key} className="flex flex-col gap-1">
-                                <p className="px-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                                <p className="px-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                                   {t(column.titleKey)}
                                 </p>
                                 {column.items.map(({ item: child, icon }) => (

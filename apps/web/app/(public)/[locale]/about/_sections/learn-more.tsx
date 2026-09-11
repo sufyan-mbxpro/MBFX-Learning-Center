@@ -45,7 +45,7 @@ export async function LearnMore({ locale }: { locale: string }) {
             className="mx-auto"
           />
         </Reveal>
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           {CARDS.map((card, index) => (
             <Reveal key={card.key} variant="up" delay={index * 60}>
               <IconCard

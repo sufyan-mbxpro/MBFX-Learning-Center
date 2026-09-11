@@ -69,13 +69,36 @@ export async function signUpWithPassword(input: {
 }
 
 /**
+ * Ends the current session. THE one sign-out request: every button, menu
+ * item and timer calls this rather than writing its own `fetch`.
+ *
+ * The JSON content type and `{}` body are the fix, not ceremony. Better Auth
+ * answers a bodyless POST to /sign-out with **415 Unsupported Media Type and
+ * leaves the session valid** — which is what all four call sites sent, so the
+ * sidebar button, the profile menu, the ADR-041 idle timeout and the
+ * wrong-surface turn-away below all navigated away from a session that was
+ * still alive (found in the changes-20 admin visual pass, reproduced against
+ * the running handler: 415 → `get-session` still returned the session).
+ *
+ * Resolves `true` when the server confirmed it.
+ */
+export async function signOut(): Promise<boolean> {
+  const response = await fetch("/api/auth/sign-out", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{}",
+  });
+  return response.ok;
+}
+
+/**
  * Ends the session the credential POST just created — how each screen turns
  * away the other surface's account type. Failure is swallowed on purpose:
  * this is UX, and the caller's error message is still correct if it doesn't
  * land. Nothing about authorization depends on it (ADR-052 §3).
  */
 export async function signOutSilently(): Promise<void> {
-  await fetch("/api/auth/sign-out", { method: "POST" }).catch(() => {});
+  await signOut().catch(() => false);
 }
 
 /**

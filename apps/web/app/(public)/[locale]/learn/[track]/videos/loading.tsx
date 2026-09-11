@@ -54,7 +54,7 @@ export default function VideoIndexLoading() {
               <Skeleton key={index} className="shimmer h-8 w-32 rounded-full" />
             ))}
           </div>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 6 }, (_, index) => (
               <VideoCardSkeleton key={index} />
             ))}

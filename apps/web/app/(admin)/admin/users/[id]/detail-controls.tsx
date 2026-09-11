@@ -49,7 +49,7 @@ export function StatusControl({
       <AdminCombobox
         aria-label={labels.status}
         disabled={pending}
-        className="w-44"
+        className="min-w-0 flex-1"
         value={status}
         onValueChange={(value) => {
           if (value && value !== status) setTarget(value);
@@ -168,7 +168,7 @@ export function RoleControls({
       <div className="flex items-center gap-2">
         <AdminCombobox
           aria-label={labels.assignRole}
-          className="w-48"
+          className="min-w-0 flex-1 sm:max-w-sm"
           placeholder="—"
           value={selected}
           onValueChange={setSelected}
@@ -259,7 +259,7 @@ export function OverrideControls({
       <div className="flex flex-wrap items-center gap-2">
         <AdminCombobox
           aria-label={labels.permission}
-          className="w-56"
+          className="min-w-0 flex-1 sm:max-w-sm"
           placeholder="—"
           value={permission}
           onValueChange={setPermission}

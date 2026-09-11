@@ -141,7 +141,7 @@ export function ResourcesPanel({
       {/* The D15 rule, surfaced BEFORE the save rejects it. `lessonInputSchema`
           and `saveLesson` both enforce this — the notice is UX, not the gate. */}
       {kinds.length === 0 && (
-        <p className="rounded-md border border-warning/30 bg-warning/8 p-2 text-xs text-warning-interactive">
+        <p className="rounded-md border border-warning/30 bg-warning/10 p-2 text-xs text-warning-interactive">
           {labels.capabilityWarning}
         </p>
       )}

@@ -174,11 +174,14 @@ export function CourseCard({
             aria-hidden
             className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/45 to-transparent"
           />
-          <span className="absolute top-2.5 start-2.5">
-            <Badge
-              variant={difficultyTone}
-              className="uppercase shadow-sm backdrop-blur-sm transition-transform duration-(--duration-base) ease-(--ease-out-quint) group-hover/card:scale-105"
-            >
+          {/* The chip's OWN ground is opaque `bg-background` (changes-20
+              Phase 5). A tonal badge is a /10 tint, i.e. mostly transparent,
+              so over artwork its ink was measured at 3.9–4.1:1 in dark mode —
+              the contrast depended on the picture. On the page background the
+              tint composites onto exactly the surface ADR-073 derives the ink
+              against, so every tone clears 4.5:1 whatever the cover is. */}
+          <span className="absolute top-2.5 start-2.5 rounded-full bg-background shadow-sm transition-transform duration-(--duration-base) ease-(--ease-out-quint) group-hover/card:scale-105">
+            <Badge variant={difficultyTone} className="uppercase">
               {difficultyLabel}
             </Badge>
           </span>
@@ -192,7 +195,7 @@ export function CourseCard({
                   course name and nothing else. */}
               <a
                 href={href}
-                className="transition-colors duration-(--duration-base) after:absolute after:inset-0 after:z-0 after:content-[''] group-hover/card:text-primary-interactive focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+                className="transition-colors duration-(--duration-base) after:absolute after:inset-0 after:z-0 group-hover/card:text-primary-interactive focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
               >
                 {title}
               </a>

@@ -65,9 +65,9 @@ function MegaMenuViewport({ sideOffset = 10 }: { sideOffset?: number }) {
         collisionAvoidance={{ side: "none" }}
         // The ::before strip bridges the gap between trigger and popup so
         // the pointer can cross it without the menu closing underneath it.
-        className="z-50 h-(--positioner-height) w-(--positioner-width) max-w-(--available-width) transition-[top,left,right,bottom] duration-(--duration-slow) ease-(--ease-out-quint) before:absolute before:inset-x-0 before:top-[-10px] before:h-2.5 before:content-[''] data-instant:transition-none"
+        className="z-50 h-(--positioner-height) w-(--positioner-width) max-w-(--available-width) transition-(--transition-geometry) duration-(--duration-slow) ease-(--ease-out-quint) before:absolute before:inset-x-0 before:-top-2.5 before:h-2.5 data-instant:transition-none"
       >
-        <NavigationMenu.Popup className="relative h-(--popup-height) w-(--popup-width) origin-(--transform-origin) overflow-hidden rounded-2xl bg-popover text-popover-foreground shadow-xl ring-1 ring-foreground/10 transition-[opacity,transform,width,height] duration-(--duration-slow) ease-(--ease-out-quint) data-ending-style:scale-95 data-ending-style:opacity-0 data-starting-style:scale-95 data-starting-style:opacity-0">
+        <NavigationMenu.Popup className="relative h-(--popup-height) w-(--popup-width) origin-(--transform-origin) overflow-hidden rounded-2xl bg-popover text-popover-foreground shadow-xl ring-1 ring-foreground/10 transition-(--transition-geometry) duration-(--duration-slow) ease-(--ease-out-quint) data-ending-style:scale-95 data-ending-style:opacity-0 data-starting-style:scale-95 data-starting-style:opacity-0">
           <NavigationMenu.Viewport className="relative h-full w-full" />
         </NavigationMenu.Popup>
       </NavigationMenu.Positioner>
@@ -107,7 +107,7 @@ function MegaMenuPanel({
       // one word per line. Fixed width, then the columns divide it.
       className={cn(
         "flex flex-col",
-        compact ? "w-[min(24rem,calc(100vw-2rem))]" : "w-[min(56rem,calc(100vw-2rem))]",
+        compact ? "w-(--width-panel-compact)" : "w-(--width-panel)",
         className,
       )}
       {...props}
@@ -119,7 +119,7 @@ function MegaMenuPanel({
         className={cn(
           "grid gap-8 lg:gap-10",
           compact ? "p-4" : "p-6",
-          features && "lg:grid-cols-[minmax(0,14rem)_1fr]",
+          features && "lg:grid-cols-(--grid-menu-main)",
         )}
       >
         {features && <div className="flex flex-col gap-3">{features}</div>}
@@ -211,7 +211,7 @@ function MegaMenuLink({
           // `group/link` drives the children; `focus-visible` mirrors every
           // hover rule so the keyboard path is the same experience, not a
           // ring bolted onto an otherwise inert row.
-          "group/link relative flex items-start gap-3 rounded-xl p-2.5 ring-1 ring-transparent transition-[background-color,box-shadow,transform] duration-(--duration-base) ease-(--ease-out-quint)",
+          "group/link relative flex items-start gap-3 rounded-xl p-2.5 ring-1 ring-transparent transition duration-(--duration-base) ease-(--ease-out-quint)",
           "hover:bg-muted hover:ring-primary/25 focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
           className,
         )}
@@ -235,7 +235,7 @@ function MegaMenuLink({
                 idiom for a directional chevron. */}
             <ChevronRight
               aria-hidden
-              className="size-3.5 -translate-x-1 opacity-0 transition-[opacity,transform] duration-(--duration-base) ease-(--ease-out-quint) group-hover/link:translate-x-0 group-hover/link:opacity-100 group-focus-visible/link:translate-x-0 group-focus-visible/link:opacity-100 rtl:rotate-180 rtl:translate-x-1 rtl:group-hover/link:translate-x-0 rtl:group-focus-visible/link:translate-x-0"
+              className="size-3.5 -translate-x-1 opacity-0 transition duration-(--duration-base) ease-(--ease-out-quint) group-hover/link:translate-x-0 group-hover/link:opacity-100 group-focus-visible/link:translate-x-0 group-focus-visible/link:opacity-100 rtl:rotate-180 rtl:translate-x-1 rtl:group-hover/link:translate-x-0 rtl:group-focus-visible/link:translate-x-0"
             />
           </span>
           {description && (

@@ -31,6 +31,7 @@ import { Combobox as ComboboxPrimitive } from "@base-ui/react/combobox";
 import { CheckIcon, ChevronsUpDownIcon, SearchIcon } from "lucide-react";
 
 import { cn } from "@repo/ui/lib/utils";
+import { useControlSize } from "@repo/ui/components/control-size";
 import {
   Select,
   SelectContent,
@@ -63,13 +64,22 @@ export interface ComboboxOption {
   disabled?: boolean;
 }
 
-/** Icon + label, identical in the popup and on the trigger. */
+/**
+ * Icon + label, identical in the popup and on the trigger.
+ *
+ * INLINE, not a flex row: on the trigger the label has to be ordinary text so
+ * the value slot's `truncate` can end it in an ellipsis. As a flex item it was
+ * an atomic box that the slot could only clip, mid-letter ("Pending
+ * verificatior", found in the admin visual pass).
+ */
 function OptionContent({ option }: { option: ComboboxOption }) {
   return (
-    <span className="flex items-center gap-2">
-      {option.icon}
+    <>
+      {option.icon && (
+        <span className="me-2 inline-flex align-middle [&_svg]:size-4">{option.icon}</span>
+      )}
       {option.label}
-    </span>
+    </>
   );
 }
 
@@ -101,9 +111,16 @@ export interface ComboboxProps {
 // tailwind-merge lets a toolbar call site override it with a narrower `w-*`.
 const triggerClasses = (className?: string) => cn("w-full justify-between", className);
 
-function Combobox({ searchable, ...props }: ComboboxProps) {
+function Combobox({ searchable, size, ...props }: ComboboxProps) {
   const isSearchable = searchable ?? props.options.length >= SEARCHABLE_ITEM_THRESHOLD;
-  return isSearchable ? <SearchableCombobox {...props} /> : <PlainCombobox {...props} />;
+  // Inside a toolbar (DataTable's filter slot) the default is that toolbar's
+  // 36px; an explicit `size` still wins (control-size.tsx).
+  const resolvedSize = useControlSize(size);
+  return isSearchable ? (
+    <SearchableCombobox {...props} size={resolvedSize} />
+  ) : (
+    <PlainCombobox {...props} size={resolvedSize} />
+  );
 }
 
 function PlainCombobox({
@@ -185,7 +202,7 @@ function SearchableCombobox({
         {/* Combobox.Value renders no element of its own, so the truncation
             and alignment classes need a host — same job SelectValue does
             for the plain branch. */}
-        <span data-slot="combobox-value" className="line-clamp-1 flex-1 text-start">
+        <span data-slot="combobox-value" className="block min-w-0 flex-1 truncate text-start">
           <ComboboxPrimitive.Value placeholder={placeholder}>
             {(option: ComboboxOption | null) =>
               option ? <OptionContent option={option} /> : placeholder

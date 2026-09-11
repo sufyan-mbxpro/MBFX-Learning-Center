@@ -24,7 +24,7 @@ import { Label } from "@repo/ui/components/label";
 import { isLearnTrack, type LearnTrackKey } from "@repo/contracts";
 import { AdminCombobox } from "../../_components/combobox.tsx";
 import { createCourseAction } from "../../_actions/learn-actions.ts";
-import { FilterBar } from "../../_components/filter-bar.tsx";
+import { FilterBarRow } from "@repo/ui/components/filter-bar";
 import { useServerAction } from "../../_hooks/use-server-action.ts";
 
 export interface CoursesFilterLabels {
@@ -63,7 +63,7 @@ export function CoursesToolbar({
   const set = (patch: Partial<CoursesFilterState>) => onChange({ ...value, ...patch });
 
   return (
-    <FilterBar>
+    <FilterBarRow>
       {/* Toolbar filters declare their own width (ADR-057 §3) — full width
           is the form-field default and would give one filter the whole row. */}
       <AdminCombobox
@@ -101,7 +101,7 @@ export function CoursesToolbar({
           })),
         ]}
       />
-    </FilterBar>
+    </FilterBarRow>
   );
 }
 

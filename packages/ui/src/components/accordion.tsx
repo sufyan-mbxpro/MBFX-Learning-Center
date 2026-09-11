@@ -5,10 +5,19 @@
 // found re-verifying docs/changes/changes-03-plan.md §4.1: the reference's
 // "Who we are / What we do / How it works" block and the homepage FAQ
 // section both need one and @repo/ui had none.
+//
+// changes-20 (tokens.md §6.14, capture-2 method): the reference's recipe,
+// shadcn `default` exactly — a divider under EVERY item, a 16px-padded
+// trigger with centred text and ONE chevron that turns 180° when open, and
+// `pb-4` content. `hover:underline` is the reference's own, not a leftover.
+// The one addition is the focus ring the reference leaves to the browser:
+// our 2px ring with a 2px offset in `--ring`, as on every other control.
+// Base UI signals "open" on the trigger through `aria-expanded`, which is
+// what the chevron keys off (Radix's `data-[state=open]` has no equivalent).
 import { Accordion as AccordionPrimitive } from "@base-ui/react/accordion";
 
 import { cn } from "@repo/ui/lib/utils";
-import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
+import { ChevronDownIcon } from "lucide-react";
 
 function Accordion({ className, ...props }: AccordionPrimitive.Root.Props) {
   return (
@@ -24,7 +33,7 @@ function AccordionItem({ className, ...props }: AccordionPrimitive.Item.Props) {
   return (
     <AccordionPrimitive.Item
       data-slot="accordion-item"
-      className={cn("not-last:border-b", className)}
+      className={cn("border-b", className)}
       {...props}
     />
   );
@@ -36,7 +45,7 @@ function AccordionTrigger({ className, children, ...props }: AccordionPrimitive.
       <AccordionPrimitive.Trigger
         data-slot="accordion-trigger"
         className={cn(
-          "group/accordion-trigger relative flex flex-1 items-start justify-between rounded-lg border border-transparent py-2.5 text-start text-sm font-medium transition-all outline-none hover:underline focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:after:border-ring aria-disabled:pointer-events-none aria-disabled:opacity-50 **:data-[slot=accordion-trigger-icon]:ms-auto **:data-[slot=accordion-trigger-icon]:size-4 **:data-[slot=accordion-trigger-icon]:text-muted-foreground",
+          "group/accordion-trigger flex flex-1 items-center justify-between gap-4 rounded-sm py-4 text-start font-medium transition-all outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background aria-disabled:pointer-events-none aria-disabled:opacity-50",
           className,
         )}
         {...props}
@@ -44,11 +53,8 @@ function AccordionTrigger({ className, children, ...props }: AccordionPrimitive.
         {children}
         <ChevronDownIcon
           data-slot="accordion-trigger-icon"
-          className="pointer-events-none shrink-0 group-aria-expanded/accordion-trigger:hidden"
-        />
-        <ChevronUpIcon
-          data-slot="accordion-trigger-icon"
-          className="pointer-events-none hidden shrink-0 group-aria-expanded/accordion-trigger:inline"
+          aria-hidden
+          className="pointer-events-none size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-aria-expanded/accordion-trigger:rotate-180"
         />
       </AccordionPrimitive.Trigger>
     </AccordionPrimitive.Header>
@@ -64,7 +70,7 @@ function AccordionContent({ className, children, ...props }: AccordionPrimitive.
     >
       <div
         className={cn(
-          "h-(--accordion-panel-height) pt-0 pb-2.5 data-ending-style:h-0 data-starting-style:h-0 [&_a]:underline [&_a]:underline-offset-3 [&_a]:hover:text-foreground [&_p:not(:last-child)]:mb-4",
+          "h-(--accordion-panel-height) pt-0 pb-4 data-ending-style:h-0 data-starting-style:h-0 [&_a]:underline [&_a]:underline-offset-3 [&_a]:hover:text-foreground [&_p:not(:last-child)]:mb-4",
           className,
         )}
       >

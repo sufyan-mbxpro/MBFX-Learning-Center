@@ -90,7 +90,7 @@ function DestinationCard({
         <span
           aria-hidden
           className={cn(
-            "pointer-events-none absolute top-0 start-0 z-20 h-1 w-0 transition-[width] duration-(--duration-slow) ease-(--ease-out-quint) group-hover:w-full",
+            "pointer-events-none absolute top-0 start-0 z-20 h-1 w-0 transition-(--transition-size) duration-(--duration-slow) ease-(--ease-out-quint) group-hover:w-full",
             DESTINATION_BAR_CLASS[tone],
           )}
         />
@@ -198,7 +198,7 @@ export async function Explore({ locale, variant = "carousel", limit }: SectionPr
       <span aria-hidden className="bg-glow-primary pointer-events-none absolute inset-0 -z-10" />
       <span
         aria-hidden
-        className="bg-dot-grid pointer-events-none absolute inset-0 -z-10 opacity-[0.12] [mask-image:linear-gradient(to_bottom,black,transparent_75%)]"
+        className="bg-dot-grid pointer-events-none absolute inset-0 -z-10 opacity-12 [mask-image:linear-gradient(to_bottom,black,transparent_75%)]"
       />
       <Container className="flex flex-col gap-(--section-gap)">
         <SectionHeading
@@ -208,7 +208,7 @@ export async function Explore({ locale, variant = "carousel", limit }: SectionPr
         />
         <Reveal variant="up">
           {variant === "grid" ? (
-            <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            <ul className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
               {cards.map((card, index) => (
                 <li key={shown[index]?.key}>{card}</li>
               ))}

@@ -157,7 +157,7 @@ function SidebarRow({ course }: { course: SidebarCourse }) {
       <span className="flex min-w-0 flex-col gap-1.5">
         <Link
           href={course.href}
-          className="line-clamp-2 text-sm leading-snug font-medium transition-colors duration-(--duration-base) after:absolute after:inset-0 after:content-[''] group-hover:text-primary-interactive focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+          className="line-clamp-2 text-sm leading-snug font-medium transition-colors duration-(--duration-base) after:absolute after:inset-0 group-hover:text-primary-interactive focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
         >
           {course.title}
         </Link>
@@ -190,7 +190,7 @@ function TrackChip({
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "rounded-full px-2.5 py-1 text-xs font-medium ring-1 transition-[background-color,color,box-shadow] duration-(--duration-base) ease-(--ease-out-quint) focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
+        "rounded-full px-2.5 py-1 text-xs font-medium ring-1 transition duration-(--duration-base) ease-(--ease-out-quint) focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
         active
           ? "bg-primary text-primary-foreground ring-primary"
           : "bg-background text-muted-foreground ring-border hover:text-foreground hover:ring-primary/25",

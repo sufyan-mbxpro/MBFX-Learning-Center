@@ -644,6 +644,7 @@
     "confirmDeleteTagBody": "The tag is removed from every article that carries it.",
     "close": "Close",
     "breadcrumbLabel": "Breadcrumb",
+    "breadcrumbDetail": "Details",
     "perPageSuffix": "per page",
     "searchEmployees": "Search employees…",
     "searchRoles": "Search roles…",

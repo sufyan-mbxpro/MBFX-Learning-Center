@@ -21,9 +21,9 @@ export default function CourseLoading() {
         <Container className="flex flex-col gap-5">
           <Skeleton className="shimmer h-4 w-40" />
 
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] lg:items-start">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-(--grid-2-1) lg:items-start">
             <div className="flex flex-col gap-4">
-              <Skeleton className="shimmer aspect-[16/6] w-full rounded-2xl" />
+              <Skeleton className="shimmer aspect-16/6 w-full rounded-2xl" />
               <div className="flex flex-wrap gap-1.5">
                 <Skeleton className="shimmer h-5 w-24 rounded-full" />
                 <Skeleton className="shimmer h-5 w-20 rounded-full" />
@@ -51,7 +51,7 @@ export default function CourseLoading() {
       </Section>
 
       <Section spacing="md">
-        <Container className="grid gap-8 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] lg:items-start">
+        <Container className="grid grid-cols-1 gap-8 lg:grid-cols-(--grid-2-1) lg:items-start">
           <div className="flex flex-col gap-4">
             <Skeleton className="shimmer h-7 w-40" />
             <Skeleton className="shimmer h-4 w-64" />

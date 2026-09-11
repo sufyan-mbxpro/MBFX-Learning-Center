@@ -10,22 +10,18 @@ import {
   type DashboardRange,
 } from "@repo/core";
 import {
-  Bell,
   Briefcase,
   ListTree,
   Newspaper,
+  PieChart,
   Settings as SettingsIcon,
   ToggleRight,
+  TrendingUp,
   UserPlus,
   Users,
 } from "lucide-react";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@repo/ui/components/card";
+import { Card, CardContent, CardDescription, CardHeader } from "@repo/ui/components/card";
+import { MetaText, SectionTitle, SectionTitleCompact } from "@repo/ui/components/typography";
 import { AdminPage } from "./_components/admin-page.tsx";
 import { DashboardActivityFeed } from "./_components/dashboard-activity-feed.tsx";
 import {
@@ -136,12 +132,11 @@ export default async function AdminHome({ searchParams }: PageProps<"/admin">) {
     <AdminPage
       title={t("dashboard")}
       description={t("dashboardWelcome")}
-
       actions={
         <DashboardRangeSelect value={range} label={t("dashboardRange")} labels={rangeLabels} />
       }
     >
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
         {statCards.map((card) => (
           <DashboardStatCard
             key={card.label}
@@ -155,10 +150,15 @@ export default async function AdminHome({ searchParams }: PageProps<"/admin">) {
         ))}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      {/* ADR-075 hand-off: chart cards take the reference's compact
+          icon title; the activity feed keeps the full card title. */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>{t("dashboardGrowthChart")}</CardTitle>
+            <SectionTitleCompact>
+              <TrendingUp aria-hidden />
+              {t("dashboardGrowthChart")}
+            </SectionTitleCompact>
             <CardDescription>{t("dashboardGrowthChartDescription")}</CardDescription>
           </CardHeader>
           <CardContent>
@@ -174,7 +174,10 @@ export default async function AdminHome({ searchParams }: PageProps<"/admin">) {
 
         <Card>
           <CardHeader>
-            <CardTitle>{t("dashboardArticleStatus")}</CardTitle>
+            <SectionTitleCompact>
+              <PieChart aria-hidden />
+              {t("dashboardArticleStatus")}
+            </SectionTitleCompact>
             <CardDescription>{t("dashboardArticleStatusDescription")}</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
@@ -188,13 +191,10 @@ export default async function AdminHome({ searchParams }: PageProps<"/admin">) {
         </Card>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Bell className="size-4" aria-hidden />
-              {t("dashboardRecentActivity")}
-            </CardTitle>
+            <SectionTitle>{t("dashboardRecentActivity")}</SectionTitle>
             <CardDescription>{t("dashboardRecentActivityDescription")}</CardDescription>
           </CardHeader>
           <CardContent>
@@ -210,18 +210,24 @@ export default async function AdminHome({ searchParams }: PageProps<"/admin">) {
 
         <div className="flex flex-col gap-4">
           {secondaryCards.map((card) => (
+            // A whole-card link: the reference's interactive card is the
+            // Card itself (`.card-hover`), not a second tile recipe.
             <Link
               key={card.href}
               href={card.href}
-              className="flex items-center gap-3 rounded-xl bg-card p-4 text-sm ring-1 ring-foreground/10 transition-colors hover:bg-muted/50"
+              className="rounded-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
             >
-              <span className="rounded-lg bg-primary/10 p-2 text-primary">
-                <card.icon className="size-4" aria-hidden />
-              </span>
-              <span className="flex flex-col">
-                <span className="font-semibold tabular-nums">{card.value.toLocaleString()}</span>
-                <span className="text-xs text-muted-foreground">{card.label}</span>
-              </span>
+              <Card size="sm">
+                <CardContent className="flex items-center gap-3">
+                  <card.icon className="size-4 shrink-0 text-primary-interactive" aria-hidden />
+                  <span className="flex flex-col">
+                    <span className="text-sm font-semibold tabular-nums">
+                      {card.value.toLocaleString()}
+                    </span>
+                    <MetaText render={<span />}>{card.label}</MetaText>
+                  </span>
+                </CardContent>
+              </Card>
             </Link>
           ))}
         </div>

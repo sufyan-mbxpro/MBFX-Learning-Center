@@ -135,7 +135,7 @@ export function RolePermissions({
                 </label>
               )}
             </header>
-            <ul className="grid gap-x-6 sm:grid-cols-2">
+            <ul className="grid grid-cols-1 gap-x-6 sm:grid-cols-2">
               {group.permissions.map((permission) => (
                 <li
                   key={permission.key}

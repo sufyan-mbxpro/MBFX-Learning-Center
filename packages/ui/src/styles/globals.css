@@ -196,6 +196,14 @@
   --text-display-md--line-height: 1.15;
   --text-display-lg: clamp(2.75rem, 1.8rem + 4.8vw, 4.5rem);
   --text-display-lg--line-height: 1.08;
+  /* A decorative numeral set as artwork (SplitCallout's step figure), not
+     reading text — named so it is not an arbitrary `text-[10rem]`. */
+  --text-display-numeral: 10rem;
+  --text-display-numeral--line-height: 1;
+
+  /* The one wide-tracked uppercase label (footer column heads, eyebrows).
+     `--tracking-*` IS a namespace -> `tracking-caps`. */
+  --tracking-caps: 0.14em;
 
   /* Elevation tiers for public cards and floating affordances. Same
      neutral-literal exception the --shadow-* block above already documents:
@@ -245,6 +253,52 @@
        these two are constants — not namespaced here for the reason above. */
     --container-wide: 1600px;
     --container-narrow: 768px;
+
+    /* Layout tokens (changes-20 Phase 6). ADR-072 §10 bans arbitrary
+       `-[…]` values and keeps `(--token)` references, so every value a
+       screen used to hand-write in brackets is named ONCE here and read as
+       `lg:grid-cols-(--grid-main-aside)`. None is a Tailwind namespace,
+       which is why they live in :root and not @theme (the spacing-scale
+       incident above). A new layout value is added here, not inlined. */
+
+    /* Grid templates: `main-aside` is content + a fixed sidebar, `intro-main`
+       / `rail-main` / `menu-main` a fixed start column + content, `2-1` and
+       `3-2` a weighted pair, `label-value` a definition list. */
+    --grid-main-aside: minmax(0, 1fr) 20rem;
+    --grid-main-aside-wide: minmax(0, 1fr) 22rem;
+    --grid-2-1: minmax(0, 2fr) minmax(0, 1fr);
+    --grid-3-2: minmax(0, 3fr) minmax(0, 2fr);
+    --grid-intro-main: minmax(0, 24rem) 1fr;
+    --grid-rail-main: minmax(0, 16rem) minmax(0, 1fr);
+    --grid-menu-main: minmax(0, 14rem) 1fr;
+    --grid-label-value: max-content 1fr;
+    --grid-fill-auto: 1fr auto;
+    --grid-auto-auto: auto auto;
+
+    /* A floating panel never wider than the viewport minus a 1rem gutter a
+       side (the mega menu), and a carousel slide that leaves room for the
+       track's 1.25rem gaps at two and three per view. */
+    --width-panel: min(56rem, calc(100vw - 2rem));
+    --width-panel-compact: min(24rem, calc(100vw - 2rem));
+    --width-slide-2: calc((100% - 1.25rem) / 2);
+    --width-slide-3: calc((100% - 2.5rem) / 3);
+
+    /* Viewport fractions: a centred error/empty page, and a scroll region
+       inside a dialog or panel. */
+    --height-half-screen: 50vh;
+    --height-scroll-panel: 60vh;
+
+    /* The home-indicator inset on notched phones, alone and under a 12px pad. */
+    --safe-area-bottom: env(safe-area-inset-bottom);
+    --safe-area-bottom-3: calc(0.75rem + env(safe-area-inset-bottom));
+
+    /* Transition property lists Tailwind has no utility for, read as
+       `transition-(--transition-size)` (which also applies the default
+       duration and easing). Colour/shadow/transform lists need none of
+       this — the plain `transition` utility already covers them. */
+    --transition-size: width, height, margin;
+    --transition-geometry:
+      width, height, margin, inset, top, right, bottom, left, opacity, transform, translate, scale;
 
     /* THE type scale (ADR-072) — one scale for the public site AND the
        admin, superseding ADR-054's reader/admin split. The reference's
@@ -1273,4 +1327,12 @@
   height: 100%;
   width: 100%;
   border: 0;
+}
+
+/* changes-20 Phase 6 — the one bracket value a token cannot carry: `attr()`
+   resolves against the element whose `content` it is, so it cannot travel
+   through a custom property reliably. A real utility (not a class in
+   @layer) so variants apply: `before:content-placeholder`. */
+@utility content-placeholder {
+  content: attr(data-placeholder);
 }

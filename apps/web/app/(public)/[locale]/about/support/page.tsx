@@ -105,7 +105,7 @@ export default async function SupportPage({ params }: PageProps<"/[locale]/about
         <Section spacing="md" tone="muted">
           <Container className="flex flex-col gap-6">
             <SectionHeading title={t("support.channels.title")} lead={t("support.channels.lead")} />
-            <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {channels.map((channel) => {
                 const Icon = CHANNEL_ICONS[channel.kind];
                 return (
@@ -136,7 +136,7 @@ export default async function SupportPage({ params }: PageProps<"/[locale]/about
               lead={t("support.help.lead")}
             />
           </Reveal>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {HELP.map((key, index) => (
               <Reveal key={key} variant="up" delay={index * 60}>
                 <IconCard
@@ -161,7 +161,7 @@ export default async function SupportPage({ params }: PageProps<"/[locale]/about
                 lead={t("support.selfServe.lead")}
               />
             </Reveal>
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               {selfServe.map((entry, index) => (
                 <Reveal key={entry.key} variant="up" delay={index * 60}>
                   <IconCard

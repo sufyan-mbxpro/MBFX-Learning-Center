@@ -41,9 +41,9 @@ export function LessonNav({
       aria-label={labels.navAria}
       className={cn(
         "flex items-stretch justify-between gap-3",
-        // Pinned below md; a normal block from md up. `pb-[env(safe-area-inset-bottom)]`
+        // Pinned below md; a normal block from md up. `pb-(--safe-area-bottom)`
         // keeps the bar clear of the home indicator on iOS.
-        "max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:z-30 max-md:border-t max-md:bg-background/95 max-md:p-3 max-md:pb-[calc(0.75rem+env(safe-area-inset-bottom))] max-md:backdrop-blur",
+        "max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:z-30 max-md:border-t max-md:bg-background/95 max-md:p-3 max-md:pb-(--safe-area-bottom-3) max-md:backdrop-blur",
         className,
       )}
     >

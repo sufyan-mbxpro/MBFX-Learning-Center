@@ -38,7 +38,7 @@ export async function NewsTopics({ categories }: { categories: ArticleFacetTerm[
           Section composes its tone through `cn` (tailwind-merge), so a
           background passed in className REPLACES `bg-muted/40` instead of
           layering over it — the trap PageHero's header comment records. */}
-      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 opacity-[0.14]">
+      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 opacity-14">
         <NewsBackdrop slot="topics" />
       </div>
 

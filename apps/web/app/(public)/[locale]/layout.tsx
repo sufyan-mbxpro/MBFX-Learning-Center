@@ -122,7 +122,14 @@ export default async function PublicRootLayout({ children, params }: LayoutProps
             {pageLoader && <SiteLoader />}
             <RevealObserver />
             <SiteHeader locale={locale} />
-            <div className="flex-1">{children}</div>
+            {/* overflow-x-clip: a `Reveal variant="end"` rests 1.5rem toward
+                the inline end until it scrolls into view (ADR-018 rule 2),
+                and at the page edge that made phones scroll sideways (8px on
+                /about/* and /economic-calendar at 390px — changes-20 Phase 6
+                browser pass). `clip`, not `hidden`: it does not create a
+                scroll container, so every `sticky` bar and sidebar inside
+                the page keeps sticking to the viewport. */}
+            <div className="flex-1 overflow-x-clip">{children}</div>
             <SiteFooter locale={locale} />
             <ScrollToTop label={t("backToTop")} />
           </ThemeProvider>

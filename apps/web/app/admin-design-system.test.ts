@@ -36,6 +36,14 @@ describe("/admin/design-system (changes-20 Phase 4)", () => {
     expect(client).not.toMatch(/NODE_ENV/);
   });
 
+  it("is request-scoped, so its request-locale metadata does not block the route", () => {
+    // Admin visual pass: with a prerenderable body, generateMetadata's
+    // translation was "runtime data in generateMetadata()" on every load.
+    const page = read(PAGE);
+    expect(page).toContain("generateMetadata");
+    expect(page).toMatch(/await connection\(\)/);
+  });
+
   it("renders the screen title and description through PageHeader (ADR-044 #8)", () => {
     expect(client).toMatch(
       /<PageHeader\s+title=\{t\("title"\)\}\s+description=\{t\("description"\)\}/,

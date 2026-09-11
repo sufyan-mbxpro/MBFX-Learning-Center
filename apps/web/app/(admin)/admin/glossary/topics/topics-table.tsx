@@ -36,7 +36,7 @@ import {
   reorderGlossaryTopicsAction,
 } from "../../_actions/glossary-topic-actions.ts";
 import { AdminCombobox } from "../../_components/combobox.tsx";
-import { FilterBar } from "../../_components/filter-bar.tsx";
+import { FilterBarRow } from "@repo/ui/components/filter-bar";
 import { StatusBadge } from "../../_components/status-badge.tsx";
 import { useClientTable } from "../../_hooks/use-client-table.ts";
 import { useServerAction } from "../../_hooks/use-server-action.ts";
@@ -360,7 +360,7 @@ export function TopicsTable({
       columns={columns}
       labels={tableLabels}
       filters={
-        <FilterBar>
+        <FilterBarRow>
           <AdminCombobox
             aria-label={labels.statusLabel}
             className="w-40"
@@ -372,7 +372,7 @@ export function TopicsTable({
               { value: "draft", label: labels.statusDraft },
             ]}
           />
-        </FilterBar>
+        </FilterBarRow>
       }
     />
   );

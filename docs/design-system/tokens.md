@@ -417,6 +417,33 @@ accessible variant closest to the reference look.
   - All per §6.14.
 - Tonal ink follows **ADR-073**: every `*-interactive` holds 4.5:1 on its own
   tint up to /15.
+- **Phase 5 (screens), 2026-09-11** — `docs/changes/changes-20-phase-5-plan.md`:
+  - the admin frame is `@repo/ui`: `AdminPage` → `PageHeader`,
+    `AdminSection` → `Card`, breadcrumbs → `Breadcrumb`, sidebar rows →
+    `NavItem`, stat tiles → `MetricCard`, DataTable filter groups →
+    `FilterBarRow` (the local `FilterBar` is deleted). Shell per §3.1.
+  - ADR-075's card-title calls are made (dashboard, Learn → Progress,
+    settings hub).
+  - `Card` also drops its top padding for a `data-slot="card-media"` first
+    child, so a linked cover needs no hand padding.
+- **Phase 5 close-out and Phase 6 (enforcement), 2026-09-11:**
+  - **Accordion** takes the reference's recipe (shadcn `default`, fetched the
+    capture-2 way): a divider under every item, a `py-4` centred trigger, one
+    chevron turning 180°, `pb-4` content, and our 2px offset ring.
+    `hover:underline` is the reference's own.
+  - **Arbitrary values are banned by lint** (code-style #21). The 113 that
+    existed are gone: they became scale steps, `text-3xs`,
+    `text-display-numeral`, `tracking-caps`, the plain `transition` utility,
+    or a named token in the globals.css "Layout tokens" block (`--grid-*`,
+    `--width-panel*`, `--width-slide-*`, `--height-*-screen`/`-panel`,
+    `--safe-area-bottom*`, `--transition-size`/`-geometry`) read as
+    `(--name)`. `content-placeholder` is the one real `@utility`, because
+    `attr()` cannot travel through a custom property.
+  - **lucide-react is lint-enforced** as the only icon library (code-style
+    #22).
+  - **Responsive grids state `grid-cols-1`** (code-style #23): 90 grids
+    retrofitted after a phone-width browser pass found three sideways-scroll
+    bugs of that shape.
 
 ### 6.1 Button
 

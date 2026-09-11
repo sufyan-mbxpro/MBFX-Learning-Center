@@ -91,7 +91,7 @@ export function ContentStats({
 
   return (
     <div className="flex min-w-0 flex-col gap-3">
-      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
         <Tile
           label={labels.words}
           value={stats.words.toLocaleString()}

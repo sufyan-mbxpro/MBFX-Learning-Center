@@ -160,7 +160,7 @@ export default async function GlossaryTopicPage({
               definition under it is a card's worth of content. `card-hover` is
               the design system's own treatment, the same one the topics index
               uses, so the two pages match. */}
-          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {view.terms.map((term) => (
               <li key={term.termId}>
                 <Link
