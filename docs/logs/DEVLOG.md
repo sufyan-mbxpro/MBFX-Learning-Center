@@ -14725,3 +14725,64 @@ browser pass measured sideways scroll only, so this is that pass.
 
 changes-20 is complete: Phases 1–6, the admin visual pass and this public
 pass. Still owed to Module 14, as before: axe, Lighthouse and E2E.
+
+## 2026-09-11 — One section bar, About-shaped track panels, no counted figures on public pages (Modules 08/12, ADR-076)
+
+The owner asked for three changes after changes-20. Learn Forex and Learn
+Crypto should navigate like About. The stat cards (totals) are admin numbers
+and should come off the public site. The second menu bar should look clearly
+different from the header.
+
+### Shipped
+
+- **One `SectionNav`** (`app/(public)/[locale]/_components/section-nav.tsx`)
+  now serves About and every `/learn/<track>/**` page.
+  - The two hand copies are deleted: `about/_components/section-nav.tsx` and
+    `learn/_components/learn-section-nav.tsx`.
+  - `activeSectionHref` moved to `_nav/active-section.ts` and serves both
+    sections unchanged.
+  - **New look:** a `bg-primary/10` tint over an opaque ground, a
+    `border-primary/20` rule, and a solid `bg-primary` pill for the active
+    entry. The tint is inside `TONAL_TINT_CONTRACT` (ADR-073), so glyph ink
+    stays legible, and colours stay admin-dynamic.
+  - About's bar is now pinned below the header, like Learn's.
+- **The track mega panels take About's shape.** Each has three headed columns
+  and a "view all" footer on the school's own index; the umbrella `/learn`
+  stays a labelled row:
+
+  | Column             | Rows              |
+  | ------------------ | ----------------- |
+  | Study              | Courses, Videos   |
+  | Practise & look up | Quizzes, Glossary |
+  | More learning      | All learning      |
+
+  They are built by `trackPanel()` from `LEARN_TRACK_ROUTE_KEYS`. The mobile
+  sheet shows the same three column headings.
+- **No counted-figures strip.** `StatStrip` is deleted.
+  - The learn, quiz, video and glossary mastheads take no `stats`, and their
+    skeletons no longer reserve the band.
+  - `learnStats` and the `*.stat*` catalog keys are removed, and
+    `nav.mega.learn.surfaces` is replaced by `study`, `practise` and `more`.
+  - About's facts band is untouched: its figures are owner-supplied facts,
+    not row counts, and it is empty today.
+- ADR-076 records all three changes. It supersedes ADR-065 §4 (the panel
+  shape) and the look of the §5 bar, plus ADR-069's stat strip.
+  Only the header lines of ADR-065 and ADR-069 changed.
+
+### Verified
+
+- `@repo/web`: typecheck clean, eslint on `app/(public)` clean, and
+  **491/491** tests.
+  - New guard: `_components/public-chrome.test.ts` (no stat strip, one bar,
+    plus the header auth-slot check from the deleted `stat-strip.test.ts`).
+  - Updated for the new panel shape: `mega-menu.test.ts` and
+    `learn-sections.test.ts`.
+- `@repo/i18n`: 22/22 tests. `check:catalog-completeness` OK (the `ar`
+  warnings are for an inactive locale). Prettier clean on touched files.
+- Live on the dev server: `/learn/forex` shows the tinted bar with the solid
+  active pill, and no strip under the masthead.
+
+### Owed
+
+- Commit (awaiting the owner). axe, Lighthouse and E2E still belong to
+  Module 14.

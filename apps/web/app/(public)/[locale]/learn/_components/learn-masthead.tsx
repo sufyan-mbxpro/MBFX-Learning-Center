@@ -14,33 +14,23 @@
 // and the video rail are several screens down, and a masthead that only
 // repeats the page's name has not earned its height.
 //
-// The figures under it are COUNTED from the shelf the page already loaded —
-// never a claim typed into a catalog. A section with nothing published shows
-// no strip at all rather than three zeroes.
-import { ArrowDown, Clock, GraduationCap, Layers } from "lucide-react";
+// No counted-figures strip under it (ADR-076 §3): totals of courses, lessons
+// and hours are an operator's numbers, and they belong to the admin's
+// dashboards, not to a reader's page.
+import { ArrowDown } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 
 import { AmbientMotif } from "@repo/ui/components/ambient-motif";
 import { Button } from "@repo/ui/components/button";
 import { PageHero } from "@repo/ui/components/page-hero";
 
-import { StatStrip, StatStripItem } from "../../_components/stat-strip.tsx";
 import { LearnBackdrop } from "./learn-art.tsx";
 
-export interface LearnStats {
-  courses: number;
-  lessons: number;
-  /** Summed estimated hours, rounded. Zero when no course carries an estimate. */
-  hours: number;
-}
-
 export async function LearnMasthead({
-  stats,
   hasVideos,
   heading,
   backdrop,
 }: {
-  stats: LearnStats;
   /** Whether the video rail is on the page — an anchor to a band that is not
    * rendered is a button that silently does nothing. */
   hasVideos: boolean;
@@ -58,65 +48,41 @@ export async function LearnMasthead({
   const t = await getTranslations("learn");
 
   return (
-    <>
-      <PageHero
-        // `priority` on this one piece: it is the LCP candidate on the route.
-        // Every other image on the page — course covers included — stays lazy.
-        backdrop={backdrop ?? <LearnBackdrop slot="banner" priority />}
-        // Composed WITH the artwork rather than instead of it: the generated
-        // banner is a soft wash and the glyph field is line art, so the two
-        // occupy different frequencies. Dialled down because this band already
-        // carries a backdrop.
-        motif={<AmbientMotif variant="learn" intensity={0.7} />}
-        eyebrow={heading?.eyebrow ?? t("index.eyebrow")}
-        title={heading?.title ?? t("index.title")}
-        lead={heading?.lead ?? t("index.intro")}
-        // Both buttons ride on --primary-foreground, the one ink ADR-003
-        // derives to be legible on the `brand` tone this hero defaults to.
-        actions={
-          <>
-            <Button size="xl" shape="pill" variant="secondary" render={<a href="#courses" />}>
-              {t("index.heroBrowse")}
-              {/* Down, not inline-end: this scrolls the page rather than
-                  navigating, so it needs no RTL flip either. */}
-              <ArrowDown aria-hidden />
+    <PageHero
+      // `priority` on this one piece: it is the LCP candidate on the route.
+      // Every other image on the page — course covers included — stays lazy.
+      backdrop={backdrop ?? <LearnBackdrop slot="banner" priority />}
+      // Composed WITH the artwork rather than instead of it: the generated
+      // banner is a soft wash and the glyph field is line art, so the two
+      // occupy different frequencies. Dialled down because this band already
+      // carries a backdrop.
+      motif={<AmbientMotif variant="learn" intensity={0.7} />}
+      eyebrow={heading?.eyebrow ?? t("index.eyebrow")}
+      title={heading?.title ?? t("index.title")}
+      lead={heading?.lead ?? t("index.intro")}
+      // Both buttons ride on --primary-foreground, the one ink ADR-003
+      // derives to be legible on the `brand` tone this hero defaults to.
+      actions={
+        <>
+          <Button size="xl" shape="pill" variant="secondary" render={<a href="#courses" />}>
+            {t("index.heroBrowse")}
+            {/* Down, not inline-end: this scrolls the page rather than
+                navigating, so it needs no RTL flip either. */}
+            <ArrowDown aria-hidden />
+          </Button>
+          {hasVideos && (
+            <Button
+              size="xl"
+              shape="pill"
+              variant="outline"
+              className="border-primary-foreground/40 bg-transparent text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground"
+              render={<a href="#videos" />}
+            >
+              {t("index.heroVideos")}
             </Button>
-            {hasVideos && (
-              <Button
-                size="xl"
-                shape="pill"
-                variant="outline"
-                className="border-primary-foreground/40 bg-transparent text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground"
-                render={<a href="#videos" />}
-              >
-                {t("index.heroVideos")}
-              </Button>
-            )}
-          </>
-        }
-      />
-
-      {stats.courses > 0 && (
-        <StatStrip tone="muted">
-          <StatStripItem
-            icon={<GraduationCap aria-hidden className="size-5" />}
-            value={stats.courses}
-            label={t("index.statCourses")}
-          />
-          <StatStripItem
-            icon={<Layers aria-hidden className="size-5" />}
-            value={stats.lessons}
-            label={t("index.statLessons")}
-          />
-          {stats.hours > 0 && (
-            <StatStripItem
-              icon={<Clock aria-hidden className="size-5" />}
-              value={stats.hours}
-              label={t("index.statHours")}
-            />
           )}
-        </StatStrip>
-      )}
-    </>
+        </>
+      }
+    />
   );
 }

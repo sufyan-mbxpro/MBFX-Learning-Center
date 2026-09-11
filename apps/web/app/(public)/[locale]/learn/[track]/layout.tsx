@@ -26,7 +26,7 @@ import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { isLearnTrack, LEARN_TRACK_KEYS } from "@repo/contracts";
 import { isFeatureVisible } from "@repo/settings";
-import { LearnSectionNav, type LearnSectionNavItem } from "../_components/learn-section-nav.tsx";
+import { SectionNav, type SectionNavItem } from "../../_components/section-nav.tsx";
 import { learnSectionsFor } from "../_nav/learn-sections.ts";
 
 /**
@@ -57,7 +57,7 @@ export default async function LearnTrackLayout({
     ),
   );
 
-  const items: LearnSectionNavItem[] = sections
+  const items: SectionNavItem[] = sections
     .filter((_, index) => visible[index])
     .map((section) => ({ href: section.href, label: t(section.labelKey) }));
 
@@ -65,7 +65,7 @@ export default async function LearnTrackLayout({
     <>
       {/* One entry left in the strip is the section itself — a row of one tab
           is chrome that tells the reader nothing, so it is not rendered. */}
-      {items.length > 1 && <LearnSectionNav items={items} ariaLabel={t("nav.sectionLabel")} />}
+      {items.length > 1 && <SectionNav items={items} ariaLabel={t("nav.sectionLabel")} />}
       {children}
     </>
   );

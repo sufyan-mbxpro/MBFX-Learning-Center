@@ -4,7 +4,7 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { getVideoCategories, getVideoTopics } from "@repo/core";
 import { isLearnTrack, learnTrackVideosPath, LEARN_TRACKS } from "@repo/contracts";
 import { getSetting, isFeatureVisible } from "@repo/settings";
-import { VideoMasthead, videoStats } from "../../_components/video-masthead.tsx";
+import { VideoMasthead } from "../../_components/video-masthead.tsx";
 import { VideoShelf } from "../../_components/video-shelf.tsx";
 
 // The video index (changes-16 PR 7, ADR-068).
@@ -66,7 +66,6 @@ export default async function VideoIndexPage({
           the header offers "Learn Crypto → Videos", and a banner that only
           said "Videos" would drop the half the reader navigated by. */}
       <VideoMasthead
-        stats={videoStats(topics)}
         heading={{
           eyebrow: t(LEARN_TRACKS[track].titleKey),
           title: t("videos.title"),

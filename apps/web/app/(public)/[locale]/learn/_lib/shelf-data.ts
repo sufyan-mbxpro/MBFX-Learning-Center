@@ -12,7 +12,6 @@ import { learnTrackPath, type LearnTrackKey } from "@repo/contracts";
 import type { TrackGroup } from "@repo/core";
 import { LEARN_TRACKS } from "@repo/contracts";
 import type { ShelfLabels, ShelfTrack } from "../_components/course-shelf.tsx";
-import type { LearnStats } from "../_components/learn-masthead.tsx";
 import { courseCoverUrl, isGeneratedCover } from "../_content/learn-media.ts";
 import { curriculumLabels, difficultyLabels, difficultyTone } from "./learn-labels.ts";
 
@@ -82,28 +81,6 @@ export function toShelfTracks(groups: TrackGroup[], t: Translate): ShelfTrack[] 
       };
     }),
   }));
-}
-
-/**
- * Counted from the shelf, not stored and not typed into a catalog: the figures
- * cannot drift from what the page is showing, because they are what the page
- * is showing.
- */
-export function learnStats(groups: TrackGroup[]): LearnStats {
-  return {
-    courses: groups.reduce((sum, group) => sum + group.courses.length, 0),
-    lessons: groups.reduce(
-      (sum, group) => sum + group.courses.reduce((n, course) => n + course.lessonCount, 0),
-      0,
-    ),
-    hours: Math.round(
-      groups.reduce(
-        (sum, group) =>
-          sum + group.courses.reduce((n, course) => n + (course.estimatedHours ?? 0), 0),
-        0,
-      ),
-    ),
-  };
 }
 
 export function shelfLabels(t: Translate): ShelfLabels {

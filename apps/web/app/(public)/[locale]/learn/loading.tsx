@@ -2,7 +2,7 @@
 //
 // It used to be one skeleton for the whole area, because the index, course and
 // lesson pages all opened with the same muted header over a content column.
-// They no longer do — the index has a masthead and a stat strip, the course
+// They no longer do — the index has a masthead over a filter toolbar, the course
 // page has a two-column header with a sticky rail — so each route now owns the
 // skeleton that matches it (`[course]/loading.tsx`, `[course]/[lesson]/`).
 // One shared skeleton across three different layouts is a guaranteed jump on
@@ -33,21 +33,6 @@ export default function LearnLoading() {
           <div className="flex flex-wrap gap-3 pt-1">
             <Skeleton className="shimmer h-12 w-44 rounded-full" />
             <Skeleton className="shimmer h-12 w-36 rounded-full" />
-          </div>
-        </Container>
-      </Section>
-
-      {/* The counted-figures strip. */}
-      <Section spacing="sm" tone="muted">
-        <Container>
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
-            {Array.from({ length: 3 }, (_, index) => (
-              <div key={index} className="flex flex-col items-center gap-2">
-                <Skeleton className="shimmer size-10 rounded-full" />
-                <Skeleton className="shimmer h-8 w-20" />
-                <Skeleton className="shimmer h-4 w-24" />
-              </div>
-            ))}
           </div>
         </Container>
       </Section>

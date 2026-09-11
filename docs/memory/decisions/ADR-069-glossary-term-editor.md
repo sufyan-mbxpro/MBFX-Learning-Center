@@ -4,7 +4,7 @@
 **Date:** 2026-09-09
 **Module:** 11 (content system — glossary), 12 (public site — glossary surfaces)
 **Supersedes:** —
-**Superseded by:** —
+**Superseded by:** ADR-076 §3 (the public masthead's counted stat strip only)
 
 ## Context
 

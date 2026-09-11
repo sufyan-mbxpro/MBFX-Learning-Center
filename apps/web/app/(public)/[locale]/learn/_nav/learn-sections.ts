@@ -47,21 +47,3 @@ export function learnSectionsFor(track: LearnTrackKey): readonly LearnSectionSpe
     { href: ROUTE_PATHS[keys.glossary], labelKey: "nav.glossary", flag: "glossary" },
   ];
 }
-
-/**
- * The current section: the entry whose href is the LONGEST prefix of the
- * pathname.
- *
- * Longest-prefix rather than plain-prefix, because `/learn/<track>` is the
- * parent of BOTH `/learn/<track>/[course]` and `/learn/<track>/quizzes` — a
- * plain rule would light up Courses while the reader is taking a quiz.
- * `/learn/forex/x/y` resolves to Courses because no longer entry matches it.
- *
- * Here rather than in the client component so it can be tested as what it is:
- * a pure function over strings, with no React and no router.
- */
-export function activeSectionHref(pathname: string, hrefs: readonly string[]): string | undefined {
-  return hrefs
-    .filter((href) => pathname === href || pathname.startsWith(`${href}/`))
-    .toSorted((a, b) => b.length - a.length)[0];
-}

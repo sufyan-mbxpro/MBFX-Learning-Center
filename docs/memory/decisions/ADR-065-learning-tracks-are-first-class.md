@@ -6,7 +6,7 @@
 **Supersedes:** —
 **Amends:** ADR-055 §3 (URLs), ADR-055 §7 (the Learn sub-nav), ADR-058 §1
 (the quiz index), ADR-048 (panel registry — two new panels)
-**Superseded by:** —
+**Superseded by:** ADR-076 (§4's panel shape and footer refusal; §5's bar look only)
 
 ## Context
 

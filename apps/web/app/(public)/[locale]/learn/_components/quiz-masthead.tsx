@@ -2,48 +2,23 @@
 // sibling, and built on the same `PageHero` for the same reason: the tone and
 // contrast decisions are made once in the primitive.
 //
-// It is a separate component rather than a `LearnMasthead` prop because its
-// figures are different figures. That one counts courses, lessons and hours;
-// this counts quizzes, questions and topics. Threading a stat array through a
-// shared component would make both call sites responsible for a layout neither
-// of them owns.
+// A separate component rather than a `LearnMasthead` prop because its artwork
+// and its anchor are its own: the quiz banner, and a jump to the quiz grid.
 //
-// The figures are COUNTED from the quizzes the page already loaded — never a
-// claim typed into a catalog. A school with nothing published shows no strip
-// at all rather than three zeroes, exactly as the learn masthead does.
-import { ArrowDown, ListChecks, Tag, Target } from "lucide-react";
+// No counted-figures strip under it (ADR-076 §3): totals of quizzes and
+// questions are an operator's numbers, not a reader's.
+import { ArrowDown } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 
-import type { QuizCardView } from "@repo/contracts";
 import { AmbientMotif } from "@repo/ui/components/ambient-motif";
 import { Button } from "@repo/ui/components/button";
 import { PageHero } from "@repo/ui/components/page-hero";
 
-import { StatStrip, StatStripItem } from "../../_components/stat-strip.tsx";
 import { LearnBackdrop } from "./learn-art.tsx";
 
-export interface QuizStats {
-  quizzes: number;
-  questions: number;
-  topics: number;
-}
-
-/** Counted from the index's own rows, so the strip cannot disagree with the
- * grid under it. Exported for the loading skeleton's sake as much as the
- * page's: both need to know a strip appears only when something is published. */
-export function quizStats(quizzes: QuizCardView[]): QuizStats {
-  return {
-    quizzes: quizzes.length,
-    questions: quizzes.reduce((sum, quiz) => sum + quiz.questionCount, 0),
-    topics: new Set(quizzes.flatMap((quiz) => (quiz.category ? [quiz.category] : []))).size,
-  };
-}
-
 export async function QuizMasthead({
-  stats,
   heading,
 }: {
-  stats: QuizStats;
   /** The school's own name, so "Learn Crypto → Quizzes" lands on a banner that
    * says which school it is (ADR-065 §1). Passed already translated. */
   heading: { eyebrow: string; title: string; lead: string };
@@ -51,54 +26,30 @@ export async function QuizMasthead({
   const t = await getTranslations("learn");
 
   return (
-    <>
-      <PageHero
-        // `priority` on this one piece: it is the LCP candidate on the route.
-        // Every quiz panel below it stays lazy.
-        backdrop={<LearnBackdrop slot="quizBanner" priority />}
-        // Composed WITH the artwork rather than instead of it: the generated
-        // banner is a soft wash and the glyph field is line art, so the two
-        // occupy different frequencies. Dialled down because this band already
-        // carries a backdrop.
-        motif={<AmbientMotif variant="learn" intensity={0.7} />}
-        eyebrow={heading.eyebrow}
-        title={heading.title}
-        lead={heading.lead}
-        actions={
-          // An in-page anchor, not a navigation: on a phone the grid is a
-          // screen down, and a masthead that only repeats the page's name has
-          // not earned its height. `secondary` rides on --primary-foreground,
-          // the one ink ADR-003 derives to be legible on the `brand` tone.
-          <Button size="xl" shape="pill" variant="secondary" render={<a href="#quizzes" />}>
-            {t("quizzes.heroBrowse")}
-            {/* Down, not inline-end: this scrolls the page rather than
-                navigating, so it needs no RTL flip either. */}
-            <ArrowDown aria-hidden />
-          </Button>
-        }
-      />
-
-      {stats.quizzes > 0 && (
-        <StatStrip tone="muted">
-          <StatStripItem
-            icon={<Target aria-hidden className="size-5" />}
-            value={stats.quizzes}
-            label={t("quizzes.statQuizzes")}
-          />
-          <StatStripItem
-            icon={<ListChecks aria-hidden className="size-5" />}
-            value={stats.questions}
-            label={t("quizzes.statQuestions")}
-          />
-          {stats.topics > 0 && (
-            <StatStripItem
-              icon={<Tag aria-hidden className="size-5" />}
-              value={stats.topics}
-              label={t("quizzes.statTopics")}
-            />
-          )}
-        </StatStrip>
-      )}
-    </>
+    <PageHero
+      // `priority` on this one piece: it is the LCP candidate on the route.
+      // Every quiz panel below it stays lazy.
+      backdrop={<LearnBackdrop slot="quizBanner" priority />}
+      // Composed WITH the artwork rather than instead of it: the generated
+      // banner is a soft wash and the glyph field is line art, so the two
+      // occupy different frequencies. Dialled down because this band already
+      // carries a backdrop.
+      motif={<AmbientMotif variant="learn" intensity={0.7} />}
+      eyebrow={heading.eyebrow}
+      title={heading.title}
+      lead={heading.lead}
+      actions={
+        // An in-page anchor, not a navigation: on a phone the grid is a
+        // screen down, and a masthead that only repeats the page's name has
+        // not earned its height. `secondary` rides on --primary-foreground,
+        // the one ink ADR-003 derives to be legible on the `brand` tone.
+        <Button size="xl" shape="pill" variant="secondary" render={<a href="#quizzes" />}>
+          {t("quizzes.heroBrowse")}
+          {/* Down, not inline-end: this scrolls the page rather than
+              navigating, so it needs no RTL flip either. */}
+          <ArrowDown aria-hidden />
+        </Button>
+      }
+    />
   );
 }

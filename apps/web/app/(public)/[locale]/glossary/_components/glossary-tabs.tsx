@@ -6,8 +6,8 @@
 // an on-page set is client state. The A–Z chips inside `/glossary` are the
 // second kind; these are the first.
 //
-// It follows `about/_components/section-nav.tsx` and `LearnSectionNav` — the
-// established shape for a section strip on this site.
+// It follows `_components/section-nav.tsx` — the one section bar About and
+// both learning schools share (ADR-076 §1).
 import { ROUTE_PATHS } from "@repo/contracts";
 import { Link } from "@repo/i18n/navigation";
 import { Container } from "@repo/ui/components/container";

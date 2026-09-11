@@ -3,7 +3,7 @@
 // Its own file rather than the area-wide one, because the two layouts no
 // longer rhyme: this route opens with a wide header image over a two-column
 // grid whose right column is a sticky card, and the index opens with a
-// masthead over a stat strip. Reusing one skeleton across both would move the
+// masthead over a filter toolbar. Reusing one skeleton across both would move the
 // page on arrival at exactly the moment the reader is deciding whether to
 // stay.
 //

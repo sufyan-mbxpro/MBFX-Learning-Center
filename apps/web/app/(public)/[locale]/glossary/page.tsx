@@ -25,8 +25,8 @@ import { TopicOfTheDay } from "./_components/topic-of-the-day.tsx";
 // D29's deterministic term of the day. None of that changed here — the
 // browser below is byte-for-byte the component it was.
 //
-// What ADR-069 added is the masthead the section front had never had, the
-// counted stat strip, and the **Topic of the day** card that
+// What ADR-069 added is the masthead the section front had never had (its
+// counted stat strip was removed by ADR-076 §3), and the **Topic of the day** card that
 // `term-of-the-day.tsx` explicitly deferred until topics were a real model.
 // Both featured cards are ABSENT rather than empty when their loader returns
 // nothing, so a database with no terms or no topics renders a shorter page
@@ -47,13 +47,6 @@ export async function generateMetadata({
   };
 }
 
-/** The A–Z initial, matching `GlossaryBrowser`'s own rule so the counted
- * letters and the rendered sections cannot disagree. */
-function initialOf(term: string, locale: string): string {
-  const first = term[0]?.toLocaleUpperCase(locale) ?? "#";
-  return /^[A-Z]$/.test(first) ? first : "#";
-}
-
 export default async function GlossaryPage({ params }: PageProps<"/[locale]/glossary">) {
   const { locale } = await params;
   setRequestLocale(locale);
@@ -69,16 +62,9 @@ export default async function GlossaryPage({ params }: PageProps<"/[locale]/glos
     getGlossaryTopics(locale),
   ]);
 
-  const stats = {
-    terms: entries.length,
-    topics: topics.length,
-    letters: new Set(entries.map((entry) => initialOf(entry.term, locale))).size,
-  };
-
   return (
     <>
       <GlossaryMasthead
-        stats={stats}
         featured={
           featuredTerm || featuredTopic ? (
             <>

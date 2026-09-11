@@ -19,7 +19,7 @@ import { Section } from "@repo/ui/components/section";
 import { CourseShelf } from "../_components/course-shelf.tsx";
 import { LearnTrackBackdrop } from "../_components/learn-art.tsx";
 import { LearnMasthead } from "../_components/learn-masthead.tsx";
-import { learnStats, shelfLabels, toShelfTracks } from "../_lib/shelf-data.ts";
+import { shelfLabels, toShelfTracks } from "../_lib/shelf-data.ts";
 
 // One school's index — `/learn/forex`, `/learn/crypto` (ADR-065 §1).
 //
@@ -76,7 +76,6 @@ export default async function LearnTrackPage({ params }: PageProps<"/[locale]/le
   return (
     <>
       <LearnMasthead
-        stats={learnStats(mine)}
         // The video rail is the umbrella page's — a school index sends the
         // reader to courses, and an anchor to a band that is not on the page
         // is a button that silently does nothing.

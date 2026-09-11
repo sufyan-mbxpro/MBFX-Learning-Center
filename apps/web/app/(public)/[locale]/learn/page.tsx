@@ -12,7 +12,7 @@ import { Empty, EmptyDescription, EmptyTitle } from "@repo/ui/components/empty";
 import { Section } from "@repo/ui/components/section";
 import { CourseShelf } from "./_components/course-shelf.tsx";
 import { LearnMasthead } from "./_components/learn-masthead.tsx";
-import { learnStats, shelfLabels, toShelfTracks } from "./_lib/shelf-data.ts";
+import { shelfLabels, toShelfTracks } from "./_lib/shelf-data.ts";
 import { LEARNING_VIDEOS } from "../_content/home-videos.ts";
 import { VideoShowcase } from "../_sections/video-showcase.tsx";
 
@@ -67,7 +67,7 @@ export default async function LearnIndexPage({ params }: PageProps<"/[locale]/le
 
   return (
     <>
-      <LearnMasthead stats={learnStats(groups)} hasVideos={LEARNING_VIDEOS.length > 0} />
+      <LearnMasthead hasVideos={LEARNING_VIDEOS.length > 0} />
 
       {tracks.length === 0 ? (
         <Section spacing="md">

@@ -31,21 +31,6 @@ export default function VideoIndexLoading() {
         </Container>
       </Section>
 
-      {/* The counted-figures strip. */}
-      <Section spacing="sm" tone="muted">
-        <Container>
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
-            {Array.from({ length: 3 }, (_, index) => (
-              <div key={index} className="flex flex-col items-center gap-2">
-                <Skeleton className="shimmer size-10 rounded-full" />
-                <Skeleton className="shimmer h-8 w-16" />
-                <Skeleton className="shimmer h-4 w-24" />
-              </div>
-            ))}
-          </div>
-        </Container>
-      </Section>
-
       {/* The category chip row, then the grid. */}
       <Section spacing="md">
         <Container className="flex flex-col gap-6">

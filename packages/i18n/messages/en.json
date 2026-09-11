@@ -154,7 +154,9 @@
       },
       "viewAll": "View all",
       "learn": {
-        "surfaces": "Start learning"
+        "study": "Study",
+        "practise": "Practise & look up",
+        "more": "More learning"
       }
     },
     "signUp": "Join us"
@@ -1538,9 +1540,6 @@
     "topicLabel": "Topic",
     "eyebrow": "Trading vocabulary",
     "heroBrowse": "Browse the A–Z",
-    "statTerms": "Terms defined",
-    "statLetters": "Letters covered",
-    "statTopics": "Topics",
     "topicOfTheDay": "Topic of the day",
     "startExploring": "Start exploring",
     "termEyebrow": "Glossary",
@@ -2477,10 +2476,7 @@
       "ctaDescription": "Start with the first course in a track — each one assumes nothing before it.",
       "ctaAction": "Browse the glossary",
       "heroBrowse": "Browse courses",
-      "heroVideos": "Watch a lesson",
-      "statCourses": "Courses",
-      "statLessons": "Lessons",
-      "statHours": "Hours of material"
+      "heroVideos": "Watch a lesson"
     },
     "filters": {
       "label": "Filter by difficulty",
@@ -2643,9 +2639,6 @@
       "correctAnswerIs": "Correct answer: {answer}",
       "retake": "Take it again",
       "heroBrowse": "Browse quizzes",
-      "statQuizzes": "Quizzes",
-      "statQuestions": "Questions",
-      "statTopics": "Topics",
       "resultCount": "{count, plural, =0 {No quizzes} one {# quiz} other {# quizzes}}",
       "startShort": "Start",
       "retakeShort": "Retake",
@@ -2663,9 +2656,6 @@
       "title": "Watch it done",
       "intro": "Short walkthroughs of the things that are quicker to see than to read about.",
       "heroBrowse": "Browse videos",
-      "statTopics": "Topics",
-      "statVideos": "Videos",
-      "statCategories": "Categories",
       "filterLabel": "Browse by category",
       "filterAll": "All videos",
       "categoryLead": "Every {category} video in this school, newest first.",
