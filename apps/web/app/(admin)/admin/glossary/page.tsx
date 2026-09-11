@@ -1,45 +1,96 @@
 import { getTranslations } from "next-intl/server";
-import { BookOpen } from "lucide-react";
-import { listOutdatedGlossaryTranslations, loadGlossaryAdminList } from "@repo/core";
-import { getActiveLocales } from "@repo/i18n";
-import { requirePermission } from "@repo/rbac";
-import { Empty, EmptyDescription, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
+import {
+  listGlossaryTopics,
+  listOutdatedGlossaryTranslations,
+  loadGlossaryAdminList,
+} from "@repo/core";
+import { LEARN_TRACK_KEYS } from "@repo/contracts";
+import { can, requirePermission } from "@repo/rbac";
 import { AdminPage } from "../_components/admin-page.tsx";
-import { richTextLabels } from "../_components/editor-labels.ts";
-import { StatusBadge, TRANSLATION_STATUS_TONE, statusTone } from "../_components/status-badge.tsx";
-import { GlossaryControls, NewTermButton, TranslationForm } from "./glossary-controls.tsx";
+import { trackLabels } from "../learn/_lib/learn-labels.ts";
+import { NewTermButton } from "./glossary-controls.tsx";
+import { GlossaryTable, type GlossaryRow } from "./glossary-table.tsx";
 
-// Glossary admin (Module 11 core slice): the full content pipeline on one
-// screen — create, edit (sanitize-on-save), status machine, OUTDATED
-// queue. Course/lesson editors reuse these exact services when their
-// screens land.
+// The glossary list (ADR-069). A table, not a stack of inline editors — see
+// `glossary-table.tsx` for why. Editing is `/admin/glossary/[id]`.
 export default async function GlossaryAdminPage() {
-  await requirePermission("glossary.view");
-  const [t, terms, outdated, activeLocales] = await Promise.all([
+  const subject = await requirePermission("glossary.view");
+  const [t, terms, outdated, topics] = await Promise.all([
     getTranslations("admin"),
     loadGlossaryAdminList(),
     listOutdatedGlossaryTranslations(),
-    getActiveLocales(),
+    listGlossaryTopics(),
   ]);
-  const locales = activeLocales.map((l) => ({
-    code: l.code,
-    label: `${l.name} (${l.nativeName})`,
-  }));
 
-  // Shared ContentStatus labels — raw enum values never render (code-style #2).
-  const statusLabels: Record<string, string> = {
+  const dateFormat = new Intl.DateTimeFormat("en", { dateStyle: "medium" });
+  const tracks = trackLabels(t);
+
+  // Shared ContentStatus labels — a raw enum value never renders (ADR-044 #5).
+  const statuses: Record<string, string> = {
     DRAFT: t("statusDraft"),
     IN_REVIEW: t("statusInReview"),
+    SEO_REVIEW: t("statusSeoReview"),
+    APPROVED: t("statusApproved"),
+    SCHEDULED: t("statusScheduled"),
     PUBLISHED: t("statusPublished"),
     ARCHIVED: t("statusArchived"),
     OUTDATED: t("statusOutdated"),
   };
+  const difficulties: Record<string, string> = {
+    BEGINNER: t("difficultyBeginner"),
+    INTERMEDIATE: t("difficultyIntermediate"),
+    ADVANCED: t("difficultyAdvanced"),
+  };
+
+  const rows: GlossaryRow[] = terms.map((term) => ({
+    id: term.id,
+    term: term.term ?? "",
+    slug: term.slug ?? "",
+    status: term.status,
+    statusLabel: statuses[term.status] ?? term.status,
+    topicId: term.topicId,
+    topicLabel: term.topicName,
+    // Resolved to a LABEL here rather than in the table: "Both schools" is a
+    // real value, not a missing one, and the table should not have to know
+    // which null means what (ADR-069 §3).
+    trackLabel: term.track === null ? t("glossaryTrackBoth") : (tracks[term.track] ?? term.track),
+    trackKey: term.track ?? "",
+    difficultyLabel: difficulties[term.difficulty] ?? term.difficulty,
+    localesLabel: term.locales
+      .map(
+        (l) => `${l.locale.toUpperCase()}: ${statuses[l.translationStatus] ?? l.translationStatus}`,
+      )
+      .join(" · "),
+    deleted: term.deletedAt !== null,
+    updatedAtLabel: dateFormat.format(term.updatedAt),
+    updatedAtSort: term.updatedAt.getTime(),
+  }));
+
+  const topicOptions = topics.map((topic) => ({ id: topic.id, name: topic.name || t("untitled") }));
 
   return (
     <AdminPage
       title={t("glossary")}
       description={t("pageDesc.glossary")}
-      actions={<NewTermButton label={t("newTerm")} />}
+      actions={
+        can(subject, "glossary.create") ? (
+          <NewTermButton
+            topicOptions={topicOptions}
+            labels={{
+              trigger: t("newTerm"),
+              title: t("glossaryEditor.newTermTitle"),
+              description: t("glossaryEditor.newTermDescription"),
+              topicLabel: t("glossaryEditor.topicLabel"),
+              topicNone: t("glossaryEditor.topicNone"),
+              trackLabel: t("trackLabel"),
+              trackBoth: t("glossaryTrackBoth"),
+              create: t("create"),
+              cancel: t("cancel"),
+              tracks,
+            }}
+          />
+        ) : undefined
+      }
     >
       {outdated.length > 0 && (
         <section className="flex flex-col gap-2 rounded-lg border border-warning-interactive/40 bg-card p-4">
@@ -54,67 +105,54 @@ export default async function GlossaryAdminPage() {
         </section>
       )}
 
-      {terms.length === 0 ? (
-        <Empty>
-          <EmptyMedia>
-            <BookOpen aria-hidden />
-          </EmptyMedia>
-          <EmptyTitle>{t("noTerms")}</EmptyTitle>
-          <EmptyDescription>{t("noTermsHint")}</EmptyDescription>
-        </Empty>
-      ) : (
-        <section className="flex flex-col gap-4">
-          {terms.map((term) => (
-            <div
-              key={term.id}
-              className="card-hover flex flex-col gap-3 rounded-lg border bg-card p-4"
-            >
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm font-medium">{term.term ?? t("untitled")}</span>
-                {term.slug && <span className="text-xs text-muted-foreground">/{term.slug}</span>}
-                <StatusBadge tone={statusTone(TRANSLATION_STATUS_TONE, term.status)}>
-                  {statusLabels[term.status] ?? term.status}
-                </StatusBadge>
-                {term.deletedAt && <StatusBadge tone="destructive">{t("deleted")}</StatusBadge>}
-                <span className="ms-auto text-xs text-muted-foreground">
-                  {term.locales
-                    .map(
-                      (l) =>
-                        `${l.locale}: ${statusLabels[l.translationStatus] ?? l.translationStatus}`,
-                    )
-                    .join(" · ")}
-                </span>
-              </div>
-              <GlossaryControls
-                termId={term.id}
-                legalTransitions={term.legalTransitions}
-                deleted={term.deletedAt !== null}
-                labels={{
-                  delete: t("softDelete"),
-                  restore: t("restore"),
-                  cancel: t("cancel"),
-                  confirmDeleteTitle: t("confirmDeleteGlossaryTitle"),
-                  confirmDeleteBody: t("confirmDeleteGlossaryBody"),
-                  statusLabels,
-                }}
-              />
-              <TranslationForm
-                termId={term.id}
-                locales={locales}
-                labels={{
-                  term: t("termLabel"),
-                  slug: t("slugLabel"),
-                  locale: t("localeLabel"),
-                  body: t("bodyLabel"),
-                  save: t("save"),
-                  saved: t("saved"),
-                  editor: richTextLabels(t),
-                }}
-              />
-            </div>
-          ))}
-        </section>
-      )}
+      <GlossaryTable
+        rows={rows}
+        statusKeys={Object.keys(statuses)}
+        topicOptions={topicOptions.map((topic) => ({ value: topic.id, label: topic.name }))}
+        trackOptions={LEARN_TRACK_KEYS.map((key) => ({ value: key, label: tracks[key] ?? key }))}
+        canCreate={can(subject, "glossary.create")}
+        canDelete={can(subject, "glossary.delete")}
+        labels={{
+          search: t("glossaryEditor.searchPlaceholder"),
+          columns: t("columns"),
+          export: t("export"),
+          selectedSuffix: t("selectedCount"),
+          pageWord: t("pageWord"),
+          ofWord: t("ofWord"),
+          previous: t("previous"),
+          next: t("next"),
+          noResults: t("noResults"),
+          termCol: t("termLabel"),
+          statusCol: t("statusLabel"),
+          topicCol: t("glossaryEditor.topicLabel"),
+          trackCol: t("trackLabel"),
+          difficultyCol: t("difficultyLabel"),
+          localesCol: t("glossaryEditor.localesCol"),
+          updatedCol: t("updatedLabel"),
+          actionsCol: t("actionsCol"),
+          untitled: t("untitled"),
+          unfiled: t("glossaryEditor.unfiled"),
+          deleted: t("deleted"),
+          edit: t("edit"),
+          duplicate: t("duplicate"),
+          softDelete: t("softDelete"),
+          restore: t("restore"),
+          confirmDeleteTitle: t("confirmDeleteGlossaryTitle"),
+          confirmDeleteBody: t("confirmDeleteGlossaryBody"),
+          confirm: t("confirm"),
+          cancel: t("cancel"),
+          openActions: t("openActions"),
+          emptyTitle: t("noTerms"),
+          emptyBody: t("noTermsHint"),
+          allStatuses: t("allStatuses"),
+          allTopics: t("glossaryEditor.allTopics"),
+          allTracks: t("glossaryEditor.allTracks"),
+          statusLabel: t("statusLabel"),
+          topicLabel: t("glossaryEditor.topicLabel"),
+          trackLabel: t("trackLabel"),
+          statuses,
+        }}
+      />
     </AdminPage>
   );
 }

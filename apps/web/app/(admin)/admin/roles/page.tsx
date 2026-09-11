@@ -50,6 +50,7 @@ export default async function RolesPage() {
             maxLevel={subject.maxRoleLevel}
             labels={{
               createRole: t("createRole"),
+              createRoleDescription: t("dialogDesc.createRole"),
               name: t("roleName"),
               key: t("roleKey"),
               level: t("level"),

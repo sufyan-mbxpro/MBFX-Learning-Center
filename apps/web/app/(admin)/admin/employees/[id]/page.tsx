@@ -125,6 +125,7 @@ export default async function EmployeeDetailPage({ params }: PageProps<"/admin/e
                     .map((e) => ({ id: e.id, name: `${e.firstName} ${e.lastName}` }))}
                   labels={{
                     edit: t("edit"),
+                    editDescription: t("dialogDesc.editEmployee"),
                     save: t("save"),
                     cancel: t("cancel"),
                     firstName: t("firstNameCol"),

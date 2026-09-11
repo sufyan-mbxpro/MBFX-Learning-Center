@@ -9,6 +9,7 @@ import { loadSubject } from "@repo/rbac";
 import { buildThemeStyleSheet, getActiveTheme } from "@repo/theme";
 import { curatedFontVariables } from "@repo/ui/fonts";
 import { ThemeProvider } from "@repo/ui/components/theme-provider";
+import { ThemeScript } from "@repo/ui/components/theme-script";
 import { AdminShell } from "./admin/_components/admin-shell.tsx";
 import { faviconIcons } from "../_lib/favicon.ts";
 import "@repo/ui/globals.css";
@@ -89,7 +90,7 @@ export default async function AdminRootLayout({ children }: LayoutProps<"/">) {
   const nonce = (await headers()).get("x-nonce") ?? undefined;
 
   return (
-    // suppressHydrationWarning on <html>: next-themes stamps the mode class
+    // suppressHydrationWarning on <html>: <ThemeScript> stamps the mode class
     // pre-hydration (ADR-008, user-controlled mode — now on the admin
     // surface too, changes-01).
     // No per-surface scale class: public and admin share one type scale (ADR-072).
@@ -102,6 +103,9 @@ export default async function AdminRootLayout({ children }: LayoutProps<"/">) {
           cz-shortcut-listen) inject body attributes before React hydrates —
           same rationale as the public layout's <html> suppression. */}
       <body className="min-h-full" suppressHydrationWarning>
+        {/* ADR-064: the pre-paint mode guard, server-rendered so the browser
+            actually executes it. Carries the nonce, like #brand-tokens. */}
+        <ThemeScript nonce={nonce} />
         <style
           id="brand-tokens"
           nonce={nonce}

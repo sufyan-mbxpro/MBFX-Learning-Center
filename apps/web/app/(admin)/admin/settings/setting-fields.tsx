@@ -13,14 +13,8 @@ import { Button } from "@repo/ui/components/button";
 import { Checkbox } from "@repo/ui/components/checkbox";
 import { Input } from "@repo/ui/components/input";
 import { Label } from "@repo/ui/components/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@repo/ui/components/select";
 import { ConfirmDialog } from "@repo/ui/components/confirm-dialog";
+import { AdminCombobox } from "../_components/combobox.tsx";
 
 export interface SettingFieldsLabels {
   addRow: string;
@@ -77,20 +71,14 @@ function FieldControl({
 
   if (field.type === "select") {
     const options = optionsFor(field, sources);
-    const current = options.find((option) => option.value === value);
     return (
-      <Select value={String(value ?? "")} onValueChange={(next) => onChange(next ?? "")}>
-        <SelectTrigger id={id} className="w-full">
-          <SelectValue>{current?.label ?? labels.selectPlaceholder}</SelectValue>
-        </SelectTrigger>
-        <SelectContent>
-          {options.map((option) => (
-            <SelectItem key={option.value} value={option.value}>
-              {option.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <AdminCombobox
+        id={id}
+        value={String(value ?? "")}
+        onValueChange={onChange}
+        placeholder={labels.selectPlaceholder}
+        options={options.map((option) => ({ value: option.value, label: option.label }))}
+      />
     );
   }
 

@@ -21,15 +21,9 @@ import {
   DropdownMenuTrigger,
 } from "@repo/ui/components/dropdown-menu";
 import { Empty, EmptyDescription, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@repo/ui/components/select";
 import { ResetPasswordDialog } from "../_components/reset-password-dialog.tsx";
 import { setUserStatusAction } from "../_actions/user-actions.ts";
+import { AdminCombobox } from "../_components/combobox.tsx";
 import { FilterBar } from "../_components/filter-bar.tsx";
 import { StatusBadge, USER_STATUS_TONE, statusTone } from "../_components/status-badge.tsx";
 import { useServerAction } from "../_hooks/use-server-action.ts";
@@ -271,42 +265,26 @@ export function UsersTable({
         labels={tableLabels}
         filters={
           <FilterBar>
-            <Select
+            <AdminCombobox
+              aria-label={labels.type}
+              className="w-40"
               value={userType}
-              onValueChange={(value) => setParams({ userType: (value as string) || null })}
-            >
-              <SelectTrigger aria-label={labels.type} className="min-w-36">
-                <SelectValue>
-                  {userType ? (labels.typeLabels[userType] ?? userType) : labels.allTypes}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="">{labels.allTypes}</SelectItem>
-                {Object.entries(labels.typeLabels).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select
+              onValueChange={(value) => setParams({ userType: value || null })}
+              options={[
+                { value: "", label: labels.allTypes },
+                ...Object.entries(labels.typeLabels).map(([value, label]) => ({ value, label })),
+              ]}
+            />
+            <AdminCombobox
+              aria-label={labels.status}
+              className="w-40"
               value={status}
-              onValueChange={(value) => setParams({ status: (value as string) || null })}
-            >
-              <SelectTrigger aria-label={labels.status} className="min-w-36">
-                <SelectValue>
-                  {status ? (labels.statusLabels[status] ?? status) : labels.allStatuses}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="">{labels.allStatuses}</SelectItem>
-                {Object.entries(labels.statusLabels).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              onValueChange={(value) => setParams({ status: value || null })}
+              options={[
+                { value: "", label: labels.allStatuses },
+                ...Object.entries(labels.statusLabels).map(([value, label]) => ({ value, label })),
+              ]}
+            />
           </FilterBar>
         }
         pageCount={pageCount}

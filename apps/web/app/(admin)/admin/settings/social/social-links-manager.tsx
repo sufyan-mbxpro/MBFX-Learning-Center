@@ -17,19 +17,13 @@ import {
   Dialog,
   DialogContent,
   DialogFooter,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@repo/ui/components/dialog";
 import { Empty, EmptyDescription, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
 import { Input } from "@repo/ui/components/input";
 import { Label } from "@repo/ui/components/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@repo/ui/components/select";
 import { SOCIAL_GLYPH_NAMES, SocialGlyph } from "@repo/ui/components/social-glyph";
 import { Switch } from "@repo/ui/components/switch";
 import { humanizeKey } from "@repo/utils";
@@ -40,6 +34,7 @@ import {
   toggleSocialLinkAction,
   updateSocialLinkAction,
 } from "../../_actions/admin-actions.ts";
+import { AdminCombobox } from "../../_components/combobox.tsx";
 import { useClientTable } from "../../_hooks/use-client-table.ts";
 import { useServerAction } from "../../_hooks/use-server-action.ts";
 
@@ -58,7 +53,9 @@ export interface SocialLinkRow {
 
 export interface SocialLinksLabels {
   add: string;
+  addDescription: string;
   edit: string;
+  editDescription: string;
   delete: string;
   save: string;
   cancel: string;
@@ -324,6 +321,9 @@ export function SocialLinksManager({
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{editing ? labels.edit : labels.add}</DialogTitle>
+            <DialogDescription>
+              {editing ? labels.editDescription : labels.addDescription}
+            </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-3">
             {!editing && (
@@ -361,29 +361,18 @@ export function SocialLinksManager({
                 preview shows the moment one is set. */}
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="social-icon">{labels.iconGlyph}</Label>
-              <Select
+              <AdminCombobox
+                id="social-icon"
                 value={form.icon}
-                onValueChange={(next) => set("icon", (next as string) || "link")}
-              >
-                <SelectTrigger id="social-icon" className="w-full">
-                  <SelectValue>
-                    <span className="flex items-center gap-2">
-                      <SocialGlyph name={form.icon} />
-                      {humanizeKey(form.icon)}
-                    </span>
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {SOCIAL_GLYPH_NAMES.map((name) => (
-                    <SelectItem key={name} value={name}>
-                      <span className="flex items-center gap-2">
-                        <SocialGlyph name={name} />
-                        {humanizeKey(name)}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                onValueChange={(next) => set("icon", next || "link")}
+                // The glyph rides along as `icon`; `label` stays the plain
+                // humanized name so the search input has something to match.
+                options={SOCIAL_GLYPH_NAMES.map((name) => ({
+                  value: name,
+                  label: humanizeKey(name),
+                  icon: <SocialGlyph name={name} />,
+                }))}
+              />
             </div>
             <ImageUploadField
               id="social-icon-url"
@@ -391,6 +380,8 @@ export function SocialLinksManager({
               description={labels.iconUploadHint}
               value={form.iconUrl}
               purpose="setting"
+              category="brand"
+              sourceType="SETTING"
               labels={labels.upload}
               previewClassName="size-12"
               onChange={(next) => set("iconUrl", next?.url ?? null)}

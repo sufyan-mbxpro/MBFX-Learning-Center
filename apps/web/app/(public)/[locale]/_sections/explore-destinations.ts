@@ -17,14 +17,19 @@
 // ...and not a label. Titles, blurbs and alt text are catalog keys
 // (code-style.md #2), derived from `key` at the call site.
 //
-// `status` is the honest half. `/learn`, `/tools` and `/markets` are seeded
-// into the header menu but have no route: they fall through to the `[...slug]`
+// `status` is the honest half. `/tools` and `/markets` are seeded into the
+// header menu but have no route: they fall through to the `[...slug]`
 // catch-all, find no published page, and 404. A carousel card that links to a
 // 404 is worse than one that says "coming soon", so a `soon` card renders as a
 // flat, non-interactive tile — no link, no hover lift. That follows IconCard's
 // own rule: a card that rises under the pointer but does nothing when clicked
 // promises an interaction it does not have. Building the route is the only
 // edit needed to promote one: flip `status` to `live`.
+//
+// `learn` was `soon` until 2026-09-11 and should not have been: `/learn` has
+// had a route since changes-11 Phase 4. `explore-destinations.test.ts` now
+// fails any entry whose `status` disagrees with whether its page file exists,
+// so the next route to land cannot leave its card stranded the same way.
 import {
   BadgeCheck,
   BookA,
@@ -60,7 +65,7 @@ export const EXPLORE_DESTINATIONS = [
     icon: GraduationCap,
     feature: "courses",
     tone: "primary",
-    status: "soon",
+    status: "live",
   },
   {
     key: "tools",

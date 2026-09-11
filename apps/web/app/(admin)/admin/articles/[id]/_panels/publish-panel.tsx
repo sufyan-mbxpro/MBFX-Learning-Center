@@ -31,8 +31,13 @@ import { useState } from "react";
 import { Archive, CalendarClock, Rocket, Send, Undo2 } from "lucide-react";
 import { Button } from "@repo/ui/components/button";
 import { ConfirmDialog } from "@repo/ui/components/confirm-dialog";
-import { Input } from "@repo/ui/components/input";
-import { Label } from "@repo/ui/components/label";
+// ADR-071 — the schedule field is shared with ContentStatusPanel now that
+// every content entity has a scheduledFor column, so the input, the three
+// clock helpers and the presets live in one place.
+import {
+  ScheduleField,
+  type ScheduleFieldLabels,
+} from "../../../_components/editor/schedule-field.tsx";
 import { transitionArticleAction } from "../../../_actions/article-actions.ts";
 import {
   ARTICLE_STATUS_TONE,
@@ -40,9 +45,9 @@ import {
   statusTone,
 } from "../../../_components/status-badge.tsx";
 import { useServerAction } from "../../../_hooks/use-server-action.ts";
-import { EditorSection } from "./editor-section.tsx";
+import { EditorSection } from "../../../_components/editor/editor-section.tsx";
 
-export interface PublishLabels {
+export interface PublishLabels extends ScheduleFieldLabels {
   section: string;
   description: string;
   hint: string;
@@ -50,12 +55,7 @@ export interface PublishLabels {
   statusLabels: Record<string, string>;
   publishedLabel: string;
   updatedLabel: string;
-  scheduleFor: string;
   transitions: Record<string, string>;
-  presetPlusHour: string;
-  presetTomorrow9: string;
-  presetNextWeek: string;
-  presetClear: string;
   confirmArchiveTitle: string;
   confirmArchiveBody: string;
   confirm: string;
@@ -82,26 +82,6 @@ const TRANSITION_ICON: Record<string, typeof Rocket> = {
   DRAFT: Undo2,
   ARCHIVED: Archive,
 };
-
-/** `datetime-local` wants "YYYY-MM-DDTHH:mm" in LOCAL time, not an ISO string. */
-function toLocalInput(date: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-// Module scope, not the component body: these read the clock, and doing that
-// during render is exactly what react-hooks/purity forbids. They are only ever
-// CALLED from a click handler.
-function plusHour(): Date {
-  return new Date(Date.now() + 60 * 60 * 1000);
-}
-
-function atNineAmIn(days: number): Date {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  d.setHours(9, 0, 0, 0);
-  return d;
-}
 
 export function PublishPanel({
   articleId,
@@ -138,8 +118,6 @@ export function PublishPanel({
   const transitions = legalTransitions.filter(
     (to) => canPublish || (to !== "PUBLISHED" && to !== "SCHEDULED"),
   );
-
-  const preset = (fn: () => Date) => () => setScheduleFor(toLocalInput(fn()));
 
   /** The two transitions that put content in front of readers save the open
    * form first; DRAFT and ARCHIVED take content DOWN, so saving into them
@@ -179,29 +157,12 @@ export function PublishPanel({
       </p>
 
       {transitions.includes("SCHEDULED") && (
-        <div className="flex flex-col gap-1.5 border-t pt-3">
-          <Label htmlFor="article-schedule">{labels.scheduleFor}</Label>
-          <Input
-            id="article-schedule"
-            type="datetime-local"
-            value={scheduleFor}
-            onChange={(e) => setScheduleFor(e.target.value)}
-          />
-          <div className="flex flex-wrap gap-1.5">
-            <Button variant="outline" size="xs" onClick={preset(plusHour)}>
-              {labels.presetPlusHour}
-            </Button>
-            <Button variant="outline" size="xs" onClick={preset(() => atNineAmIn(1))}>
-              {labels.presetTomorrow9}
-            </Button>
-            <Button variant="outline" size="xs" onClick={preset(() => atNineAmIn(7))}>
-              {labels.presetNextWeek}
-            </Button>
-            <Button variant="ghost" size="xs" onClick={() => setScheduleFor("")}>
-              {labels.presetClear}
-            </Button>
-          </div>
-        </div>
+        <ScheduleField
+          id="article-schedule"
+          value={scheduleFor}
+          onChange={setScheduleFor}
+          labels={labels}
+        />
       )}
 
       <div className="flex flex-wrap gap-1.5 border-t pt-3">

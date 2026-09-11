@@ -91,16 +91,21 @@ model User {
   lockedUntil      DateTime?
   deletedAt        DateTime?
 
-  accounts      Account[]
-  sessions      Session[]
-  twofactors    TwoFactor[]
-  roles         UserRole[]
-  permissions   UserPermission[]
-  employee      Employee?
-  auditLogs     AuditLog[]
-  notifications Notification[]
+  accounts       Account[]
+  sessions       Session[]
+  twofactors     TwoFactor[]
+  roles          UserRole[]
+  permissions    UserPermission[]
+  employee       Employee?
+  auditLogs      AuditLog[]
+  notifications  Notification[]
   // ADR-019, design-only — see Comment.
-  comments      Comment[]
+  comments       Comment[]
+  // ADR-056 — learner progress. All three cascade on user delete (GDPR-shaped).
+  lessonProgress LessonProgress[]
+  enrollments    CourseEnrollment[]
+  lessonFeedback LessonFeedback[]
+  quizAttempts   QuizAttempt[]
 
   @@unique([email])
   @@index([userType, status])
@@ -539,7 +544,11 @@ model MediaAsset {
   kind          MediaKind @default(IMAGE)
   title         String?   @db.VarChar(200)
   altText       String?   @db.VarChar(500) // default alt; a placement's translatable alt overrides it
-  folder        String    @default("/") @db.VarChar(300) // path string, no folder table (ADR-034 §2)
+  // ADR-066: the first segment is a registered category (`/news`, `/learn`,
+  // `/brand`, `/general`); a sub-path below it is still free. Type is NOT in
+  // this path — `kind` is the type axis, and duplicating it here would be a
+  // second source of truth for a value magic bytes already decided.
+  folder        String    @default("/general") @db.VarChar(300)
   tags          Json? // string[] — validated, lower-cased, <= 20 (ADR-034 Consequences: filtered in memory, not indexed)
   durationMs    Int?
   posterAssetId String? // VIDEO: a MediaAsset IMAGE id; required for background use (ADR-032 §2)
@@ -547,7 +556,11 @@ model MediaAsset {
   deletedAt     DateTime?
 
   @@index([purpose, createdAt])
-  @@index([kind, folder])
+  // ADR-067's dominant query is: folder prefix → kind → newest first. The
+  // ADR-034 pair `[kind, folder]` had the columns the right way round for a
+  // kind-first library that no longer exists.
+  @@index([folder, kind, createdAt])
+  @@index([deletedAt, createdAt])
   @@map("media_assets")
 }
 
@@ -648,6 +661,42 @@ enum Difficulty {
   ADVANCED
 }
 
+// ADR-056 #5 — how a lesson becomes complete. Scroll-depth and
+// video-percentage auto-completion are deliberately absent: both are
+// unreliable, neither is testable at the DB level, and both write completion
+// rows the learner did not intend. QUIZ_PASS is unreachable until Phase 6.
+enum CompletionRule {
+  MANUAL
+  QUIZ_PASS
+}
+
+// ADR-058 #1. Ordering, matching, short answer and image questions are NOT
+// implemented; the enum makes them additive rather than a migration of every
+// existing row.
+enum QuestionType {
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+}
+
+// ADR-058 #4 — when the CORRECT ANSWER and its explanation may be revealed.
+// NEVER also suppresses per-answer correctness during the attempt, because a
+// live right/wrong counter is a correctness oracle and would make this setting
+// a lie. AFTER_PASS still reveals correctness during the attempt (you learn you
+// were wrong) and withholds the answer itself until you pass.
+enum AnswerVisibility {
+  NEVER
+  AFTER_SUBMIT
+  AFTER_PASS
+}
+
+// No NOT_STARTED member: the absence of a row IS "not started". Storing it
+// would mean writing a row for every lesson a learner merely scrolled past.
+enum LessonProgressStatus {
+  IN_PROGRESS
+  COMPLETED
+}
+
 enum ContentStatus {
   DRAFT
   IN_REVIEW
@@ -679,22 +728,46 @@ enum CommentStatus {
 
 model Course {
   id             String            @id @default(cuid())
+  // LEARN_TRACKS registry key (ADR-055 #2). Validated in @repo/contracts, not
+  // by a FK: a track is site structure, which ADR-042 keeps in code.
+  track          String            @db.VarChar(40)
   difficulty     Difficulty        @default(BEGINNER)
   estimatedHours Int?
-  coverImageUrl  String?           @db.VarChar(500)
+  // ADR-055 #6 — the MediaAsset id, not a URL. Plain String like
+  // Article.coverImageAssetId (ADR-035): MediaAsset carries no back-relations.
+  coverAssetId   String?
+  // ADR-055 #5 — an external course. HTTPS-only, never fetched server-side.
+  externalUrl    String?           @db.VarChar(500)
+  // Denormalised published-lesson count, maintained by @repo/core in the same
+  // transaction as the lesson write, so /learn costs one read rather than N.
+  lessonCount    Int               @default(0)
   status         ContentStatus     @default(DRAFT)
   visibility     FeatureVisibility @default(PUBLIC)
   sortOrder      Int               @default(0)
   authorId       String?
   publishedAt    DateTime?
+  // ADR-071 — the instant this row becomes public. Nullable: only a SCHEDULED
+  // row carries one, and moving to PUBLISHED or DRAFT clears it. Visibility is
+  // decided in the query (PUBLISHED, or SCHEDULED whose time has come), so a
+  // due row is live whether or not the sweep has run.
+  scheduledFor   DateTime?
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
   deletedAt      DateTime?
 
+  // ADR-056 #7 / ADR-058 #1 — the course-level completion rule. Deliberately
+  // NOT a phantom Lesson row: that would give it a slug, a URL, a position in
+  // LessonProgress and a completionRule duplicating this very question.
+  finalQuizId String?
+
   translations CourseTranslation[]
-  modules      Module[]
+  sections     CourseSection[]
+  enrollments  CourseEnrollment[]
+  finalQuiz    Quiz?               @relation("CourseFinalQuiz", fields: [finalQuizId], references: [id], onDelete: SetNull)
 
   @@index([status, publishedAt])
+  @@index([track, status, sortOrder])
+  @@index([status, scheduledFor])
   @@map("courses")
 }
 
@@ -726,7 +799,12 @@ model CourseTranslation {
   @@map("course_translations")
 }
 
-model Module {
+// ADR-055 #1 — was `Module`. Renamed because "Module" already denotes a build
+// unit in this repository ("Module 11"), and `db.module` beside a DEVLOG entry
+// about Module 11 is a permanent ambiguity. Learner-facing word: "Section".
+// A section groups lessons ON THE PAGE only — it never appears in a URL
+// (ADR-055 #3), so reordering sections breaks no link.
+model CourseSection {
   id          String   @id @default(cuid())
   courseId    String
   sortOrder   Int      @default(0)
@@ -734,51 +812,85 @@ model Module {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  course       Course              @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  course       Course                     @relation(fields: [courseId], references: [id], onDelete: Cascade)
   lessons      Lesson[]
-  translations ModuleTranslation[]
+  translations CourseSectionTranslation[]
 
   @@index([courseId, sortOrder])
-  @@map("modules")
+  @@map("course_sections")
 }
 
-model ModuleTranslation {
+model CourseSectionTranslation {
   id          String  @id @default(cuid())
-  moduleId    String
+  sectionId   String
   locale      String  @db.VarChar(10)
   title       String  @db.VarChar(255)
   description String? @db.Text
 
-  module Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  section CourseSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
 
-  @@unique([moduleId, locale])
-  @@map("module_translations")
+  @@unique([sectionId, locale])
+  @@map("course_section_translations")
 }
 
+// ADR-055 #4 — capabilities, not types. A lesson is a bag of optional
+// capabilities (content, videoUrl, attachments, externalUrl, quizId) and what
+// it IS is derived from which are present. There is deliberately no
+// `LessonType` enum: it would make illegal combinations representable and put
+// a switch in every consumer. `lessonInputSchema` enforces that at least one
+// capability is set, so an empty lesson cannot be saved.
 model Lesson {
   id                   String            @id @default(cuid())
-  moduleId             String
+  sectionId            String
   difficulty           Difficulty        @default(BEGINNER)
   estimatedMinutes     Int?
+  // External embed URL — genuinely not an asset, so it stays a string.
+  // Validated by parseVideoUrl(); the iframe is rebuilt at render, never
+  // stored (ADR-055 #5).
   videoUrl             String?           @db.VarChar(500)
-  coverImageUrl        String?           @db.VarChar(500)
+  // ADR-055 #5 — an external resource. HTTPS-only, never fetched
+  // server-side, framed only if parseVideoUrl() accepts it; else a link.
+  externalUrl          String?           @db.VarChar(500)
+  // ADR-055 #6 — MediaAsset id, not a URL (see Course.coverAssetId).
+  heroAssetId          String?
+  // ADR-056 #5. MANUAL works identically for text, video, PDF and external
+  // lessons, which is what makes external resources cheap to support: we
+  // cannot observe what a learner does on someone else's site.
+  completionRule       CompletionRule    @default(MANUAL)
+  // Optional material does not block course completion (ADR-056 #7).
+  isRequired           Boolean           @default(true)
   prerequisiteLessonId String?
+  // ADR-058 #1 — the lesson's quiz. SetNull, not Cascade: deleting a quiz must
+  // never delete the lesson that used it. A QUIZ_PASS lesson left without one
+  // is treated as non-blocking by recomputeCourseCompletion (ADR-058
+  // consequences) rather than making the course impossible to finish.
+  quizId               String?
   sortOrder            Int               @default(0)
   status               ContentStatus     @default(DRAFT)
   visibility           FeatureVisibility @default(PUBLIC)
   authorId             String?
   publishedAt          DateTime?
+  // ADR-071 — the instant this row becomes public. Nullable: only a SCHEDULED
+  // row carries one, and moving to PUBLISHED or DRAFT clears it. Visibility is
+  // decided in the query (PUBLISHED, or SCHEDULED whose time has come), so a
+  // due row is live whether or not the sweep has run.
+  scheduledFor         DateTime?
   lastReviewedAt       DateTime?
   viewCount            Int               @default(0)
   createdAt            DateTime          @default(now())
   updatedAt            DateTime          @updatedAt
   deletedAt            DateTime?
 
-  module       Module              @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  section      CourseSection       @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   translations LessonTranslation[]
+  attachments  LessonAttachment[]
+  progress     LessonProgress[]
+  feedback     LessonFeedback[]
+  quiz         Quiz?               @relation("LessonQuiz", fields: [quizId], references: [id], onDelete: SetNull)
 
-  @@index([moduleId, sortOrder])
+  @@index([sectionId, sortOrder])
   @@index([status, publishedAt])
+  @@index([status, scheduledFor])
   @@map("lessons")
 }
 
@@ -813,25 +925,348 @@ model LessonTranslation {
   @@map("lesson_translations")
 }
 
+// ADR-055 #4/#6 — PDFs and downloads attached to a lesson. `assetId` is a
+// MediaAsset id held as a plain String, matching Article.coverImageAssetId
+// (ADR-035); the placement is mirrored into ContentReference so
+// deleteMedia()'s in-use guard sees it.
+model LessonAttachment {
+  id        String   @id @default(cuid())
+  lessonId  String
+  assetId   String
+  sortOrder Int      @default(0)
+  // Display-only. A translatable label is deferred until an editor asks for
+  // one — the file name carries the meaning today.
+  label     String?  @db.VarChar(200)
+  createdAt DateTime @default(now())
+
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@index([lessonId, sortOrder])
+  @@map("lesson_attachments")
+}
+
+// ADR-056 #2 — one row per (user, lesson).
+//
+// `courseId` is denormalised on purpose. The course page asks "which of this
+// course's lessons has this user completed" on every load; without it that is
+// progress -> lesson -> section -> course, with it one index seek. The write
+// path sets it inside the same transaction that resolves the lesson, so it
+// cannot drift.
+model LessonProgress {
+  id          String               @id @default(cuid())
+  userId      String
+  lessonId    String
+  courseId    String
+  status      LessonProgressStatus @default(IN_PROGRESS)
+  completedAt DateTime?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, lessonId]) // makes "mark complete" idempotent
+  @@index([userId, courseId]) // course page: one indexed read
+  @@index([lessonId, status]) // analytics: drop-off per lesson
+  @@map("lesson_progress")
+}
+
+// ADR-056 #2 — one row per (user, course). `lessonsCompleted` is denormalised
+// and maintained ONLY inside the same transaction as the LessonProgress write;
+// a concurrency test asserts it equals the distinct completed-lesson count.
+model CourseEnrollment {
+  id               String    @id @default(cuid())
+  userId           String
+  courseId         String
+  lastLessonId     String? // drives "Continue Learning"
+  lessonsCompleted Int       @default(0)
+  startedAt        DateTime  @default(now())
+  completedAt      DateTime?
+  lastActiveAt     DateTime  @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])
+  @@index([userId, lastActiveAt]) // learner dashboard
+  @@index([courseId, completedAt]) // admin analytics
+  @@map("course_enrollments")
+}
+
+// ADR-056 #8 — one row per vote, not a pair of counters on Lesson.
+//
+// Counters would answer "what is the ratio right now" and nothing else. A row
+// per vote answers "which lessons got worse after the March rewrite", which is
+// the question an editor actually asks, and it is the reason Phase 9's
+// least-helpful report is a query rather than a new feature.
+//
+// **The unique constraint binds SIGNED-IN learners only, and that is
+// deliberate.** MariaDB treats NULLs as distinct in a unique index, so
+// anonymous rows (userId NULL) accumulate freely while a learner with an
+// account can only hold one vote per lesson. Do not "fix" this to a filtered
+// or partial index — the behaviour is the design. Anonymous duplicates are
+// bounded by the endpoint's per-IP rate limit and deduped per browser in
+// localStorage, which is UX rather than security and is stated as such.
+//
+// The optional `user` relation is one addition to ADR-056 #8's sketch, which
+// had `userId` as a bare column: deleting a learner has to take their votes
+// with it, exactly as it does for LessonProgress and CourseEnrollment, rather
+// than leaving rows attributable to a dangling id.
+model LessonFeedback {
+  id        String   @id @default(cuid())
+  lessonId  String
+  userId    String?
+  helpful   Boolean
+  createdAt DateTime @default(now())
+
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([lessonId, userId])
+  @@index([lessonId, helpful]) // the editorial rollup
+  @@map("lesson_feedback")
+}
+
+// ADR-058 #1 — the quiz is the entity and consumers point AT it
+// (Lesson.quizId, Course.finalQuizId). Nullable courseId/lessonId here was the
+// alternative and it makes illegal states representable — both set, or a quiz
+// attached to a lesson in another course — while making reuse impossible.
+model Quiz {
+  id               String           @id @default(cuid())
+  // LEARN_TRACKS registry key (ADR-065 §3). Required, unlike GlossaryTerm's:
+  // a quiz has ONE canonical URL, /learn/<track>/quizzes/<slug>, and that
+  // segment cannot be built from a null. Validated in @repo/contracts, not by
+  // a FK — a track is site structure, which ADR-042 keeps in code.
+  track            String           @db.VarChar(40)
+  // Percentage. A learner passes at or above it.
+  passingScore     Int              @default(70)
+  // Null means unlimited, which is the default and the right one for a
+  // learning site (D24).
+  maxAttempts      Int?
+  showAnswersAfter AnswerVisibility @default(AFTER_SUBMIT)
+  // Listing only, never access control: a lesson quiz stays reachable by slug,
+  // it is simply not indexed at /learn/quizzes (ADR-058 #1).
+  isStandalone     Boolean          @default(false)
+  // Editorial grouping for the index's client-side chips. Free text like
+  // GlossaryTerm.category, and it reaches the screen through a label map, never
+  // raw (ADR-044 #5's public counterpart).
+  category         String?          @db.VarChar(80)
+
+  status       ContentStatus     @default(DRAFT)
+  visibility   FeatureVisibility @default(PUBLIC)
+  authorId     String?
+  publishedAt  DateTime?
+  // ADR-071 — the instant this row becomes public. Nullable: only a SCHEDULED
+  // row carries one, and moving to PUBLISHED or DRAFT clears it. Visibility is
+  // decided in the query (PUBLISHED, or SCHEDULED whose time has come), so a
+  // due row is live whether or not the sweep has run.
+  scheduledFor DateTime?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  deletedAt    DateTime?
+
+  translations QuizTranslation[]
+  questions    QuizQuestion[]
+  attempts     QuizAttempt[]
+  lessons      Lesson[]          @relation("LessonQuiz")
+  courses      Course[]          @relation("CourseFinalQuiz")
+
+  @@index([status, publishedAt])
+  @@index([isStandalone, status])
+  @@index([track, isStandalone, status])
+  @@index([status, scheduledFor])
+  @@map("quizzes")
+}
+
+model QuizTranslation {
+  id          String  @id @default(cuid())
+  quizId      String
+  locale      String  @db.VarChar(10)
+  title       String  @db.VarChar(255)
+  slug        String  @db.VarChar(255)
+  description String? @db.Text
+
+  translationStatus TranslationStatus @default(DRAFT)
+  sourceHash        String?           @db.VarChar(64)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  quiz Quiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
+
+  @@unique([quizId, locale])
+  @@unique([locale, slug])
+  @@map("quiz_translations")
+}
+
+// ADR-058 #2 — the CORRECT ANSWER lives here, on the untranslated row, and
+// never on a translation. A correct-answer index is not language, and putting
+// it in a translation lets a translator desync it from every other locale.
+//
+// correctAnswer is a JSON number for SINGLE_CHOICE/TRUE_FALSE and a JSON array
+// of numbers for MULTIPLE_CHOICE, indexing into the translation's options.
+// Parsed through Zod on write and on read; the database will not stop a bad
+// write from another codepath, and there is exactly one writer.
+model QuizQuestion {
+  id            String       @id @default(cuid())
+  quizId        String
+  type          QuestionType @default(SINGLE_CHOICE)
+  sortOrder     Int          @default(0)
+  correctAnswer Json
+  points        Int          @default(1)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  quiz         Quiz                      @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  translations QuizQuestionTranslation[]
+
+  @@index([quizId, sortOrder])
+  @@map("quiz_questions")
+}
+
+model QuizQuestionTranslation {
+  id           String @id @default(cuid())
+  questionId   String
+  locale       String @db.VarChar(10)
+  prompt       String @db.Text
+  // Option LABELS, in order. The index into this array is what correctAnswer
+  // names, which is why reordering options in the admin has to move the
+  // correct-answer index with them.
+  options      Json
+  // Per-option explanation, shown in review when showAnswersAfter allows.
+  // Optional and sparse — an editor explains the ones worth explaining.
+  explanations Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  question QuizQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, locale])
+  @@map("quiz_question_translations")
+}
+
+// ADR-058 #3/#5 — one row per attempt, answers as JSON.
+//
+// The answers are only ever read as a whole set, for one attempt, by one user;
+// no query filters on them. A QuizAttemptAnswer table would be
+// rows-per-question-per-attempt for zero query benefit. The one analytic it
+// forecloses is "most frequently missed questions" (Phase 9), and THAT is the
+// trigger for adding one — nothing else in the analytics set needs it.
+//
+// grades is the server's own record of which questions were answered
+// correctly, written as each answer arrives. The final score is computed from
+// it, never from anything the browser sends at submit time.
+model QuizAttempt {
+  id            String    @id @default(cuid())
+  quizId        String
+  userId        String
+  attemptNumber Int       @default(1)
+  score         Int       @default(0)
+  percentage    Int       @default(0)
+  passed        Boolean   @default(false)
+  answers       Json
+  grades        Json
+  startedAt     DateTime  @default(now())
+  completedAt   DateTime?
+
+  quiz Quiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([quizId, userId, attemptNumber])
+  @@index([quizId, userId])
+  @@index([userId, completedAt])
+  @@map("quiz_attempts")
+}
+
 model GlossaryTerm {
-  id          String        @id @default(cuid())
-  category    String?       @db.VarChar(80)
-  difficulty  Difficulty    @default(BEGINNER)
-  formula     String?       @db.Text
-  imageUrl    String?       @db.VarChar(500)
-  status      ContentStatus @default(DRAFT)
-  viewCount   Int           @default(0)
-  authorId    String?
-  publishedAt DateTime?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-  deletedAt   DateTime?
+  id           String        @id @default(cuid())
+  // ADR-055 #12 (D27) — was `category String?`, free text with no slug, no
+  // translation, no description, no ordering and no page to link to. It could
+  // not support "browse by topic" and it broke two rules we already hold:
+  // ADR-044 #5 (a raw identifier never renders) and ADR-043 #1 (public strings
+  // are translatable). Pre-launch reset, no backfill.
+  topicId      String?
+  // LEARN_TRACKS registry key, or NULL (ADR-065 §3). Null does NOT mean
+  // unfiled — it means the term belongs to EVERY track's glossary, which is
+  // the honest state for "leverage", "spread" and "volatility". Duplicating
+  // those per track would give one concept two pages competing in search.
+  track        String?       @db.VarChar(40)
+  difficulty   Difficulty    @default(BEGINNER)
+  formula      String?       @db.Text
+  imageUrl     String?       @db.VarChar(500)
+  status       ContentStatus @default(DRAFT)
+  viewCount    Int           @default(0)
+  authorId     String?
+  publishedAt  DateTime?
+  // ADR-071 — the instant this row becomes public. Nullable: only a SCHEDULED
+  // row carries one, and moving to PUBLISHED or DRAFT clears it. Visibility is
+  // decided in the query (PUBLISHED, or SCHEDULED whose time has come), so a
+  // due row is live whether or not the sweep has run.
+  scheduledFor DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  deletedAt    DateTime?
 
   translations GlossaryTermTranslation[]
+  topic        GlossaryTopic?            @relation(fields: [topicId], references: [id], onDelete: SetNull)
 
-  @@index([category])
+  // SetNull, not Cascade: deleting a topic must never delete the terms filed
+  // under it. They fall back to untopiced and stay in the A–Z browse.
+  @@index([topicId])
   @@index([status])
+  @@index([track, status])
+  @@index([status, scheduledFor])
   @@map("glossary_terms")
+}
+
+// ADR-055 #12 (D27) — mirrors ArticleCategory / ArticleCategoryTranslation
+// EXACTLY. That is the point: it is a proven pattern in this repo, so there is
+// nothing new to design and the admin screens are the same shape.
+model GlossaryTopic {
+  id        String   @id @default(cuid())
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  translations GlossaryTopicTranslation[]
+  terms        GlossaryTerm[]
+
+  @@index([isActive, sortOrder])
+  @@map("glossary_topics")
+}
+
+model GlossaryTopicTranslation {
+  id      String @id @default(cuid())
+  topicId String
+  locale  String @db.VarChar(10)
+
+  name           String  @db.VarChar(100)
+  slug           String  @db.VarChar(150)
+  // Rich text, not a caption (changes-18 PR 3). It was VarChar(500) because a
+  // topic was a row in an inline manager; it is now a page with an editor, and
+  // the public topic page renders it as prose. Sanitized server-side on save
+  // like every other rich field (security.md #8), and read back through
+  // `htmlToText` wherever it is used AS a string — the bug ADR-069 recorded
+  // for `simpleExplanation`.
+  description    String? @db.Text
+  seoTitle       String? @db.VarChar(70)
+  seoDescription String? @db.VarChar(180)
+  // Plural and free text: the meta keywords tag, not a focus term.
+  // `SeoAnalysis` scores prose against ONE keyword and a topic page has no
+  // prose to score, so `seoFocusKeyword` would promise an analysis that is
+  // not there (changes-18 §2 D4).
+  seoKeywords    String? @db.VarChar(255)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  topic GlossaryTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@unique([topicId, locale])
+  @@unique([locale, slug])
+  @@index([slug])
+  @@map("glossary_topic_translations")
 }
 
 model GlossaryTermTranslation {
@@ -861,6 +1296,160 @@ model GlossaryTermTranslation {
   @@unique([locale, slug])
   @@index([slug])
   @@map("glossary_term_translations")
+}
+
+// ─────────────────────────────────────────────────────────────
+// VIDEOS — the fourth learn section (Module 11/12, ADR-068)
+//
+// A video topic is a PAGE whose subject is a video. It is not a Lesson, it
+// belongs to no Course, and nothing about it is graded — which is why it is
+// its own entity rather than a Lesson variant (ADR-068 §2): every Lesson
+// column about ordering, completion and progress would be dead on it, and
+// `lessonsCompleted` would have to learn to ignore a kind of Lesson.
+//
+// Categories mirror GlossaryTopic / ArticleCategory exactly, on purpose.
+// ─────────────────────────────────────────────────────────────
+
+model VideoCategory {
+  id        String   @id @default(cuid())
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  translations VideoCategoryTranslation[]
+  topics       VideoTopic[]
+
+  @@index([isActive, sortOrder])
+  @@map("video_categories")
+}
+
+model VideoCategoryTranslation {
+  id         String @id @default(cuid())
+  categoryId String
+  locale     String @db.VarChar(10)
+
+  name           String  @db.VarChar(100)
+  slug           String  @db.VarChar(150)
+  description    String? @db.VarChar(500)
+  seoTitle       String? @db.VarChar(70)
+  seoDescription String? @db.VarChar(180)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  category VideoCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, locale])
+  @@unique([locale, slug])
+  @@index([slug])
+  @@map("video_category_translations")
+}
+
+model VideoTopic {
+  id String @id @default(cuid())
+
+  // SetNull, not Cascade: deleting a category must never delete the pages
+  // filed under it — the same call Lesson.quizId makes.
+  categoryId   String?
+  // Required (ADR-068 §1, following ADR-065 §3): the track is the URL's second
+  // segment, not a filter over one, so it cannot be built from a null. Width
+  // matches Course.track / Quiz.track — one track registry, one column shape.
+  track        String  @db.VarChar(40)
+  // MediaAsset id as a plain String (ADR-035) — no FK, so deleting an asset
+  // cannot cascade into content. `ContentReference` is the integrity index.
+  coverAssetId String?
+
+  status       ContentStatus     @default(DRAFT)
+  visibility   FeatureVisibility @default(PUBLIC)
+  authorId     String?
+  publishedAt  DateTime?
+  // ADR-071 — the instant this row becomes public. Nullable: only a SCHEDULED
+  // row carries one, and moving to PUBLISHED or DRAFT clears it. Visibility is
+  // decided in the query (PUBLISHED, or SCHEDULED whose time has come), so a
+  // due row is live whether or not the sweep has run.
+  scheduledFor DateTime?
+  sortOrder    Int               @default(0)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  deletedAt    DateTime?
+
+  category     VideoCategory?          @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  translations VideoTopicTranslation[]
+  videos       VideoTopicVideo[]
+  links        VideoTopicLink[]
+
+  @@index([status, publishedAt])
+  @@index([track, status])
+  @@index([categoryId, sortOrder])
+  @@index([status, scheduledFor])
+  @@map("video_topics")
+}
+
+model VideoTopicTranslation {
+  id      String @id @default(cuid())
+  topicId String
+  locale  String @db.VarChar(10)
+
+  title   String  @db.VarChar(255)
+  slug    String  @db.VarChar(255)
+  summary String? @db.Text
+  content String? @db.LongText // sanitized on save (security.md #8)
+
+  seoTitle        String? @db.VarChar(70)
+  seoDescription  String? @db.VarChar(180)
+  seoFocusKeyword String? @db.VarChar(100)
+
+  translationStatus TranslationStatus @default(DRAFT)
+  sourceHash        String?           @db.VarChar(64)
+  translatedBy      String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  topic VideoTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@unique([topicId, locale])
+  @@unique([locale, slug])
+  @@index([translationStatus])
+  @@map("video_topic_translations")
+}
+
+// Exactly one of assetId / externalUrl is set (ADR-068 §4) — enforced in
+// @repo/contracts, because MariaDB CHECK constraints are not in this repo's
+// vocabulary and a second enforcement point that can disagree with the first
+// is worse than one that cannot.
+model VideoTopicVideo {
+  id            String   @id @default(cuid())
+  topicId       String
+  sortOrder     Int      @default(0)
+  assetId       String? // MediaAsset, kind VIDEO
+  externalUrl   String?  @db.VarChar(500)
+  posterAssetId String? // MediaAsset, kind IMAGE — the uploaded video's poster
+  title         String?  @db.VarChar(200) // display-only, not translatable (ADR-068 §4)
+  createdAt     DateTime @default(now())
+
+  topic VideoTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@index([topicId, sortOrder])
+  @@map("video_topic_videos")
+}
+
+// Exactly one of path / url is set (ADR-068 §5). There is deliberately no
+// `isExternal` column: which branch is set already says it, and a stored copy
+// goes stale the first time a link is edited.
+model VideoTopicLink {
+  id        String   @id @default(cuid())
+  topicId   String
+  sortOrder Int      @default(0)
+  label     String   @db.VarChar(200)
+  path      String?  @db.VarChar(500) // site-relative, one leading "/"
+  url       String?  @db.VarChar(500) // https only
+  createdAt DateTime @default(now())
+
+  topic VideoTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@index([topicId, sortOrder])
+  @@map("video_topic_links")
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1366,6 +1955,9 @@ enum ReferenceSourceType {
   COURSE
   BRAND
   SETTING
+  // ADR-068 §7 — a video topic holds media placements (cover, uploaded
+  // videos, posters), so it is a reference SOURCE like an article or a course.
+  VIDEO_TOPIC
 }
 
 enum ReferenceType {

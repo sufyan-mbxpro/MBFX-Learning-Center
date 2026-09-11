@@ -14,6 +14,10 @@ import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from "@repo/contracts";
 import { db } from "@repo/db";
 import { redisSecondaryStorage } from "./redis-secondary-storage.ts";
 
+// Public-write throttling (changes-11 PR 5.2/5.5). Re-exported here so a
+// route handler imports one package for "who is this" and "how often".
+export { rateLimit, type RateLimitResult } from "./rate-limit.ts";
+
 // @node-rs/argon2 exports Algorithm as an ambient const enum, which
 // verbatimModuleSyntax forbids referencing directly (can't verify the
 // inlining is safe across the module boundary). 2 === Algorithm.Argon2id —

@@ -14,10 +14,12 @@ import type { HomeSectionKey } from "@repo/contracts";
 import { Explore } from "./explore.tsx";
 import { FeatureHighlights } from "./feature-highlights.tsx";
 import { Faq } from "./faq.tsx";
+import { FeaturedLessons } from "./featured-lessons.tsx";
 import { GlossarySpotlight } from "./glossary-spotlight.tsx";
 import { Hero } from "./hero.tsx";
 import { LatestAnalysis } from "./latest-analysis.tsx";
 import { LatestNews } from "./latest-news.tsx";
+import { LearningPaths } from "./learning-paths.tsx";
 import { Newsletter } from "./newsletter.tsx";
 import { RiskDisclaimer } from "./risk-disclaimer.tsx";
 import { VideoShowcase } from "./video-showcase.tsx";
@@ -34,6 +36,8 @@ export const SECTION_COMPONENTS: Partial<
   Record<HomeSectionKey | string, ComponentType<SectionProps>>
 > = {
   learning_videos: VideoShowcase,
+  learning_paths: LearningPaths,
+  featured_lessons: FeaturedLessons,
   hero: Hero,
   explore_platform: Explore,
   feature_highlights: FeatureHighlights,

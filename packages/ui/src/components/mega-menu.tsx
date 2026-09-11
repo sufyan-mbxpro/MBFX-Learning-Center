@@ -78,13 +78,26 @@ function MegaMenuViewport({ sideOffset = 10 }: { sideOffset?: number }) {
 /** The panel body: an optional feature rail beside one or more columns. */
 function MegaMenuPanel({
   features,
+  size = "wide",
   children,
   className,
   ...props
 }: React.ComponentProps<"div"> & {
   /** The left rail of gradient tiles. Omitted, the columns take the full width. */
   features?: React.ReactNode;
+  /**
+   * How much room the panel claims.
+   *
+   * `wide` is the multi-column treatment the About panel uses. `compact` is
+   * for a panel that is genuinely ONE list — a school's three surfaces, say.
+   * The width is explicit either way, so this cannot be inferred from the
+   * children: a one-column list in the wide box leaves two thirds of a very
+   * large popup empty, which reads as a rendering bug rather than as a short
+   * menu (ADR-065 §4).
+   */
+  size?: "wide" | "compact";
 }) {
+  const compact = size === "compact";
   return (
     <div
       data-slot="mega-menu-panel"
@@ -92,17 +105,32 @@ function MegaMenuPanel({
       // content, and a `1fr` grid inside a max-content box resolves each
       // column to min-content — which rendered the first build of this panel
       // one word per line. Fixed width, then the columns divide it.
-      className={cn("flex w-[min(56rem,calc(100vw-2rem))] flex-col", className)}
+      className={cn(
+        "flex flex-col",
+        compact ? "w-[min(24rem,calc(100vw-2rem))]" : "w-[min(56rem,calc(100vw-2rem))]",
+        className,
+      )}
       {...props}
     >
       {/* The rail column is added only when there IS a rail: applied
           unconditionally, the columns land in the 14rem track and every row
           wraps a word per line. */}
       <div
-        className={cn("grid gap-8 p-6 lg:gap-10", features && "lg:grid-cols-[minmax(0,14rem)_1fr]")}
+        className={cn(
+          "grid gap-8 lg:gap-10",
+          compact ? "p-4" : "p-6",
+          features && "lg:grid-cols-[minmax(0,14rem)_1fr]",
+        )}
       >
         {features && <div className="flex flex-col gap-3">{features}</div>}
-        <div className="grid gap-x-8 gap-y-6 sm:grid-cols-2 lg:grid-cols-3">{children}</div>
+        <div
+          className={cn(
+            "grid gap-x-8 gap-y-6",
+            compact ? "grid-cols-1 gap-y-1" : "sm:grid-cols-2 lg:grid-cols-3",
+          )}
+        >
+          {children}
+        </div>
       </div>
     </div>
   );

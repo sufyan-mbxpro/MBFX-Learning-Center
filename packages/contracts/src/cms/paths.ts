@@ -19,6 +19,10 @@ export const RESERVED_PATHS = [
   // `about` landed with ADR-047 and `economic-calendar` with ADR-050.
   // Both have children, and reserving the parent segment covers them.
   "about",
+  // The learn area (ADR-055, changes-11 PR 4.1). Reserved in the SAME PR that
+  // lands the route, per the ADR-047 precedent: the segment has children
+  // (`/learn/[course]/[lesson]`) and reserving the parent covers them.
+  "learn",
   "sign-in",
   // Public self-registration (ADR-052). Reserved for the same reason
   // sign-in is: a CMS page at this path would shadow the real route.

@@ -7,3 +7,6 @@ export * from "./html-text.ts";
 export * from "./content-analysis.ts";
 export * from "./humanize.ts";
 export * from "./economic-calendar.ts";
+export * from "./file-size.ts";
+export * from "./stable-hash.ts";
+export * from "./slug.ts";

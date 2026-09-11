@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getCookieCache } from "better-auth/cookies";
+import { getCookieCache, getSessionCookie } from "better-auth/cookies";
 import createMiddleware from "next-intl/middleware";
 import { routing } from "@repo/i18n/routing";
 
@@ -131,6 +131,25 @@ async function staffGate(request: NextRequest, pathname: string): Promise<NextRe
   const cache = await getCookieCache(request, { secret: process.env.BETTER_AUTH_SECRET });
   const userType = (cache?.user as { userType?: string } | undefined)?.userType;
 
+  // The cookie cache EXPIRES (5 min, packages/auth) and nothing refreshes it
+  // on an admin page view: Better Auth rewrites it when its own handler runs,
+  // and the admin surface reads the session inside a server component
+  // ((admin)/layout.tsx), where Next.js does not permit setting a cookie. So
+  // five minutes after sign-in `cache` is null for a session the database
+  // still considers valid for seven days, and this gate was bouncing the
+  // staff member to sign-in on every navigation from then on.
+  //
+  // A session token is therefore what this gate tests for, and the cache is
+  // only a fast path on top of it. Raising maxAge would not fix this (the
+  // cache still expires and is still never rewritten) and calling auth() here
+  // would put Prisma and a round-trip in the proxy, which architecture.md #3
+  // forbids. Letting an authenticated request through is exactly ADR-006's
+  // division of labour — the proxy is a gate, the layout is the boundary —
+  // and the layout already loads the subject from the database and redirects
+  // a non-STAFF user. An anonymous request has no token and is still turned
+  // away here, which is the case this gate exists for.
+  const hasSession = getSessionCookie(request) !== null;
+
   // Server Action POSTs carry this header. Found live: the cookie cache's
   // maxAge (5 min, packages/auth) is shorter than a slow admin edit — e.g.
   // sitting on the theme editor's Colors/Modes tabs — so a still-valid
@@ -146,7 +165,7 @@ async function staffGate(request: NextRequest, pathname: string): Promise<NextRe
   // real error instead of a broken one.
   const isServerAction = request.headers.has("next-action");
 
-  if (userType !== "STAFF" && !isServerAction) {
+  if (userType !== "STAFF" && !hasSession && !isServerAction) {
     const signInUrl = new URL(ADMIN_SIGN_IN_PATH, request.url);
     signInUrl.searchParams.set("redirect", pathname);
     return applySecurityHeaders(NextResponse.redirect(signInUrl), "admin", null);

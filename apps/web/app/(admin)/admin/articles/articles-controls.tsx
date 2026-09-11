@@ -10,20 +10,15 @@ import { Button } from "@repo/ui/components/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from "@repo/ui/components/dialog";
 import { Label } from "@repo/ui/components/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@repo/ui/components/select";
 import { createArticleAction } from "../_actions/article-actions.ts";
+import { AdminCombobox } from "../_components/combobox.tsx";
 import { FilterBar } from "../_components/filter-bar.tsx";
 import { useServerAction } from "../_hooks/use-server-action.ts";
 import { useUrlFilters } from "../_hooks/use-url-filters.ts";
@@ -50,64 +45,39 @@ export function ArticlesToolbar({
 
   return (
     <FilterBar>
-      <Select value={searchParams.get("kind") ?? ""} onValueChange={(v) => setParams({ kind: v })}>
-        <SelectTrigger aria-label={labels.kind} className="min-w-36">
-          <SelectValue>
-            {searchParams.get("kind")
-              ? (labels.kinds[searchParams.get("kind") ?? ""] ?? searchParams.get("kind"))
-              : labels.allKinds}
-          </SelectValue>
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="">{labels.allKinds}</SelectItem>
-          {KINDS.map((kind) => (
-            <SelectItem key={kind} value={kind}>
-              {labels.kinds[kind] ?? kind}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Select
+      <AdminCombobox
+        aria-label={labels.kind}
+        className="w-40"
+        value={searchParams.get("kind") ?? ""}
+        onValueChange={(kind) => setParams({ kind })}
+        options={[
+          { value: "", label: labels.allKinds },
+          ...KINDS.map((kind) => ({ value: kind, label: labels.kinds[kind] ?? kind })),
+        ]}
+      />
+      <AdminCombobox
+        aria-label={labels.allStatuses}
+        className="w-40"
         value={searchParams.get("status") ?? ""}
-        onValueChange={(v) => setParams({ status: v })}
-      >
-        <SelectTrigger aria-label={labels.allStatuses} className="min-w-36">
-          <SelectValue>
-            {searchParams.get("status")
-              ? (labels.statuses[searchParams.get("status") ?? ""] ?? searchParams.get("status"))
-              : labels.allStatuses}
-          </SelectValue>
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="">{labels.allStatuses}</SelectItem>
-          {STATUSES.map((status) => (
-            <SelectItem key={status} value={status}>
-              {labels.statuses[status] ?? status}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Select
+        onValueChange={(status) => setParams({ status })}
+        options={[
+          { value: "", label: labels.allStatuses },
+          ...STATUSES.map((status) => ({
+            value: status,
+            label: labels.statuses[status] ?? status,
+          })),
+        ]}
+      />
+      <AdminCombobox
+        aria-label={labels.allCategories}
+        className="w-40"
         value={searchParams.get("category") ?? ""}
-        onValueChange={(v) => setParams({ category: v })}
-      >
-        <SelectTrigger aria-label={labels.allCategories} className="min-w-40">
-          <SelectValue>
-            {searchParams.get("category")
-              ? (categories.find((c) => c.id === searchParams.get("category"))?.name ??
-                labels.allCategories)
-              : labels.allCategories}
-          </SelectValue>
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="">{labels.allCategories}</SelectItem>
-          {categories.map((category) => (
-            <SelectItem key={category.id} value={category.id}>
-              {category.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+        onValueChange={(category) => setParams({ category })}
+        options={[
+          { value: "", label: labels.allCategories },
+          ...categories.map((category) => ({ value: category.id, label: category.name })),
+        ]}
+      />
     </FilterBar>
   );
 }
@@ -119,6 +89,7 @@ export function NewArticleDialog({
   categories: { id: string; name: string }[];
   labels: {
     newArticle: string;
+    newArticleDescription: string;
     create: string;
     cancel: string;
     close: string;
@@ -139,39 +110,29 @@ export function NewArticleDialog({
       <DialogContent className="max-w-sm" closeLabel={labels.close}>
         <DialogHeader>
           <DialogTitle>{labels.newArticle}</DialogTitle>
+          <DialogDescription>{labels.newArticleDescription}</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="new-article-kind">{labels.kind}</Label>
-            <Select value={newKind} onValueChange={(v) => setNewKind(v ?? newKind)}>
-              <SelectTrigger id="new-article-kind">
-                <SelectValue>{labels.kinds[newKind] ?? newKind}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {KINDS.map((kind) => (
-                  <SelectItem key={kind} value={kind}>
-                    {labels.kinds[kind] ?? kind}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <AdminCombobox
+              id="new-article-kind"
+              value={newKind}
+              onValueChange={(next) => setNewKind(next || newKind)}
+              options={KINDS.map((kind) => ({ value: kind, label: labels.kinds[kind] ?? kind }))}
+            />
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="new-article-category">{labels.category}</Label>
-            <Select value={newCategory} onValueChange={(v) => setNewCategory(v ?? newCategory)}>
-              <SelectTrigger id="new-article-category">
-                <SelectValue>
-                  {categories.find((c) => c.id === newCategory)?.name ?? ""}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {categories.map((category) => (
-                  <SelectItem key={category.id} value={category.id}>
-                    {category.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <AdminCombobox
+              id="new-article-category"
+              value={newCategory}
+              onValueChange={(next) => setNewCategory(next || newCategory)}
+              options={categories.map((category) => ({
+                value: category.id,
+                label: category.name,
+              }))}
+            />
           </div>
         </div>
         <DialogFooter>

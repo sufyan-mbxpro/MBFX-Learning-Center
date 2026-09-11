@@ -55,6 +55,7 @@ export default async function RoleDetailPage({ params }: PageProps<"/admin/roles
               maxLevel={subject.maxRoleLevel}
               labels={{
                 edit: t("edit"),
+                editDescription: t("dialogDesc.editRole"),
                 clone: t("clone"),
                 delete: t("delete"),
                 save: t("save"),

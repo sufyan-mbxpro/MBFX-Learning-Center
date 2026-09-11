@@ -30,15 +30,15 @@ names numbers. If a bump changes behavior, it gets an ADR.
 
 ## Data & auth (installed in their modules, pinned now)
 
-| Package                 | Pin                                               | Module | Notes                                                                                                                                           |
-| ----------------------- | ------------------------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| prisma / @prisma/client | **7.10.x**                                        | 01     | Prisma 8 is still RC (`8.0.0-rc.12`); CLI `latest` tag points at the RC — never install unpinned. See **ADR-002**.                              |
-| @prisma/adapter-mariadb | match 7.10.x                                      | 01     | Driver-adapter path.                                                                                                                            |
-| better-auth             | **1.7.2** (+ `@better-auth/prisma-adapter@1.7.2`) | 04     | ADR-001 locked 2026-09-01; fallback Auth.js v5 not needed. **Do not add `@better-auth/cli`** — deprecated, folded into `better-auth`'s own bin. |
-| @node-rs/argon2         | ^2.2.0                                            | 01/04  | Argon2id hasher; in `onlyBuiltDependencies`.                                                                                                    |
-| zod                     | ^4.5.4                                            | 05+    | v4 error APIs — no v3 snippets.                                                                                                                 |
-| next-intl               | ^4.14.1                                           | 06     | Verify Next 16 peer range at module start.                                                                                                      |
-| next-themes             | ^0.4.6                                            | 08/12  | User-controlled mode (ADR-008).                                                                                                                 |
+| Package                 | Pin                                               | Module | Notes                                                                                                                                                                                                       |
+| ----------------------- | ------------------------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| prisma / @prisma/client | **7.10.x**                                        | 01     | Prisma 8 is still RC (`8.0.0-rc.12`); CLI `latest` tag points at the RC — never install unpinned. See **ADR-002**.                                                                                          |
+| @prisma/adapter-mariadb | match 7.10.x                                      | 01     | Driver-adapter path.                                                                                                                                                                                        |
+| better-auth             | **1.7.2** (+ `@better-auth/prisma-adapter@1.7.2`) | 04     | ADR-001 locked 2026-09-01; fallback Auth.js v5 not needed. **Do not add `@better-auth/cli`** — deprecated, folded into `better-auth`'s own bin.                                                             |
+| @node-rs/argon2         | ^2.2.0                                            | 01/04  | Argon2id hasher; in `onlyBuiltDependencies`.                                                                                                                                                                |
+| zod                     | ^4.5.4                                            | 05+    | v4 error APIs — no v3 snippets.                                                                                                                                                                             |
+| next-intl               | ^4.14.1                                           | 06     | Verify Next 16 peer range at module start.                                                                                                                                                                  |
+| ~~next-themes~~         | **REMOVED** (was ^0.4.6)                          | 08/12  | ADR-064: replaced by `@repo/ui`'s own ThemeProvider + ThemeScript. Its provider rendered the pre-paint `<script>` from inside the client tree, which React 19.2 warns on and never executes. Do not re-add. |
 
 ## Testing
 

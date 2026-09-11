@@ -73,6 +73,14 @@ export function SiteNav({ items, ariaLabel }: { items: SiteNavItem[]; ariaLabel:
                 <MegaMenuTrigger>{item.label}</MegaMenuTrigger>
                 <MegaMenuContent>
                   <MegaMenuPanel
+                    // One column and no rail is a LIST, not a grid — the wide
+                    // box would leave two thirds of a very large popup empty
+                    // (ADR-065 §4).
+                    size={
+                      resolved.columns.length === 1 && resolved.features.length === 0
+                        ? "compact"
+                        : "wide"
+                    }
                     features={
                       resolved.features.length > 0
                         ? resolved.features.map(({ item: feature, icon }) => (

@@ -36,7 +36,12 @@ import { Label } from "@repo/ui/components/label";
 import { Textarea } from "@repo/ui/components/textarea";
 import { cn } from "@repo/ui/lib/utils";
 import { EditorSection } from "./editor-section.tsx";
-import type { FaqDraft } from "../editor-types.ts";
+
+/** The minimum a FAQ row is. Hosts may carry more (the article’s `id`). */
+export interface FaqItemLike {
+  question: string;
+  answer: string;
+}
 
 export interface FaqLabels {
   section: string;
@@ -70,18 +75,20 @@ function move<T>(list: T[], from: number, to: number): T[] {
 }
 
 /** Add and edit share one dialog — the only difference is the seed value. */
-function FaqDialog({
+function FaqDialog<T extends FaqItemLike>({
   open,
   onOpenChange,
   initial,
+  makeItem,
   onSubmit,
   labels,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** null = adding. */
-  initial: FaqDraft | null;
-  onSubmit: (draft: FaqDraft) => void;
+  initial: T | null;
+  makeItem: (fields: FaqItemLike, previous: T | null) => T;
+  onSubmit: (draft: T) => void;
   labels: FaqLabels;
 }) {
   const [question, setQuestion] = useState(initial?.question ?? "");
@@ -89,11 +96,7 @@ function FaqDialog({
 
   const submit = () => {
     if (question.trim() === "") return;
-    onSubmit({
-      ...(initial?.id ? { id: initial.id } : {}),
-      question: question.trim(),
-      answer,
-    });
+    onSubmit(makeItem({ question: question.trim(), answer }, initial));
     onOpenChange(false);
   };
 
@@ -144,13 +147,20 @@ function FaqDialog({
   );
 }
 
-export function FaqPanel({
+export function FaqPanel<T extends FaqItemLike>({
   items,
   onChange,
+  makeItem,
   labels,
 }: {
-  items: FaqDraft[];
-  onChange: (items: FaqDraft[]) => void;
+  items: T[];
+  onChange: (items: T[]) => void;
+  /**
+   * Builds a stored row from the dialog’s two fields, given the row being
+   * edited (null when adding). Exists so a host whose row carries more than
+   * question+answer keeps it across an edit.
+   */
+  makeItem: (fields: FaqItemLike, previous: T | null) => T;
   labels: FaqLabels;
 }) {
   // `null` = closed, `-1` = adding, `>= 0` = editing that index.
@@ -284,6 +294,7 @@ export function FaqPanel({
             if (!next) setDialogIndex(null);
           }}
           initial={dialogIndex >= 0 ? (items[dialogIndex] ?? null) : null}
+          makeItem={makeItem}
           onSubmit={(draft) => {
             if (dialogIndex >= 0) {
               onChange(items.map((it, i) => (i === dialogIndex ? draft : it)));

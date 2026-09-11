@@ -33,6 +33,13 @@ interface NavEntryDef {
     | "roles"
     | "employees"
     | "glossary"
+    | "glossaryTopics"
+    | "learnCourses"
+    | "learnLessons"
+    | "learnQuizzes"
+    | "learnVideos"
+    | "videoCategories"
+    | "learnProgress"
     | "articles"
     | "websiteMedia"
     | "website"
@@ -48,7 +55,7 @@ interface NavEntryDef {
 }
 
 const ADMIN_NAV_GROUPS: {
-  labelKey: "navPeople" | "navContent" | "navSystem" | null;
+  labelKey: "navPeople" | "navLearning" | "navContent" | "navSystem" | null;
   entries: NavEntryDef[];
 }[] = [
   {
@@ -71,12 +78,79 @@ const ADMIN_NAV_GROUPS: {
     ],
   },
   {
+    // Learning (Module 11, changes-11 Phase 3). Its own group rather than a
+    // pair of rows under Content: a course is a structure an editor works
+    // INSIDE for hours, not one more filed item beside a glossary term.
+    // Sections get no entry on purpose — they exist only within a course
+    // (plan §8.1), and a top-level screen for them would invite editing a
+    // curriculum without seeing the course it belongs to.
+    labelKey: "navLearning",
+    entries: [
+      {
+        href: "/admin/learn/courses",
+        labelKey: "learnCourses",
+        icon: "learnCourses",
+        permission: "courses.view",
+      },
+      {
+        href: "/admin/learn/lessons",
+        labelKey: "learnLessons",
+        icon: "learnLessons",
+        permission: "lessons.view",
+      },
+      {
+        // ADR-058 #8 — quizzes are gated on the LESSON keys. There is
+        // no `quizzes.view` in the seed registry, and adding one would need a role
+        // to attach it to; a quiz is authored beside the lessons it belongs to,
+        // by the same people.
+        href: "/admin/learn/quizzes",
+        labelKey: "learnQuizzes",
+        icon: "learnQuizzes",
+        permission: "lessons.view",
+      },
+      {
+        // ADR-068 §3 — videos take the LESSON keys too, for the reason quizzes
+        // did one row up: there is no `videos.*` group in the seed registry,
+        // and adding one needs a role to attach it to.
+        href: "/admin/learn/videos",
+        labelKey: "learnVideos",
+        icon: "learnVideos",
+        permission: "lessons.view",
+        exact: true,
+      },
+      {
+        href: "/admin/learn/videos/categories",
+        labelKey: "videoCategories",
+        icon: "videoCategories",
+        permission: "lessons.view",
+      },
+      {
+        // Analytics has its own seeded key and its own audience — a manager who
+        // reads numbers is not necessarily an editor who writes lessons, so
+        // this row does NOT reuse lessons.view the way the quiz row does.
+        href: "/admin/learn/progress",
+        labelKey: "learnProgress",
+        icon: "learnProgress",
+        permission: "analytics.view",
+      },
+    ],
+  },
+  {
     labelKey: "navContent",
     entries: [
       {
         href: "/admin/glossary",
         labelKey: "glossary",
         icon: "glossary",
+        permission: "glossary.view",
+        exact: true,
+      },
+      {
+        // D27: a topic IS glossary data, so it reuses the glossary keys rather
+        // than adding three nobody holds.
+        href: "/admin/glossary/topics",
+        labelKey: "glossaryTopics",
+        icon: "glossaryTopics",
         permission: "glossary.view",
       },
       // Standalone media library (ADR-037 Decision #4's follow-up) — the

@@ -3,11 +3,19 @@
 import { describe, expect, it } from "vitest";
 import {
   brandAssetKeySchema,
+  categoryOfFolder,
+  clampPageSize,
+  folderForCategory,
   listMediaAssetsQuerySchema,
+  mediaCategorySchema,
+  mediaFolderSchema,
   mediaKindSchema,
   setBrandAssetSchema,
   updateMediaMetaSchema,
   uploadPurposeSchema,
+  MAX_MEDIA_PAGE_SIZE,
+  MEDIA_CATEGORIES,
+  MEDIA_PAGE_SIZE,
   type BrandAssetKey,
 } from "./media.ts";
 import { updateSettingsBatchSchema } from "./settings.ts";
@@ -84,6 +92,86 @@ describe("listMediaAssetsQuerySchema", () => {
     expect(listMediaAssetsQuerySchema.safeParse({}).success).toBe(true);
     expect(listMediaAssetsQuerySchema.safeParse({ kind: "VIDEO", q: "logo" }).success).toBe(true);
     expect(listMediaAssetsQuerySchema.safeParse({ kind: "EMBED" }).success).toBe(false);
+  });
+
+  it("normalises a single kind and a repeated kind param to an array (ADR-067 §5)", () => {
+    expect(listMediaAssetsQuerySchema.parse({ kinds: "IMAGE" }).kinds).toEqual(["IMAGE"]);
+    expect(listMediaAssetsQuerySchema.parse({ kinds: ["IMAGE", "VIDEO"] }).kinds).toEqual([
+      "IMAGE",
+      "VIDEO",
+    ]);
+  });
+
+  it("accepts a category and rejects an unregistered one", () => {
+    expect(listMediaAssetsQuerySchema.safeParse({ category: "news" }).success).toBe(true);
+    expect(listMediaAssetsQuerySchema.safeParse({ category: "invoices" }).success).toBe(false);
+  });
+});
+
+// ─── ADR-066 / ADR-067 ───────────────────────────────────────
+
+describe("mediaCategorySchema (ADR-066 §1)", () => {
+  it("accepts every registered category and nothing else", () => {
+    for (const category of MEDIA_CATEGORIES) {
+      expect(mediaCategorySchema.safeParse(category).success).toBe(true);
+    }
+    expect(mediaCategorySchema.safeParse("invoices").success).toBe(false);
+    expect(mediaCategorySchema.safeParse("").success).toBe(false);
+  });
+});
+
+describe("mediaFolderSchema (ADR-066 §1, §3)", () => {
+  it("accepts a bare category and a category with a sub-path", () => {
+    for (const category of MEDIA_CATEGORIES) {
+      expect(mediaFolderSchema.safeParse(`/${category}`).success).toBe(true);
+    }
+    expect(mediaFolderSchema.safeParse("/news/2026-covers").success).toBe(true);
+    expect(mediaFolderSchema.safeParse("/learn/forex/course-covers").success).toBe(true);
+  });
+
+  it("rejects the bare root and any unregistered first segment", () => {
+    expect(mediaFolderSchema.safeParse("/").success).toBe(false);
+    expect(mediaFolderSchema.safeParse("/unknown/x").success).toBe(false);
+    expect(mediaFolderSchema.safeParse("news").success).toBe(false);
+    expect(mediaFolderSchema.safeParse("/News").success).toBe(false);
+  });
+
+  it("refuses a sub-path that names a media type — `kind` is the type axis (ADR-066 §3)", () => {
+    expect(mediaFolderSchema.safeParse("/news/images").success).toBe(false);
+    expect(mediaFolderSchema.safeParse("/learn/videos").success).toBe(false);
+    expect(mediaFolderSchema.safeParse("/general/documents").success).toBe(false);
+    expect(mediaFolderSchema.safeParse("/general/audio").success).toBe(false);
+  });
+
+  it("round-trips a category through folderForCategory/categoryOfFolder", () => {
+    for (const category of MEDIA_CATEGORIES) {
+      expect(categoryOfFolder(folderForCategory(category))).toBe(category);
+    }
+    expect(categoryOfFolder("/news/2026-covers")).toBe("news");
+    expect(categoryOfFolder("/")).toBeNull();
+  });
+});
+
+describe("clampPageSize (ADR-067 §1 — no input asks for everything)", () => {
+  it("defaults an absent, non-numeric or infinite value to the page size", () => {
+    expect(clampPageSize(undefined)).toBe(MEDIA_PAGE_SIZE);
+    expect(clampPageSize("abc")).toBe(MEDIA_PAGE_SIZE);
+    expect(clampPageSize(Number.POSITIVE_INFINITY)).toBe(MEDIA_PAGE_SIZE);
+    expect(clampPageSize(Number.NaN)).toBe(MEDIA_PAGE_SIZE);
+  });
+
+  it("clamps zero, negatives and oversized requests into [1, MAX]", () => {
+    expect(clampPageSize(0)).toBe(1);
+    expect(clampPageSize(-10)).toBe(1);
+    expect(clampPageSize(10_000)).toBe(MAX_MEDIA_PAGE_SIZE);
+    expect(clampPageSize("9999")).toBe(MAX_MEDIA_PAGE_SIZE);
+    expect(clampPageSize("24")).toBe(24);
+  });
+
+  it("is what the query schema uses, so no request can be unbounded", () => {
+    expect(listMediaAssetsQuerySchema.parse({}).limit).toBe(MEDIA_PAGE_SIZE);
+    expect(listMediaAssetsQuerySchema.parse({ limit: "9999" }).limit).toBe(MAX_MEDIA_PAGE_SIZE);
+    expect(listMediaAssetsQuerySchema.parse({ limit: 0 }).limit).toBe(1);
   });
 });
 

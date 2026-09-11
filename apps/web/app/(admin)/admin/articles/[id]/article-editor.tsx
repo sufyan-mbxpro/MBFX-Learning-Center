@@ -48,13 +48,6 @@ import {
 } from "@repo/ui/components/dropdown-menu";
 import { Input } from "@repo/ui/components/input";
 import { Label } from "@repo/ui/components/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@repo/ui/components/select";
 import { Switch } from "@repo/ui/components/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@repo/ui/components/tabs";
 import { Textarea } from "@repo/ui/components/textarea";
@@ -71,11 +64,12 @@ import {
   TRANSLATION_STATUS_TONE,
   statusTone,
 } from "../../_components/status-badge.tsx";
+import { AdminCombobox } from "../../_components/combobox.tsx";
 import { useServerAction } from "../../_hooks/use-server-action.ts";
-import { ContentStats } from "./_panels/content-stats.tsx";
-import { EditorSection, Field } from "./_panels/editor-section.tsx";
-import { SeoAnalysis } from "./_panels/seo-analysis.tsx";
-import { FaqPanel } from "./_panels/faq-panel.tsx";
+import { ContentStats } from "../../_components/editor/content-stats.tsx";
+import { EditorSection, Field } from "../../_components/editor/editor-section.tsx";
+import { SeoAnalysis } from "../../_components/editor/seo-analysis.tsx";
+import { FaqPanel } from "../../_components/editor/faq-panel.tsx";
 import { RelatedPanel } from "./_panels/related-panel.tsx";
 import { PublishPanel } from "./_panels/publish-panel.tsx";
 import { TaxonomyPanel } from "./_panels/taxonomy-panel.tsx";
@@ -375,18 +369,13 @@ export function ArticleEditor({
                 <Label htmlFor="article-locale" className="text-xs">
                   {labels.localeLabel}
                 </Label>
-                <Select value={locale} onValueChange={(v) => setLocale(v ?? locale)}>
-                  <SelectTrigger id="article-locale" className="h-8 w-24">
-                    <SelectValue>{locale}</SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {locales.map((code) => (
-                      <SelectItem key={code} value={code}>
-                        {code}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <AdminCombobox
+                  id="article-locale"
+                  className="h-8 w-24"
+                  value={locale}
+                  onValueChange={(next) => setLocale(next || locale)}
+                  options={locales.map((code) => ({ value: code, label: code }))}
+                />
                 <StatusBadge tone={statusTone(TRANSLATION_STATUS_TONE, tr.translationStatus)}>
                   {labels.statusLabels[tr.translationStatus] ?? tr.translationStatus}
                 </StatusBadge>
@@ -433,6 +422,7 @@ export function ArticleEditor({
                 // Item 7: the body is the one field long enough, and edited
                 // by people technical enough, to want a source view.
                 allowHtmlMode
+                mediaCategory="news"
               />
             </Field>
 
@@ -556,35 +546,31 @@ export function ArticleEditor({
                   label={labels.ogImageUrl}
                   value={tr.ogImageUrl || null}
                   purpose="article"
+                  category="news"
+                  sourceType="ARTICLE"
                   labels={labels.upload}
                   onChange={(next) =>
                     setTr({ ogImageUrl: next?.url ?? "", ogImageAssetId: next?.id ?? null })
                   }
                 />
                 <Field id="article-twitter-card" label={labels.twitterCard}>
-                  <Select
+                  <AdminCombobox
+                    id="article-twitter-card"
                     value={tr.twitterCard || "summary_large_image"}
-                    onValueChange={(v) => setTr({ twitterCard: v ?? "" })}
-                  >
-                    <SelectTrigger id="article-twitter-card">
-                      <SelectValue>
-                        {labels.twitterCardOptions[tr.twitterCard || "summary_large_image"]}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(labels.twitterCardOptions).map(([value, label]) => (
-                        <SelectItem key={value} value={value}>
-                          {label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    onValueChange={(twitterCard) => setTr({ twitterCard })}
+                    options={Object.entries(labels.twitterCardOptions).map(([value, label]) => ({
+                      value,
+                      label,
+                    }))}
+                  />
                 </Field>
                 <ImageUploadField
                   id="article-twitter-image"
                   label={labels.twitterImage}
                   value={tr.twitterImageUrl || null}
                   purpose="article"
+                  category="news"
+                  sourceType="ARTICLE"
                   labels={labels.upload}
                   onChange={(next) =>
                     setTr({
@@ -626,6 +612,13 @@ export function ArticleEditor({
           <FaqPanel
             items={tr.faqItems}
             onChange={(faqItems) => setTr({ faqItems })}
+            // An article FAQ row has a stable `id` the service diffs against
+            // the stored rows, so it has to survive an edit (ADR-069 moved
+            // this panel and made that the host’s call).
+            makeItem={(fields, previous) => ({
+              ...(previous?.id ? { id: previous.id } : {}),
+              ...fields,
+            })}
             labels={labels.faq}
           />
 
@@ -703,6 +696,8 @@ export function ArticleEditor({
                   label={labels.coverImageUrl}
                   value={coverImageUrl || null}
                   purpose="article"
+                  category="news"
+                  sourceType="ARTICLE"
                   labels={labels.upload}
                   onChange={(next) => {
                     setCoverImageUrl(next?.url ?? "");
@@ -736,6 +731,8 @@ export function ArticleEditor({
                 label={labels.headerImage}
                 value={headerImageUrl || null}
                 purpose="article"
+                category="news"
+                sourceType="ARTICLE"
                 labels={labels.upload}
                 onChange={(next) => {
                   setHeaderImageUrl(next?.url ?? "");
@@ -753,18 +750,12 @@ export function ArticleEditor({
             accent="neutral"
           >
             <Field id="article-kind" label={labels.kind}>
-              <Select value={kind} onValueChange={(v) => setKind(v ?? kind)}>
-                <SelectTrigger id="article-kind">
-                  <SelectValue>{labels.kinds[kind] ?? kind}</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(labels.kinds).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <AdminCombobox
+                id="article-kind"
+                value={kind}
+                onValueChange={(next) => setKind(next || kind)}
+                options={Object.entries(labels.kinds).map(([value, label]) => ({ value, label }))}
+              />
             </Field>
             <dl className="flex flex-col gap-1 text-sm">
               <div className="flex justify-between gap-2">

@@ -45,8 +45,9 @@ export function MediaPickerControl({
   React.useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    void listMediaAssetsAction({ q: query || undefined }).then((rows) => {
-      if (!cancelled) setAssets(rows);
+    void listMediaAssetsAction({ q: query || undefined }).then((page) => {
+      // ADR-067 §1: a page, not a list — this retained (hidden) screen is not exempt.
+      if (!cancelled) setAssets(page.items);
     });
     return () => {
       cancelled = true;

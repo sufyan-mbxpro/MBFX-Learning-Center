@@ -1,9 +1,13 @@
 "use client";
 
-// The MediaLibrary (ADR-034 §5) — full-page mode. Grid + kind filter + text
-// search (client-side, over the already-fetched list — the same "filtered
-// in memory" posture the ADR accepts for tags) + upload + a detail dialog
-// (title/alt/folder/tags, usage, replace, delete).
+// The MediaLibrary (ADR-034 §5) — full-page mode. Grid + category filter +
+// kind filter + SERVER-side text search + paged loading + upload + a detail
+// dialog (title/alt/category/tags, usage, replace, delete).
+//
+// Paged by ADR-067: it renders the first page the server sent and asks for
+// one more page per Load More. The client-side filter this replaced could
+// only ever search what had already been fetched, which stopped being a
+// preference and became a bug the moment the whole library stopped arriving.
 //
 // Shared by the standalone Content → Media screen (`/admin/media`) and the
 // paused Website Builder's own media screen (ADR-037) — moved here rather
@@ -16,7 +20,7 @@
 // building it now would be unverifiable. Upload/replace now show real
 // percentage progress (`useUploadProgress`, XHR against `admin/api/
 // uploads/*` — a Server Action's transport exposes no progress events).
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { FileText, Music, Trash2, Upload, Video } from "lucide-react";
@@ -27,33 +31,29 @@ import {
   Dialog,
   DialogContent,
   DialogFooter,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@repo/ui/components/dialog";
 import { Empty, EmptyTitle } from "@repo/ui/components/empty";
+import { Spinner } from "@repo/ui/components/spinner";
 import { Input } from "@repo/ui/components/input";
 import { Label } from "@repo/ui/components/label";
 import { Tabs, TabsList, TabsTrigger } from "@repo/ui/components/tabs";
+import { ALL_MEDIA_CATEGORIES, MEDIA_CATEGORIES, folderForCategory } from "@repo/contracts";
 import { deleteMediaAction, updateMediaMetaAction } from "../_actions/media-actions.ts";
+import {
+  invalidateMediaCache,
+  useMediaBrowser,
+  type CategoryFilter,
+  type MediaPageResponse,
+} from "../_hooks/use-media-browser.ts";
+import { AdminCombobox } from "./combobox.tsx";
 import { useServerAction } from "../_hooks/use-server-action.ts";
-import { useUploadProgress } from "../_hooks/use-upload-progress.ts";
+import { useUploadProgress, useUploadQueue } from "../_hooks/use-upload-progress.ts";
 import { UploadProgress } from "./upload-progress.tsx";
-import type { StoredMediaAsset } from "@repo/core";
-
-export interface MediaAssetRow {
-  id: string;
-  key: string;
-  url: string;
-  fileName: string;
-  mimeType: string;
-  size: number;
-  kind: "IMAGE" | "VIDEO" | "AUDIO" | "DOCUMENT";
-  title: string | null;
-  altText: string | null;
-  folder: string;
-  tags: string[];
-  usageCount: number;
-}
+import type { MediaAssetRow, StoredMediaAsset } from "@repo/core";
+import type { MediaCategory } from "@repo/contracts";
 
 interface MediaLabels {
   title: string;
@@ -66,9 +66,16 @@ interface MediaLabels {
   documentKind: string;
   noResults: string;
   detailTitle: string;
+  detailDescription: string;
   titleLabel: string;
   altTextLabel: string;
-  folderLabel: string;
+  categoryLabel: string;
+  allCategories: string;
+  categories: Record<MediaCategory, string>;
+  subfolderLabel: string;
+  subfolderHint: string;
+  loading: string;
+  loadMore: string;
   tagsLabel: string;
   tagsHint: string;
   usageCount: string;
@@ -86,11 +93,11 @@ const KIND_TABS = ["all", "IMAGE", "VIDEO", "AUDIO", "DOCUMENT"] as const;
 type KindTab = (typeof KIND_TABS)[number];
 
 function AssetThumbnail({ asset }: { asset: MediaAssetRow }) {
-  if (asset.kind === "IMAGE") {
+  if (asset.kind === "IMAGE" && asset.thumbnailUrl) {
     return (
       <div className="relative size-full">
         <Image
-          src={asset.url}
+          src={asset.thumbnailUrl}
           alt={asset.altText ?? ""}
           fill
           sizes="200px"
@@ -122,7 +129,14 @@ function AssetDetailDialog({
 }) {
   const [title, setTitle] = useState(asset.title ?? "");
   const [altText, setAltText] = useState(asset.altText ?? "");
-  const [folder, setFolder] = useState(asset.folder);
+  // ADR-066: the folder is now a registered category plus an optional
+  // sub-path, so it is edited as those two things. A free-text path field
+  // could express a folder the schema refuses, which is a validation error
+  // presented as a typing exercise.
+  const [category, setCategory] = useState<MediaCategory>(asset.category ?? "general");
+  const [subfolder, setSubfolder] = useState(
+    asset.category ? asset.folder.slice(folderForCategory(asset.category).length + 1) : "",
+  );
   const [tagsText, setTagsText] = useState(asset.tags.join(", "));
   const { run, pending } = useServerAction();
   const router = useRouter();
@@ -144,7 +158,7 @@ function AssetDetailDialog({
         updateMediaMetaAction(asset.id, {
           title: title || null,
           altText: altText || null,
-          folder,
+          folder: [folderForCategory(category), subfolder.trim()].filter(Boolean).join("/"),
           tags,
         }),
       { onDone: () => onOpenChange(false) },
@@ -163,6 +177,7 @@ function AssetDetailDialog({
       <DialogContent className="max-w-lg" closeLabel={labels.close}>
         <DialogHeader>
           <DialogTitle>{labels.detailTitle}</DialogTitle>
+          <DialogDescription>{labels.detailDescription}</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-3">
           <div className="aspect-video overflow-hidden rounded-md border">
@@ -193,11 +208,25 @@ function AssetDetailDialog({
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="media-folder">{labels.folderLabel}</Label>
+            <Label htmlFor="media-category">{labels.categoryLabel}</Label>
+            <AdminCombobox
+              id="media-category"
+              value={category}
+              onValueChange={(value) => setCategory(value as MediaCategory)}
+              options={MEDIA_CATEGORIES.map((key) => ({
+                value: key,
+                label: labels.categories[key],
+              }))}
+              disabled={!canManage}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="media-subfolder">{labels.subfolderLabel}</Label>
             <Input
-              id="media-folder"
-              value={folder}
-              onChange={(e) => setFolder(e.target.value)}
+              id="media-subfolder"
+              value={subfolder}
+              onChange={(e) => setSubfolder(e.target.value)}
+              placeholder={labels.subfolderHint}
               disabled={!canManage}
             />
           </div>
@@ -272,17 +301,19 @@ function AssetDetailDialog({
 }
 
 export function MediaLibrary({
-  assets,
+  initialPage,
   canUpload,
   canManage,
   labels,
 }: {
-  assets: MediaAssetRow[];
+  /** The first page the server rendered — the browser hook continues from it (ADR-067 §1). */
+  initialPage: MediaPageResponse;
   canUpload: boolean;
   canManage: boolean;
   labels: MediaLabels;
 }) {
   const [kindTab, setKindTab] = useState<KindTab>("all");
+  const [category, setCategory] = useState<CategoryFilter>(ALL_MEDIA_CATEGORIES);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<MediaAssetRow | null>(null);
   // changes-08 #10: replace/delete straight from the grid tile, without
@@ -294,9 +325,9 @@ export function MediaLibrary({
   const [replaceTarget, setReplaceTarget] = useState<MediaAssetRow | null>(null);
   const router = useRouter();
   const { run } = useServerAction();
-  const upload = useUploadProgress<StoredMediaAsset>("/admin/api/uploads/media", {
-    autoResetMs: 2500,
-  });
+  // A queue, not one file at a time (changes-13 PR 6): filling a category
+  // used to mean pick, wait, pick, wait.
+  const upload = useUploadQueue<StoredMediaAsset>("/admin/api/uploads/media");
   const replaceUpload = useUploadProgress<StoredMediaAsset>(
     replaceTarget ? `/admin/api/uploads/media/${replaceTarget.id}` : "/admin/api/uploads/media",
     { autoResetMs: 2500 },
@@ -312,24 +343,34 @@ export function MediaLibrary({
     DOCUMENT: labels.documentKind,
   };
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return assets.filter((asset) => {
-      if (kindTab !== "all" && asset.kind !== kindTab) return false;
-      if (!q) return true;
-      return (
-        asset.fileName.toLowerCase().includes(q) ||
-        (asset.title ?? "").toLowerCase().includes(q) ||
-        (asset.altText ?? "").toLowerCase().includes(q) ||
-        asset.tags.some((t) => t.includes(q))
-      );
-    });
-  }, [assets, kindTab, query]);
+  // ADR-067: the grid asks the server a narrow question. The client-side
+  // filter this replaced could never find an asset outside the first page,
+  // which stopped being a preference and became a bug the moment paging
+  // existed.
+  const browser = useMediaBrowser({
+    category,
+    kind: kindTab,
+    query,
+    initialResponse: initialPage,
+  });
 
-  function onUploadFileChosen(file: File | undefined) {
-    if (!file) return;
-    void upload.upload(file).then((stored) => {
-      if (stored) router.refresh();
+  const categoryOptions = [
+    { value: ALL_MEDIA_CATEGORIES, label: labels.allCategories },
+    ...MEDIA_CATEGORIES.map((key) => ({ value: key, label: labels.categories[key] })),
+  ];
+
+  /** A write invalidated the cache; refetch rather than trust a stale grid. */
+  function afterWrite() {
+    invalidateMediaCache();
+    browser.refresh();
+    router.refresh();
+  }
+
+  function onUploadFilesChosen(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    const uploadCategory = category === ALL_MEDIA_CATEGORIES ? "general" : category;
+    void upload.enqueue([...files], { category: uploadCategory }).then((stored) => {
+      if (stored.length > 0) afterWrite();
     });
   }
 
@@ -341,7 +382,7 @@ export function MediaLibrary({
   function onReplaceFileChosen(file: File | undefined) {
     if (!file) return;
     void replaceUpload.upload(file).then((stored) => {
-      if (stored) router.refresh();
+      if (stored) afterWrite();
     });
   }
 
@@ -358,6 +399,13 @@ export function MediaLibrary({
           </TabsList>
         </Tabs>
         <div className="flex items-center gap-2">
+          <AdminCombobox
+            className="w-44"
+            value={category}
+            onValueChange={(value) => setCategory(value as CategoryFilter)}
+            options={categoryOptions}
+            aria-label={labels.categoryLabel}
+          />
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -370,11 +418,15 @@ export function MediaLibrary({
                 ref={uploadInputRef}
                 type="file"
                 className="hidden"
-                onChange={(e) => onUploadFileChosen(e.target.files?.[0])}
+                multiple
+                onChange={(e) => {
+                  onUploadFilesChosen(e.target.files);
+                  e.target.value = "";
+                }}
               />
               <Button
                 size="sm"
-                disabled={upload.status === "uploading"}
+                disabled={upload.active}
                 onClick={() => uploadInputRef.current?.click()}
               >
                 {labels.upload}
@@ -384,15 +436,18 @@ export function MediaLibrary({
         </div>
       </div>
 
-      {canUpload && upload.status !== "idle" && (
-        <UploadProgress
-          status={upload.status}
-          progress={upload.progress}
-          error={upload.error}
-          fileName={upload.fileName}
-          onRetry={() => void upload.retry().then((stored) => stored && router.refresh())}
-        />
-      )}
+      {/* One row per queued file: a batch that half-failed has to say WHICH
+          half, and a single collapsed bar cannot. */}
+      {canUpload &&
+        upload.items.map((item) => (
+          <UploadProgress
+            key={item.id}
+            status={item.status}
+            progress={item.progress}
+            error={item.error}
+            fileName={item.fileName}
+          />
+        ))}
 
       {canManage && (
         <input
@@ -416,13 +471,19 @@ export function MediaLibrary({
         />
       )}
 
-      {filtered.length === 0 ? (
+      {browser.status === "loading" ? (
+        <div className="flex justify-center py-10">
+          <Spinner aria-label={labels.loading} />
+        </div>
+      ) : browser.status === "error" ? (
+        <p className="py-8 text-center text-sm text-destructive">{browser.error}</p>
+      ) : browser.items.length === 0 ? (
         <Empty className="border">
           <EmptyTitle>{labels.noResults}</EmptyTitle>
         </Empty>
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-          {filtered.map((asset) => (
+          {browser.items.map((asset) => (
             // A div, not a button: the hover actions are themselves
             // buttons, and a button inside a button is invalid HTML that
             // browsers un-nest — which broke the click target. The tile's
@@ -484,13 +545,27 @@ export function MediaLibrary({
                     description={labels.confirmDeleteBody}
                     confirmLabel={labels.confirm}
                     cancelLabel={labels.cancel}
-                    onConfirm={() => run(() => deleteMediaAction(asset.id))}
+                    onConfirm={() => run(() => deleteMediaAction(asset.id), { onDone: afterWrite })}
                   />
                 </div>
               )}
             </div>
           ))}
         </div>
+      )}
+
+      {/* A real button, not only a scroll sentinel (ADR-067 §5). */}
+      {browser.hasMore && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="self-center"
+          disabled={browser.status === "loading-more"}
+          onClick={browser.loadMore}
+        >
+          {labels.loadMore}
+        </Button>
       )}
 
       {selected && (

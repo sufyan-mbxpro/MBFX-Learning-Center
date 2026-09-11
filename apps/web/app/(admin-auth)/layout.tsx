@@ -5,6 +5,7 @@ import { getMessages } from "next-intl/server";
 import { buildThemeStyleSheet, getActiveTheme } from "@repo/theme";
 import { curatedFontVariables } from "@repo/ui/fonts";
 import { ThemeProvider } from "@repo/ui/components/theme-provider";
+import { ThemeScript } from "@repo/ui/components/theme-script";
 import "@repo/ui/globals.css";
 
 // Root layout for the STAFF SIGN-IN surface — the third root layout in this
@@ -48,6 +49,9 @@ export default async function AdminAuthRootLayout({ children }: LayoutProps<"/">
       suppressHydrationWarning
     >
       <body className="min-h-full" suppressHydrationWarning>
+        {/* ADR-064: the pre-paint mode guard, server-rendered so the browser
+            actually executes it. Carries the nonce, like #brand-tokens. */}
+        <ThemeScript nonce={nonce} />
         <style
           id="brand-tokens"
           nonce={nonce}

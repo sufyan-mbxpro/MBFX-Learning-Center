@@ -18,8 +18,13 @@ export const metadata: Metadata = {
 
 export default function GlobalNotFound() {
   return (
-    <html lang="en" className="h-full antialiased">
-      <body className="min-h-full">
+    // suppressHydrationWarning: this file owns its own <html>/<body> because
+    // it bypasses every layout, so it needs the same browser-extension
+    // tolerance the three root layouts already carry — extensions
+    // (ColorZilla's cz-shortcut-listen is the one seen here) stamp
+    // attributes on <body> before React hydrates.
+    <html lang="en" className="h-full antialiased" suppressHydrationWarning>
+      <body className="min-h-full" suppressHydrationWarning>
         <main className="flex min-h-full flex-col items-center justify-center gap-4 p-8">
           <h1 className="text-lg font-semibold">Page not found</h1>
           <Link href="/" className="text-sm underline underline-offset-4">

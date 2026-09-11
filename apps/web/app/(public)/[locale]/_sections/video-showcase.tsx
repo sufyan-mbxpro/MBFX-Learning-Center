@@ -31,7 +31,17 @@ function catalogKey(key: string): string {
   return key.charAt(0).toUpperCase() + key.slice(1);
 }
 
-export async function VideoShowcase({ locale, variant = "carousel", limit }: SectionProps) {
+export async function VideoShowcase({
+  locale,
+  variant = "carousel",
+  limit,
+  // "Watch every lesson" points at /learn. On the homepage that is the whole
+  // job of the button; on /learn itself it is a link to the page you are
+  // already reading, so the learn index turns it off. Defaulted to true so the
+  // registry-driven homepage path (`SECTION_COMPONENTS`, which passes only
+  // `SectionProps`) is unchanged.
+  showCta = true,
+}: SectionProps & { showCta?: boolean }) {
   // The rail teaches; it belongs to the courses feature. An operator who
   // turns off `courses` should not still be shown a wall of lessons.
   if (!(await isFeatureVisible("courses", null))) return null;
@@ -102,15 +112,17 @@ export async function VideoShowcase({ locale, variant = "carousel", limit }: Sec
               {t("videoLead")}
             </p>
           </div>
-          <Button
-            variant="ghost"
-            shape="pill"
-            className="bg-secondary-foreground/10 text-secondary-foreground ring-1 ring-secondary-foreground/20 ring-inset hover:bg-secondary-foreground/20 hover:text-secondary-foreground"
-            render={<Link href="/learn" />}
-          >
-            {t("videoAll")}
-            <ArrowRight data-icon="inline-end" aria-hidden className="rtl:rotate-180" />
-          </Button>
+          {showCta && (
+            <Button
+              variant="ghost"
+              shape="pill"
+              className="bg-secondary-foreground/10 text-secondary-foreground ring-1 ring-secondary-foreground/20 ring-inset hover:bg-secondary-foreground/20 hover:text-secondary-foreground"
+              render={<Link href="/learn" />}
+            >
+              {t("videoAll")}
+              <ArrowRight data-icon="inline-end" aria-hidden className="rtl:rotate-180" />
+            </Button>
+          )}
         </div>
 
         <Reveal variant="up">

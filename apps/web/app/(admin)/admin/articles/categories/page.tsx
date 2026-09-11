@@ -32,6 +32,8 @@ export default async function ArticleCategoriesPage() {
     saved: t("saved"),
     create: t("create"),
     newCategory: t("newCategory"),
+    newCategoryDescription: t("dialogDesc.newCategory"),
+    editDescription: t("dialogDesc.editCategory"),
     edit: t("edit"),
     delete: t("delete"),
     cancel: t("cancel"),

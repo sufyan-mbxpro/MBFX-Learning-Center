@@ -1,176 +1,142 @@
 "use client";
 
+// The glossary list's one control (ADR-069, changes-17 PR 2).
+//
+// What used to live here — `GlossaryControls`, `TranslationForm` and
+// `TermTrackSelect` — is gone, not hidden. The form could not edit (it seeded
+// every field to "" and its loader never selected a body), and the other two
+// were per-row controls on a screen that is now a table. All three moved into
+// `/admin/glossary/[id]`, where a term is edited one at a time.
+//
+// What is left is creating one. It asks for the two fields that decide where a
+// term LIVES, because both have a sensible default that is easy to leave wrong
+// forever once the term is written: an unfiled term never appears under
+// `/glossary/topics`, and until ADR-069 there was no way to file it at all.
 import { useState } from "react";
-import { ArrowRight } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Plus } from "lucide-react";
+import { LEARN_TRACK_KEYS } from "@repo/contracts";
 import { Button } from "@repo/ui/components/button";
-import { ConfirmDialog } from "@repo/ui/components/confirm-dialog";
-import { Input } from "@repo/ui/components/input";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@repo/ui/components/select";
-import {
-  createGlossaryTermAction,
-  deleteGlossaryTermAction,
-  saveGlossaryTranslationAction,
-  transitionGlossaryAction,
-} from "../_actions/content-actions.ts";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@repo/ui/components/dialog";
+import { Label } from "@repo/ui/components/label";
+import { createGlossaryTermAction } from "../_actions/content-actions.ts";
+import { AdminCombobox } from "../_components/combobox.tsx";
 import { useServerAction } from "../_hooks/use-server-action.ts";
-import { RichTextEditor, type RichTextLabels } from "../_components/rich-text-editor.tsx";
-import type { LocaleOption } from "../articles/categories/category-controls.tsx";
 
-export function NewTermButton({ label }: { label: string }) {
-  const { run, pending } = useServerAction();
-  return (
-    <Button size="sm" disabled={pending} onClick={() => run(() => createGlossaryTermAction())}>
-      {label}
-    </Button>
-  );
+/**
+ * The "no value" option for both dropdowns — and they do NOT mean the same
+ * thing (ADR-069 §3). "Unfiled" is a term with no topic; "Both schools" is a
+ * term that belongs to every one. A named sentinel rather than `""`, because
+ * an empty value reads as "nothing selected" to a listbox and each of these is
+ * a deliberate choice.
+ */
+const NONE = "__none__";
+
+export interface NewTermLabels {
+  trigger: string;
+  title: string;
+  description: string;
+  topicLabel: string;
+  topicNone: string;
+  trackLabel: string;
+  trackBoth: string;
+  create: string;
+  cancel: string;
+  tracks: Record<string, string>;
 }
 
-export function GlossaryControls({
-  termId,
-  legalTransitions,
-  deleted,
+export function NewTermButton({
+  topicOptions,
   labels,
 }: {
-  termId: string;
-  legalTransitions: string[];
-  deleted: boolean;
-  labels: {
-    delete: string;
-    restore: string;
-    cancel: string;
-    confirmDeleteTitle: string;
-    confirmDeleteBody: string;
-    statusLabels: Record<string, string>;
-  };
+  topicOptions: { id: string; name: string }[];
+  labels: NewTermLabels;
 }) {
+  const router = useRouter();
   const { run, pending } = useServerAction();
+  const [open, setOpen] = useState(false);
+  const [topicId, setTopicId] = useState<string>(NONE);
+  const [track, setTrack] = useState<string>(NONE);
+
+  const create = () =>
+    run(
+      async () => {
+        const id = await createGlossaryTermAction({
+          topicId: topicId === NONE ? null : topicId,
+          track: track === NONE ? null : track,
+        });
+        setOpen(false);
+        // Straight into the editor: a blank DRAFT term on the list is a row
+        // with no name, and the next thing anyone wants is to write it.
+        router.push(`/admin/glossary/${id}`);
+      },
+      { skipRefresh: true },
+    );
 
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      {legalTransitions.map((to) => (
-        <Button
-          key={to}
-          variant="outline"
-          size="xs"
-          disabled={pending}
-          onClick={() => run(() => transitionGlossaryAction(termId, to))}
-        >
-          <ArrowRight data-icon="inline-start" aria-hidden className="rtl:rotate-180" />
-          {labels.statusLabels[to] ?? to}
-        </Button>
-      ))}
-      {/* changes-08 #6: deleting asks first, everywhere. Restoring does
-          not — it is the undo, and putting a confirmation in front of the
-          way BACK just makes the destructive path harder to reverse. */}
-      {deleted ? (
-        <Button
-          variant="outline"
-          size="xs"
-          disabled={pending}
-          className="ms-auto"
-          onClick={() => run(() => deleteGlossaryTermAction(termId, false))}
-        >
-          {labels.restore}
-        </Button>
-      ) : (
-        <ConfirmDialog
-          trigger={
-            <Button variant="destructive" size="xs" disabled={pending} className="ms-auto">
-              {labels.delete}
-            </Button>
-          }
-          title={labels.confirmDeleteTitle}
-          description={labels.confirmDeleteBody}
-          confirmLabel={labels.delete}
-          cancelLabel={labels.cancel}
-          onConfirm={() => run(() => deleteGlossaryTermAction(termId, true))}
-        />
-      )}
-    </div>
-  );
-}
-
-export function TranslationForm({
-  termId,
-  locales,
-  labels,
-}: {
-  termId: string;
-  /** Active locales for the dropdown (changes-02: no free-text locale codes). */
-  locales: LocaleOption[];
-  labels: {
-    term: string;
-    slug: string;
-    locale: string;
-    body: string;
-    save: string;
-    saved: string;
-    editor: RichTextLabels;
-  };
-}) {
-  const [locale, setLocale] = useState(locales[0]?.code ?? "en");
-  const [term, setTerm] = useState("");
-  const [slug, setSlug] = useState("");
-  const [body, setBody] = useState("");
-  const { run, pending } = useServerAction();
-
-  return (
-    <div className="flex flex-col gap-2 border-t pt-3">
-      <div className="flex flex-wrap gap-2">
-        <Select value={locale} onValueChange={(v) => setLocale(v ?? locale)}>
-          <SelectTrigger aria-label={labels.locale} className="w-40">
-            <SelectValue>{locales.find((l) => l.code === locale)?.label ?? locale}</SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {locales.map((l) => (
-              <SelectItem key={l.code} value={l.code}>
-                {l.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Input
-          value={term}
-          onChange={(e) => setTerm(e.target.value)}
-          aria-label={labels.term}
-          placeholder={labels.term}
-          className="max-w-48"
-        />
-        <Input
-          value={slug}
-          onChange={(e) => setSlug(e.target.value)}
-          aria-label={labels.slug}
-          placeholder={labels.slug}
-          className="max-w-48"
-        />
-      </div>
-      <RichTextEditor value={body} onChange={setBody} labels={labels.editor} />
-      <Button
-        size="sm"
-        className="self-end"
-        disabled={pending || !term || !body}
-        onClick={() =>
-          run(
-            () =>
-              saveGlossaryTranslationAction({
-                termId,
-                locale,
-                term,
-                slug: slug || undefined,
-                simpleExplanation: body,
-              }),
-            { successMessage: labels.saved },
-          )
-        }
-      >
-        {labels.save}
+    <>
+      <Button size="sm" onClick={() => setOpen(true)}>
+        <Plus data-icon="inline-start" aria-hidden />
+        {labels.trigger}
       </Button>
-    </div>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          {/* ADR-057 #5 / code-style #11: a title AND a description, always. */}
+          <DialogHeader>
+            <DialogTitle>{labels.title}</DialogTitle>
+            <DialogDescription>{labels.description}</DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="new-term-topic">{labels.topicLabel}</Label>
+              <AdminCombobox
+                id="new-term-topic"
+                value={topicId}
+                onValueChange={(next) => setTopicId(next || NONE)}
+                options={[
+                  { value: NONE, label: labels.topicNone },
+                  ...topicOptions.map((topic) => ({ value: topic.id, label: topic.name })),
+                ]}
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="new-term-track">{labels.trackLabel}</Label>
+              <AdminCombobox
+                id="new-term-track"
+                value={track}
+                onValueChange={(next) => setTrack(next || NONE)}
+                options={[
+                  // First: it is the right answer for most vocabulary.
+                  { value: NONE, label: labels.trackBoth },
+                  ...LEARN_TRACK_KEYS.map((key) => ({
+                    value: key,
+                    label: labels.tracks[key] ?? key,
+                  })),
+                ]}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setOpen(false)}>
+              {labels.cancel}
+            </Button>
+            <Button disabled={pending} onClick={create}>
+              {labels.create}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

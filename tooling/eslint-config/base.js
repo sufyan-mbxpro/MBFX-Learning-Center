@@ -20,6 +20,20 @@ export const noColorLiteralRule = {
 };
 
 /**
+ * The `next/cache` restriction, exported on its own for the same reason
+ * `noColorLiteralRule` is: flat config REPLACES a rule's value when a later
+ * config object sets it again, so any config adding its own
+ * `no-restricted-imports` path must re-include this one or it silently stops
+ * applying to those files. See adminComboboxRule in next.js.
+ */
+export const noUnstableCacheImport = {
+  name: "next/cache",
+  importNames: ["unstable_cache"],
+  message:
+    'unstable_cache is the legacy caching path (ADR-004). Use "use cache" + cacheTag()/cacheLife(), invalidated with revalidateTag()/updateTag().',
+};
+
+/**
  * Shared flat-config base for every package and app. Anything workspace-wide
  * (no color literals outside theme, import hygiene) lives here so it can't
  * be silently opted out of per-app. The physical-property ban lives in
@@ -47,29 +61,11 @@ export const baseConfig = [
       ],
       "import-x/no-cycle": "error",
       "no-restricted-syntax": ["error", noColorLiteralRule],
-      "no-restricted-imports": [
-        "error",
-        {
-          paths: [
-            {
-              name: "next/cache",
-              importNames: ["unstable_cache"],
-              message:
-                "unstable_cache is the legacy caching path (ADR-004). Use \"use cache\" + cacheTag()/cacheLife(), invalidated with revalidateTag()/updateTag().",
-            },
-          ],
-        },
-      ],
+      "no-restricted-imports": ["error", { paths: [noUnstableCacheImport] }],
     },
   },
   {
-    ignores: [
-      "**/dist/**",
-      "**/.next/**",
-      "**/.turbo/**",
-      "**/coverage/**",
-      "**/src/generated/**",
-    ],
+    ignores: ["**/dist/**", "**/.next/**", "**/.turbo/**", "**/coverage/**", "**/src/generated/**"],
   },
 ];
 

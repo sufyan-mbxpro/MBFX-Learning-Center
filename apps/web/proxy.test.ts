@@ -109,6 +109,25 @@ describe("proxy — /admin STAFF gate (security.md #3: the two-lock proxy gate)"
     expect(location.pathname).toBe("/admin/sign-in");
   });
 
+  it("a NAVIGATION carrying a session token but no fresh cookie cache is NOT redirected — the cache expires after 5 minutes and nothing rewrites it on a page view, so this gate was bouncing valid 7-day staff sessions to sign-in every few minutes (changes-18 PR 1)", async () => {
+    const response = await proxy(
+      requestFor("/admin/glossary", "better-auth.session_token=a-real-session-token"),
+    );
+    expect(response.status).not.toBe(307);
+    expect(response.status).not.toBe(308);
+    expect(response.headers.get("location")).toBeNull();
+  });
+
+  it("that fall-through is not a hole: the request reaches (admin)/layout.tsx, which loads the subject from the database and redirects a non-STAFF user (ADR-006 — the proxy is a gate, the layout is the boundary)", async () => {
+    // Asserted here as the shape of the contract: the proxy no longer claims
+    // to decide, so the layout's own re-check is what a learner meets. The
+    // learner-session probes against every /admin/* route stay owed to
+    // Module 14 (security.md #7), where a real session can be constructed.
+    const response = await proxy(requestFor("/admin", "better-auth.session_token=learner-token"));
+    expect(response.headers.get("X-Frame-Options")).toBe("DENY");
+    expect(response.headers.get("location")).toBeNull();
+  });
+
   it("a Server Action request with a stale/missing cookie cache is NOT redirected — redirecting it breaks the client's action-response parsing (regression: 'An unexpected response was received from the server' saving the theme)", async () => {
     const request = requestFor("/admin/theme");
     request.headers.set("next-action", "0123456789abcdef0123456789abcdef01234567");

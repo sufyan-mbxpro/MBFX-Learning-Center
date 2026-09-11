@@ -20,9 +20,18 @@ An article is publicly visible iff ALL of:
 `packages/core/src/public-articles.ts` — every public query composes it;
 never re-derive it inline. #4 is the scheduler (ADR-015 #6): no cron —
 with `cacheLife({revalidate: 300})` a scheduled article goes live within
-5 minutes of its time. `publishDueArticles()` exists for a future cron and
-stamps `publishedAt = scheduledFor`; until swept, `effectivePublishedAt()`
-is the display time.
+5 minutes of its time. `publishDueArticles()` stamps
+`publishedAt = scheduledFor`; until swept, `effectivePublishedAt()` is the
+display time.
+
+**ADR-071 generalised all of this to the other five content entities and moved
+the shared parts out.** `ScheduleInPastError` and `effectivePublishedAt` now
+live in `content.ts` (`articles.ts` re-exports both — no caller changed), the
+`datetime-local` control is `_components/editor/schedule-field.tsx`, shared by
+`publish-panel.tsx` and `ContentStatusPanel`, and `publishDueArticles()`
+finally has a caller: `POST /api/cron/publish-due` runs it beside
+`publishDueContent()` behind a `CRON_SECRET` bearer. Nothing is deployed
+calling that route yet, and nothing needs to be — #4 is still the mechanism.
 
 ## Lifecycle & permissions
 

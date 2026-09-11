@@ -82,7 +82,19 @@ export async function searchAdmin(subject: Subject, query: string): Promise<Admi
           where: { locale: "en", term: { contains: q }, glossaryTerm: { deletedAt: null } },
           take: SECTION_TAKE,
           orderBy: { term: "asc" },
-          select: { termId: true, term: true, glossaryTerm: { select: { category: true } } },
+          // The topic NAME, not the id — ADR-044 #5: a raw identifier never
+          // renders, and the palette shows this string directly.
+          select: {
+            termId: true,
+            term: true,
+            glossaryTerm: {
+              select: {
+                topic: {
+                  select: { translations: { where: { locale: "en" }, select: { name: true } } },
+                },
+              },
+            },
+          },
         })
       : Promise.resolve([]),
   ]);
@@ -115,7 +127,7 @@ export async function searchAdmin(subject: Subject, query: string): Promise<Admi
     glossary: glossary.map((g) => ({
       id: g.termId,
       label: g.term,
-      sublabel: g.glossaryTerm.category,
+      sublabel: g.glossaryTerm.topic?.translations[0]?.name ?? null,
       href: "/admin/glossary",
     })),
   };

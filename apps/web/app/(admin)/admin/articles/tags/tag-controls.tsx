@@ -14,19 +14,13 @@ import {
   Dialog,
   DialogContent,
   DialogFooter,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@repo/ui/components/dialog";
 import { Empty, EmptyDescription, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
 import { Input } from "@repo/ui/components/input";
 import { Label } from "@repo/ui/components/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@repo/ui/components/select";
 import { Switch } from "@repo/ui/components/switch";
 import {
   createArticleTagAction,
@@ -34,6 +28,7 @@ import {
   saveArticleTagTranslationAction,
   setArticleTagActiveAction,
 } from "../../_actions/article-actions.ts";
+import { AdminCombobox } from "../../_components/combobox.tsx";
 import { useClientTable } from "../../_hooks/use-client-table.ts";
 import { useServerAction } from "../../_hooks/use-server-action.ts";
 import type { LocaleOption } from "../categories/category-controls.tsx";
@@ -61,7 +56,9 @@ export interface TagLabels {
   save: string;
   saved: string;
   newTag: string;
+  newTagDescription: string;
   edit: string;
+  editDescription: string;
   delete: string;
   cancel: string;
   confirm: string;
@@ -134,25 +131,20 @@ function TagEditDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{tag ? labels.edit : labels.newTag}</DialogTitle>
+          <DialogDescription>
+            {tag ? labels.editDescription : labels.newTagDescription}
+          </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-3">
           {tag && (
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="tag-locale">{labels.locale}</Label>
-              <Select value={locale} onValueChange={(v) => switchLocale(v ?? locale)}>
-                <SelectTrigger id="tag-locale" className="w-full">
-                  <SelectValue>
-                    {locales.find((l) => l.code === locale)?.label ?? locale}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {locales.map((l) => (
-                    <SelectItem key={l.code} value={l.code}>
-                      {l.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <AdminCombobox
+                id="tag-locale"
+                value={locale}
+                onValueChange={(next) => switchLocale(next || locale)}
+                options={locales.map((l) => ({ value: l.code, label: l.label }))}
+              />
             </div>
           )}
           <div className="flex flex-col gap-1.5">

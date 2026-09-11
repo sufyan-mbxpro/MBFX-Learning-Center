@@ -99,5 +99,10 @@ focus-ring test.
 
 ## DoD
 
-Kitchen-sink at `/admin/_dev/kitchen-sink` (dev-only, staff-gated); zero
+The design-system reference at `/admin/design-system` (changes-20 Phase 4,
+Q13) is the permanent specimen board: every shared component in every
+variant, size and state, with a dark pane alongside and an RTL switch. A new
+component or variant is added THERE in the same change, and every string it
+shows is an `admin.designSystem.*` key (`admin-design-system.test.ts` fails on
+a missing one). It replaces the dev-only `/admin/_dev/kitchen-sink`. Zero
 physical-property utilities in the repo.

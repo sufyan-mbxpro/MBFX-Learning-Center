@@ -20,6 +20,7 @@ import { UploadProgress } from "./upload-progress.tsx";
 import { describeOversizeFile } from "./media-constraints.ts";
 import { MediaPickerDialog } from "./media-picker-dialog.tsx";
 import type { StoredImage } from "@repo/core";
+import type { MediaCategory, MediaSourceType } from "@repo/contracts";
 
 export interface ImageUploadLabels {
   upload: string;
@@ -50,6 +51,8 @@ export function ImageUploadField({
   description,
   previewClassName,
   disabled,
+  category,
+  sourceType,
   allowLibrary = true,
 }: {
   id: string;
@@ -67,6 +70,10 @@ export function ImageUploadField({
    * default — it exists so a surface that genuinely must upload fresh
    * bytes can opt out, not as a per-screen rollout switch. */
   allowLibrary?: boolean;
+  /** Which shelf an upload from this field lands on (ADR-066 §4). Required: an optional default would quietly file half the library in the wrong place. */
+  category: MediaCategory;
+  /** Scopes the picker's recently-used strip to the surface this field belongs to. */
+  sourceType?: MediaSourceType;
 }) {
   const t = useTranslations("admin");
   const inputRef = React.useRef<HTMLInputElement>(null);
@@ -106,7 +113,7 @@ export function ImageUploadField({
       return;
     }
     setSizeError(null);
-    applyStored(await upload.upload(file, { purpose }));
+    applyStored(await upload.upload(file, { purpose, category }));
     if (inputRef.current) inputRef.current.value = "";
   };
 
@@ -216,6 +223,8 @@ export function ImageUploadField({
           open={pickerOpen}
           onOpenChange={setPickerOpen}
           purpose={purpose}
+          category={category}
+          sourceType={sourceType}
           kinds={["IMAGE"]}
           title={label}
           onSelect={(picked) => {

@@ -231,6 +231,15 @@
     /* How far a Reveal travels before settling. */
     --reveal-distance: 1.5rem;
 
+    /* How far down the viewport the sticky header reaches (ADR-065 §5), and
+       therefore where a SECOND sticky bar has to start. It is not a constant:
+       the announcement bar, the top bar and a wrapped nav all change it, so
+       `StickyHeaderShell` measures the real element and overwrites this on
+       the document element. The value here is the floor for the first paint
+       and for a page rendered with no header at all — the header's own
+       height, which is what the stack measures when nothing else is on. */
+    --header-offset: var(--height-header);
+
     /* Container's fixed hero/prose siblings. --container-width stays the
        admin-set value the theme engine emits and .container-page consumes;
        these two are constants — not namespaced here for the reason above. */
@@ -647,6 +656,57 @@
     }
   }
 
+  /* == Public design system: loading shimmer (learn design pass) ==
+   *
+   * A light sweep across a PLACEHOLDER surface, layered onto `Skeleton`'s
+   * own `animate-pulse`. The pulse says "not yet"; the sweep says "and
+   * something is on its way" — a page of pulsing blocks with no directional
+   * motion reads as broken on a slow connection, which is exactly when the
+   * skeleton is on screen longest.
+   *
+   * Two things it deliberately does NOT do. It never changes layout (the
+   * pseudo-element is inset over the host), so a skeleton occupies the same
+   * box whether or not this class is on it. And it is confined to
+   * prefers-reduced-motion: no-preference, so a reduced-motion visitor sees
+   * a plain tinted block rather than a stilled one.
+   *
+   * Same cascade trap `.sheen` documents: this sets `position: relative`,
+   * which will OVERRIDE a Tailwind `absolute` on the same element. Put it on
+   * a statically positioned surface.
+   *
+   * `--foreground` at 8%, not a new colour: the sweep is a lightness shift
+   * over `bg-muted`, and an alpha of the page's own ink is the one value
+   * that behaves in both modes without a second token. */
+  .shimmer {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+  }
+  .shimmer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in oklab, var(--foreground) 8%, transparent) 50%,
+      transparent 100%
+    );
+    transform: translateX(-100%);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .shimmer::after {
+      animation: shimmer-sweep 1.8s var(--ease-out-quint) infinite;
+    }
+    /* translateX has no logical axis, so the direction is flipped by hand —
+       the technique .sheen and .reveal-start already use. */
+    [dir="rtl"] .shimmer::after {
+      animation-name: shimmer-sweep-rtl;
+    }
+  }
+
   /* A chevron/arrow that nudges toward the reading direction when its group
      is hovered. The host carries `group`; this goes on the glyph. */
   .hover-arrow {
@@ -905,6 +965,22 @@
   }
   to {
     clip-path: inset(0);
+  }
+}
+@keyframes shimmer-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+@keyframes shimmer-sweep-rtl {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(-100%);
   }
 }
 @keyframes marquee-scroll {

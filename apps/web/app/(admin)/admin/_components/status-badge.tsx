@@ -58,6 +58,24 @@ export const ARTICLE_STATUS_TONE: Record<string, StatusTone> = {
   ARCHIVED: "warning",
 };
 
+/**
+ * The FULL content status machine (courses, lessons, glossary), which runs
+ * three states wider than the article one: DRAFT → IN_REVIEW → SEO_REVIEW →
+ * APPROVED → SCHEDULED/PUBLISHED. Kept separate from ARTICLE_STATUS_TONE
+ * rather than merged into it, because the two enums genuinely differ and a
+ * union map would silently give an article a tone for a state it can never
+ * reach.
+ */
+export const CONTENT_STATUS_TONE: Record<string, StatusTone> = {
+  DRAFT: "neutral",
+  IN_REVIEW: "info",
+  SEO_REVIEW: "info",
+  APPROVED: "info",
+  SCHEDULED: "info",
+  PUBLISHED: "success",
+  ARCHIVED: "warning",
+};
+
 export const TRANSLATION_STATUS_TONE: Record<string, StatusTone> = {
   DRAFT: "neutral",
   IN_REVIEW: "info",

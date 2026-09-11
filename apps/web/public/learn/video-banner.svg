@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" width="1600" height="900" role="presentation" aria-hidden="true"><defs>
+<linearGradient id="g-video-banner" x1="0" y1="0" x2="1" y2="1">
+<stop offset="0" stop-color="#2E251C"/>
+<stop offset=".55" stop-color="#221C16"/>
+<stop offset="1" stop-color="#14110E"/>
+</linearGradient>
+<radialGradient id="warm-video-banner" cx=".5" cy=".5" r=".5">
+<stop offset="0" stop-color="#E8B98C" stop-opacity=".55"/>
+<stop offset="1" stop-color="#E8B98C" stop-opacity="0"/>
+</radialGradient>
+<radialGradient id="cool-video-banner" cx=".5" cy=".5" r=".5">
+<stop offset="0" stop-color="#7FA3C4" stop-opacity=".38"/>
+<stop offset="1" stop-color="#7FA3C4" stop-opacity="0"/>
+</radialGradient>
+<linearGradient id="fade-video-banner" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#E8B98C" stop-opacity=".5"/>
+<stop offset="1" stop-color="#E8B98C" stop-opacity="0"/>
+</linearGradient>
+<pattern id="grid-video-banner" width="64" height="64" patternUnits="userSpaceOnUse">
+<path d="M64 0H0V64" fill="none" stroke="#F5EFE8" stroke-opacity=".05" stroke-width="1"/>
+</pattern>
+<radialGradient id="vig-video-banner" cx=".5" cy=".45" r=".75">
+<stop offset=".55" stop-color="#14110E" stop-opacity="0"/>
+<stop offset="1" stop-color="#14110E" stop-opacity=".42"/>
+</radialGradient>
+</defs><rect width="1600" height="900" fill="url(#g-video-banner)"/><ellipse cx="854.34" cy="796.65" rx="366.36" ry="285.76" fill="url(#warm-video-banner)"/><ellipse cx="937.05" cy="649.4" rx="579.12" ry="451.71" fill="url(#cool-video-banner)"/><ellipse cx="358.72" cy="440.69" rx="579.18" ry="451.76" fill="url(#warm-video-banner)"/><rect width="1600" height="900" fill="url(#grid-video-banner)"/><rect x="256" y="180" width="928" height="180" rx="18" fill="#14110E" fill-opacity=".72" stroke="#F5EFE8" stroke-opacity=".12" stroke-width="2"/>
+<rect x="288.4" y="212.4" width="115.2" height="115.2" rx="12" fill="#E8B98C" fill-opacity=".9"/><rect x="464.8" y="234" width="292.64" height="9" rx="4.5" fill="#F5EFE8" fill-opacity=".34"/><rect x="464.8" y="284.4" width="309.24" height="9" rx="4.5" fill="#F5EFE8" fill-opacity=".18"/><rect x="336" y="378" width="864" height="180" rx="18" fill="#14110E" fill-opacity=".5" stroke="#F5EFE8" stroke-opacity=".12" stroke-width="2"/>
+<rect x="368.4" y="410.4" width="115.2" height="115.2" rx="12" fill="#7A5D42" fill-opacity=".5"/><rect x="544.8" y="432" width="325.02" height="9" rx="4.5" fill="#F5EFE8" fill-opacity=".34"/><rect x="544.8" y="482.4" width="533.52" height="9" rx="4.5" fill="#F5EFE8" fill-opacity=".18"/><rect x="416" y="576" width="800" height="180" rx="18" fill="#14110E" fill-opacity=".5" stroke="#F5EFE8" stroke-opacity=".12" stroke-width="2"/>
+<rect x="448.4" y="608.4" width="115.2" height="115.2" rx="12" fill="#7A5D42" fill-opacity=".5"/><rect x="624.8" y="630" width="247.88" height="9" rx="4.5" fill="#F5EFE8" fill-opacity=".34"/><rect x="624.8" y="680.4" width="316.25" height="9" rx="4.5" fill="#F5EFE8" fill-opacity=".18"/><rect width="1600" height="900" fill="url(#vig-video-banner)"/></svg>

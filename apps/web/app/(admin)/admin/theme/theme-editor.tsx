@@ -22,18 +22,12 @@ import { Alert, AlertDescription, AlertTitle } from "@repo/ui/components/alert";
 import { Button } from "@repo/ui/components/button";
 import { Input } from "@repo/ui/components/input";
 import { Label } from "@repo/ui/components/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@repo/ui/components/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@repo/ui/components/tabs";
 import { activateThemeAction, saveThemeAction } from "../_actions/admin-actions.ts";
 import { clearBrandAssetAction, setBrandAssetAction } from "../_actions/media-actions.ts";
 import { ImageUploadField, type ImageUploadLabels } from "../_components/image-upload-field.tsx";
 import { StatusBadge } from "../_components/status-badge.tsx";
+import { AdminCombobox } from "../_components/combobox.tsx";
 import { useServerAction } from "../_hooks/use-server-action.ts";
 
 interface Labels {
@@ -298,25 +292,12 @@ export function ThemeEditor({
                   <Label htmlFor={`layout-${field}`} className="w-36">
                     {fieldLabel(field)}
                   </Label>
-                  <Select
+                  <AdminCombobox
+                    id={`layout-${field}`}
                     value={layout[field]}
-                    onValueChange={(v) =>
-                      setLayout({ ...layout, [field]: (v as string) || layout[field] })
-                    }
-                  >
-                    <SelectTrigger id={`layout-${field}`} className="min-w-40">
-                      <SelectValue>
-                        {options.find((f) => f.key === layout[field])?.label ?? layout[field]}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {options.map((f) => (
-                        <SelectItem key={f.key} value={f.key}>
-                          {f.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    onValueChange={(v) => setLayout({ ...layout, [field]: v || layout[field] })}
+                    options={options.map((f) => ({ value: f.key, label: f.label }))}
+                  />
                 </div>
               );
             })}
@@ -384,6 +365,8 @@ export function ThemeEditor({
               label={label}
               value={logos[key]}
               purpose="brand"
+              category="brand"
+              sourceType="BRAND"
               labels={labels.upload}
               disabled={logoAction.pending}
               onChange={(next) => {

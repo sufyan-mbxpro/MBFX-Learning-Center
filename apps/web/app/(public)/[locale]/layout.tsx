@@ -14,6 +14,7 @@ import { SiteFooter } from "./_components/footer.tsx";
 import { SiteHeader } from "./_components/header.tsx";
 import { faviconIcons } from "../../_lib/favicon.ts";
 import { ThemeProvider } from "@repo/ui/components/theme-provider";
+import { ThemeScript } from "@repo/ui/components/theme-script";
 import "@repo/ui/globals.css";
 
 // Root layout for the PUBLIC surface (ADR-006: (public) and (admin) each own
@@ -96,13 +97,17 @@ export default async function PublicRootLayout({ children, params }: LayoutProps
       lang={locale}
       dir={LOCALE_DIRECTION[locale]}
       className={`h-full antialiased ${curatedFontVariables}`}
-      // next-themes mutates the class list before hydration (stored mode).
+      // <ThemeScript> mutates the class list before hydration (stored mode).
       suppressHydrationWarning
     >
       {/* suppressHydrationWarning: browser extensions (e.g. ColorZilla's
           cz-shortcut-listen) inject body attributes before React hydrates —
           same rationale as this <html>'s suppression above. */}
       <body className="flex min-h-full flex-col" suppressHydrationWarning>
+        {/* ADR-064: the pre-paint mode guard, server-rendered so the browser
+            actually executes it. No nonce here — this layout is cached (ADR-004)
+            and has no request to read one from. */}
+        <ThemeScript />
         <style
           id="brand-tokens"
           dangerouslySetInnerHTML={{ __html: buildThemeStyleSheet(theme) }}

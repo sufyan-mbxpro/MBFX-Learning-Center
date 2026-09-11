@@ -311,3 +311,350 @@ describe("soft delete + restore", () => {
     ).toBe(2);
   });
 });
+
+// ─── ADR-069: the editor's data layer ────────────────────────
+
+describe("loadGlossaryTermAdminDetail — the prefill regression", () => {
+  // The bug this closes: `loadGlossaryAdminList` never selected a body field,
+  // so the inline form it fed opened BLANK on a term written months earlier.
+  // The only way to fix a typo was to retype the whole definition.
+  it("returns every stored field, so the editor opens populated", async () => {
+    const termId = await content.createGlossaryTerm(actor);
+    await content.saveGlossaryTerm(actor, {
+      termId,
+      meta: { difficulty: "ADVANCED", formula: "pip = 0.0001", track: "forex" },
+      translation: {
+        locale: "en",
+        term: "Pip A069",
+        slug: "pip-a069",
+        simpleExplanation: "<p>Smallest price move.</p>",
+        detailedExplanation: "<p>Detailed.</p>",
+        advancedExplanation: "<p>Advanced.</p>",
+        exampleScenario: "<p>Example.</p>",
+        faq: [{ question: "Why?", answer: "Because." }],
+        seoTitle: "Pip definition",
+        seoDescription: "What a pip is.",
+      },
+    });
+
+    const detail = await content.loadGlossaryTermAdminDetail(termId);
+    expect(detail).not.toBeNull();
+    expect(detail!.difficulty).toBe("ADVANCED");
+    expect(detail!.formula).toBe("pip = 0.0001");
+    expect(detail!.track).toBe("forex");
+
+    const en = detail!.translations.find((t) => t.locale === "en")!;
+    expect(en.term).toBe("Pip A069");
+    expect(en.slug).toBe("pip-a069");
+    // The four bodies — none of these had a read path before ADR-069.
+    expect(en.simpleExplanation).toContain("Smallest price move");
+    expect(en.detailedExplanation).toContain("Detailed");
+    expect(en.advancedExplanation).toContain("Advanced");
+    expect(en.exampleScenario).toContain("Example");
+    expect(en.faq).toEqual([{ question: "Why?", answer: "Because." }]);
+    expect(en.seoTitle).toBe("Pip definition");
+    expect(en.seoDescription).toBe("What a pip is.");
+  });
+
+  it("returns null for an id that does not exist", async () => {
+    expect(await content.loadGlossaryTermAdminDetail("nope")).toBeNull();
+  });
+
+  it("drops malformed FAQ rows rather than throwing on a content screen", async () => {
+    const termId = await content.createGlossaryTerm(actor);
+    await content.saveGlossaryTerm(actor, {
+      termId,
+      meta: {},
+      translation: { locale: "en", term: "Spread A069", simpleExplanation: "<p>x</p>" },
+    });
+    // Written straight to the Json column, bypassing the schema — this is the
+    // shape a pre-ADR-069 row or a hand-edited row can hold.
+    await db.glossaryTermTranslation.update({
+      where: { termId_locale: { termId, locale: "en" } },
+      data: { faq: [{ question: "ok", answer: "yes" }, null, { question: "no answer" }, "junk"] },
+    });
+
+    const detail = await content.loadGlossaryTermAdminDetail(termId);
+    expect(detail!.translations[0]!.faq).toEqual([{ question: "ok", answer: "yes" }]);
+  });
+});
+
+describe("saveGlossaryTerm — ADR-069 §2, the source hash covers all four bodies", () => {
+  it("flips a sibling OUTDATED when only the WORKED EXAMPLE changed", async () => {
+    // Before ADR-069 the hash covered simple + detailed only, so this edit
+    // left every translation claiming to be current.
+    const termId = await content.createGlossaryTerm(actor);
+    const base = {
+      locale: "en" as const,
+      term: "Leverage A069",
+      simpleExplanation: "<p>Borrowed capital.</p>",
+      detailedExplanation: "<p>Unchanged.</p>",
+    };
+    await content.saveGlossaryTerm(actor, {
+      termId,
+      meta: {},
+      translation: { ...base, exampleScenario: "<p>1:10 on 1,000 units.</p>" },
+    });
+    await content.saveGlossaryTranslation(actor, {
+      termId,
+      locale: "es",
+      term: "Apalancamiento A069",
+      simpleExplanation: "<p>Capital prestado.</p>",
+    });
+    expect(
+      (
+        await db.glossaryTermTranslation.findUniqueOrThrow({
+          where: { termId_locale: { termId, locale: "es" } },
+        })
+      ).translationStatus,
+    ).toBe("TRANSLATED");
+
+    await content.saveGlossaryTerm(actor, {
+      termId,
+      meta: {},
+      translation: { ...base, exampleScenario: "<p>1:30 on 1,000 units — corrected.</p>" },
+    });
+
+    expect(
+      (
+        await db.glossaryTermTranslation.findUniqueOrThrow({
+          where: { termId_locale: { termId, locale: "es" } },
+        })
+      ).translationStatus,
+    ).toBe("OUTDATED");
+  });
+
+  it("sanitizes each body separately (security.md #8)", async () => {
+    const termId = await content.createGlossaryTerm(actor);
+    await content.saveGlossaryTerm(actor, {
+      termId,
+      meta: {},
+      translation: {
+        locale: "en",
+        term: "XSS A069",
+        simpleExplanation: "<p>ok</p><script>alert(1)</script>",
+        advancedExplanation: "<p>fine</p><img src=x onerror=alert(2)>",
+        exampleScenario: "<p>safe</p><iframe src='javascript:alert(3)'></iframe>",
+      },
+    });
+    const row = await db.glossaryTermTranslation.findUniqueOrThrow({
+      where: { termId_locale: { termId, locale: "en" } },
+    });
+    expect(row.simpleExplanation).not.toContain("<script");
+    expect(row.advancedExplanation ?? "").not.toContain("onerror");
+    expect(row.exampleScenario ?? "").not.toContain("javascript:");
+  });
+});
+
+describe("term filing — the two nulls (ADR-069 §3)", () => {
+  it("round-trips topicId, and null means unfiled", async () => {
+    const topic = await db.glossaryTopic.create({
+      data: {
+        translations: { create: { locale: "en", name: "Risk", slug: "risk" } },
+      },
+    });
+    const termId = await content.createGlossaryTerm(actor, { topicId: topic.id });
+    expect((await content.loadGlossaryTermAdminDetail(termId))!.topicId).toBe(topic.id);
+
+    await content.saveGlossaryTerm(actor, {
+      termId,
+      meta: { topicId: null },
+      translation: { locale: "en", term: "Margin A069", simpleExplanation: "<p>x</p>" },
+    });
+    expect((await content.loadGlossaryTermAdminDetail(termId))!.topicId).toBeNull();
+  });
+
+  it("round-trips track, and null means EVERY school — not unfiled", async () => {
+    const termId = await content.createGlossaryTerm(actor, { track: "crypto" });
+    expect((await content.loadGlossaryTermAdminDetail(termId))!.track).toBe("crypto");
+
+    await content.saveGlossaryTerm(actor, {
+      termId,
+      meta: { track: null },
+      translation: { locale: "en", term: "Volatility A069", simpleExplanation: "<p>x</p>" },
+    });
+    expect((await content.loadGlossaryTermAdminDetail(termId))!.track).toBeNull();
+  });
+
+  it("leaves a meta field alone when it is omitted rather than nulling it", async () => {
+    // `undefined` = untouched, `null` = cleared. Conflating them would mean
+    // saving the English body silently unfiled the term.
+    const termId = await content.createGlossaryTerm(actor, { track: "forex" });
+    await content.saveGlossaryTerm(actor, {
+      termId,
+      meta: {},
+      translation: { locale: "en", term: "Basis Point A069", simpleExplanation: "<p>x</p>" },
+    });
+    expect((await content.loadGlossaryTermAdminDetail(termId))!.track).toBe("forex");
+  });
+});
+
+// ─── ADR-071: scheduling stops parking content ───────────────
+
+describe("scheduled publishing (ADR-071)", () => {
+  const HOUR = 60 * 60 * 1000;
+  const future = () => new Date(Date.now() + HOUR);
+
+  /** Walk a fresh term to APPROVED — the one state SCHEDULED is reachable from. */
+  async function approvedTerm(term: string): Promise<string> {
+    const termId = await content.createGlossaryTerm(actor);
+    await content.saveGlossaryTranslation(actor, {
+      termId,
+      locale: "en",
+      term,
+      simpleExplanation: "<p>x</p>",
+    });
+    await content.transitionContentStatus(actor, "glossary", termId, "IN_REVIEW");
+    await content.transitionContentStatus(actor, "glossary", termId, "SEO_REVIEW");
+    await content.transitionContentStatus(actor, "glossary", termId, "APPROVED");
+    return termId;
+  }
+
+  async function visibleAt(termId: string, now: Date): Promise<boolean> {
+    const { publicGlossaryTermWhere } = await import("./public-content.ts");
+    const count = await db.glossaryTerm.count({
+      where: { id: termId, ...publicGlossaryTermWhere(now) },
+    });
+    return count === 1;
+  }
+
+  it("refuses SCHEDULED with no date — the parked state this ADR ends", async () => {
+    const termId = await approvedTerm("Carry Trade A071");
+
+    await expect(
+      content.transitionContentStatus(actor, "glossary", termId, "SCHEDULED"),
+    ).rejects.toThrow(content.ScheduleInPastError);
+
+    // Refused, not defaulted to "now": the row has not moved.
+    const row = await db.glossaryTerm.findUniqueOrThrow({ where: { id: termId } });
+    expect(row.status).toBe("APPROVED");
+    expect(row.scheduledFor).toBeNull();
+  });
+
+  it("refuses a date in the past", async () => {
+    const termId = await approvedTerm("Slippage A071");
+    await expect(
+      content.transitionContentStatus(
+        actor,
+        "glossary",
+        termId,
+        "SCHEDULED",
+        new Date(Date.now() - HOUR),
+      ),
+    ).rejects.toThrow(content.ScheduleInPastError);
+  });
+
+  it("requires the publish permission, exactly as PUBLISHED does", async () => {
+    // SCHEDULED puts content in front of readers on a timer, so it is a
+    // publishing move — gating it any lower would be a way around `*.publish`.
+    const termId = await approvedTerm("Rollover A071");
+    const noPublishActor: Subject = { ...actor, allowed: new Set() };
+    await expect(
+      content.transitionContentStatus(noPublishActor, "glossary", termId, "SCHEDULED", future()),
+    ).rejects.toThrow(content.PublishPermissionError);
+  });
+
+  it("stays invisible until its moment, then goes public BEFORE any sweep runs", async () => {
+    // The load-bearing property (ADR-071 #1): visibility is decided by the
+    // QUERY, so a sweep that is late, failed or never configured delays
+    // nothing. Nothing is swept anywhere in this test.
+    const termId = await approvedTerm("Basis A071");
+    const when = future();
+    await content.transitionContentStatus(actor, "glossary", termId, "SCHEDULED", when);
+
+    const row = await db.glossaryTerm.findUniqueOrThrow({ where: { id: termId } });
+    expect(row.status).toBe("SCHEDULED");
+    expect(row.scheduledFor?.getTime()).toBe(when.getTime());
+    expect(row.publishedAt).toBeNull();
+
+    expect(await visibleAt(termId, new Date(when.getTime() - 1000))).toBe(false);
+    expect(await visibleAt(termId, new Date(when.getTime() + 1000))).toBe(true);
+  });
+
+  it("reports the promised time as the publish time while it is still unswept", async () => {
+    const termId = await approvedTerm("Contango A071");
+    const when = future();
+    await content.transitionContentStatus(actor, "glossary", termId, "SCHEDULED", when);
+    const row = await db.glossaryTerm.findUniqueOrThrow({ where: { id: termId } });
+
+    expect(content.effectivePublishedAt(row)?.getTime()).toBe(when.getTime());
+  });
+
+  it("the sweep flips a due row once, stamping the PROMISED time, not the sweep's", async () => {
+    const termId = await approvedTerm("Backwardation A071");
+    const when = future();
+    await content.transitionContentStatus(actor, "glossary", termId, "SCHEDULED", when);
+
+    const sweptAt = new Date(when.getTime() + 30 * 60 * 1000);
+    expect(await content.publishDueContent(sweptAt)).toBeGreaterThanOrEqual(1);
+
+    const published = await db.glossaryTerm.findUniqueOrThrow({ where: { id: termId } });
+    expect(published.status).toBe("PUBLISHED");
+    // Half an hour late, and "published at" still reads the promised minute.
+    expect(published.publishedAt?.getTime()).toBe(when.getTime());
+    expect(published.scheduledFor).toBeNull();
+
+    // Idempotent: a second sweep finds nothing to do on this row and must not
+    // restamp it — the row no longer matches `status: SCHEDULED`.
+    await content.publishDueContent(sweptAt);
+    const again = await db.glossaryTerm.findUniqueOrThrow({ where: { id: termId } });
+    expect(again.publishedAt?.getTime()).toBe(when.getTime());
+  });
+
+  it("leaves an un-due row alone", async () => {
+    const termId = await approvedTerm("Vega A071");
+    const when = future();
+    await content.transitionContentStatus(actor, "glossary", termId, "SCHEDULED", when);
+
+    await content.publishDueContent(new Date(when.getTime() - 60 * 1000));
+    expect((await db.glossaryTerm.findUniqueOrThrow({ where: { id: termId } })).status).toBe(
+      "SCHEDULED",
+    );
+  });
+
+  it("sweeps every entity on the machine, not only the one it was written against", async () => {
+    // `publishDueContent` loops five delegates. A test against glossary alone
+    // would pass with four of them missing from that map.
+    const { createCourse } = await import("./courses.ts");
+    const publisher: Subject = {
+      ...actor,
+      allowed: new Set(["glossary.publish", "courses.publish"]),
+    };
+    const courseId = await createCourse(publisher, { track: "forex", title: "Scheduled A071" });
+    await content.transitionContentStatus(publisher, "courses", courseId, "IN_REVIEW");
+    await content.transitionContentStatus(publisher, "courses", courseId, "SEO_REVIEW");
+    await content.transitionContentStatus(publisher, "courses", courseId, "APPROVED");
+
+    const when = future();
+    await content.transitionContentStatus(publisher, "courses", courseId, "SCHEDULED", when);
+    await content.publishDueContent(new Date(when.getTime() + 1000));
+
+    const course = await db.course.findUniqueOrThrow({ where: { id: courseId } });
+    expect(course.status).toBe("PUBLISHED");
+    expect(course.publishedAt?.getTime()).toBe(when.getTime());
+  });
+
+  it("clears the date on every move that is not itself a schedule", async () => {
+    // The seven-state machine allows SCHEDULED → APPROVED, which the article
+    // machine does not. Enumerating the destinations that clear (PUBLISHED and
+    // DRAFT — the article rule, copied) left an APPROVED row carrying a date
+    // that would never fire, and the editor's panel renders that verbatim as
+    // "Scheduled: …" on a row that is not scheduled.
+    const pulled = await approvedTerm("Gamma A071");
+    await content.transitionContentStatus(actor, "glossary", pulled, "SCHEDULED", future());
+    await content.transitionContentStatus(actor, "glossary", pulled, "APPROVED");
+    expect(
+      (await db.glossaryTerm.findUniqueOrThrow({ where: { id: pulled } })).scheduledFor,
+    ).toBeNull();
+
+    // Publishing early clears it too, and stamps the real moment rather than
+    // the abandoned promise.
+    const early = await approvedTerm("Theta A071");
+    const when = future();
+    await content.transitionContentStatus(actor, "glossary", early, "SCHEDULED", when);
+    await content.transitionContentStatus(actor, "glossary", early, "PUBLISHED");
+    const row = await db.glossaryTerm.findUniqueOrThrow({ where: { id: early } });
+    expect(row.scheduledFor).toBeNull();
+    expect(row.publishedAt!.getTime()).toBeLessThan(when.getTime());
+  });
+});

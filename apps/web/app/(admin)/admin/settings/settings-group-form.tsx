@@ -21,16 +21,10 @@ import { Button } from "@repo/ui/components/button";
 import { Checkbox } from "@repo/ui/components/checkbox";
 import { Input } from "@repo/ui/components/input";
 import { Label } from "@repo/ui/components/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@repo/ui/components/select";
 import { Textarea } from "@repo/ui/components/textarea";
 import { updateSettingsAction } from "../_actions/admin-actions.ts";
 import { ImageUploadField, type ImageUploadLabels } from "../_components/image-upload-field.tsx";
+import { AdminCombobox } from "../_components/combobox.tsx";
 import { useServerAction } from "../_hooks/use-server-action.ts";
 import {
   ListField,
@@ -242,6 +236,8 @@ export function SettingsGroupForm({
           label=""
           value={value}
           purpose="setting"
+          category="general"
+          sourceType="SETTING"
           labels={labels.upload}
           onChange={(next) => setValue(setting.key, next?.url ?? "")}
         />
@@ -275,18 +271,16 @@ export function SettingsGroupForm({
     if (selectOptions && selectOptions.length > 0) {
       const current = selectOptions.find((o) => o.value === value);
       return (
-        <Select value={value} onValueChange={(v) => setValue(setting.key, (v as string) ?? value)}>
-          <SelectTrigger id={id} className="w-full">
-            <SelectValue>{current?.label ?? value ?? labels.selectPlaceholder}</SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {selectOptions.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <AdminCombobox
+          id={id}
+          value={value}
+          onValueChange={(v) => setValue(setting.key, v)}
+          placeholder={current?.label ?? value ?? labels.selectPlaceholder}
+          options={selectOptions.map((option) => ({
+            value: option.value,
+            label: option.label,
+          }))}
+        />
       );
     }
 

@@ -9,15 +9,9 @@
 import { ChevronDown, ChevronUp, Link2, Settings2, X } from "lucide-react";
 import { Button } from "@repo/ui/components/button";
 import { Empty, EmptyDescription, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@repo/ui/components/select";
 import { Switch } from "@repo/ui/components/switch";
-import { EditorSection, Field } from "./editor-section.tsx";
+import { AdminCombobox } from "../../../_components/combobox.tsx";
+import { EditorSection, Field } from "../../../_components/editor/editor-section.tsx";
 
 export interface RelatedLabels {
   section: string;
@@ -122,23 +116,15 @@ export function RelatedPanel({
 
         {available.length > 0 && selected.length < 12 && (
           <Field id="related-add" label={labels.addLabel} hint={labels.hint}>
-            <Select
+            <AdminCombobox
+              id="related-add"
               value=""
+              placeholder={labels.addPlaceholder}
               onValueChange={(v) => {
                 if (v) onSelectedChange([...selected, v]);
               }}
-            >
-              <SelectTrigger id="related-add">
-                <SelectValue>{labels.addPlaceholder}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {available.map((o) => (
-                  <SelectItem key={o.id} value={o.id}>
-                    {o.title}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              options={available.map((o) => ({ value: o.id, label: o.title }))}
+            />
           </Field>
         )}
       </EditorSection>
@@ -154,21 +140,15 @@ export function RelatedPanel({
           <Switch checked={showRelated} onCheckedChange={(v) => onShowRelatedChange(v === true)} />
         </label>
         <Field id="related-count" label={labels.relatedCount}>
-          <Select
+          <AdminCombobox
+            id="related-count"
             value={String(relatedCount)}
             onValueChange={(v) => onRelatedCountChange(Number(v) || 3)}
-          >
-            <SelectTrigger id="related-count">
-              <SelectValue>{`${relatedCount} ${labels.postsSuffix}`}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {[1, 2, 3, 4, 6, 8, 12].map((n) => (
-                <SelectItem key={n} value={String(n)}>
-                  {`${n} ${labels.postsSuffix}`}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            options={[1, 2, 3, 4, 6, 8, 12].map((n) => ({
+              value: String(n),
+              label: `${n} ${labels.postsSuffix}`,
+            }))}
+          />
         </Field>
       </EditorSection>
     </>

@@ -5,6 +5,7 @@
 // literals are fine here: this page 404s in production and is a staff-only
 // dev tool, not a user surface (code-style.md #2's scaffold tolerance).
 import { useState } from "react";
+import { AdminCombobox } from "../../_components/combobox.tsx";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -103,6 +104,19 @@ const dataTableLabels: DataTableLabels = {
   noResults: "No results.",
 };
 
+const KS_PAIRS = [
+  "EUR/USD",
+  "GBP/USD",
+  "USD/JPY",
+  "USD/CHF",
+  "AUD/USD",
+  "USD/CAD",
+  "NZD/USD",
+  "EUR/GBP",
+  "EUR/JPY",
+  "GBP/JPY",
+];
+
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="flex flex-col gap-3 rounded-lg border bg-card p-4">
@@ -113,6 +127,8 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 export function KitchenSink() {
+  const [pair, setPair] = useState("eurusd");
+  const [risk, setRisk] = useState("medium");
   const [dark, setDark] = useState(false);
   const [rtl, setRtl] = useState(false);
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 5 });
@@ -195,6 +211,36 @@ export function KitchenSink() {
         <div className="flex max-w-sm flex-col gap-2">
           <Label htmlFor="ks-input">Account name</Label>
           <Input id="ks-input" placeholder="e.g. Swing trading" />
+        </div>
+      </Section>
+
+      {/* ADR-057: one component, two primitives. The pair list is over the
+          8-option threshold so it gets a search input; the risk list is under
+          it and stays a plain Select. Both triggers are full width. */}
+      <Section title="Dropdown (AdminCombobox)">
+        <div className="flex max-w-sm flex-col gap-4">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="ks-pair">Currency pair — 10 options, searchable</Label>
+            <AdminCombobox
+              id="ks-pair"
+              value={pair}
+              onValueChange={setPair}
+              options={KS_PAIRS.map((p) => ({ value: p.toLowerCase(), label: p }))}
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="ks-risk">Risk profile — 3 options, plain select</Label>
+            <AdminCombobox
+              id="ks-risk"
+              value={risk}
+              onValueChange={setRisk}
+              options={[
+                { value: "low", label: "Low" },
+                { value: "medium", label: "Medium" },
+                { value: "high", label: "High" },
+              ]}
+            />
+          </div>
         </div>
       </Section>
 

@@ -7,7 +7,6 @@ import { buildNavigation, getBrandAssets } from "@repo/core";
 import { getActiveLocales } from "@repo/i18n";
 import { Link } from "@repo/i18n/navigation";
 import { getSetting } from "@repo/settings";
-import { cn } from "@repo/ui/lib/utils";
 import { BrandLogo } from "@repo/ui/components/brand-logo";
 import { Button } from "@repo/ui/components/button";
 import { Container } from "@repo/ui/components/container";
@@ -17,6 +16,7 @@ import { AuthSlot } from "./auth-slot.tsx";
 import { LocaleSwitcher } from "./locale-switcher.tsx";
 import { MobileNav } from "./mobile-nav.tsx";
 import { ModeToggle } from "./mode-toggle.tsx";
+import { StickyHeaderShell } from "./sticky-header-shell.tsx";
 import { TopBar } from "./top-bar.tsx";
 import { SiteNav, type SiteNavItem } from "../_nav/site-nav.tsx";
 
@@ -57,7 +57,7 @@ export async function SiteHeader({ locale }: { locale: string }) {
   }));
 
   return (
-    <div className={cn(sticky && "sticky top-0 z-40")}>
+    <StickyHeaderShell sticky={Boolean(sticky)}>
       {announcement?.enabled && (
         <AnnouncementBar text={announcement.text} dismissible={announcement.dismissible} />
       )}
@@ -125,6 +125,6 @@ export async function SiteHeader({ locale }: { locale: string }) {
           className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-primary-interactive/40 to-transparent"
         />
       </header>
-    </div>
+    </StickyHeaderShell>
   );
 }

@@ -383,6 +383,10 @@ accessible variant closest to the reference look.
     the tonal status is `danger`)
   - `CountBadge` (new)
   - Avatar (`shape="square"`)
+- **Phase 4, built 2026-09-11:** `/admin/design-system` renders every token
+  (read live from the active theme) and every component in every variant,
+  size and state. It has a "dark mode alongside" pane and an RTL switch. It
+  is staff-only, English-only and production-available (Q13).
 - **Group 4 (layout), built 2026-09-11:**
   - Card per **ADR-075**: rounded-lg, border, `shadow-sm`, a 24px rhythm (16px
     at `size="sm"`), no header or footer band, 24px titles.

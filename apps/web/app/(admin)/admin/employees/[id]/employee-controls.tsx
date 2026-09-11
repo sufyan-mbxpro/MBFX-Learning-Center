@@ -12,20 +12,15 @@ import {
   Dialog,
   DialogContent,
   DialogFooter,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@repo/ui/components/dialog";
 import { Input } from "@repo/ui/components/input";
 import { Label } from "@repo/ui/components/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@repo/ui/components/select";
 import { Textarea } from "@repo/ui/components/textarea";
 import { setEmployeeStatusAction, updateEmployeeAction } from "../../_actions/user-actions.ts";
+import { AdminCombobox } from "../../_components/combobox.tsx";
 import { useServerAction } from "../../_hooks/use-server-action.ts";
 
 export function EmployeeStatusControl({
@@ -51,23 +46,16 @@ export function EmployeeStatusControl({
 
   return (
     <>
-      <Select
+      <AdminCombobox
+        aria-label={labels.status}
+        disabled={pending}
+        className="w-44"
         value={status}
         onValueChange={(value) => {
-          if (value && value !== status) setTarget(value as string);
+          if (value && value !== status) setTarget(value);
         }}
-      >
-        <SelectTrigger aria-label={labels.status} disabled={pending} className="min-w-44">
-          <SelectValue>{statusLabels[status] ?? status}</SelectValue>
-        </SelectTrigger>
-        <SelectContent>
-          {Object.entries(statusLabels).map(([value, label]) => (
-            <SelectItem key={value} value={value}>
-              {label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+        options={Object.entries(statusLabels).map(([value, label]) => ({ value, label }))}
+      />
       <ConfirmDialog
         open={target !== null}
         onOpenChange={(next) => {
@@ -113,6 +101,7 @@ export function EmployeeEditDialog({
   reportingOptions: { id: string; name: string }[];
   labels: {
     edit: string;
+    editDescription: string;
     save: string;
     cancel: string;
     firstName: string;
@@ -158,19 +147,15 @@ export function EmployeeEditDialog({
   ) => (
     <div className="flex flex-col gap-1.5">
       <Label htmlFor={id}>{label}</Label>
-      <Select value={value} onValueChange={(next) => set(key, (next as string) ?? "")}>
-        <SelectTrigger id={id} className="w-full">
-          <SelectValue>{options.find((o) => o.id === value)?.label ?? labels.none}</SelectValue>
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="">{labels.none}</SelectItem>
-          {options.map((option) => (
-            <SelectItem key={option.id} value={option.id}>
-              {option.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <AdminCombobox
+        id={id}
+        value={value}
+        onValueChange={(next) => set(key, next)}
+        options={[
+          { value: "", label: labels.none },
+          ...options.map((option) => ({ value: option.id, label: option.label })),
+        ]}
+      />
     </div>
   );
 
@@ -183,6 +168,7 @@ export function EmployeeEditDialog({
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>{labels.edit}</DialogTitle>
+            <DialogDescription>{labels.editDescription}</DialogDescription>
           </DialogHeader>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="flex flex-col gap-1.5">

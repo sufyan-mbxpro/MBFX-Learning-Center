@@ -31,7 +31,7 @@ the mechanical rules, so edge cases get judged correctly.
 4. Hover/active/interactive color variants are **derived by the engine**,
    never hand-authored (ADR-003). Don't add `--primary-hover` overrides.
 
-## Admin display conventions (ADR-044)
+## Admin display conventions (ADR-044, extended by ADR-057)
 
 Binding on every admin screen, including ones not written yet. The
 cancelled surfaces (ADR-042) are out of scope and are not brought up to
@@ -67,23 +67,69 @@ these.
    `DataTable`'s `filters` prop so search and filters share one row; do
    not stack a separate filter bar above the table.
 
+10. **Every admin dropdown is the same component, and it searches.**
+    Admin screens import `AdminCombobox`
+    (`app/(admin)/admin/_components/combobox.tsx`), never
+    `@repo/ui/components/select` — lint-enforced under `app/(admin)/**`.
+    It renders a search input at or above `SEARCHABLE_ITEM_THRESHOLD` (8)
+    options and a plain Select below it, because Base UI's own guidance is
+    that a dropdown with no input keeps better listbox semantics as a
+    Select. So a short fixed enum landing on the Select branch is the rule
+    working, not an exception to it; `searchable` overrides in either
+    direction when a call site knows better.
+
+    **Width says what a dropdown is.** The trigger is `w-full` by default,
+    like every other form control. A table-toolbar filter passes an explicit
+    `className="w-40"` — an explicit width is how a toolbar filter declares
+    itself, and its absence means "this is a form field". Popups are
+    `min-w-(--anchor-width)`, never a fixed `w-`, so a long option label
+    widens the popup instead of being truncated inside it (ADR-057).
+
+11. **A modal has a header, not just a title.** Every `DialogContent`
+    renders a `DialogHeader` with a `DialogTitle` AND a
+    `DialogDescription` — one line on what the modal does, from a catalog
+    key, never a field label pressed into service. This is rule #8 one level
+    down: a modal is a screen opening over another one, and it needs the
+    description more, not less. `ConfirmDialog` already takes both as
+    required props. The only exemption is a header deliberately `sr-only`
+    because the surface is its own label (the ⌘K palette), and it still
+    renders both elements. Guarded by
+    `apps/web/app/admin-dialog-conventions.test.ts` (ADR-057 #5).
+
 ## TypeScript
 
-10. Strict mode everywhere; `noUncheckedIndexedAccess` stays on. No `any`
+12. Strict mode everywhere; `noUncheckedIndexedAccess` stays on. No `any`
     without an eslint-disable and a reason on the same line.
-11. `import type` for types (`consistent-type-imports` is lint-enforced).
-12. Zod v4 in contracts — don't copy v3 snippets (error API differs).
-13. TypeScript is pinned at 6.0.3 (ADR-010). Do not bump, do not add TS 7.
+13. `import type` for types (`consistent-type-imports` is lint-enforced).
+14. Zod v4 in contracts — don't copy v3 snippets (error API differs).
+15. TypeScript is pinned at 6.0.3 (ADR-010). Do not bump, do not add TS 7.
 
 ## Structure & naming
 
-14. Files: kebab-case (`data-table.tsx`); exported symbols: PascalCase
+16. Files: kebab-case (`data-table.tsx`); exported symbols: PascalCase
     components, camelCase functions. Named exports — default exports only
     where a framework convention requires them (Next.js pages/layouts/config).
-15. Follow official Next.js file conventions (`page`/`layout`/`loading`/
+17. Follow official Next.js file conventions (`page`/`layout`/`loading`/
     `error`/`not-found`/`route`, `_private` folders for non-routed
     colocation, route groups). Don't invent parallel conventions.
-16. Comments explain _why_, not _what_. Every TODO names its module:
+18. Comments explain _why_, not _what_. Every TODO names its module:
     `// TODO(Module 06): …`.
-17. Package exports stay granular where weight matters (`@repo/ui`) — see
+19. Package exports stay granular where weight matters (`@repo/ui`) — see
     architecture.md #9.
+
+## Client/server boundary (ADR-064)
+
+20. **An inline `<script>` never goes in the React tree — server component
+    included.** React creates it on the client render path and it never
+    executes; React 19.2 warns and substitutes a `<div>`, so the script
+    silently does nothing on exactly the render where it was needed. Moving
+    it to a server component does NOT fix this: the element survives in the
+    RSC payload and Next's client prerender/recovery passes create it from
+    there. Inject it with **`useServerInsertedHTML`**, whose callback runs
+    only on the server, and return `null`;
+    `@repo/ui/components/theme-script` is the worked example and
+    `theme-provider.test.tsx` is the guard. `next/script`
+    `strategy="beforeInteractive"` is not a substitute for an inline script —
+    it renders its own `<script>` and defers execution past first paint.
+    Give the injected script the request's `x-nonce` on the dynamic admin
+    surfaces, the way `#brand-tokens` already does (security.md #14).

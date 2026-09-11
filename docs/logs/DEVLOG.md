@@ -10155,6 +10155,3337 @@ environment limits recorded in the ADR-054 entry are unchanged).
 budgets, not part of this fix, and it is not a security issue — the strings are
 catalog labels, not data.
 
+## 2026-09-08 — changes-11 Phase 1: Learn area governance, schema, contracts, seed (Modules 11/12, ADR-055 + ADR-056)
+
+Phase 1 of `docs/changes/changes-11-plan.md` — PRs 1.1 through 1.4. No service
+code, no routes, no admin screens: this is the foundation the rest of the
+programme builds on, and nothing user-visible changes yet. **`/learn` still
+404s**; PR 4.1 closes that.
+
+### PR 1.1 — ADRs
+
+**ADR-055** (structure) and **ADR-056** (progress and completion) written and
+merged before any code, per Part F #10.
+
+**ADR-057 was deliberately NOT written, and that is the one deviation from the
+plan worth reading carefully.** changes-11 PR 1.1 orders three ADRs, the third
+covering media decisions D19–D23. Every one of those five is superseded by
+`docs/changes/changes-12-plan.md` §11 — D19 by M7, D20 by M2, D22 by M8, D23's
+dedup by M12, and D21's garbage collection by M2/M8/Phase M6 — which carry
+their own ADR-059…062. Writing ADR-057 would have entered decisions into
+governance history that the owner had already overruled, which is worse than a
+gap. The number is left unused rather than reassigned, and ADR-055 carries a
+"Media architecture is out of scope" section so a reader who finds "ADR-057" in
+changes-11 lands on the explanation instead of a hole.
+
+**The concrete consequence: `MediaAsset.checksum` is NOT in this migration**,
+though changes-11 PR 1.2 lists it. changes-12 M6 owns the whole `MediaAsset`
+block and M12 fills that column from a streamed SHA-256 in the worker's
+`VALIDATE` stage. Adding it now would have created a column no code fills,
+pre-empting an ADR not yet written.
+
+`Course.coverAssetId` / `Lesson.heroAssetId` / `LessonAttachment` **are** in,
+because D12 is learning content _pointing at_ media, not media architecture —
+changes-12 does not touch it, and §1.1 explicitly keeps the learning programme
+on the existing local-disk `StorageDriver` while the media programme runs in
+parallel.
+
+### PR 1.2 — Schema
+
+One migration, `20260908083834_learn_area_phase1_adr055_adr056`.
+
+- **`Module` → `CourseSection`**, `ModuleTranslation` →
+  `CourseSectionTranslation`, `modules` → `course_sections`,
+  `Lesson.moduleId` → `sectionId` (ADR-055 #1). `db.module` no longer exists,
+  so the name cannot come back by habit.
+- `Course`: `+track` (VarChar 40, required), `+externalUrl`, `+coverAssetId`,
+  `+lessonCount`, `−coverImageUrl`, `+@@index([track, status, sortOrder])`.
+- `Lesson`: `+externalUrl`, `+heroAssetId`, `+completionRule`, `+isRequired`,
+  `−coverImageUrl`.
+- New: `LessonAttachment`, `LessonProgress`, `CourseEnrollment`; enums
+  `CompletionRule`, `LessonProgressStatus`.
+
+`coverAssetId` / `heroAssetId` / `LessonAttachment.assetId` are plain `String`
+columns, not Prisma relations — matching `Article.coverImageAssetId` (ADR-035).
+`MediaAsset` carries no back-relations today and changes-12 M6 is about to
+reshape it; adding two back-relations now would collide with that.
+
+**Applied with `migrate deploy`, not `db:reset`.** The plan says reset, on the
+reasonable assumption that dropping `coverImageUrl` and adding a required
+`track` costs data. It does not here: `courses`, `modules` and `lessons` were
+all verified empty (0/0/0) before the migration, so the DDL applies cleanly —
+while the database also held **13 articles, 24 media assets and 2 users**,
+which a reset would have destroyed for no gain. All three counts confirmed
+intact afterwards. The pre-launch reset policy is still the policy; it just was
+not needed to satisfy this migration, and the plan's instruction assumed a cost
+that did not apply.
+
+### PR 1.3 — `@repo/contracts/learn.ts`
+
+`LEARN_TRACKS` (`forex`, `crypto`), `LEARN_TRACK_KEYS` ordered by `sortOrder`,
+`isLearnTrack`, `learnTrackSchema`, `RESERVED_COURSE_SLUGS` +
+`isReservedCourseSlug`, `externalUrlSchema`, and the course / section / lesson /
+attachment / recommendation / progress / feedback schemas.
+
+Three details worth recording because each was a choice, not a transcription:
+
+- **The track icon is not in the registry**, though the plan's sketch shows
+  `icon: "line-chart"`. `@repo/contracts` depends only on zod and may not
+  import lucide; a lucide name held as a bare string in a shared package is a
+  key nothing validates, which fails silently. ADR-048 already settled this
+  shape — `MEGA_MENU_ICONS` maps route keys to `LucideIcon` values in the app —
+  so the icon map lands app-side in PR 4.0 beside `LEARN_SECTIONS`.
+- **`externalUrlSchema` is `z.url({ protocol: /^https$/ })`.** The first cut
+  used `new URL(value).protocol === "https:"` in a `.refine`, which typechecks
+  nowhere: the contracts tsconfig has neither DOM nor Node libs, so `URL` is
+  not in scope. Zod v4's own `protocol` option gives identical results —
+  verified against `http:`, `javascript:`, `data:`, `file:` and a non-URL — and
+  needs no lib change.
+- **`lessonInputSchema.attachments` is REQUIRED, not optional.** The capability
+  rule (ADR-055 #4, "at least one of body / video / external / attachment")
+  has to be decidable from the payload alone. An optional list makes "no
+  attachments sent" indistinguishable from "attachments cleared", and the rule
+  would then pass or fail on what the caller happened to mean. Required, as a
+  full replacement set — the discipline `updateArticleMetaSchema.tagIds`
+  already documents.
+
+`quizInputSchema` / `quizSubmissionSchema` are **not** written. They are Phase 6
+and ADR-058 finalises their shape at that kickoff; writing them now would be
+code ahead of its ADR. The lesson capability `superRefine` is written so Phase 6
+adds one disjunct rather than a rewrite.
+
+**Tests:** `packages/contracts/src/learn.test.ts`, 39 new. Notable ones —
+`sortOrder` beats alphabetical ordering (`crypto` sorts first, `forex` must
+render first); `isLearnTrack("toString")` is false, which `key in LEARN_TRACKS`
+would have got wrong; a course _titled_ "Quizzes" is legal while the _slug_
+`quizzes` is not; and a lesson whose only body is whitespace is rejected.
+
+One test I wrote was wrong and the schema was right: `https:/example.com`
+(single slash) is normalised by the WHATWG parser to `https://example.com/` and
+navigates there, so accepting it is correct. The test now documents that
+behaviour rather than asserting a rejection that would have been a bug.
+
+### PR 1.4 — Seed
+
+One published demo course per registered track, idempotent on the
+`[locale, slug]` uniqueness of `course_translations` — the same key the article
+taxonomy uses.
+
+- `forex-fundamentals` — 3 sections, 8 lessons, one with a video URL, one
+  external-resource lesson (`externalUrl`, no body, `isRequired: false`).
+- `crypto-foundations` — 3 sections, 5 lessons.
+
+Both tracks ship a course deliberately. A track with no published courses must
+render **no band at all** (ADR-055 #2, and plan Risk #5); seeding only `forex`
+would have hidden that rule behind an empty result instead of exercising it.
+The empty-track case gets its own fixture when the loader lands in Phase 2.
+
+`track` is a plain string literal in the seed, not an import: `packages/db` must
+not depend on `packages/contracts` (architecture.md #8 points core →
+db/contracts, never db → contracts). The values are covered by a contracts unit
+test and by service-layer validation in Phase 2.
+
+`docs/erd.md` updated — the rename, the capability model, the two progress
+tables, and a note that `GlossaryTerm.category` is replaced by `GlossaryTopic`
+in Phase 10.
+
+### Tests and checks
+
+Baseline was captured first, and this is the headline: **`pnpm build` is green,
+for the first time in six DEVLOG entries.** The previous three attempts died on
+a MariaDB pool timeout and twice in V8 with the machine near memory exhaustion.
+It ran clean here both before and after this change, which closes plan Risk #6
+— the programme is no longer inheriting an unknown build.
+
+| Check                             | Before      | After                           |
+| --------------------------------- | ----------- | ------------------------------- |
+| `pnpm build`                      | green       | **green**                       |
+| `pnpm typecheck`                  | 13/13       | 13/13                           |
+| `pnpm lint`                       | 13/13       | 13/13                           |
+| `pnpm turbo test --concurrency=1` | 11/13 tasks | 11/13 tasks                     |
+| `@repo/contracts`                 | 154         | **193** (+39)                   |
+| `@repo/db`                        | 14          | 14 (3 rewritten for the rename) |
+| `@repo/core`                      | 321/323     | 321/323                         |
+| `apps/web`                        | 131/131     | 131/131                         |
+| `pnpm governance:check`           | OK          | OK                              |
+
+Docker was available this run, so the 20 Testcontainers tests that the ADR-054
+entry recorded as unrunnable all executed against a real MariaDB — including
+every test touched by the rename (Course FK cascade, lesson `(locale, slug)`
+collision, soft-delete round-trip) and the seed-idempotency test, which now
+exercises the new course block twice and confirms the second run seeds zero.
+
+**The 2 `@repo/core` failures are pre-existing and unchanged**, identical
+before and after: `cms/paths.test.ts` and `cms/pages.integration.test.ts` both
+fail on `ReservedPathError: "about"`. Commit `d8c904a` added `about` to
+`RESERVED_PATHS` for ADR-047 and did not update these two Module 16 CMS tests.
+That is cancelled-programme code under ADR-042 and out of this programme's
+scope; recorded here so the next person does not attribute it to the Learn
+area. Note this is now the _only_ `@repo/core` failure mode — the ADR-054 entry
+counted 21 failures because Docker was absent; 20 of those were environmental
+and now pass.
+
+`pnpm build` also emits non-fatal `MISSING_MESSAGE: nav.mega.*` warnings for
+`ar`/`ur`/`es`. Pre-existing (ADR-048 mega menu), inactive locales only,
+non-blocking — `check:catalog-completeness` does not fail on them because those
+locales are not in `ENFORCED_LOCALES`.
+
+### Deferred / noted for later phases
+
+- **`learn` is not in `RESERVED_PATHS`** (`packages/contracts/src/cms/paths.ts`).
+  ADR-047's own comment establishes the convention — "coded route sections
+  whose reservation lagged the route files" — and `about` and
+  `economic-calendar` were both added retroactively for exactly this reason.
+  The explicit route file will take Next precedence regardless, so this is not
+  a shadowing bug; it means a CMS page could be created at `/learn` and become
+  a silent orphan. **Add it in PR 4.1, in the same change that creates the
+  route**, matching how ADR-047 did it.
+- Phase 6 additions (`Course.finalQuizId`, `Lesson.quizId`, the `Quiz` models)
+  are absent by design; ADR-058 defines them at Phase 6 kickoff.
+- `LessonFeedback` (ADR-056 #8) is specified in the ADR but not migrated — it
+  is PR 5.5, and the model lands with the endpoint that writes it.
+
+## 2026-09-08 — changes-11 Phase 2: course, section and lesson services (Module 11, ADR-055 + ADR-056)
+
+PRs 2.1–2.3. Four new files in `@repo/core`, no routes and no admin screens —
+`/learn` still 404s until PR 4.1. Everything here is reuse of machinery that
+already existed: the status machine, the sanitizer, the slug/redirect helper,
+`ContentRelation`, `ContentReference` and `syncReferences` are all used
+unchanged, and nothing new was invented to hold them.
+
+### What shipped
+
+- **`courses.ts`** — `listCoursesAdmin`, `createCourse`, `saveCourse`
+  (meta + translation + recommendations in one transaction),
+  `setCourseDeleted`, `reorderCourses`, `setCourseRecommendations`,
+  `getCourseRecommendations`, `recomputeLessonCount`.
+- **`course-sections.ts`** — `createSection`, `saveSection`,
+  `reorderSections`, `deleteSection`.
+- **`lessons.ts`** — `listLessonsAdmin`, `createLesson`, `saveLesson`,
+  `duplicateLesson`, `moveLesson`, `reorderLessons`, `setLessonDeleted`,
+  `setLessonAttachments`, `setLessonStatus`.
+- **`public-courses.ts`** — `getLearnIndex` / `getCourseBySlug` /
+  `getLessonBySlug` (each a `"use cache"` + `cacheTag("content")` wrapper over
+  an uncached `load*` the tests drive directly), `resolveRecommendations`,
+  `loadLearnSitemapEntries`, and the `publicCourseWhere` / `publicLessonWhere`
+  predicates.
+- **`content.ts`** — `createSlugRedirect` exported (it was private and the
+  glossary was its only caller), plus `coursePath()` and `lessonPath()` beside
+  the existing `glossaryTermPath()`.
+- **`content-relations.ts`** — two constants, `COURSE` and `RECOMMENDED`. No
+  new table and no new service: `replaceRelations` already does ordered,
+  duplicate-proof, self-reference-dropping replacement inside a caller's
+  transaction, which is the entire feature.
+
+### Permission layering — followed, not re-invented
+
+`requirePermission()` lives in `@repo/rbac` and is called by the **action or
+route handler**; core services take an `actor: Subject` and enforce only the
+gating that depends on the row being touched. That is exactly what
+`articles.ts` and `content.ts` already do, and the alternative — re-checking
+base keys inside every service — would have made these the only services in the
+repo that do so. Publishing therefore goes through `transitionContentStatus`,
+which requires `courses.publish` / `lessons.publish` before it writes anything.
+The action layer lands in Phase 3; **no admin surface is reachable yet**, so
+nothing is exposed unguarded in the meantime.
+
+### Six decisions the plan did not spell out
+
+1. **A course rename redirects every lesson under it.** A lesson URL embeds its
+   course slug (ADR-055 #3), so renaming a course moves every lesson too.
+   Without the loop in `finishCourseSave`, the course redirects correctly and
+   all its lessons 404 — a failure invisible from the page you just renamed.
+   Tested.
+2. **`moveLesson` refuses a cross-course move.** `LessonProgress.courseId` is
+   denormalised (ADR-056 #2), so a lesson that changed course would strand
+   every existing progress row against the wrong one. Silently corrupting
+   learner progress to save an editor one delete-and-recreate is the wrong
+   trade — `CrossCourseMoveError`.
+3. **`deleteSection` refuses while lessons remain.** The DB cascades
+   section → lessons, so without the guard one click destroys every lesson,
+   translation and published URL underneath. A section has no `deletedAt`
+   because it has no independent existence to restore; the safe operation is
+   "move the lessons out, then delete the empty section".
+4. **Lesson media references are derived from persisted state, not from the
+   payload.** `syncReferences` replaces every row for a source, so if the hero
+   image and the attachments each synced their own list, whichever wrote second
+   would silently delete the other's references — and `deleteMedia()` would
+   then cheerfully delete an asset still on the page. `syncLessonMediaReferences`
+   re-reads both inside the transaction instead. There is a test that fails on
+   the naive version.
+5. **The reference source id is `lesson:<id>`.** `ReferenceSourceType` has
+   `COURSE` and no `LESSON`, and ADR-055 #6 says to use it, so the id carries
+   the distinction. Without the prefix the admin's in-use breakdown could not
+   tell an editor whether an asset sits on a course cover or a lesson. Same
+   compound-id trick `saveArticle` uses for per-locale OG images.
+6. **Lesson slugs are suffixed on collision, not rejected.**
+   `@@unique([locale, slug])` is global (that global uniqueness is precisely
+   what lets the URL omit the section), so a second "Introduction" in another
+   course would otherwise hit a constraint error an editor cannot act on.
+
+### The capability rule is enforced twice, on purpose
+
+`lessonInputSchema` checks the payload; `saveLesson` re-checks what will
+actually be stored. They are not the same check: a body of `<p></p>` passes a
+non-empty-string test in the contract and sanitizes down to nothing here.
+Server-side is the boundary (security.md #6), and there is a test for exactly
+that case.
+
+### A behaviour I changed while cleaning up a lint warning
+
+`courses.ts` imported `computeSourceHash`/`isTranslationOutdated` and computed
+a hash it could not store — **`CourseTranslation` has no `sourceHash` column;
+only `LessonTranslation` does.** The hash was only being used as a truthiness
+gate, which meant every source-locale save flipped every sibling translation to
+OUTDATED, including a save that only touched an SEO field. A work queue that
+cries wolf gets ignored.
+
+Replaced with a comparison against the row being overwritten (title, summary,
+description). Three tests pin it: a title change flips siblings, an SEO-only
+change does not, and a non-source-locale save does not. The middle one fails
+under the previous behaviour, so it is a real mutation check rather than a
+restatement.
+
+`lessons.ts` keeps the hash flow unchanged, because `LessonTranslation` does
+have the column.
+
+### Two contract corrections
+
+- **`courseTranslationSchema` no longer carries `courseId`.** It is only ever
+  nested inside `courseInputSchema`, which already has the id; repeating it let
+  one payload name two different courses and forced the service to pick a
+  winner. Typecheck surfaced this, and fixing the contract was right rather
+  than working around it in the caller.
+- **`courseInputSchema` gained optional `recommendations`.** Optional and
+  meaningful: an empty array clears the set, `undefined` leaves it untouched —
+  so a save from the Details tab cannot wipe what the Recommendations tab set.
+  Both directions are tested.
+
+### Visibility: PUBLIC only in the cached loaders, and why
+
+`publicCourseWhere()` filters to `visibility: PUBLIC`. Deciding "is this viewer
+staff" — which ADR-012 requires for `PREMIUM` — needs a session, and ADR-056 #1
+forbids a session read in a cached loader. Serving `AUTHENTICATED` or `PREMIUM`
+rows from a `"use cache"` page would put gated content into a payload shared
+with anonymous visitors.
+
+So gated courses are absent from the public learn area entirely. That is
+ADR-012's own conservative direction ("a missing model is not consent to grant
+the broader tier"), and it is a **real limitation worth naming**: an
+`AUTHENTICATED` course is currently invisible to signed-in learners too.
+Surfacing gated content to entitled learners needs its own dynamic path and is
+not in this programme.
+
+### Tests
+
+`packages/core/src/learn.integration.test.ts`, 45 tests, real MariaDB via
+Testcontainers. Plan §15 rows covered at the service layer: empty-track
+suppression and registry ordering; reserved slugs on create AND on a
+title-only save; reorder/move change no URL; course-slug 301 including the
+per-lesson redirects; lesson-slug 301; slug collision suffixing; illegal
+transition; publish without permission; `lessonCount` across publish and soft
+delete; section-not-empty; XSS and the iframe host allowlist; the capability
+rule including the sanitizes-to-nothing case; unsupported video provider; **no
+outbound fetch during save or render** (spied `globalThis.fetch`);
+unpublished/`AUTHENTICATED`/`PREMIUM` hidden from every loader and from the
+sitemap; recommendation order, self-exclusion, unpublished exclusion, and the
+untouched/cleared distinction; media in-use protection across attachments,
+covers, hero-plus-attachments and duplication; prev/next across section
+boundaries; wrong-course lesson lookup.
+
+| Check                | Before Phase 2 | After              |
+| -------------------- | -------------- | ------------------ |
+| `pnpm build`         | green          | green              |
+| `pnpm typecheck`     | 13/13          | 13/13              |
+| `pnpm lint`          | 13/13          | 13/13 (0 warnings) |
+| `@repo/core`         | 321/323        | **366/368** (+45)  |
+| `@repo/contracts`    | 193            | 193                |
+| `apps/web`           | 131/131        | 131/131            |
+| `check:phantom-deps` | OK             | OK                 |
+
+The 2 `@repo/core` failures are the same pre-existing pair as Phase 1 —
+`cms/paths.test.ts` and `cms/pages.integration.test.ts`, both
+`ReservedPathError: "about"` from commit `d8c904a` in cancelled Module 16 code.
+Unchanged in count and identity.
+
+**One environmental note worth recording**, because it will happen again:
+mid-run, Docker Desktop's engine crashed and returned HTTP 500, which failed
+every Testcontainers file in `@repo/core` at once with "Could not find a working
+container runtime strategy" — including `index.test.ts`, which needs no
+container. That pattern looks exactly like an import-graph break and is not one.
+Docker recovered on its own and the suite is green; if you see all of core fail
+together, check `docker info` before reading the code.
+
+### Deferred / carried forward
+
+- `learn` is still absent from `RESERVED_PATHS` — add it in PR 4.1 with the
+  route, per the ADR-047 precedent (carried from Phase 1).
+- The admin action layer (`requirePermission` call sites) is Phase 3; no
+  learning surface is reachable until then.
+- `Course.finalQuizId` / `Lesson.quizId` and the quiz services stay absent
+  until ADR-058 at Phase 6 kickoff. `recomputeCourseCompletion` is not written
+  yet — it is PR 5.1, and ADR-056 #7 fixes its shape so Phase 6 adds a conjunct.
+
+## 2026-09-08 — changes-11 Phase 3: the admin course builder and lesson editor (Modules 09/11, ADR-063)
+
+PRs 3.1 through 3.4 of `docs/changes/changes-11-plan.md`. PR 3.5 (media) is
+**not** here — `changes-12-plan.md` replaced it with Phases M1–M4, and the
+learning area stays on the existing local-disk `StorageDriver` (changes-12
+§1.1), so nothing in this phase waits on that programme.
+
+Phase 2 left the services complete and nothing reachable. This phase is the
+action layer plus the screens: the learning area is now editable end to end,
+from creating a course to publishing a lesson.
+
+### What shipped
+
+**PR 3.1 — sidebar group and the two lists.** A `Learning` group in
+`admin-shell.tsx` between People and Content, holding Courses
+(`courses.view`) and Lessons (`lessons.view`). Its own group rather than two
+rows under Content: a course is a structure an editor works _inside_ for
+hours, not one more filed item beside a glossary term. Sections deliberately
+get no entry — plan §8.1 — because a top-level section screen invites editing
+a curriculum without seeing the course it belongs to.
+
+- `/admin/learn/courses` — the shared `DataTable` driven by `useClientTable`
+  (the roles/employees pattern; `listCoursesAdmin` already returns the whole
+  list and server paging for tens of rows would be churn). Track / status /
+  difficulty filters are client-side and live in the table's own toolbar
+  (D26 + ADR-044 #9). Soft-deleted courses are listed dimmed with a badge, so
+  the recycle bin is reachable from the one screen that lists courses.
+- `/admin/learn/lessons` — the flat list across every course, and the reason
+  it exists beside the curriculum tab: the **OUTDATED translation queue**. One
+  chip per locale, toned by translation status, plus an "Outdated translations
+  only" filter. There is no "New lesson" action on it, because `createLesson`
+  needs a section and a section only exists inside a course.
+
+**PR 3.2 — course editor, Details + SEO.** `/admin/learn/courses/[id]`, four
+tabs, the article editor's locale switcher: per-translation fields swap with
+it, per-course fields (track, difficulty, cover, visibility, recommendations)
+do not, and edits are held per locale so switching away and back loses nothing.
+One header save through `saveCourseAction`, which commits meta, translation and
+recommendations in one transaction.
+
+**PR 3.3 — curriculum tab.** Sections with lessons nested; add / edit /
+delete / reorder sections, add / reorder / move / delete lessons, each lesson
+carrying its derived capability badges and its status.
+
+**PR 3.4 — lesson editor.** `/admin/learn/lessons/[id]`, reusing the article
+editor as plan §8.3 specifies, plus the four panels a lesson needs and an
+article does not: Placement, Lesson settings, Resources, Objectives. One save
+through `saveLessonAction` — `lessonInputSchema`'s capability rule can only be
+decided from a payload carrying meta, translation and attachments together.
+
+### Decisions
+
+**1. Drag-and-drop is not in this phase, and that is the plan's own rule.**
+Plan §8.2: keyboard-accessible move-up/move-down ships FIRST, drag-and-drop is
+layered on top, and "DnD without a keyboard equivalent does not ship". I
+checked before writing: there is no DnD library in the repository (ADR-038's
+paused navigation reorder left no dependency behind), and adding one is a
+dependency change security.md #15 says not to make casually. So the keyboard
+half shipped and the pointer affordance is left to a PR that can review the
+dependency on its own merits. Nothing has to change to accept it — every
+reorder already goes through `reorderSectionsAction` / `reorderLessonsAction` /
+`moveLessonAction`, which is exactly what a drag handle would call.
+
+**2. Two save models on one screen, deliberately.** Details, Recommendations
+and SEO hold a draft and commit together; the Curriculum tab does not. Every
+curriculum control is its own committed mutation followed by a refresh, because
+a structural change is not something to hold in a browser tab — `moveLesson`
+and `reorderSections` renumber `sortOrder` on both sides, and a tree that has
+already renumbered in the reader's head while the database has not is the worst
+kind of stale. The same argument makes the lesson editor's section picker
+commit immediately while every other field on that screen waits for Save.
+
+**3. `ContentStatusPanel` instead of the article's `publish-panel.tsx` —
+ADR-063.** Plan §8.3 said to reuse that panel "as-is", and on inspection that
+was never available: it drives the four-state article machine, three of the
+seven-state machine's transitions have no button in its maps, its scheduling
+half writes a `scheduledFor` value neither `Course` nor `Lesson` has a column
+for, and it imports `transitionArticleAction` directly. ADR-053 holds in full
+in the new panel — publishing transitions run save-then-publish, the two calls
+stay sequenced so the publish gate is still checked against the same subject,
+and archiving confirms. One behaviour is new because the wider machine makes it
+reachable: when an actor's legal transitions filter down to nothing, the panel
+says so rather than rendering an empty button row that reads as a bug.
+
+**4. Three panels moved to `_components/editor/`.** `editor-section.tsx`,
+`seo-analysis.tsx` and `content-stats.tsx` were colocated under
+`articles/[id]/_panels/`. The lesson editor reuses the first two, and reaching
+into another route's private folder to do it would be worse than moving them.
+No behaviour changed; the article editor's imports were rewritten in the same
+pass and its suite is untouched.
+
+**5. Enum state is narrowed on the way IN, never cast on the way out.**
+`@repo/contracts` gained `CourseDifficulty` and `ContentVisibility` (inferred
+from schemas that already existed) and `contentStatusSchema` — the seven-state
+vocabulary as a literal union, so apps stay off `@repo/db` (the convention
+`user-actions.ts` records). The editors hold typed state and parse a dropdown's
+plain string through `safeParse` / `isLearnTrack` rather than casting it into
+the payload. A cast would compile against a set of options that later drifts;
+this makes that drift a type error.
+
+**6. Every label goes through the catalog, and no identifier renders raw.**
+132 new `admin.*` keys plus 4 `admin.pageDesc.*`, English-only by design
+(ADR-043 #2). `learn-labels.ts` maps status, transition, difficulty,
+visibility, completion-rule and track keys to strings, with `humanizeKey()` as
+the fallback — so a track added to `LEARN_TRACKS` reads as a name before anyone
+writes its label. The video provider on the Resources badge goes through
+`humanizeKey()` for the same reason (ADR-044 #5).
+
+**7. The capability rule is surfaced, not just enforced.** The Resources panel
+shows the derived badges live ("Video · Youtube", "External") and raises the
+D15 warning when a lesson carries no capability at all, before Save is offered.
+`lessonInputSchema` and `saveLesson` are still the gate — the notice only
+avoids a round trip that ends in a Zod error the editor cannot explain.
+
+### Core additions
+
+The screens needed read models that did not exist:
+
+- `loadCourseAdminDetail` — course + meta + every translation + curated
+  recommendations, with the cover URL **resolved** rather than stored (ADR-055
+  #6 dropped the `*ImageUrl` columns, so a replace-in-place must not leave a
+  stale copy on the course row).
+- `loadCourseCurriculum` — the whole tree in one read. Soft-deleted lessons are
+  excluded: a section still holding one would look empty in the tree while
+  `deleteSection` refuses it, and a delete button that fails with no visible
+  cause is worse than no delete button.
+- `loadLessonAdminDetail` — including attachment assets. An attachment whose
+  asset has been hard-deleted is DROPPED rather than rendered broken, because
+  the editor's save would otherwise re-persist a dangling id.
+  `learningObjectives` is a Json column, so it is narrowed to `string[]` here
+  rather than in the client: a hand-edited row holding a number would otherwise
+  crash a component on render.
+- `listAllLessonsAdmin` — the flat list, capped at 200, with course and section
+  titles resolved.
+- `setCourseStatus` — a thin wrapper over `transitionContentStatus` so the
+  admin action has one symmetric pair with `setLessonStatus` to call.
+
+### One check that was already failing
+
+`pnpm check:permission-keys` was red before this phase and I fixed it here:
+`lessons.ts`'s header comment spelled `requirePermission` with a wildcard key
+literal, and the script's regex reads a comment exactly as it reads a call, so
+it reported an unregistered key that can never be in the registry. The comment
+now says the same thing without spelling a call — and says why, so it does not
+get "tidied" back.
+
+### Tests
+
+No new automated tests in this phase. The services this layer calls were
+covered by Phase 2's 45 integration tests, and plan §15's remaining learning
+rows are E2E (happy-path + permission-denied per admin screen, testing.md #1),
+which need the Playwright fixtures Module 14 owns. **This is a real gap and it
+is owed**: `testing.md` #1 requires every admin screen to ship both E2E, and
+this phase adds five screens without them. Recorded here rather than quietly
+carried.
+
+| Check                        | Result                                         |
+| ---------------------------- | ---------------------------------------------- |
+| `pnpm typecheck`             | 13/13                                          |
+| `pnpm lint`                  | 13/13, 0 warnings                              |
+| `pnpm test`                  | 11/12 packages; `@repo/core` **366/368**       |
+| `check:permission-keys`      | OK (was FAILING before this phase — see above) |
+| `check:catalog-completeness` | OK (inactive-locale warnings unchanged)        |
+| `check:phantom-deps`         | OK                                             |
+
+The 2 `@repo/core` failures are the same pre-existing pair Phases 1 and 2
+recorded — `cms/paths.test.ts` and `cms/pages.integration.test.ts`, both
+`ReservedPathError: "about"` from commit `d8c904a` in cancelled Module 16 code.
+Unchanged in count and identity.
+
+**The Phase 2 environmental note repeated itself**, so it is worth restating
+with what actually diagnosed it: Docker Desktop's engine dropped mid-run and
+every Testcontainers file in `@repo/core` failed at once with "Could not find a
+working container runtime strategy" — 21 suites, which looks exactly like an
+import-graph break and is not one. `docker info` answered fine while the engine
+was still restarting; `docker run --rm hello-world` is the check that tells the
+truth. The machine also ran out of memory at the default worker count
+("Committing semi space failed", and a "paging file is too small" failure from
+parallel `tsc`). Both cleared with `--maxWorkers=2` and `--concurrency=1`.
+
+### Deferred / carried forward
+
+- **E2E for all five new screens** — happy path + permission-denied asserted at
+  the DB level. Owed to Module 14 per testing.md #1.
+- **Drag-and-drop** on the curriculum tree, once the dependency is reviewed
+  (decision 1). The keyboard path is not a placeholder — it stays either way.
+- **`learn` is still absent from `RESERVED_PATHS`** — added in PR 4.1 with the
+  public route, per the ADR-047 precedent. Carried from Phases 1 and 2.
+- The **Quiz** slot in the lesson editor and the course's **final quiz** slot
+  are absent until ADR-058 at Phase 6 kickoff; the completion-rule picker
+  already offers `QUIZ_PASS` with a hint saying so.
+- Course `sortOrder` has an action (`reorderCoursesAction`) and no UI: the
+  courses list sorts by track then order, and reordering across tracks needs a
+  design decision the plan does not make. The action is there for Phase 4 if
+  the public `/learn` bands need it.
+
+## 2026-09-08 — admin dropdowns become searchable and full width; every modal gets a description (Modules 07/09, ADR-057)
+
+Owner report, two sentences, three defects: a dropdown in a form renders at
+the width of its current value rather than the field's; a long option label
+is truncated when the list opens; and there is no way to find an option in a
+long list. Plus: "the modals should be a proper header with title & short
+description". The explicit ask was for a RULE, not a set of screen fixes.
+
+Both dropdown symptoms were one cause. `SelectTrigger` was `w-fit`, so a form
+control sized itself to its content, and `SelectContent` was
+`w-(--anchor-width)`, which pins the popup to exactly the trigger's width.
+Some call sites had already worked around the first half with `w-full` and
+some had not — 46 `<SelectTrigger>` across 22 in-scope admin files, each
+deciding its own width.
+
+### The one judgment call, recorded because it narrows the ask
+
+"All dropdowns searchable" is implemented as **searchable at or above 8
+options**. Base UI's own usage guidance says a dropdown rendering no input
+should stay a Select, because the listbox-without-input role carries
+accessibility affordances Combobox does not. A search box over a three-option
+Draft/Published picker is therefore not just noise — it is a small a11y
+regression. Raised with the owner before any code; the threshold option was
+chosen, along with retrofitting all 22 files now and lint-enforcing the
+result.
+
+So the threshold switches the underlying PRIMITIVE, not just the input's
+visibility, and both branches keep correct semantics. A short fixed enum
+landing on the Select branch is the rule working, not an exception to it.
+
+### What shipped
+
+**`@repo/ui/components/combobox`** — one component, two primitives behind it,
+one prop surface (`options` / `value` / `onValueChange`). Trigger is `w-full`;
+popups are `min-w-(--anchor-width) max-w-(--available-width)` on BOTH branches,
+so a long label widens the popup instead of being truncated inside it. An
+optional `icon` per option carries a glyph (the social-links picker) while
+`label` stays a plain string, because that is what the search filters against.
+
+**`AdminCombobox`** (`app/(admin)/admin/_components/combobox.tsx`) — supplies
+the search-placeholder and empty-state strings from the catalog so 46 call
+sites don't thread them. `@repo/ui` keeps carrying no catalogs.
+
+**`select.tsx`'s popup width fix** reaches the two public `@repo/blocks`
+dropdowns as well. Intended: the truncation was a bug everywhere it appeared.
+
+**Migration** — all 46 triggers across 22 files. Toolbar filters pass an
+explicit `w-40`/`w-44` (ADR-057 §3: an explicit width is how a toolbar filter
+declares itself); everything else takes the full-width default. Option lists
+became data instead of JSX, so the diff is net-negative in most files.
+
+**Modal headers** — 11 in-scope modals had a `DialogTitle` and no
+`DialogDescription`; all now render both, from a new `admin.dialogDesc.*`
+catalog block (English-only per ADR-043). The taxonomy panel's existing
+description was `{slugLabel}` — a field label doing duty as an explanation —
+and now gets a real one.
+
+### Enforcement, because a written-down convention decays
+
+- **Lint:** `no-restricted-imports` on `@repo/ui/components/select` scoped to
+  `app/(admin)/**`. Verified by temporarily reintroducing the import: it
+  errors with the message naming `AdminCombobox` and the `searchable={false}`
+  escape hatch.
+- **A trap this rule walked into and out of:** flat config REPLACES a rule's
+  value when a later config object sets it again, so adding
+  `no-restricted-imports` for admin files silently dropped the ADR-004
+  `unstable_cache` ban for every admin `.tsx`. `noUnstableCacheImport` is now
+  exported from `base.js` and re-listed in the admin block. `base.js` already
+  carried this warning for `no-restricted-syntax`; it applies to both.
+- **Guard test:** `apps/web/app/admin-dialog-conventions.test.ts` reads admin
+  sources and fails on a `DialogTitle` with no `DialogDescription`, and on a
+  description bound to a `*Label`. Source-scanning per the `type-scale.test.ts`
+  precedent. Verified by deleting one description: the suite goes red on that
+  file. It also asserts it found files at all, so a broken walk cannot pass as
+  an empty loop.
+
+Scope excludes the ADR-042-cancelled Website Builder and the ADR-038-paused
+homepage composer, matching ADR-044's own scope statement. Both are excluded
+in the lint rule and the guard test — keep those two lists in step.
+
+### Test status
+
+| Check                             | Result                                    |
+| --------------------------------- | ----------------------------------------- |
+| `turbo lint --concurrency=1`      | 13/13                                     |
+| `turbo typecheck --concurrency=1` | 13/13                                     |
+| `@repo/ui` vitest                 | 172/172 (10 files; +9 new combobox tests) |
+| `apps/web` vitest                 | 166/166 (9 files; +35 new dialog-guard)   |
+| Prettier                          | clean                                     |
+| `turbo build`                     | **not verified — see below**              |
+
+**Two environment notes, both worth recording because they will recur.**
+`pnpm typecheck` at full concurrency died with `FATAL ERROR: Zone Allocation
+failed - process out of memory` across packages that were never touched
+(including `@repo/utils`) — 11 parallel `tsc` processes exhaust this host.
+`--concurrency=1` or `2` is green. Same shape as the Docker note in the
+changes-11 Phase 2 entry: when everything fails at once, suspect the
+environment before the import graph. Separately, `@repo/ui` typecheck failed
+mid-session on `curriculum-list.tsx` importing a non-existent
+`AccordionPanel` — an untracked file from parallel work, not from this
+change; it resolved on its own and the final run is green.
+
+`pnpm build` could **not** be verified for this change, and the reason is
+worth stating precisely rather than hand-waving. The learn area's public
+routes (`app/(public)/[locale]/learn/**`, `curriculum-list.tsx`) were being
+written in parallel while this ran, and every build error observed came from
+that untracked tree, never from an admin file: first a missing
+`progress-bar`/`external-badge` module, then `formatBytes` not exported from
+`@repo/utils`. In between, one run compiled cleanly and got as far as
+"Generating static pages using 11 workers (0/147)" before a worker died to
+the same host OOM — which is the useful signal here: the admin surface
+COMPILED. Re-run `pnpm build` once the learn routes settle; nothing in this
+entry is expected to be implicated.
+
+### Deferred
+
+- Interaction coverage runs through the Combobox branch only. Base UI's Select
+  cannot be driven to commit a selection under jsdom (a bare `click` on an
+  item is a no-op there, for ANY value — verified, not assumed), so the Select
+  branch is asserted structurally. Real selection semantics on a short list
+  need an E2E test, which lands with Module 14's admin suites.
+- No axe run on the new component yet — same Module 14 handoff as the rest of
+  the admin surface.
+
+## 2026-09-08 — changes-11 Phase 4: the public learn area and the glossary presentation pass (Modules 07/11/12, no new ADR)
+
+PRs 4.0 through 4.5. **`/learn` was a live 404** — it has had a seeded menu row
+pointing at it since Module 08 — and PR 4.1 closes it. All four routes were
+verified rendering against the seeded dev data, not just typechecked: `/learn`,
+`/learn/[course]`, `/learn/[course]/[lesson]` and the reworked `/glossary`.
+
+### What shipped
+
+**PR 4.0 — section tabs.** `LEARN_SECTIONS` in `learn/_nav/`, rendered by
+`LearnSectionNav` (the `about/_components/section-nav.tsx` pattern the plan
+names). A section whose feature flag is OFF is **absent, not disabled** — its
+route already 404s, and a tab leading to a 404 is worse than no tab. Verified:
+the strip shows Courses + Glossary, and Quizzes is correctly missing because
+its flag is seeded off.
+
+Two things differ from the About strip, both forced by this section's shape.
+Longest-prefix matching alone would light up Courses while the reader is on a
+quiz, since `/learn` is the parent of both `/learn/quizzes` and
+`/learn/[course]`; the nav resolves to the longest matching entry instead.
+And `/glossary` is a sibling that does not move — it has a seeded menu row, a
+live sitemap entry and indexed URLs, so the strip links across to it and marks
+it current. The nav is a VIEW of the learning surfaces, not a claim about their
+URL structure.
+
+**PR 4.1 — `/learn`.** Track bands from `getLearnIndex`, `CourseCard` with
+D30's inline curriculum expansion, client-side difficulty chips. `"learn"`
+joins `RESERVED_PATHS` in this PR, per the ADR-047 precedent — the carried item
+from Phases 1–3 is now closed.
+
+**PR 4.2 — `/learn/[course]`.** The FOREX.com header the plan adopts: level,
+length and progress sit ABOVE the curriculum, where the decision is made.
+
+**PR 4.3 — `/learn/[course]/[lesson]`.** Sidebar curriculum from md, a Sheet
+below it, body, objectives, video, external resource, attachments, `LessonNav`
+pinned to the bottom on mobile, and §9.5's static code-owned practice CTA.
+
+**PR 4.4 — SEO.** `generateMetadata` per course and lesson from the
+`*Translation` SEO fields, canonical + hreflang, `Course` JSON-LD with
+`hasPart`, breadcrumbs, 301s through `getRedirect`, and `loadLearnSitemapEntries`
+wired into `sitemap.ts`. Verified live: 19 learn URLs in the sitemap, a
+canonical and an `hreflang="en"` pair on a course, and an unknown slug 404ing.
+
+**PR 4.5 — glossary presentation, no schema change.** D26's A–Z chip bar,
+client-side search, inline `simpleExplanation`, and D29's term of the day.
+
+### New in `@repo/ui`
+
+`CourseCard`, `CurriculumList`, `LessonStateIcon`, `ExternalBadge`,
+`ProgressBar`, `LessonNav` — plan §9.2's list — plus `RichText` (below). All
+framework-agnostic: no Next import, no admin dependency (`architecture.md`
+#5/#10).
+
+`CourseCard` takes a `renderCover` render prop and has **no `<img>` fallback**,
+deliberately. @repo/ui must not depend on Next, and a fallback would silently
+opt every cover on the shelf out of `next/image`, which plan §13 requires with
+explicit `sizes`. Making the renderer the only path means a caller that forgets
+it sees the placeholder and notices.
+
+### Decisions
+
+**1. Progress renders in its static all-not-started state, and that is the
+design.** ADR-056 #1 forbids reading a session in a cached page, so the server
+always renders 0-of-N with every lesson marker in place. Because the bar and the
+markers already occupy their space, the Phase 5 island can swap real state in
+with no layout shift — that is the whole reason the server renders a state it
+knows to be provisional. The one exception: the lesson being read is marked
+in-progress from first paint, which the server CAN state without a session.
+
+**2. The difficulty filter is client state, and it removes whole bands.**
+D26's rule. Under Cache Components, reading `searchParams` makes a public page
+dynamic (`architecture.md` #6), so `/learn?difficulty=beginner` is not
+available and the answer is not to go dynamic. The filter lives inside one
+client component rather than above server-rendered bands because filtering to
+Advanced when only Forex has an advanced course must leave ONE band, not two
+with one empty — the same rule `loadLearnIndex` applies server-side. A chip is
+only offered for a level that has courses at all; on the seeded data both
+courses are BEGINNER, so the row correctly does not render.
+
+**3. `ExternalBadge` reads "External", not "External · YouTube".** Plan §9.2
+names the provider form. For a lesson VIDEO the provider is known
+(`parseVideoUrl`) and the video renders inline anyway; for an external
+RESOURCE it is not, and there are only two ways to get it — fetch the URL,
+which `security.md` #9 forbids, or maintain a hostname→brand map that is wrong
+for everything not in it. The badge states what we actually know.
+
+**4. Glossary "Browse by topic" is absent, and the plan requires that.** §9.5's
+tab strip lists it, but topics are a real model (D27) that lands in Phase 10,
+and PR 4.5 is explicitly "presentation, no schema". A tab fed by
+`GlossaryTerm.category` free text would render a raw identifier with no page
+behind it. Search is inline instead of a third tab, because it filters the same
+list rather than replacing it.
+
+**5. The A–Z bar renders the full alphabet with empty letters disabled** (D26),
+so the row does not reflow as the glossary fills. It hides while a search is
+active: its anchors point at letter headings the filter may have removed, and a
+jump link to a heading that is not on the page is a broken control.
+
+**6. `GlossaryBrowser` resolves its own strings.** It started with a `labels`
+prop and threw at runtime — "Functions cannot be passed directly to Client
+Components". `resultCount` is a PLURAL over a number that changes on every
+keystroke, so it cannot be pre-resolved on the server, and no fixed set of
+strings covers it (Arabic has six plural forms). It uses `useTranslations` like
+`announcement-bar.tsx` and the admin's `media-picker-dialog.tsx`. **Caught by
+opening the page, not by typecheck or lint** — worth remembering that neither
+catches an RSC boundary violation.
+
+**7. `RichText` extracted to `@repo/ui`.** The article body's 47-utility class
+string was inline in `news/[slug]/page.tsx`; the lesson body and the course
+description need the same thing. Copying it into three files guarantees they
+diverge, so it moved into one component and the article page now uses it — the
+class string is byte-identical, lifted programmatically rather than retyped.
+
+### Loader changes
+
+The public loaders returned asset IDs and no URLs, so nothing could render an
+image. They now resolve, INSIDE the cached loader:
+
+- `CourseCardView.coverUrl` and `LessonView.heroUrl`. ADR-055 #6 dropped the
+  `*ImageUrl` columns, so the URL is a property of the asset — and a media write
+  on a COURSE reference invalidates `content`, the tag these loaders carry, so a
+  replace-in-place re-renders rather than leaving a stale copy.
+- `LessonView.attachments` gain `fileName`, `url`, `mimeType` and `size`: a
+  download link that states none of them is not a download link. One that has
+  lost its asset is DROPPED rather than rendered dead.
+- `alternates` on both views — per-locale slugs for hreflang. The lesson page
+  pairs them with the COURSE alternates, because the course slug varies by
+  locale too; pairing a localised lesson slug with the current course slug would
+  emit hreflang URLs that 404 in every non-default locale.
+
+All resolution is one batched query per page (`resolveAssetUrls`), never N+1 per
+card.
+
+`getTermOfTheDay` is new, on a **daily** `cacheLife` rather than the 5-minute
+default — the value only changes at midnight, so re-rendering every five minutes
+to produce the same term is waste. It still carries `content`, so unpublishing
+the featured term invalidates it at once instead of leaving a card that 404s for
+up to a day.
+
+### New in `@repo/utils`
+
+`formatBytes`, with tests. Binary units under the familiar KB/MB/GB labels — what
+every download panel shows — including the step-up case that would otherwise
+print "1024 KB" instead of "1 MB".
+
+### Tests
+
+| Check                        | Result                     |
+| ---------------------------- | -------------------------- |
+| `pnpm typecheck`             | 13/13                      |
+| `pnpm lint`                  | 13/13, 0 warnings          |
+| `@repo/core`                 | **371/373** (+5)           |
+| `@repo/utils`                | 151/151 (+6 `formatBytes`) |
+| `check:reserved-paths`       | OK — 15 reserved paths     |
+| `check:catalog-completeness` | OK                         |
+| `check:permission-keys`      | OK                         |
+| `check:phantom-deps`         | OK                         |
+
+The 2 `@repo/core` failures are the same pre-existing pair Phases 1–3 recorded —
+`cms/paths.test.ts` and `cms/pages.integration.test.ts`, both `ReservedPathError:
+"about"` from `d8c904a` in cancelled Module 16 code. **Re-verified by identity,
+not by count**: adding `"learn"` to `RESERVED_PATHS` could plausibly have added a
+third, and the failing assertion is still the `"about"` one.
+
+New tests: 5 on `termOfTheDayIndex` pinning D29's contract (stable within a day,
+in range, changes daily, and SCATTERS consecutive days — a day-number modulo
+would pass "stable" while walking the list in visible order), and 6 on
+`formatBytes`.
+
+**No E2E.** Plan §15's remaining public rows — axe on every template, the RTL
+smoke over `en`/`ar`, the Lighthouse budget on `/learn/*` — are Module 14's
+fixtures and are **owed, not done**. §13 is explicit that the budget file must
+cover `/learn/*` before Phase 4 closes; it does not yet.
+
+### Verified by rendering, not by inference
+
+Against seeded dev data (2 courses, 13 lessons): both track bands and their
+cards; the course header, progress card and curriculum accordion; the lesson
+sidebar with the current lesson marked in-progress, the practice CTA and the
+next-lesson nav; the section strip with Quizzes correctly absent; canonical and
+hreflang; an unknown course 404ing; 19 learn URLs in the sitemap.
+
+The glossary needed data the seed does not create (**`seed.ts` seeds no
+glossary terms at all** — worth knowing, because the empty state is the only
+reachable one on a fresh database). Four temporary rows were inserted under a
+`tmpverify-` id prefix, the browser verified — term of the day, the live result
+count, `#`/A/B/S clickable and C–R/T–Z disabled, and a search matching a term
+through its EXPLANATION rather than its name — and then deleted by that prefix.
+The dev glossary is back to the 0 rows it held before.
+
+### Deferred / carried forward
+
+- **axe, RTL smoke and the Lighthouse budget for `/learn/*`** — Module 14.
+  Named in plan §13 as a Phase 4 exit condition and not met.
+- **The progress island, "Continue" CTAs and "Your courses"** — Phase 5.
+  `CourseCard` already takes a `cta` slot for it and every marker already
+  occupies its space, so the island is additive.
+- **`/learn/quizzes`** — Phase 6. Registered in `LEARN_SECTIONS` and invisible
+  while its flag is off; the registry entry carries an href rather than a
+  `RouteKey` precisely so no key in `ROUTE_PATHS` points at a 404.
+- **Glossary topics** (`/glossary/topics`) — Phase 10, D27.
+- A single-course track band leaves the second grid column empty on large
+  screens. Cosmetic, and it resolves itself as courses are added.
+
+## 2026-09-08 — changes-11 Phase 5: learner progress, the completion island, and lesson feedback (Modules 11/12/04, ADR-056)
+
+**PRs 5.1–5.5 in one pass.** ADR-056 was written in Phase 1 and has been the
+plan for progress ever since; nothing here deviates from it, so no new ADR. One
+schema addition goes slightly beyond its sketch and is called out below.
+
+### What shipped
+
+| PR  | Landed                                                                                                    |
+| --- | --------------------------------------------------------------------------------------------------------- |
+| 5.1 | `@repo/core/progress.ts` + 20 integration tests against a real MariaDB                                    |
+| 5.2 | `GET`/`POST /api/learn/progress`, and the repo's first general-purpose rate limiter                       |
+| 5.3 | The island: `ProgressProvider`, the curriculum markers, the CTA, the completion control, the sign-in card |
+| 5.4 | "Pick up where you left off" on `/learn`; the `learning_paths` and `featured_lessons` homepage sections   |
+| 5.5 | `LessonFeedback` — model, migration, service, `POST /api/learn/feedback`, the control                     |
+| 5.6 | **Partly.** Lint and the unit/integration suites are green; the E2E rows are still owed to Module 14      |
+
+### The one thing worth reading: the counter cannot drift
+
+ADR-056's consequences section predicts exactly one bug — `lessonsCompleted`
+drifting under concurrency — and `withEnrollmentLock` is the answer. It needs
+**two** mechanisms and either alone is broken:
+
+1. An `update` on the enrollment row at the top of the transaction takes an
+   exclusive row lock, so every write for one (learner, course) serialises.
+2. `isolationLevel: "ReadCommitted"`. Under MariaDB's default REPEATABLE READ,
+   the recount after the lock can still be served from a snapshot taken before
+   the blocking transaction committed — **the lock would serialise the writes
+   and the counter would drift anyway.** Locking without this is a fix that
+   looks right and is not.
+
+The regression test completes five lessons in parallel and asserts the counter
+equals five. It fails against a naive implementation, which is the reason to
+keep it green.
+
+The counter is **recomputed, never incremented**: an increment is only correct
+if every write path remembers it exactly once, and un-completing, unpublishing
+and soft-deleting all break that. `touchLesson` recomputes too, which makes
+opening any lesson the self-healing path for a counter that drifted for any
+reason.
+
+`recomputeCourseCompletion` is written D18-shaped from day one, as ADR-056 #7
+requires: the quiz clause is present as an explicit `finalQuizPassed` conjunct
+with a `TODO(Phase 6)`, so quizzes add a line rather than rewriting completion.
+
+### Three behaviours that are decisions, not details
+
+**A course falls back OUT of completion when a new required lesson publishes.**
+That is the mirror image of ADR-056 #6, not a contradiction of it: EDITING a
+lesson never un-completes it (there is a test), but ADDING one genuinely
+reopens the course, and saying otherwise would be the lie. `completedAt` keeps
+its ORIGINAL value when a completed course is revisited, so rereading a lesson
+does not restamp a course finished last March.
+
+**An empty course is never "complete".** `requiredTotal > 0` is a condition,
+not an oversight — congratulating a learner for opening a course with nothing
+published in it is worse than showing no state.
+
+**`touchLesson` never downgrades a completed lesson.** Its `update` clause is
+deliberately empty: arriving on a finished lesson is a visit, not an
+un-completion, and an upsert that wrote IN_PROGRESS would quietly reverse the
+learner's own action every time they reread something.
+
+### The route is the boundary; the page never sees a session
+
+`/api/learn/progress` runs four checks in order — session, flags, rate limit,
+parse — before any progress is read or written. `progress_tracking` is seeded
+`AUTHENTICATED`, so ADR-056 #3's "guests read everything, progress needs an
+account" is enforced BY THE FLAG rather than restated in code. Content
+visibility is enforced one level down: `locateLesson()` resolves through the
+same `publicLessonWhere()` + `publicCourseWhere()` the cached loaders use, so a
+hidden lesson answers 404 and is indistinguishable from one that never existed
+(security.md #7). There is a test that a `PREMIUM` course and a nonsense id
+produce the identical error.
+
+`?course=<id>` returns one course's detail; **no parameter returns the learner
+dashboard**. One endpoint rather than two because both need the identical
+authorization; `progressQuerySchema.course` became optional to say so.
+
+### New: a rate limiter, in `@repo/auth`
+
+There was none in the repo. It lives beside the account-lockout policy because
+that is where "how much may an unknown caller do" is already decided, and
+putting it in `@repo/core` would mean giving the domain package an ioredis
+dependency to answer a transport question.
+
+It deliberately does **not** reuse Better Auth's secondary-storage client: that
+one queues commands while Redis is briefly unreachable, which is right for a
+session lookup and wrong here — a rate limiter that blocks on a dead Redis
+turns an infrastructure blip into a hung request. This client fails fast, falls
+back to a process-local window so `pnpm dev` enforces the same limits without
+Redis, and **fails open** on infrastructure error. That last one is the right
+trade for lesson votes and the wrong one for sign-in, which is exactly why
+sign-in is rate-limited by Better Auth against its own storage instead.
+
+### `LessonFeedback`, and one deviation from ADR-056 #8
+
+The model is as specified — one row per vote, `@@unique([lessonId, userId])`
+binding signed-in learners only because MariaDB treats NULLs as distinct, and a
+schema comment saying so, so nobody "fixes" it to a filtered index.
+
+**The deviation:** ADR-056 #8 sketched `userId` as a bare column; it is a real
+optional FK with `onDelete: Cascade`. Deleting a learner has to take their
+votes with it, exactly as it does for `LessonProgress` and `CourseEnrollment`,
+rather than leaving rows attributable to a dangling id. This changes no
+decision in the ADR — the NULL semantics are untouched — and there is a test
+that deleting an account removes its votes.
+
+`tallyLessonFeedback` is written now and called by nothing: Phase 9's
+least-helpful report is its consumer. It is deliberately NOT surfaced publicly
+— "3 of 47 found this helpful" under a lesson tells a learner to skip it.
+
+### Homepage: two placeholders become real sections
+
+`learning_paths` and `featured_lessons` have rendered the "coming soon" stub
+since Module 12 because there were no courses to point at. Both are built now
+and moved from `HOME_SECTION_STUB_KEYS` to `HOME_SECTION_BUILT_KEYS`.
+
+**"Featured" is a code-owned rule, not an admin flag.** `Lesson` has no
+`isFeatured` column and this did not add one: the section shows the OPENING
+lesson of each published course, which is the honest answer to "give me
+somewhere to start" and needs no editorial upkeep. `Article.isFeatured` exists
+because a news front must be curated; a course's first lesson is already
+determined by the curriculum the editor ordered.
+
+Both are seeded `enabled: false`, so **they need `pnpm db:reset` to appear**.
+
+`settings.test.ts`'s "a section can declare variants without being built yet"
+case moved from `learning_paths` to `popular_tools`. Having to move it is the
+test working — the pairing it pins is real, so building a section is supposed
+to show up there.
+
+### Two things lint and React taught, worth recording
+
+**`react-hooks/set-state-in-effect` rejects the obvious localStorage read.**
+`useEffect(() => { if (voted) setState(...) })` is a cascading render. The fix
+is `useSyncExternalStore` with a separate server snapshot — which is not a
+workaround but precisely its purpose: read a client-only value without making
+the server and first client render disagree.
+
+**Passing `children` through a client provider keeps them server-rendered.**
+`ProgressProvider` wraps the whole course and lesson page, and everything
+inside it is still RSC; only the leaves calling `useProgress()` are client
+components. Without that, the island would have pulled the entire lesson body
+into the client bundle.
+
+`LessonContentsSheet` lost its `labels` prop and resolves its own strings with
+`useTranslations`, following `GlossaryBrowser` — the `labels`-object shape is
+the one that broke at runtime in Phase 4.
+
+### Tests
+
+| Check                        | Result                                  |
+| ---------------------------- | --------------------------------------- |
+| `pnpm lint`                  | 13/13, 0 warnings                       |
+| `@repo/core` progress suite  | **20/20** (new file)                    |
+| `@repo/contracts`            | 193/193                                 |
+| `check:home-sections`        | OK — 17 seeded, 12 built, 5 known stubs |
+| `check:permission-keys`      | OK                                      |
+| `check:phantom-deps`         | OK                                      |
+| `check:catalog-completeness` | OK                                      |
+| `check:reserved-paths`       | OK                                      |
+
+`pnpm --filter web typecheck` could **not be run to completion**: a `next dev`
+server on this machine was holding 4.3 GB of 16 GB and `tsc` OOMed before
+finishing. Every other package typechecks clean, and the web app typechecked
+clean earlier in the same session, before the last three files landed. It is
+recorded as UNVERIFIED rather than green — re-run it with the dev server
+stopped.
+
+### Deferred, and named
+
+- **Every E2E row for Phase 5** — guest sees curriculum + sign-in card and no
+  progress; "Continue Learning" returns to the last lesson; learner-session
+  probes against `/admin/*`; axe on the three learn templates; the RTL smoke;
+  the Lighthouse budget covering `/learn/*`. Phases 1–4 deferred the same rows
+  to Module 14 and this does not change that. **`/learn/*` is now the largest
+  surface on the public site with no E2E at all.**
+- **The XSS suite extended to lesson bodies** — `learn.integration.test.ts`
+  already asserts `saveLesson` strips script/`onerror`/`javascript:` payloads;
+  what is owed is the rendered-page half.
+- **Anonymous feedback growth** — bounded by the rate limit, not by a cap. If
+  it ever matters the rollup is an aggregate and old rows compact without
+  losing the editorial signal (ADR-056 #8's own note).
+
+## 2026-09-08 — changes-11 Phase 6: quizzes (Modules 11/12/09/03, ADR-058)
+
+**ADR-058 written first**, as the plan required ("ADR-058 at kickoff"). One of
+its decisions was rewritten before any of its code landed; that is recorded
+below rather than buried.
+
+### What shipped
+
+Schema (`Quiz`, `QuizTranslation`, `QuizQuestion`, `QuizQuestionTranslation`,
+`QuizAttempt`, plus `Lesson.quizId` and `Course.finalQuizId`), contracts,
+`@repo/core/quizzes.ts`, three attempt endpoints, the public index and runner,
+the admin list and builder, attach controls on the lesson and course editors, a
+seeded demo quiz, and 24 integration tests.
+
+### The rule the whole file turns on
+
+**The correct answer never leaves `quizzes.ts`.** `QuizView` — what
+`getQuizBySlug` returns — has no field for it, and `loadQuizBySlug` does not
+even `select` it, so the value never enters the process that renders the page.
+The test asserts this against the **serialized** payload rather than a property
+on the view, because a nested leak would slip past a shape check.
+
+This is why the admin and public reads are two functions with different return
+types rather than one with an `includeAnswers` flag: a flag is one forgotten
+argument away from a leak, and a type that cannot express the answer is not.
+
+**The learner never sends a score.** `quizSubmitSchema` is an attempt id and a
+locale. An attempt is created server-side, each answer is graded server-side
+against the stored `correctAnswer`, and the final score is computed from the
+`grades` column this file wrote. A forged score is not ignored — there is
+nowhere to put one.
+
+### ADR-058 #7 was rewritten before any code depended on it
+
+The first draft said quizzes were signed-in-only "because the seeded flag says
+so" — `quizzes` was seeded `enabled: false, AUTHENTICATED`. Building the index
+made the flaw obvious: **the learn layout is cached and reads no session**
+(ADR-056 #1), so it evaluates section flags with a `null` subject, and
+`evaluateVisibility` answers false for `AUTHENTICATED` against a null subject.
+The Quizzes tab would have been absent for **everyone, signed in or not**, and
+the only route to a quiz would be a URL nobody is given. The flag as seeded did
+not gate the feature; it hid it.
+
+The seeded flag is now `enabled: true, PUBLIC`, and the split matches the rest
+of the site (ADR-056 #3): **guests read every question, taking one needs an
+account.** The attempt endpoints check the session first and answer 401, which
+is what puts the plan's "save your scores" prompt on screen instead of making
+it unreachable.
+
+The ADR was edited rather than superseded because it had no history yet — no
+code, no DEVLOG entry, nothing depending on it. Its `Status` line and every
+other decision are unchanged.
+
+### `showAnswersAfter: NEVER` means never, including during the attempt
+
+The reference layout shows a live "✓ 3 ✗ 1" counter, which is a correctness
+oracle and flatly contradicts `NEVER`. Rather than let the runner quietly
+bypass the setting, the per-answer response returns `correct` **only** when
+`showAnswersAfter` is `AFTER_SUBMIT` or `AFTER_PASS`; under `NEVER` the runner's
+counter shows PROGRESS ("4 answered") and the score still comes out right,
+because grading happens either way and only the feedback is withheld.
+
+`AFTER_PASS` still reveals correctness during the attempt and withholds the
+ANSWER until you pass — that distinction is what makes three values worth
+having rather than a boolean.
+
+The gate and the review query are one function, so a `NEVER` quiz never reads
+an explanation out of the database at all.
+
+### Passing writes the same row a manual completion writes
+
+ADR-058 #6, and it is the decision most worth keeping. A `QUIZ_PASS` lesson is
+completed by writing a `COMPLETED` `LessonProgress` row — not by deriving
+completion at read time. ADR-056 #2 made that row the source of truth and
+`lessonsCompleted` a recount over it; a lesson completed "virtually" would read
+as done in the curriculum and be invisible to the counter, and the two would
+disagree permanently.
+
+`Course.finalQuizId` is the exception and stays a live check, because it has no
+lesson to hang a row on. **It cost exactly what ADR-056 #7 promised**: one query
+beside the three already in `recomputeCourseCompletion`, and one conjunct
+replacing a hardcoded `true`. No rewrite of completion.
+
+Passing a course's final quiz does **not** enrol the learner in that course —
+there is a test. Someone taking a standalone quiz has not started the course.
+
+### The consequence that needed a rule of its own
+
+`Lesson.quizId` is `SetNull`, so deleting a quiz leaves a `QUIZ_PASS` lesson
+nothing can satisfy. Counting it as required would seal the course shut forever
+because of an editor's delete, so `recomputeCourseCompletion` excludes an
+unsatisfiable lesson from the BLOCKING set while still counting it in the
+denominator if it was completed earlier.
+
+The first version of that test asserted the wrong thing — it built a course
+whose ONLY lesson was the orphan and expected completion. That course has
+nothing completable at all, so "not complete" was correct for a different
+reason (`requiredTotal > 0`) and the test proved nothing. It now adds an
+ordinary lesson beside the orphan, completes that, and asserts the course
+finishes anyway.
+
+### Quizzes reuse the `lessons.*` permission keys
+
+There are no `quizzes.*` keys in the seed registry and `changes-11-plan.md` §18
+rule #3 forbids adding any. The reuse is coherent rather than convenient: a
+quiz is authored beside the lessons it belongs to, from the same screens, by
+the same people.
+
+This forced one change in `content.ts`. `transitionContentStatus` computed its
+permission as `` `${entity}.publish` ``, which for the new `quizzes` entity
+would have looked for `quizzes.publish` — **a key no role can hold, so every
+quiz publish would have failed silently**, which is precisely the bug
+`check:permission-keys` exists to catch. The entity→permission mapping is now
+an explicit record. There is a test: an actor with `lessons.update` but not
+`lessons.publish` is refused, and the editor succeeds.
+
+**The named cost:** quiz authorship cannot be granted separately from lesson
+authorship. A `quizzes.*` group is the additive fix if anyone ever needs that.
+
+### Attaching a quiz is an ordinary field, not its own action
+
+`setLessonQuiz` / `setCourseFinalQuiz` were written and then **removed**:
+`Lesson.quizId` and `Course.finalQuizId` are columns on rows those editors
+already save, and a second write path for one column is a second place for the
+audit row, the cache invalidation and the permission check to drift. They are
+`lessonMetaSchema.quizId` and `courseMetaSchema.finalQuizId` now.
+
+The lesson editor's quiz picker sits beside its completion rule, and the hint
+changes to "Attach a quiz, or this lesson can never be completed" when the rule
+is `QUIZ_PASS` with nothing attached — the form says so rather than silently
+allowing an uncompletable lesson.
+
+### One latent bug fixed on the way past
+
+`app/sitemap.ts` carried a comment claiming the learn loaders build their own
+locale prefix. They do not — `loadLearnSitemapEntries` returns `/learn/<slug>`
+and the locale separately. With only `en` active (ADR-007) every entry was
+correct by coincidence; activating a second locale would have put unprefixed
+duplicates in the sitemap. The prefix is applied in `sitemap.ts` now, for
+courses, lessons and quizzes alike.
+
+### Also worth knowing
+
+- **The quiz runner page is `noindex, follow`.** A quiz whose questions change
+  is a search result that lies; the index page is the indexable surface. It is
+  still listed in the sitemap, which is a crawl hint, not an indexing
+  instruction.
+- **`Quiz.category` is free text**, so no catalog key can exist for it.
+  `humanizeKey()` renders it on both surfaces — ADR-044 #5's stated last resort,
+  applied to the public site as well as the admin.
+- **The demo quiz is standalone and attached to nothing.** Attaching it to a
+  seeded lesson would put a `QUIZ_PASS` rule into a course whose other lessons
+  are `MANUAL` — a confusing default for someone opening the admin for the
+  first time. It needs `pnpm db:reset` (or a re-run of the idempotent seed) to
+  appear.
+
+### Tests
+
+| Check                        | Result                                        |
+| ---------------------------- | --------------------------------------------- |
+| `pnpm lint`                  | web + core + contracts + db, 0 warnings       |
+| `pnpm typecheck`             | web, core, contracts, db — all clean          |
+| `@repo/core` learn suites    | **89/89** (learn 45, progress 20, quizzes 24) |
+| `check:permission-keys`      | OK                                            |
+| `check:catalog-completeness` | OK                                            |
+| `check:home-sections`        | OK                                            |
+| `check:reserved-paths`       | OK                                            |
+| `check:phantom-deps`         | OK                                            |
+| `pnpm db:seed`               | applied; demo quiz created, 6 questions       |
+
+The web typecheck ran to completion this time — the memory pressure recorded in
+the Phase 5 entry had eased.
+
+### Deferred
+
+- **E2E for every quiz surface** — the runner journey, the guest 401, the
+  attempt-limit 409, axe on the index and runner. Owed to Module 14 with the
+  rest of the learn area's E2E.
+- **`QuizAttemptAnswer`** — not created, with the trigger named in ADR-058 #5:
+  Phase 9's "most frequently missed questions" is the one analytic that needs
+  it. Everything else aggregates from `QuizAttempt` columns.
+- **Quiz translations beyond the default locale.** The model and the loaders
+  are per-locale throughout; the admin builder edits one locale (the default)
+  and a locale switcher is the same shape the lesson editor already has.
+
+## 2026-09-08 — changes-11 Phases 7, 9 and 10: recommendations, learning analytics, glossary topics (Modules 11/12/09, ADR-055 #12, no new ADR)
+
+Three phases in one pass, because two of them turned out to be much smaller
+than the plan's ordering implied and the third was a straight application of an
+existing decision. **Phase 8 is not here and is not owed** — it was replaced in
+full by `changes-12-plan.md`.
+
+### Phase 7 was three-quarters already built
+
+The plan lists four things: an admin picker writing `ContentRelation`, a
+same-track fallback, a course-page surface, and a completion-state surface.
+Checking before building, the first three had shipped — the picker in PR 3.2,
+`resolveRecommendations`'s top-up in Phase 2, the course-page block in PR 4.2.
+
+So Phase 7 is **one component**: `CourseCompletionBanner`, which appears above
+the curriculum when the progress island reports `isCompleted` and offers the
+recommendations the page already loaded. It renders from props rather than
+fetching — the list is public cached content, and putting a request in the path
+of a celebration is the wrong trade. It carries `aria-live="polite"`, because it
+appears after hydrate and a screen reader that has already read the page would
+otherwise never learn the course is finished.
+
+D17's claim that reusing `ContentRelation` would make this phase small is
+confirmed rather than merely asserted.
+
+### Phase 9: every number is an aggregate over rows that already exist
+
+`@repo/core/learn-analytics.ts` + `/admin/learn/progress`, gated on the existing
+seeded `analytics.view` key. **No new table, no event log, no counter column.**
+
+That is the point worth recording: ADR-056 #2 rejected an event log on the
+grounds that none of the questions we ask need event history, and this file is
+the evidence. Started, completed, completion rate, per-lesson drop-off,
+attempts, pass rate, average score and least-helpful lessons all fall out of
+`CourseEnrollment`, `LessonProgress`, `QuizAttempt` and `LessonFeedback` with
+`groupBy`. If a question ever arrives that a fold over events would answer and
+these will not, that is the trigger to revisit it.
+
+Three definitions are decisions rather than details, and each is stated on the
+screen:
+
+- **"Started" means an enrollment row**, which Phase 5 creates on the first
+  touch of any lesson — "opened something", not "pressed enrol". There is no
+  enrol action to press, so this is the only honest reading.
+- **Drop-off is opened-and-not-completed.** It is computable only because
+  `LessonProgress` keeps an `IN_PROGRESS` row rather than recording completions
+  alone; without it, a lesson nobody finishes and a lesson nobody opens look
+  identical.
+- **Least-helpful is ranked by NET score, not ratio.** A lesson with one "no"
+  and no "yes" has a 0% ratio and means nothing, while 40 no against 12 yes is
+  a real problem. The usual fix — a minimum vote threshold — hides new lessons,
+  which are exactly the ones worth catching early.
+
+**One row of the plan's §51 is deliberately absent**: "most frequently missed
+questions". ADR-058 #5 stores quiz answers as JSON on the attempt, which serves
+the review screen and cannot be aggregated in SQL, and that analytic is the
+single named trigger for adding `QuizAttemptAnswer`. Shipping an approximation
+would remove the pressure to do it properly.
+
+The screen uses plain tables rather than the shared `DataTable`: every list is
+already sorted by the question it answers, there is no filtering, no export and
+no row action, so `DataTable`'s toolbar would be five disabled controls.
+
+### Phase 10: `GlossaryTerm.category` is gone
+
+D27, applied. `category` was `String?` free text — no slug, no translation, no
+description, no ordering, no page to link to. It could not support browse-by-
+topic and it broke two rules the repo already holds: ADR-044 #5 (a raw
+identifier never renders) and ADR-043 #1 (public strings are translatable).
+
+`GlossaryTopic` + `GlossaryTopicTranslation` mirror `ArticleCategory` /
+`ArticleCategoryTranslation` **exactly**, which is the whole value of the
+decision: a proven pattern, nothing new to design, and admin screens the same
+shape an editor already knows. Pre-launch reset, no backfill.
+
+Shipped: the two models, `GlossaryTerm.topicId`, the service (admin CRUD,
+reorder, cached public loaders, sitemap entries), `/glossary/topics`,
+`/glossary/topics/[topic]`, the browse tab strip, and `/admin/glossary/topics`.
+
+Four things worth knowing:
+
+1. **`Lesson`-style `SetNull`, plus a service-level refusal.** The FK would
+   happily orphan terms, so `deleteGlossaryTopic` refuses while any term is
+   filed under it. The right fix is an editor's decision ("move these first"),
+   not a silent reassignment — the same shape `deleteSection` uses.
+2. **`/glossary/topics` shadows a term slugged "topics"**, so `topics` joins
+   `RESERVED_GLOSSARY_SLUGS` and `saveGlossaryTranslation` throws
+   `ReservedGlossarySlugError`. Rejected at write time rather than discovered
+   at read time — D3's rule, one section over.
+3. **The tab strip hides itself when no topic has published terms.** A database
+   with no topics looks exactly as it did before this phase, so shipping the
+   model does not change the glossary until an editor uses it.
+4. **An INACTIVE topic reads as unfiled** in the A–Z payload rather than
+   linking to a page that is switched off.
+
+`GlossaryListEntry.category` became `topicName` + `topicSlug`, both resolved
+through the same locale fallback chain the term itself uses — a topic name in
+the wrong language on an RTL page is the bug ADR-007 exists to prevent, one
+level down. The admin command palette now shows the topic NAME rather than the
+old raw category string (ADR-044 #5).
+
+**Topic admin permissions reuse the `glossary.*` keys**, on the same reasoning
+ADR-058 #8 applied to quizzes: a topic IS glossary data, with no separate
+audience, and inventing `glossaryTopics.*` would add three keys no role holds.
+
+### One latent bug fixed on the way past (again)
+
+The sitemap's locale-prefix fix from the Phase 6 entry now also covers glossary
+topics. Course, lesson, quiz and topic entries all go through one `localised()`
+helper.
+
+### Tests
+
+| Check                        | Result                                                  |
+| ---------------------------- | ------------------------------------------------------- |
+| `pnpm lint`                  | web + core + contracts, 0 warnings                      |
+| `pnpm typecheck`             | web, core, contracts, db — all clean                    |
+| `@repo/core` full suite      | **401 passed**, 19 skipped, 1 failed (see below)        |
+| Analytics tests              | 4 new, inside `progress.integration.test.ts` (24 total) |
+| `check:permission-keys`      | OK                                                      |
+| `check:catalog-completeness` | OK                                                      |
+| `check:home-sections`        | OK                                                      |
+| `check:reserved-paths`       | OK                                                      |
+| `check:phantom-deps`         | OK                                                      |
+
+The one failure is the **same pre-existing pair every entry since Phase 1 has
+recorded** — `cms/paths.test.ts` and `cms/pages.integration.test.ts`, both
+`ReservedPathError: "about"` from commit `d8c904a` in cancelled Module 16 code.
+Verified by identity rather than by count: the failing assertion is still the
+`"about"` one, and nothing in these three phases touches `cms/`.
+
+The analytics tests live in the progress suite rather than their own file on
+purpose: every number the service reports aggregates rows those tests already
+create, so asserting them there proves they read the same rows the rest of the
+suite wrote — which is the only thing that could go wrong.
+
+### Deferred, and named
+
+- **E2E for all three phases** — the completion banner, the analytics screen's
+  permission-denied path, the topic browse journey. Owed to Module 14 with the
+  rest of the learn area.
+- **Seeded glossary topics.** `seed.ts` still seeds no glossary TERMS at all
+  (noted in the Phase 4 entry), so seeding topics would create empty groups the
+  loader would then omit. Topics appear when terms do.
+- **Topic translations beyond the default locale.** The model and loaders are
+  per-locale throughout; the admin screen edits one locale, exactly as the quiz
+  builder does.
+- **`/glossary/topics` on the public nav.** It is reachable from the glossary's
+  own tab strip and from the sitemap; adding a header menu row is a seed
+  change, and menu composition is code-owned (ADR-042) — worth a deliberate
+  decision rather than a silent addition here.
+
+### changes-11 is now complete except Phase 8
+
+Phases 1–7, 9 and 10 have shipped. **Phase 8 is not outstanding work**: the
+plan itself replaced it in full with `changes-12-plan.md`, which specifies
+object storage, presigned uploads, the BullMQ worker, Sharp derivatives,
+FFmpeg/HLS and the CDN as their own programme. Nothing in Phases 1–10 depends
+on it, and the learning area runs on the existing local-disk driver exactly as
+`changes-12-plan.md` §1.1 intends.
+
+What genuinely remains from this plan is the **E2E and hardening column** —
+axe on every learn template, the RTL smoke over `en`/`ar`, the Lighthouse
+budget covering `/learn/*`, learner-session probes against `/admin/*`, and the
+XSS suite extended to rendered lesson bodies. Every phase since Phase 1 has
+deferred those to Module 14, and they are now the largest single gap in this
+programme.
+
+## 2026-09-08 — the theme-mode provider comes in-house; the pre-paint script moves to a server component (Modules 07/12/09, ADR-064)
+
+Owner pasted a Next.js dev-overlay console error:
+
+> Encountered a script tag while rendering React component. Scripts inside
+> React components are never executed when rendering on the client.
+> `../../packages/ui/src/components/theme-provider.tsx (11:5) @ ThemeProvider`
+
+Line 11 was `<NextThemesProvider …>` — the file contained nothing else. The
+script belonged to `next-themes`, whose provider renders the pre-paint FOUC
+guard as an inline `<script dangerouslySetInnerHTML>` from inside a **client**
+component.
+
+### What was established before choosing a fix
+
+Traced the message to React's `createInstance` in
+`react-dom-client.development.js:12993` — the client-**mount** path, not
+hydration — where React substitutes a `<div>` for the script. That matters
+more than the log line: on any render that mounts rather than hydrates
+(hydration-mismatch recovery, an error-boundary re-render, the dev overlay)
+the mode guard was being silently replaced by an empty div.
+
+Confirmed it is dev-only (the string exists only in React's `*.development.js`
+bundles) and does not reproduce on a clean SSR + hydration pass — loaded
+`/en`, `/admin`, `/admin/sign-in` and forced a Fast Refresh against the
+running dev server, no warning on any of them.
+
+Confirmed there is nothing to wait for upstream: `0.4.6` is `latest`, and
+`1.0.0-beta.0` was unpacked and still does
+`createElement("script", {nonce, dangerouslySetInnerHTML})` from the same
+client component. No prop disables it — `scriptProps` is spread _before_
+`dangerouslySetInnerHTML`, so a call site cannot override the body either.
+
+Owner was given the fork (live with dev noise vs. own the provider) with the
+cost of each, and chose to own it.
+
+### What shipped
+
+**`packages/ui/src/lib/theme-mode.ts`** — the contract both halves read:
+storage key, mode classes, the `system` resolution rule, and
+`buildThemeInitScript()`. The stringified function is self-contained by
+contract; every value arrives as a literal argument, because a module-scope
+reference would survive minification as a name the browser does not have and
+the mode would apply only after hydration.
+
+**`packages/ui/src/components/theme-script.tsx`** — injects the pre-paint
+script through `useServerInsertedHTML` and returns `null`. It does not render
+a `<script>` at all.
+
+**This took two attempts, and the first one is worth recording.** The obvious
+fix — move the script into a **server** component, since the warning fires on
+React's client path — was implemented, tested, built, and reported as done.
+The owner came back with the identical warning now pointing at
+`theme-script.tsx`. The reason: a server component's `<script>` still lives in
+the RSC payload, and Next 16's client prerender/recovery passes create host
+instances from that payload. There is no placement inside the React element
+tree that avoids this. `next/script` `strategy="beforeInteractive"` was read
+in Next's own source and rejected too — for an inline script it renders its
+own `<script>` element whose body only pushes onto `self.__next_s` for Next's
+runtime to run later, which is after first paint.
+
+`useServerInsertedHTML` is the mechanism that actually works: its callback
+fires only where `ServerInsertedHTMLContext` is non-null, which is the server,
+and it is a documented no-op on the client. The file is `"use client"`
+_because_ the hook needs a client context to attach to. Confirmed against the
+running server: the script appears exactly once per document, inside
+`<head>` — earlier than next-themes ever managed, which emitted into `<body>`
+— and is **absent from the RSC payload**.
+
+**`packages/ui/src/components/theme-provider.tsx`** — our own context:
+`{ theme, resolvedTheme, systemTheme, setTheme }`, `class` on `<html>`,
+`localStorage`, `matchMedia`, and a `storage` listener for a second tab.
+Renders no `<script>`. State initialises to `"system"` on both sides and is
+corrected in an effect, so hydration cannot diverge; nothing flashes because
+`<html>` is already correct by then.
+
+`mode-toggle.tsx` and `sonner.tsx` — the only two `useTheme()` consumers —
+changed one import line each. `<ThemeScript />` mounted in all three root
+layouts; the two admin layouts pass the `x-nonce` they already read
+(security.md #14 — this was the one inline script on `/admin/*` that could not
+be nonced from a call site). The cached public layout passes none, unchanged
+from before, and that stays Module 14's problem.
+
+Deleted `apps/web/app/(public)/[locale]/_components/theme-provider.tsx` — a
+dead duplicate of the `@repo/ui` component, no importers.
+`next-themes` removed from `@repo/ui` and `apps/web`; `docs/memory/stack.md`
+records the row as REMOVED with the reason, so it is not re-added by reflex.
+
+### Tests
+
+`packages/ui/src/components/theme-provider.test.tsx` — 10 cases. Four are the
+regression (testing.md #2), and they cover BOTH components after the false
+start above: neither `ThemeProvider` nor `ThemeScript` renders a `<script>`,
+and neither emits a `script tag while rendering` console error.
+`ThemeScript` is additionally asserted to render literally nothing in the
+browser. The rest cover the mode contract — adopting the stored mode, resolving `system` against
+`matchMedia`, `setTheme` persisting and swapping the class, the outside-a-
+provider stub — plus the init script actually applying the stored mode when
+evaluated, and its arguments being inlined rather than closed over.
+
+`pnpm --filter @repo/ui test` 180/180, `pnpm --filter @repo/web test` 170/170,
+`pnpm lint` clean, `pnpm typecheck` 13/13, `pnpm check:phantom-deps` OK.
+
+Verified against the running dev server, not just in jsdom: `/`, `/about`,
+`/news`, `/glossary` and `/admin/sign-in` each carry exactly ONE
+`applyStoredThemeMode` occurrence, inside `<head>` (one occurrence means it is
+not in the RSC payload — the failed first attempt showed two), with the nonce
+present on the admin one. Console clean across soft navigations and a Fast
+Refresh; the toggle round-trips dark → light → dark with the class,
+`color-scheme`, `localStorage` and the painted background all following, and
+survives a reload with the class present pre-hydration.
+
+### Not fixed here, seen while verifying
+
+`/en` and `/en/glossary` throw a `PrismaClientValidationError` from
+`GlossarySpotlight` / `GlossaryPage`, handled by the error boundary (`/en`
+returns 500 to a plain fetch). Pre-existing and unrelated — it reproduces
+before this change. Likely a schema/client drift wanting `pnpm db:reset`
+after the D27 glossary-topics migration.
+
+## 2026-09-09 — the public learn area's design pass: masthead, tonal levels, clickable cards, a filtered course rail (Modules 07/12, no new ADR)
+
+**Owner ask.** The learn surfaces were correct but plain next to `/news` and
+`/`: no banner, no artwork on a shelf of coverless courses, badges that all
+looked alike, a skeleton that matched none of the three routes it covered, no
+video anywhere, no sidebar, and — the one that reads as a bug rather than as
+taste — a course card whose cover and body did nothing when clicked.
+
+A design pass, not an architecture change, so no ADR: composition stays in
+code (ADR-042), the caching model is untouched (ADR-056 #1 still holds — no
+route below `/learn` reads a session), and every new string is a catalog key
+(ADR-043 #1). Same posture as the `/news` and homepage passes of 2026-09-07.
+
+### The card is the link now
+
+`packages/ui/src/components/course-card.tsx`. The title's anchor paints a
+transparent `::after` over the header region — a stretched link, so the cover,
+the badges and the summary all navigate while there is still exactly ONE link
+to the course in the accessibility tree and no nested anchors. Two things the
+markup now has to keep true, both documented in the file and both tested: the
+overlay's containing block is the header ROW (not the `<article>`, which would
+swallow the expanded lesson list below it), and every control inside that row —
+the CTA, the disclosure — is `relative z-10` above it. A control that is not
+raised is invisible to a pointer while looking perfectly fine in a snapshot,
+which is exactly the class of break a test has to hold.
+
+Also on the card: a wider cover with `media-zoom` (the card carries the bare
+`group` class that utility selects, alongside `group/card` for the named
+variants), a level chip floated on the cover under its own scrim, icon'd
+lesson/duration chips, an optional video chip, and `hover-lift`/`sheen`
+composed onto `card-hover`.
+
+### Levels are coloured, from tokens
+
+Three tonal Badge variants — `success`, `warning`, `info` — built the way
+`eyebrow` is: an ALPHA TINT of the hue plus that hue's `-interactive` ink,
+which @repo/theme derives against `--background` in both modes. Not a fixed
+tint with derived ink, which is the pairing badge.tsx already records failing a
+Lighthouse contrast check in dark mode. `_lib/learn-labels.ts` owns the one
+difficulty → tone map (green/blue/amber; deliberately NOT `destructive` for
+ADVANCED — red says "you did something wrong"), so a level is one colour on the
+shelf, the course header and the rail.
+
+### Artwork, a masthead, and video
+
+`apps/web/scripts/generate-learn-art.mjs` — fourth generator on ADR-051 §5's
+shared engine, four committed pieces under `public/learn/`. Two backdrops
+(section front, course header) and two TRACK PANELS, which are what a course
+with no uploaded cover now shows: keyed by track, so a new course inherits
+artwork with no asset work and a shelf of coverless courses still reads as two
+distinct subjects. `_content/learn-media.ts` is the ADR-047 §3 media pattern's
+fourth instance, plus `courseCoverUrl()` so the shelf, the "continue" band, the
+rail and the recommendations cannot disagree about which picture a course has.
+
+`_components/learn-masthead.tsx` is `PageHero` + backdrop + `AmbientMotif`,
+with a counted stat strip under it in its own muted band — StatCard's ink is
+derived against `--background`, so it cannot sit on the brand fill. The figures
+are COUNTED from the shelf the page already loaded, never stored and never
+typed into a catalog, and the strip is absent when nothing is published.
+
+The video rail is `VideoShowcase` — the homepage's component and registry, not
+a copy, already gated on the `courses` flag and already honest about a registry
+whose URLs are all null (`home-videos.ts` documents why). It gained one
+optional prop, `showCta`, because its CTA points at `/learn` and on `/learn`
+that is a link to the page you are reading.
+
+### Filters, and why they are not /news's filters
+
+The shelf toolbar gained a search box and topic chips beside the existing
+difficulty chips, plus an `aria-live` result count. All client state, which is
+D26's rule, not a shortcut: reading `searchParams` would make the page dynamic
+(architecture.md #6), every course is already in the payload, and
+`/learn?difficulty=beginner` is not a URL anyone bookmarks. /news filters by
+NAVIGATING because `/news/category/x` is a real indexable page with its own
+articles; a track has no such route. Same vocabulary, different mechanism,
+chosen per surface — written into the file so the next reader does not "fix"
+one to match the other.
+
+The course page gained `_components/course-sidebar.tsx`: the catalogue,
+filtered by track, opening on the track being read, with the current course
+never on its own rail. Distinct from the recommendations block above it — those
+are the editor's answer to "what next". It reads `getLearnIndex`, the same
+cached `content`-tagged loader the shelf uses, so the rail can never disagree
+with the shelf about what is published.
+
+### Skeletons that match what arrives
+
+One area-wide `loading.tsx` covered three layouts that no longer rhyme, so each
+route owns its own now (index / `[course]` / `[course]/[lesson]`), each
+mirroring its real grid. New `.shimmer` utility in globals.css layers a
+directional sweep over Skeleton's pulse — inside the reduced-motion guarantee,
+and it never changes layout.
+
+### One real bug found and fixed on the way
+
+`resolveRecommendations` in `packages/core/src/public-courses.ts` was the only
+public loader in that file with no cached wrapper. Uncached, it was the one
+un-prerenderable read on `/[locale]/learn/[course]`: Prisma reaches for
+`Date.now()` timing a query, Cache Components rejects an unstable value during
+prerender, and the whole course route quietly fell out of ISR into per-request
+rendering. It answered 200 throughout, which is why nobody saw it; the cost was
+a database round trip on every view of every course page.
+
+Confirmed rather than guessed: stubbing the call out stopped the prerender
+error, restoring it brought the error back, and adding `"use cache"` +
+`cacheTag("content")` + 300s — matching `getLearnIndex`, `getCourseBySlug` and
+`getLessonBySlug` exactly — stopped it for good across four further fetches.
+The body moved to `loadRecommendations`; the exported name and signature are
+unchanged, so no call site moved.
+
+### Tests
+
+`packages/ui/src/components/course-card.test.tsx` — 11 new cases. Four hold the
+stretched link (one link in the tree, no ancestor anchor, the overlay scoped to
+the header row, both controls raised above it), four the level tone / video
+chip / no-artwork fallback, three the tonal badge recipe.
+
+`pnpm --filter @repo/ui test` 193/193, `pnpm --filter @repo/web test` 170/170,
+`pnpm typecheck` 13/13, `pnpm lint` clean, `check:catalog-completeness` exit 0
+(`en` complete; the three warnings are the inactive locales, unchanged).
+
+Verified against the running dev server: `/learn`, `/learn/[course]` and
+`/learn/[course]/[lesson]` all 200, with the banner, the track panels, the stat
+strip, the toolbar, the six video tiles and the filtered rail present in the
+HTML; `/` and `/news` unchanged at 200.
+
+### Not fixed here
+
+`pnpm build` OOMs on this machine (`Zone Allocation failed` at ~180MB heap with
+3GB physical free) — a memory-pressure failure, not a compile error; typecheck,
+lint and both suites pass, and the pages render on the dev server.
+
+`packages/core/src/cms/paths.test.ts` fails one case: `/about` is now in
+`RESERVED_PATHS` and this test of the CANCELLED CMS module (ADR-042) still
+expects it to be allowed. Pre-existing, unrelated to this change, and not
+touched here — it belongs to whoever decides what the retained CMS tests are
+still asserting.
+
+## 2026-09-09 — learning tracks become first-class: per-track URLs, header entries and a pinned section bar (Modules 12/11/08/01/07, ADR-065)
+
+The owner asked for three things, with babypips as the reference: the header
+to carry the schools as separate entries rather than one "Learn", hovering one
+to reveal its learning surfaces, and the Learn area's second bar to stay
+pinned while a long lesson scrolls.
+
+The first two could not be built honestly on the flat URLs ADR-055 §3 gave
+this area. "Learn Crypto → Quizzes" pointing at an index of forex quizzes is a
+lie the nav tells on every page, and once a reader opens `/learn/price-action`
+the URL no longer says which school they are in, so the bar had nothing to
+scope itself to. ADR-055 §8's own rule settled it: a filter that produces
+something a person bookmarks is a route, and a crypto learner bookmarks the
+crypto school. The track chip was on the wrong side of it.
+
+### The shape
+
+```
+/learn                                both schools (umbrella, no section bar)
+/learn/[track]                        school index
+/learn/[track]/[course]               course
+/learn/[track]/[course]/[lesson]      lesson
+/learn/[track]/quizzes(/[quiz])       that school's quizzes
+/learn/[track]/glossary               that school's A–Z
+```
+
+`[track]` is validated against `LEARN_TRACKS` and feeds `generateStaticParams`,
+so both schools prerender. A course loaded under the wrong track **404s**:
+`/learn/crypto/price-action` is a wrong address, not a second one for a forex
+course. A course that genuinely moved has a redirect row, which the branch
+above the check already handled.
+
+`/glossary` and `/glossary/[term]` did **not** move — ADR-055 §7's promise
+kept. The track glossary is a filtered view onto the same terms, linking to
+the same term pages.
+
+### Two columns, deliberately different
+
+`Quiz.track` is NOT NULL: a quiz has one canonical URL and that segment cannot
+be built from a null. `GlossaryTerm.track` is nullable, and **null means every
+school** rather than "unfiled" (which is what a null `topicId` means one field
+over). "Leverage" is forex and crypto both; duplicating it per track would give
+one concept two pages competing in search. The asymmetry is written into both
+the schema comments and the ADR, because it reads as an inconsistency until
+you know why.
+
+`coursePath`, `lessonPath` and `quizPath` now take a track, and they stay the
+only places the URL shape lives — three signatures, not a search-and-replace.
+`saveCourse` and `saveQuiz` write a redirect when the TRACK changes exactly as
+they do for a slug; for a course that means one per lesson as well.
+
+### The pinned bar, and the number it needed
+
+`LEARN_SECTIONS` became `learnSectionsFor(track)`; the bar renders on every
+page under `/learn/[track]/**` and a flag-off section is still ABSENT rather
+than disabled. It sticks at `top-(--header-offset)` — not `top-16`, which is
+correct for exactly one header configuration and hides the bar behind the
+header the day the announcement bar is switched on. `StickyHeaderShell` now
+wraps the header stack, measures it with a `ResizeObserver` and publishes the
+height on the document element; the CSS default is the header's own height, so
+the first paint and the no-JavaScript case are both sane. Verified live: with
+the page scrolled 900px, `--header-offset` read `65px` and the bar's top edge
+sat at 65 against a header bottom of 64.8.
+
+The active-tab rule moved out of the client component into the registry module
+as `activeSectionHref`, so it can be tested as what it is — a pure function
+over strings. Longest-prefix still matters and matters more now: `/learn/forex`
+is a prefix of `/learn/forex/quizzes`.
+
+### Header
+
+The seeded `learn` root row is gone, replaced by `learn-forex` and
+`learn-crypto`, each with four children and a panel. The umbrella is the last
+ROW rather than a "view all" footer, because the footer takes its label from
+the panel's own item and would have read "Learn Forex · View all" over a link
+to the page covering both schools.
+
+`MegaMenuPanel` gained `size`. Its width is explicit (Base UI measures the
+popup from its content, and a `1fr` grid in a max-content box collapses to one
+word per line), so a single list in the 56rem box left two thirds of a very
+large popup empty — a rendering bug to look at, not a short menu. `site-nav`
+picks the size from the RESOLVED panel, so it follows what actually rendered.
+
+### Admin
+
+The "New quiz" dialog asks for a track like the course dialog does; the quiz
+editor can move one between schools (and the redirect follows). The glossary
+list gained a per-term track select whose first option is "Both schools" — a
+named sentinel, not an empty string, because this is a deliberate choice and
+an empty value reads as "nothing selected" to a listbox.
+
+### Tests
+
+`packages/contracts/src/learn.test.ts` — the two registries cannot drift: every
+registered track has its three route keys, every `learn-*` key names a
+registered track, and the path helpers agree with what `ROUTE_PATHS` stores.
+New `learn-sections.test.ts` (14 cases) covers the per-track section list, the
+catalog keys, the active-tab rule across index/course/lesson/quiz/glossary
+paths, and — as source guards, since apps/web's vitest has no DOM — that the
+bar is `sticky top-(--header-offset)` at `z-30` and that the shell measures
+rather than assumes. `mega-menu.test.ts` gained the two panels.
+`learn.integration.test.ts` and `quizzes.integration.test.ts` gained the
+track-move redirect cases and the per-track quiz index.
+
+`pnpm lint` clean · `pnpm typecheck` 13/13 · `@repo/web` 188/188 ·
+`@repo/ui` 193/193 · `@repo/contracts` 197/197 ·
+`@repo/core` `learn.integration` 46/46 and `quizzes.integration` 26/26 ·
+`check:catalog-completeness`, `check:permission-keys`, `check:reserved-paths`,
+`check:home-sections`, `check:phantom-deps` all OK.
+
+Verified on the dev server after `db:deploy` + `db:seed`: `/learn`,
+`/learn/forex`, `/learn/crypto`, `/learn/forex/quizzes` and
+`/learn/forex/glossary` all render; the header shows Learn Forex / Learn
+Crypto; hovering one opens the compact panel; the section bar stays under the
+header at 900px of scroll.
+
+### Known, and not introduced here
+
+- **An unknown track answers 200 with the not-found page.** `notFound()` runs,
+  but `learn/loading.tsx` streams a shell first and the status commits with it.
+  `dynamicParams = false` would fix it at the routing layer and is **refused
+  under Cache Components** ("not compatible with nextConfig.cacheComponents") —
+  ADR-004's trade, not a local one. `/news/<unknown-slug>` has answered 200 the
+  same way since its loader landed, so this is one instance of a repo-wide
+  soft-404 question that belongs to Module 14.
+- The `quizzes` flag is OFF in this dev database, so the Quizzes tab and the
+  panel row are correctly absent there. That is the flag rule working; the seed
+  only sets a flag's value on create.
+- `packages/core/src/cms/paths.test.ts` still fails its `/about` case —
+  pre-existing, unrelated, untouched (recorded in the 2026-09-09 design-pass
+  entry).
+- E2E for the new routes is still owed to Module 14, along with the rest of the
+  learn area's.
+
+## 2026-09-09 — the quiz index's design pass: panels, tonal categories, a score meter that means something (Modules 07/12/11, no new ADR)
+
+The quiz index was the one learn surface the 2026-09-09 design pass had not
+reached: a muted header band over a grid of text cards with two grey badges and
+no picture anywhere. It now opens the way `/learn` and `/news` do, and its cards
+carry the three things a reader actually scans a quiz grid for — how hard it
+is, what it is about, and how they did.
+
+### Artwork
+
+`generate-learn-art.mjs` gained five pieces: a `quiz-banner` backdrop and four
+CARD panels (`quiz-gauge`, `quiz-bubbles`, `quiz-bars`, `quiz-flow`). Committed
+output, byte-deterministic, re-run rather than hand-edited — the existing four
+files came back identical, which is the generator's own guarantee holding.
+
+The panels are **not keyed by track**, and that is the one deliberate departure
+from `LEARN_TRACK_MEDIA`. A course falls back to its track's panel because a
+course usually HAS a cover and the panel is the floor; a quiz has no cover
+column and is never getting one, so a track-keyed panel would be the whole
+supply and one school's shelf would repeat a single placeholder down the grid.
+`quizCoverUrl(slug)` hashes the slug (FNV-1a, ours, pure) into the four. Same
+quiz, same picture, forever; a shelf of six shows four different ones. The
+motifs are pictures of what taking a quiz IS — a score dial, a question and its
+answer, results, a choice resolving — rather than of the subject, which the
+category badge already names in words.
+
+### The card
+
+New `@repo/ui/components/quiz-card`, a SIBLING of `CourseCard` rather than a
+variant of it. A course card answers "what level, how long" in landscape with
+an openable curriculum; a quiz card answers "how hard, how did I do" in
+portrait with a meter. One component would have been a prop per difference.
+
+The whole card navigates. `.sheen` already supplies `position: relative`, so
+the title's stretched `::after` resolves against the `<article>` and the panel
+is part of the click target — one link in the accessibility tree, and the CTA
+raised `relative z-10` above the overlay. Unlike `CourseCard` the overlay is
+meant to cover EVERYTHING (there is no disclosure below it), so the guard is
+the inverse: nothing between the title and the article may be positioned.
+
+**The meter is the part worth reading twice.** With no learner data it shows
+the quiz's PASS MARK as a tick on an empty track. It does not fill to the pass
+mark — a 70% tick rendered as a 70% fill tells every reader they are 70% done —
+and it claims no `role="progressbar"`, because a bar pinned at 0 on every card
+in a grid is noise in a screen reader's ear. Once the island answers, the same
+track fills to the learner's best score, the tick stays put, and the question
+"did I clear the line" is answered by looking rather than by subtracting. Tone
+follows outcome (success / warning), captions on the derived `-interactive`
+inks, the bar itself on the solid hue — it is a block of colour, not small text.
+
+Hand-built rather than `Progress`: Base UI owns its track and indicator markup,
+so the threshold tick cannot go inside it, and a tick painted outside would
+drift from the fill the moment either moved. The tick is positioned with
+`insetInlineStart`, so RTL needs no `[dir]` rule.
+
+### Category colour, and the chip that produced it
+
+`Quiz.category` is free text an editor typed — no registry, no catalog key, so
+a fixed key-to-tone table would leave every category invented next month in the
+fallback colour. `categoryTone()` derives the tone from the STRING instead:
+stable (server and client agree, which is the difference between a colour and a
+hydration mismatch) and total (a new category is coloured the moment it is
+typed). Which of the four a category lands on is arbitrary and meant to be —
+these are labels being made distinguishable, not a scale. The one place a tone
+MEANS something is the meter, which does not use this.
+
+The filter chips wear the same colour their cards' badges wear, carry a count,
+and the cards they produced take a `ring-primary/40`. A chip that lights up
+over a grid of identical cards leaves the reader to trust that the grid
+changed; this shows it.
+
+### The learner's record
+
+New `GET /api/learn/quiz/results` behind the existing `guardQuizRequest`, and
+new `getQuizProgressForUser` in `@repo/core`. **No ADR: this deviates from
+nothing.** It is ADR-056 #1's island pattern and ADR-058 #3's guard applied to
+a read — counters and ids, never content, so the page stays cached and the
+numbers arrive after paint. The guard's 401/404/429 are exactly the three
+answers the island needs, for free.
+
+Two queries, not one, because "best score" and "ever passed" are different
+questions: a learner who passed at 80% and later scored 40% has a best of 80
+and a pass that the max row agrees with only by luck — and stops agreeing the
+day a quiz's pass mark is lowered under existing attempts. Abandoned attempts
+are excluded; `percentage` defaults to 0 until submit, and counting one would
+show "best 0%" to someone who opened a tab and left.
+
+Above the grid, a "your record" band with a real `ProgressBar` — passed of
+total, counted across the quizzes ON THIS PAGE, because a figure counting
+quizzes the reader cannot see from here is arithmetic they cannot check.
+
+### The rest
+
+`QuizMasthead` (PageHero + the generated banner + `AmbientMotif`) with a
+counted stat strip — quizzes, questions, topics, never a claim typed into a
+catalog, and absent entirely when nothing is published. Its own component
+rather than a `LearnMasthead` prop because its figures are different figures.
+Per-route `loading.tsx` with `shimmer` skeletons in the card's real anatomy —
+its own file, because the learn index's skeleton is a two-across grid of
+landscape cards and this page is three-across portrait. Panels fade in on
+decode over the card's own `bg-muted`, at the exact size they will occupy, so a
+cold cache cannot pop a picture into a card that has already settled. Reveal
+stagger capped at five, `media-zoom` + `hover-lift` + `card-hover` + `sheen` on
+the card, `glow-on-hover` on the CTA, and the cover scrim LIFTS on hover so the
+artwork comes forward as the pointer arrives.
+
+The sign-in prompt moved out of the header band into its own section under the
+stat strip: it renders nothing until it knows whether the reader has an
+account, and a masthead that reflows once the answer arrives is worse than a
+band that appears below the fold.
+
+### Tests
+
+New `packages/ui/src/components/quiz-card.test.tsx` (15 cases): the single
+stretched link and no wrapper anchor, no positioned element between the title
+and the article, the raised CTA, and the meter's whole contract — pass mark
+with no progressbar and a 0% fill before any attempt, `aria-valuenow` after
+one, derived ink per tone, a drifted percentage clamped into the track, the
+tick on a logical inset. New
+`apps/web/app/(public)/[locale]/learn/_lib/quiz-presentation.test.ts` (6): both
+hashes are stable, total, and spread a realistic shelf across the whole panel
+set — the properties that separate a deterministic picture from a hydration
+mismatch, which no type or lint rule catches.
+`packages/core/src/quizzes.integration.test.ts` gained six: best-not-latest,
+`passed` surviving a later failure, abandoned attempts ignored, the read scoped
+to its caller, and the payload carrying exactly four keys.
+
+`pnpm lint` clean on every touched package · per-package typecheck clean
+(`@repo/contracts`, `@repo/core`, `@repo/ui`, `@repo/web` — the four
+`ListMediaAssetsPage` errors in `@repo/web` are the in-flight changes-13 media
+work, pre-existing and untouched) · `@repo/ui` 208/208 · `@repo/web` 194/194 ·
+`@repo/contracts` 207/207 · `@repo/core` `quizzes.integration` 32/32 ·
+`check:catalog-completeness` and `check:phantom-deps` OK.
+
+Verified on the dev server: `/learn/forex/quizzes` renders the masthead, the
+counted strip, and a card carrying its `quiz-bars` panel and a "Pass mark 70%"
+meter; `GET /api/learn/quiz/results` answers 401 for a guest.
+
+### Known, and not introduced here
+
+- Root `pnpm typecheck` and `pnpm test` still die at exit 134 (heap) on this
+  machine; the gate was run per package, as it has been since the learn design
+  pass.
+- axe, RTL smoke and a Lighthouse budget for `/learn/[track]/quizzes` are still
+  owed to Module 14, along with the rest of the learn area's.
+- The dev database holds one published quiz, so the category chip row (which
+  needs more than one category before it is anything but a dead control) was
+  exercised only in the unit tests, not in the browser.
+
+## 2026-09-09 — changes-16 foundation: the Videos section is planned, decided and contracted (Modules 11/12/08, ADR-068)
+
+The owner asked for a content type built around a video — title, rich body,
+thumbnail, SEO, attached videos uploaded or external, labelled links, grouped by
+an admin-managed category, rendered publicly like the FOREX.com page in
+`docs/changes/image-26.png`. This entry covers the plan, the ADR and the first
+two PRs. No schema, no service and no screen yet; those are PRs 2–10.
+
+### The review that shortened the plan
+
+Most of the brief already exists. `storeMedia()` has accepted MP4/WebM by magic
+bytes to a per-kind 100 MB cap since ADR-034, `/uploads/[file]` already streams
+with `Accept-Ranges` and 206 slices, `parseVideoUrl()` already whitelists three
+providers, and `frame-src` already names exactly the origins that parser emits.
+So "add video upload" is not work — **attaching a `MediaAsset` to a page is**.
+The plan says so in §1 and §2.2 rather than quietly building a second pipeline,
+which is the failure mode changes-12 exists to prevent.
+
+Two things the brief assumed do NOT exist and are not faked: a view counter
+(`viewCount` is a column on `Lesson` and `GlossaryTerm` that nothing reads or
+writes) and a share row. The owner scoped both out — a counter is a write on a
+page ADR-056 #1 requires to stay cached, so it is an island plus an endpoint
+plus rate limiting, not a label.
+
+### The naming problem, and the four decisions that followed
+
+"Topic" was already taken twice: `GlossaryTopic` is one, and the learn shelf's
+track chips say "All topics". A third meaning is a cost paid in every later
+conversation, so the reader-facing word is **Videos**, the entity is
+`VideoTopic`, and the routes are `/learn/[track]/videos/…`.
+
+ADR-068 records six decisions. The two worth reading twice:
+
+**A topic requires a track; a category does not.** ADR-065 §3 settled the first
+for quizzes — a canonical URL cannot be built from a null — and re-tracking a
+topic writes a redirect exactly as a slug rename does. But a category is
+taxonomy, not address: it spans schools, and the category page under a track is
+a filtered view the way `/learn/[track]/glossary` is a view onto `/glossary`.
+The accepted consequence is that the same category chip shows different counts
+under different tracks. That is correct, and it is written down so it is not
+"fixed" later.
+
+**Videos publish on the `lessons.*` keys.** Third time this repo has refused to
+add keys for a new content type (quizzes ADR-058 #8, glossary topics D27), for
+the same reason: five keys with no seeded role behind them is a silent 403
+waiting to happen. The cost is named rather than hidden — video authorship
+cannot be granted apart from lesson authorship — and `ENTITY_PUBLISH_PERMISSION`
+is already the indirection that makes the fix one line.
+
+### The card is deliberately not a stretched link
+
+`CourseCard` covers its header row, `QuizCard` covers the whole card. `VideoCard`
+covers neither (owner, 2026-09-09). A play affordance over the thumbnail is a
+second target with a different destination — **playing is not navigating** — and
+one stretched link with a button inside it has two outcomes, both bad: the
+button sits under the overlay and cannot be reached, or it punches a hole in the
+overlay and the card stops being one link. So `video-card.test.tsx` will assert
+the inverse of `quiz-card.test.tsx`: no overlay anywhere, both controls in the
+tab order, each with its own name.
+
+### PR 0 — `VideoFacade` stops living under News
+
+`app/(public)/[locale]/learn/[track]/[course]/[lesson]/page.tsx` imported it as
+`../../../../news/_components/video-facade.tsx` — a learn page reaching four
+levels up into another section's private folder, and the Videos section would
+have made a third consumer. It now sits in `[locale]/_components/`.
+
+`video-tile.tsx` was NOT folded into it. Its own header already argues the case
+and the argument holds: the tile is a showcase treatment with copy over the
+poster, hover choreography and a third "no recording yet" state the facade has
+no concept of. Same mechanism, different job — two components, on purpose.
+
+### PR 1 — contracts
+
+`learn-forex-videos` / `learn-crypto-videos` in `ROUTE_PATHS`, a `videos` key in
+both halves of `LEARN_TRACK_ROUTE_KEYS`, `learnTrackVideosPath` and
+`learnTrackVideoCategoryPath`, `videos` added to `RESERVED_COURSE_SLUGS` and a
+new `RESERVED_VIDEO_SLUGS = ["categories"]`.
+
+New `packages/contracts/src/videos.ts` carries three rules the admin form, the
+action and the service must all fail on identically: a video row has **exactly
+one** source, a link has **exactly one** href, and a topic needs at least one
+capability (a video, or a body) or an empty page can be published.
+
+`internalPathSchema` is the piece to read. An "internal link" field is where
+`//evil.example` gets in — it is a protocol-relative URL that a browser resolves
+off-site and that satisfies every naive `startsWith("/")` check ever written.
+The regex demands one leading slash and refuses a second, and there is
+deliberately no stored `isExternal` flag: which branch is set already says it,
+and a copy goes stale the first time a link is edited.
+
+### The drift guard only guarded what it enumerated
+
+The finding worth carrying forward. `learn.test.ts` advertises itself as the
+check that keeps `LEARN_TRACKS` and `ROUTE_PATHS` in step, but it hardcoded the
+original three surfaces in **three separate places** — the surface list, the
+`/^learn-([a-z0-9-]+?)(?:-quizzes|-glossary)?$/` regex, and the path assertions.
+Adding a fourth surface would have failed the middle one with a message blaming
+a track named `forex-videos`, which is not the problem it would have had.
+
+Fixed at the root rather than by adding a fourth string in three places:
+`LEARN_TRACK_SURFACES` is now exported from `navigation.ts` and the test
+iterates it, plus a new assertion that a track's key set equals that registry
+exactly — so a fifth surface fails in one place with a message that names it.
+
+### Tests
+
+`packages/contracts/src/videos.test.ts` is new (29 cases): every path form
+`internalPathSchema` must accept and the five it must refuse, both exactly-one-of
+rules in all four combinations, the capability rule including a whitespace-only
+body, why the lists are required rather than optional, and the list caps.
+`learn.test.ts` extended in the four places above.
+
+`@repo/contracts` 236/236 · `@repo/web` 218/218 · typecheck clean on
+`@repo/contracts`, `@repo/core` and `@repo/web` · lint clean on every touched
+file · `governance:check` OK.
+
+Note: the four `ListMediaAssetsPage` errors the last two entries recorded as
+pre-existing in `@repo/web` are gone — that typecheck is now clean.
+
+### Owed, and deliberately not done here
+
+- PRs 2–10: schema + migration + seed, the core service, the admin category
+  manager / list / editor, the public index, category and detail pages, the nav
+  wiring and the design pass. `docs/changes/changes-16-plan.md` §6 is the list.
+- The `videos` feature flag does not exist yet (PR 2), so no section tab
+  appears and no route is claimed. That sequencing is deliberate: a flag-off
+  section is ABSENT, not disabled (changes-11 D25).
+- axe, RTL smoke, Lighthouse budgets and E2E for the new surfaces stay owed to
+  Module 14 with the rest of the learn area's.
+
+## 2026-09-09 — changes-13: the media library stops loading itself (Modules 11/09, ADR-066 + ADR-067)
+
+The media picker used to answer "which image do you want?" by fetching every
+non-deleted `MediaAsset` row, running a `groupBy` over all of them for a
+`usageCount` it never displayed, and filtering the result in the browser.
+`/admin/media` did the same thing into an RSC payload on a `force-dynamic`
+route. At 5,000 assets that is a ~1.7 MB payload and 5,000 mounted `<Image>`
+elements, per open. The whole programme follows from the owner's one line:
+
+> Never load the complete media library just because the media picker was
+> opened. Every category/type change, search, or pagination action makes a
+> small server request.
+
+### The invariant is structural, not a habit
+
+`listMediaAssets()` returns `ListMediaAssetsPage`, not `MediaAssetRow[]`, and
+that return type **is** the enforcement — there is no `limit: 0`, no
+`all: true`, and a `media.test.ts` source guard fails if any exported reader
+grows a bare `MediaAssetRow[]` return. `getRecentlyUsedMedia` is the single
+allowed exception and is internally bounded. Someone who wants the whole
+library has to change a signature and delete a test to get it, which is the
+friction that makes the rule hold after everyone has forgotten the reason.
+
+The breaking signature change was the point, not a side effect: it forced every
+caller — picker, library screen, the retained (hidden) Website Builder picker —
+through the paged shape in the same landing. ADR-042's retained code is not
+exempt from an invariant for being hidden.
+
+### A category is the first segment of `folder` (ADR-066)
+
+Not `purpose`, which looks like the taxonomy and is actually the input to the
+upload permission gate — widening it would couple "which folder is this in" to
+"who may upload it". Not a `media_folders` table either: `MEDIA_CATEGORIES` is
+a four-key code registry (`news | learn | brand | general`), which is the same
+call ADR-042 and ADR-048 already made. `/news/2026-covers` stays legal; only the
+first segment is constrained.
+
+Type is **not** in the path. `folder` is the category axis, `kind` is the type
+axis, and they compose in one query against `@@index([folder, kind, createdAt])`
+— the ADR-034 pair had its columns ordered for a kind-first library that no
+longer exists. A stored per-type folder would have made "everything in News" a
+four-prefix query and invited someone to "move" an asset between types, which
+magic bytes already decided and `replaceMedia` already refuses.
+
+`ImageUploadField` and `MediaPickerDialog` gained a **required** `category`
+prop, so every call site was touched — articles to `news`, courses and lessons
+to `learn`, theme and social logos to `brand`, settings to `general`. An
+optional prop with a `"general"` default would have avoided the churn and
+quietly filed half the library in the wrong place.
+
+### Browsing is a paginated GET (ADR-067)
+
+`GET /admin/api/media`, not a server action: it is abortable (typing must
+cancel the request in flight), it is not serialised per client the way action
+calls are, and a GET can carry `Cache-Control: private, max-age=30` honestly.
+`requirePermission("media.view")` is the first line and every parameter is
+parsed through `listMediaAssetsQuerySchema`, never cast — `limit=9999` clamps,
+`kind=EMBED` 400s.
+
+Pagination is **keyset on `(createdAt, id)`**, not offset, so an upload landing
+mid-scroll cannot make page 2 repeat or skip a row. `usageCount` costs its
+`groupBy` only when `withUsage` is asked for — the library screen asks, the
+picker does not.
+
+Opening a picker costs **one** round trip: `include=facets,recent` folds the
+facet counts and the recently-used strip into the first page's response, and
+every later request (tab, search, Load More) carries rows only. `Recently used`
+is absent rather than empty when a surface has no reference history, the same
+rule the public learn area's flag-off sections follow.
+
+`use-media-browser.ts` owns the request, its abort, the 250 ms search debounce,
+the cursor and a 30-second response cache that lives **outside** React — the
+dialog unmounts on close on purpose (that unmount is its state reset), so an
+in-component cache would be discarded exactly when reopening the same picker
+twice while editing one article. No new cache tag: these are permission-scoped
+reads on a dynamic surface, so architecture.md #12's frozen list does not grow.
+
+### The three things that were quietly wrong
+
+**Search was a correctness bug, not a preference.** It filtered the array the
+client already had, so it could never find an asset the first fetch missed —
+harmless only while "the first fetch" meant "everything". It is now a `q` the
+server answers, with an integration test that matches a row on page 2.
+
+**`width`/`height` were declared and never written.** `readImageDimensions()`
+now reads PNG IHDR, GIF screen descriptor, WebP VP8, the JPEG marker chain and
+SVG attributes (falling back to `viewBox`) at upload, returning null rather than
+throwing for anything it does not recognise. Tiles get intrinsic dimensions and
+`next/image` can emit a real `srcset`.
+
+**A range request read the whole object.** `StorageDriver` gained an optional
+`getRange`, implemented on local disk as a positional read; `/uploads/[file]`
+reads metadata first for the length and never materialises the file for a 206.
+A seek into a 100 MB lesson video used to allocate 100 MB to return a few
+hundred KB — a production incident waiting for the first course video. The seam
+is additive: changes-12 M2's S3 driver implements it as a native ranged GET, and
+a driver without it falls back to today's read-and-slice.
+
+`resolveThumbnailUrl(row)` is the derivative seam (identity today, changes-12 M7
+fills it) and every grid tile already reads it, so that landing moves no UI.
+
+### The gap ADR-034 §1 left open, closed here
+
+ADR-034 §1 specified `Content-Disposition: attachment` for anything not meant to
+render inline; the serving route never implemented it, and changes-13 §9 #6
+recorded it as owed. `contentDispositionFor(kind, fileName)` now returns the
+header for a `DOCUMENT` and null for every renderable kind — nothing in this
+repository embeds a PDF, so a same-origin navigation into one is a render nobody
+asked for. It lives in `@repo/core` rather than the route handler, which
+composes headers and decides nothing, and it emits both RFC 6266 filename forms
+with the ASCII fallback scrubbed of quotes, backslashes and control bytes: a
+filename is whatever the uploader's file was called, and it must not be able to
+end the header value. A name scrubbed down to punctuation becomes `download`
+rather than a row of underscores. The header rides the 206 too, so a resumed
+download is still a download.
+
+### Migration
+
+`20260909150000_media_categories_adr066` — `folder` default `/general`, the
+index swap, and a `deletedAt, createdAt` index for the soft-delete filter every
+list read carries. The one `UPDATE` in it exists so a developer's throwaway
+database does not sit at a value the schema refuses; it is not a migration
+strategy. Pre-launch policy is `pnpm db:reset`, not backfill.
+
+### Tests
+
+`@repo/contracts` 236/236 · `@repo/web` 220/220 · `@repo/core` media unit suite
+43/43 · typecheck clean on `@repo/core` and `@repo/web` · lint clean on the
+touched packages · `governance:check` OK.
+
+`media.integration.test.ts` carries the paging, category-boundary, search,
+dimension, facet and `withUsage`-spy cases and **was not run on this machine**:
+Testcontainers needs a container runtime and there is none here. Two failures in
+`@repo/core`'s wider suite are unrelated and pre-existing — `index.test.ts` is
+the same missing runtime, and `src/cms/paths.test.ts` expects `/about` not to be
+reserved, which changes-09 made false when it claimed the path.
+
+### Owed
+
+- `media.integration.test.ts` on a machine with a container runtime, before this
+  is trusted in CI.
+- changes-13 §9 #7–9 stay unscheduled by name: an LRU over the `key → mimeType`
+  lookup (that DB hit is also the "only known keys are served" check, so it
+  needs care), the soft-deleted-row reaper, and per-category budgets — the last
+  two are changes-12 operational scale.
+- E2E for the picker and the library screen, with the rest of the admin's, to
+  Module 14.
+
+---
+
+## 2026-09-09 — Modules 11 + 12: the glossary gets an editor and a design pass (ADR-069, changes-17)
+
+The owner asked for the glossary to match two reference screens (a FOREX.com
+term page, a BabyPips index) and for "a rich text editor while adding". The
+editor was already there. Looking for it turned up three defects behind it and
+one absence, and the ADR is written against those rather than the ask as
+phrased.
+
+### What was actually wrong
+
+1. **The admin form could not edit.** `TranslationForm` seeded `term`, `slug`
+   and `body` from `useState("")`, and `loadGlossaryAdminList` never selected a
+   body field — so there was nothing to prefill from even if it had tried.
+   Opening a published term showed three blank inputs and an empty editor, and
+   Save was disabled until the author retyped the definition. Fixing a typo
+   meant rewriting the entry.
+2. **It wrote one column of eleven.** `simpleExplanation` only.
+   `detailedExplanation` was accepted by the service and passed by no caller;
+   `advancedExplanation`, `exampleScenario`, `faq`, `seoTitle` and
+   `seoDescription` had no write path at all and had not had one since Module 01.
+3. **`GlossaryTerm.topicId` was unwritable.** D27 gave topics a model,
+   translations, slugs and two public routes; the only way to set the column was
+   an optional argument to `createGlossaryTerm` that the action did not pass. So
+   `/glossary/topics` rendered empty on every database and `GlossaryTabs` — which
+   hides itself until a topic has published terms — had never appeared for anyone.
+4. `/glossary` and `/glossary/[term]` never had the presentation pass /news
+   (09-07) and /learn (09-09) got. The term page was a bare `<main>` with a
+   back-link, an `h1` and one body div.
+
+### What shipped
+
+**Contracts.** New `packages/contracts/src/glossary.ts`: `glossaryFaqSchema`
+(the `Json?` column is where a raw cast is invisible), `glossaryTermMetaSchema`,
+`saveGlossaryTermSchema`, `createGlossaryTermSchema`. `glossaryTrackSchema` is
+imported from `learn.ts`, not redefined — it already existed there beside
+`quizTrackSchema`, and the two are meant to be read together.
+
+**Core.** `saveGlossaryTerm` commits term-level fields and one locale's
+translation in ONE transaction; `saveGlossaryTranslation` is kept and delegates,
+so the OUTDATED-flip and the slug-redirect keep exactly one implementation.
+`loadGlossaryTermAdminDetail` is new. The source hash now covers **all four**
+prose fields (ADR-069 §2) — before, rewriting a worked example marked nothing
+OUTDATED. Public loaders gained `getPopularGlossaryTerms`,
+`getRelatedGlossaryTerms` and `getTopicOfTheDay`.
+
+**Admin.** `/admin/glossary/[id]` — modelled on the lesson editor, not the
+article editor, for ADR-063's reason (seven-state machine, no `scheduledFor`).
+Four rich-text bodies, FAQ, SEO with analysis, topic/track/difficulty/formula/
+illustration, `ContentStatusPanel`. The list is a `DataTable` with toolbar
+filters. `TranslationForm` is deleted, not hidden — a form that cannot edit is
+worse than no form.
+
+**Public.** `/glossary` gets a `PageHero` masthead with generated backdrop, a
+counted stat strip, and the **Topic of the day** card `term-of-the-day.tsx` had
+explicitly deferred. `/glossary/[term]` gets a breadcrumb, a hero band, topic
+and difficulty badges, the four prose sections, FAQ, related terms, and a
+closing "Search the Glossary" block with the A–Z rail and Popular terms.
+`generate-glossary-art.mjs` is the fifth instance of the ADR-047 §3 pattern; it
+emits the `index` motif, which had been written for this surface and never used.
+
+### Three bugs found by running it, not by reading it
+
+- **`glossary-topics.ts` selected a `definition` column that has never existed
+  in any migration.** Phase 10 shipped the line dead. Nothing caught it because
+  a topic page only renders once a topic HAS published terms, which was
+  impossible until item 3 above was fixed — so the first thing this work did was
+  make a 500 reachable. Now selects `simpleExplanation`.
+- **`simpleExplanation` is rich text and the A–Z rendered it as a string**, so
+  the list showed literal `<p>` tags and the client-side search matched on tag
+  names. `loadPublishedGlossary` now strips it with `htmlToText`; the field's own
+  doc comment had claimed it was plain text for months. The detail loader keeps
+  the markup.
+- **`admin.glossary` was a STRING and I turned it into an object.** Adding
+  `admin.glossary.*` keys via `Object.assign` over a string spread `"Glossary"`
+  into eight numeric keys and next-intl threw `INSUFFICIENT_PATH` on the list
+  page. Restored, and the editor's keys live under `admin.glossaryEditor`. Worth
+  recording because nothing static catches it: `check:catalog-completeness` is
+  silent on the admin namespace by design (ADR-043 #2) and the keys are not
+  type-checked. Only loading the page did.
+
+The last one is the argument for the verification step, not against it.
+
+### Refactor carried along
+
+`faq-panel.tsx` moved from `articles/[id]/_panels/` to
+`_components/editor/` and became generic over its item type, with the host
+supplying `makeItem`. An article FAQ row carries a stable `id` that must survive
+an edit; a glossary row is its two fields. The alternative was a 300-line copy.
+
+### Tests
+
+`packages/contracts/src/glossary.test.ts` new (25 cases): the FAQ schema's six
+rejections and its unknown-key strip, both nullable-but-opposite fields, the
+save payload. `content.integration.test.ts` +8 against real MariaDB: the prefill
+round-trip, the four-field hash flipping a sibling OUTDATED on an
+example-only edit, per-field sanitization, `topicId`/`track` round-trips, and
+`undefined`-means-untouched.
+
+`@repo/contracts` 261/261 · `@repo/web` 240/240 · `@repo/core` content +
+public-content + term-of-the-day 31/31 · typecheck clean on contracts, core and
+web · lint clean on every touched file.
+
+Verified in the running app against temporary fixture data (8 terms, 2 topics),
+since the seed contains no glossary content and never has: all seven glossary
+routes 200, console clean, editor prefilled, admin list filtering. The fixture
+was removed afterwards and the database left as found.
+
+### Owed, and deliberately not done here
+
+- **`viewCount` is never incremented** (ADR-069 §4). The Popular rail orders by
+  `viewCount DESC, term ASC`, so today it is strictly alphabetical — which is
+  what the reference screen shows anyway. A counter belongs with analytics, not
+  a per-request write on a `"use cache"` page.
+- **A `pnpm db:reset` is wanted before relying on translation status.** ADR-069
+  §2 changes what the source hash covers, so every stored hash is stale. No
+  non-English glossary rows are seeded, so the practical blast radius is zero.
+- Seeding real glossary content, and the same treatment for
+  `/glossary/topics/[topic]`, which now works but kept its original layout.
+- axe, RTL smoke, Lighthouse budgets and E2E for both surfaces stay owed to
+  Module 14 with the rest of the learn area's.
+
+## 2026-09-09 — a sync export in a `"use server"` module took the whole app down (Module 11/09, no new ADR)
+
+Reported as a Prisma error on the public homepage. It was two unrelated
+failures stacked, and the first one hid the second.
+
+### What was actually wrong
+
+**1. The database was down, not leaking.** `loadActiveTheme` surfaced
+`pool timeout: failed to retrieve a connection from pool after 10108ms
+(pool connections: active=0 idle=0 limit=10)`. The `active=0 idle=0` is the
+whole diagnosis: the pool had not exhausted its connections, it had never
+opened one. The Docker daemon was not running, so `mbfx-mariadb` was down and
+every query sat for the full timeout. `loadActiveTheme` was merely the first
+query on the page, not the cause. `DATABASE_URL` was correct and the data was
+intact. No code involved; recorded only so the next `active=0` reads faster.
+
+**2. With the database back, every route still 500'd** — including the public
+site — on a compile error in the uncommitted changes-13 tree:
+
+```
+media-actions.ts:76  Server Actions must be async functions.
+export function readUploadCategory(formData: FormData): MediaCategory
+```
+
+`readUploadCategory` was a synchronous helper colocated in a `"use server"`
+module. Next.js makes every export of one a callable server action and
+therefore requires all of them to be async. It could not simply lose its
+`export`: both XHR upload routes under `api/uploads/*` import it.
+
+### What shipped
+
+New `app/(admin)/admin/_lib/media-upload.ts`, a plain module holding the two
+helpers that are shared between the action module and the route handlers:
+`readUploadCategory` (unchanged, ADR-066 §4 comment intact) and
+`gateForPurpose`, moved in the same pass. The gate was async and so compiled
+fine, but exporting it from a `"use server"` file published a real RPC
+endpoint for something only server code calls — it is a gate helper, not an
+action. security.md #1 is unaffected in both directions: the callers still
+gate every mutation, and this is what they call to do it.
+
+`media-actions.ts` and both upload routes now import from `_lib`; three
+imports that only the moved code used (`requireAnyPermission`, `Subject`,
+`UploadPurpose`) came out with it. Behavior is unchanged — both functions are
+byte-identical to what they replaced.
+
+### Tests
+
+`apps/web/app/use-server-exports.test.ts` new: every export of a `"use server"`
+module is an async function, read as source in the idiom of
+`admin-dialog-conventions.test.ts`.
+
+This class of bug slips both existing gates, which is why it reached the
+working tree at all — `tsc --noEmit` sees a valid function and no lint rule
+models the directive, so it surfaces only when the bundler reaches the route,
+and then it takes down every route rather than the one screen that owns the
+file. The guard matches non-async `export function` and non-async
+`export const f = () =>`, skips inline (in-function) directives, and asserts
+it found modules to scan at all so a moved app root cannot turn it into a
+silently-passing empty loop. Verified failing by reintroducing the bug: it
+flagged the file and named the offending export.
+
+`@repo/web` 240/240 · typecheck, lint and `check:phantom-deps` clean.
+Verified in the running app: `/`, `/admin/media` and `/admin/sign-in` all 200
+with `#brand-tokens` injected, which is `loadActiveTheme` — the function in
+the original report — doing its job.
+
+### Owed
+
+- E2E for the upload routes stays owed to Module 14 with the rest of the
+  media surfaces'; this changed which module the helpers live in, not what
+  they do, so it adds nothing new to that list.
+
+### Follow-up the same day — the glossary gets seeded content
+
+The section shipped with no content and never had any, so every surface above
+rendered its empty state on a fresh database. `seed.ts` now carries **6 topics
+and 54 terms**, published, English, filed across both tracks.
+
+Placed after the demo-quiz block and built on the `DEMO_COURSES` precedent
+exactly: idempotent through the `[locale, slug]` uniqueness on
+`glossary_term_translations`, an existing slug **skipped rather than updated**
+so a re-seed cannot clobber an editor's rewording. Verified — a second
+`pnpm db:seed` reports `0 term(s) of 54`.
+
+**These are not ADR-051 placeholder facts and are not behind its content-mode
+switch.** That ADR quarantines claims about MBX — awards, capital, regulation —
+because a demo value surviving into production would be read as an assertion
+about the company. A definition of "pip" asserts nothing about MBX. It is
+educational content of exactly the kind the new admin exists to edit, and it is
+correct as written, so it lives in the seed like the demo courses do.
+
+The set is deliberately uneven, because the pages have to survive that: most
+terms carry only the required `simpleExplanation`, a dozen add a detailed
+explanation, and a handful carry the full spread (advanced, worked example,
+formula, FAQ). `Pip`, `Leverage`, `Drawdown` and `Volatility` are the ones that
+exercise every field. `Accrual` is deliberately **unfiled** (`topic: null`) so
+the A–Z includes a term that no topic page lists, and nine terms are forex-only
+while four are crypto-only so the track views are genuinely narrower than the
+whole.
+
+`sourceHash` is left null, as the demo courses leave it: `computeSourceHash`
+lives in `@repo/i18n` and `packages/db` cannot import it (architecture.md #8).
+It is written on the first admin save, and there are no non-English rows here
+for a stale hash to mislead.
+
+**Verified in the running app.** `/glossary` shows 54 terms / 21 letters /
+6 topics with both featured cards; `/glossary/topics` lists six topics with
+counts summing to 53 + 1 unfiled; `/glossary/topics/risk-management` renders —
+it returned **500** before the `definition`-column fix recorded above, and this
+is the first time anything has loaded it; `/glossary/pip` renders all six
+blocks including the formula and FAQ. Track views narrow correctly: 54 total,
+50 on `/learn/forex/glossary`, 45 on `/learn/crypto/glossary`. Console clean on
+every page.
+
+`@repo/db` typecheck and lint clean · `governance:check` OK · the seed is
+covered by `db.integration.test.ts`, which calls `seed()` twice and therefore
+exercises the idempotency above.
+
+## 2026-09-09 — changes-16 PRs 2–6: the Videos section gets a database, a service and three screens (Modules 11/09, ADR-068)
+
+Continues the same day's foundation entry, which landed the plan, ADR-068 and
+PRs 0–1. This is the schema, the core service and the whole admin surface. The
+public routes (PRs 7–10) are still owed, and the `videos` feature flag is
+seeded **off** so nothing here is reachable from the public site yet.
+
+### PR 2 — schema, migration, seed
+
+`20260909174448_add_video_topics_adr068`: five tables — `video_categories` +
+`video_category_translations`, `video_topics` + `video_topic_translations`,
+`video_topic_videos`, `video_topic_links` — and `VIDEO_TOPIC` on
+`ReferenceSourceType`.
+
+Two FK choices carry the design. `VideoTopic.categoryId` is **SetNull**, the
+call `Lesson.quizId` already makes: deleting a taxonomy row must never delete
+the pages it organised. Everything hanging off a topic — translations, videos,
+links — is **Cascade**, because none of it means anything without the topic.
+
+One deliberate deviation from the plan's §5, recorded rather than silent:
+`track` is `VarChar(40)`, not the `VarChar(20)` written there. `Course.track`,
+`Quiz.track` and `GlossaryTerm.track` are all 40, and a fourth track column at
+a different width is a difference with no reason behind it.
+
+**The demo content does not invent a video URL, and that is the interesting
+part of this PR.** `_content/home-videos.ts` already records the rule and the
+reason: a video URL is a FACTUAL CLAIM — it asserts "this specific recording
+exists and teaches this" — and an invented eleven-character id resolves to
+whatever happens to occupy it. The plan asked for "one external and one
+uploaded-source topic among them". Six seeded topics satisfy
+`videoTopicInputSchema`'s capability rule the OTHER way it allows, with a real
+written body and no video; **one topic per track** carries a video anyway,
+because the player, the facade and the `videoCount` badge are paths PRs 8 and
+10 have to be able to see on a fresh database. That URL is the Blender
+Foundation's open test reel — a real, stable, freely-licensed recording that is
+self-evidently not a trading lesson, so it exercises the mechanism without
+asserting a curriculum claim a plausible-looking id would. A `TODO(owner)` in
+the seed says what to replace and that nothing else changes.
+
+No uploaded-source rows are seeded either: an `assetId` with no bytes behind it
+404s in the player, which is worse than not seeding one.
+
+Idempotent through the `[locale, slug]` uniqueness on both translation tables,
+on the `GLOSSARY_TERMS` precedent — an existing slug is SKIPPED, never updated,
+so a re-seed cannot clobber an editor's rewording. Verified: a second
+`pnpm db:seed` reports `0 topic(s) of 6`.
+
+**No permission rows.** ADR-068 §3.
+
+### PR 3 — the service
+
+`packages/core/src/videos.ts`. `saveVideoTopic` is one transaction — meta, the
+active locale's translation, the whole video list, the whole link list and the
+`ContentReference` rows — with the redirect written OUTSIDE it on a slug or
+track change, exactly as `saveQuiz` does and for the recorded reason: a failed
+redirect write has never rolled back a saved translation.
+
+Both lists are replaced rather than diffed, on `saveQuiz`'s reasoning about its
+question set. Videos carrying an `id` keep it so a reorder does not churn rows;
+links carry no id in the contract, because nothing points at an individual link
+and a wholesale replace cannot leave a stale one behind.
+
+**The rule specific to this file: a raw URL never reaches a `src`.** Every
+stored video row is resolved into a `VideoSourceView` — an `/uploads/…` path
+for an upload, or an embed URL `parseVideoUrl` derived — and a row whose URL no
+provider recognises is **dropped**, not passed through. There is no useful
+middle state: a player with no source is better than a page that hands an
+attacker-controlled string to an iframe. Same posture for an upload whose asset
+has since been deleted.
+
+`loadVideoTopicBySlug` takes the **track** and returns null when the row's
+track differs, so a topic loaded under the wrong school 404s rather than
+answering at two URLs — ADR-065's rule for courses, applied.
+
+Three one-line additions to `content.ts` wire videos into the shared status
+machine (`ContentEntity`, `ENTITY_DELEGATE`, `ENTITY_PUBLISH_PERMISSION →
+lessons.publish`), plus `videoTopicPath` and `videoCategoryPath` beside
+`coursePath`/`lessonPath` — the locale-carrying, redirect-feeding half of the
+path helpers, with the static section path staying in contracts.
+
+**A category rename writes one redirect per track it has topics in.** That
+falls out of ADR-068 §1 — a category is taxonomy, so its page exists under each
+school as a filtered view — and it is written down here so it is not later
+"fixed" into a single redirect that would leave the other tracks' URLs dead.
+
+### PRs 4–6 — the admin
+
+`/admin/learn/videos` (list, three toolbar filters), its `[id]` editor, and
+`/admin/learn/videos/categories`. Nav rows and icons in `admin-shell.tsx`.
+Everything gated on `lessons.*` — ADR-068 §3, the third refusal to add keys for
+a new content type.
+
+The editor is modelled on `glossary-editor.tsx`, not the article editor:
+ADR-063's split — seven-state `CONTENT_TRANSITIONS`, no `scheduledFor`, so
+`ContentStatusPanel` fits and `publish-panel.tsx` does not.
+
+Two new panels, and both encode the same idea: **the UI must not offer a state
+the contract will refuse.** In `videos-panel.tsx`, picking an upload clears the
+external URL and typing a URL clears the picked asset, because a row carries
+exactly one source (ADR-068 §4) — a row is one choice with two bodies, not two
+optional fields the editor is trusted to keep exclusive. The poster control
+appears only on the upload branch, since an external video's thumbnail is
+derived by the parser and the field would otherwise be a control with no
+effect. `links-panel.tsx` does the same with a two-way toggle rather than two
+boxes, and stores no `isExternal` flag — which branch is set already says it.
+
+**What is translatable here is a decision, not an oversight.** Title, summary,
+body and SEO are per-locale. Videos and links are not: a recording is the same
+recording in every language, and a link's destination does not change with the
+reader — `@repo/i18n`'s `Link` adds the locale prefix at render, which is why
+no prefix is stored.
+
+One catalog collision avoided by ADR-069's own precedent: `admin.videos` and
+`admin.videoCategories` cannot be both a nav string and a key block, so the
+manager's keys live under `admin.videoCategoryManager` the way the glossary
+editor's live under `admin.glossaryEditor`. Nothing static catches that — it
+resolves to a miss at runtime.
+
+### The bug this surfaced, which was not in this code
+
+Both new screens rendered their empty state against a database with six rows.
+The dev server was logging `TypeError: Cannot read properties of undefined
+(reading 'findMany')` — `db.videoTopic` was undefined because the long-running
+`next dev` process held a Prisma client generated **before** the migration.
+Restarting it fixed it completely. Recorded because the symptom is misleading:
+an empty screen reads as a query bug, and the log is where the real answer was.
+
+### Tests
+
+`packages/core/src/videos.integration.test.ts` new, 19 cases against a real
+MariaDB: the save writes meta + translation + videos + links atomically; a
+mid-save failure leaves nothing behind; both lists replace rather than merge;
+the body is sanitized regardless of what was sent; a slug change writes a
+redirect and so does a TRACK change; a wrong-track read returns null; drafts
+and soft-deleted rows are absent from every public read; an unrecognised video
+URL is dropped and never appears in the payload; `isExternal` is derived from
+the stored branch; a category counts per track, not globally; an unregistered
+track is dropped from the sitemap; publishing without `lessons.publish` throws
+`PublishPermissionError` **naming the lesson key** and leaves the row where it
+was; `DRAFT → PUBLISHED` is refused even for an editor who may publish;
+`ContentReference` rows appear and disappear with their placements; deleting a
+category nulls `categoryId` and deletes no topic.
+
+The fixture walks the seven-state machine in full rather than jumping to
+PUBLISHED — the first draft of it did jump, and `CONTENT_TRANSITIONS` refused,
+correctly.
+
+`@repo/core` 19/19 (new suite) · `@repo/db` 14/14 · `@repo/web` 245/245 ·
+`@repo/contracts` 261/261 · workspace `typecheck` and `lint` clean (13/13
+tasks each) · `governance:check`, `check:phantom-deps`,
+`check:permission-keys`, `check:reserved-paths` and
+`check:catalog-completeness` all OK.
+
+**Verified in the running app**, signed in as the seeded admin: the list shows
+all six topics with their tracks and PUBLISHED status, the categories screen
+shows both categories, and the editor at `/admin/learn/videos/[id]` prefills
+the title, the body, the external video URL, both links and the category — the
+prefill property ADR-069 exists to enforce, on a screen written after it.
+
+### Owed
+
+- **PRs 7–10**: the public index, category and detail pages, the nav/sitemap
+  wiring and the design pass. `docs/changes/changes-16-plan.md` §6 is the list.
+  The `videos` flag stays off until PR 7, deliberately: a flag-off learn
+  section is ABSENT, not disabled (changes-11 D25).
+- E2E for all three admin screens, plus axe, RTL smoke and Lighthouse budgets
+  for the public surfaces when they land — Module 14, with the rest of the
+  learn area's.
+
+## 2026-09-09 — changes-18 PR 1: Publish published nothing, and the admin signed you out every five minutes (Modules 09/11/04, no new ADR)
+
+The owner's brief (`docs/changes/changes-14-admin-side-update.md`) is fifteen
+lines about the admin's glossary section, the media picker and the quiz list.
+Two of those lines turned out to describe defects rather than requests, and
+this entry is those two. The rest is planned in `docs/changes/changes-18-plan.md`
+and awaits acceptance — §11 there carries the three things I would not decide
+alone.
+
+### "check why not publishing the new glossary after approved status..?"
+
+It was not publishing. `ContentStatusPanel` took one callback,
+`submitForm(thenTransitionTo?)`, and every editor was trusted to honour the
+argument: save the open form, then move. Five editors pass it. **Two declared
+`async ()`** — `glossary-editor.tsx:161` and `learn/videos/[id]/video-editor.tsx:142`
+— dropped the argument on the floor, saved, and reported success while the
+status stayed exactly where it was. A term could sit at APPROVED forever with
+the editor insisting it had saved, which is precisely what the owner saw.
+
+TypeScript cannot catch this. A zero-parameter function is assignable to a
+one-parameter type, so the prop type `(thenTransitionTo?: string) => Promise<void>`
+was never going to flag it, and no test clicks Publish. The videos half shipped
+this morning with changes-16 and acquired the same bug independently, which is
+the argument against fixing two call sites: **a contract a caller can silently
+fail to honour will keep being silently failed.**
+
+So the shape changed instead. The panel takes `save` and `transitionTo`
+separately and sequences them itself:
+
+```ts
+const move = (to: string) =>
+  run(async () => {
+    if (PUBLISHING.includes(to)) await save();
+    await transitionTo(to);
+  });
+```
+
+The old bug is now unrepresentable rather than guarded — there is no argument
+left to drop. `course-editor`, `lesson-editor` and `quiz-editor` lost the
+`thenTransitionTo` parameter and the trailing `if (thenTransitionTo) await
+set…Status(…)` they had been carrying correctly; glossary and videos just work
+now. The article editor is untouched: it uses `publish-panel.tsx`, a different
+component for the four-state article machine whose `submitForm` also carries
+`scheduledForIso`.
+
+### "why the signout in every 2,3 minutes"
+
+Also real, and the mechanism was already written down in the code that caused
+it. `packages/auth` sets `session.cookieCache.maxAge` to five minutes against
+an `expiresIn` of seven days, and `proxy.ts`'s `staffGate` decided STAFF-ness
+from that signed cookie alone. **Nothing rewrites that cookie on an admin page
+view:** Better Auth refreshes it when its own handler runs, and the admin
+surface reads the session inside a server component (`(admin)/layout.tsx`),
+where Next.js does not permit setting a cookie. Five minutes after sign-in the
+cache is gone, the database session is still fine for another seven days, and
+the gate redirected every navigation to `/admin/sign-in`.
+
+This same expiry broke Save once before. That fix exempted `next-action`
+requests, and `staffGate`'s own comment describes the mechanism in full — the
+navigation half was simply left in place. The comment was the evidence, not a
+new theory.
+
+The gate now tests for a **session token**, with the cookie cache as a fast
+path on top of it. The rejected alternatives, for the record:
+
+- _Raise `maxAge`._ Does not fix it. The cache still expires and is still never
+  rewritten; it only lengthens the interval between bounces, and it makes
+  revocation staler.
+- _Call `auth()` in the proxy._ Prisma and a round-trip on every admin request,
+  and the proxy deciding — architecture.md #3 forbids it.
+
+Letting an authenticated request through is ADR-006's own division of labour:
+the proxy is a gate, the layout is the boundary, and the layout already loads
+the subject from the database and redirects a non-STAFF user. An anonymous
+request has no token and is still turned away at the edge, which is the case
+the gate exists for. The cost is one extra hop for a learner who pokes at
+`/admin`; the learner-session probes against every `/admin/*` route stay owed
+to Module 14 (security.md #7).
+
+### Verified
+
+**Against the running app with a real signed-in session, not only in tests.**
+Signing in as the seeded admin and then dropping the `better-auth.session_data`
+cookie reproduces the expired-cache state exactly:
+
+| Request                               | Before            | After                                |
+| ------------------------------------- | ----------------- | ------------------------------------ |
+| `/admin`, no cookies                  | 307 → sign-in     | 307 → sign-in (`?redirect=%2Fadmin`) |
+| `/admin`, real session, cache dropped | **307 → sign-in** | **200**                              |
+| `/admin`, bogus session token         | 307 (proxy)       | 307 from the LAYOUT, no `?redirect=` |
+
+That last row is the one worth reading twice: the redirect still happens, it
+just comes from the database check instead of the cookie. An invalid session
+gets nothing.
+
+Both new proxy tests were confirmed to FAIL against the old condition before
+being kept (testing.md #2). `content-status-panel-contract.test.ts` is new — a
+source guard in the style of `admin-dialog-conventions.test.ts`, because
+`apps/web` has no jsdom environment and these components sit inside async
+server components awaiting a session. It asserts the panel sequences
+save-then-transition and that every call site passes both props and revives
+neither. A real click-through belongs to the E2E suite Module 14 already owes
+these screens.
+
+`@repo/web` typecheck and lint clean. 29/29 on the two touched test files.
+
+### Not mine, but red
+
+`app/(public)/[locale]/learn/_nav/learn-sections.test.ts` fails 2/2 on the
+working tree — "expected 4 to have a length of 3". The whole `_nav/` directory
+is untracked changes-16 work: the videos section was added to `LEARN_SECTIONS`
+and its own test still expects three surfaces. Left alone deliberately — it
+belongs to that PR, and quietly editing another change's expectation to match
+new code is how a real regression gets normalised. It is the only failure in
+`@repo/web`'s 259.
+
+### Owed
+
+- changes-18 PRs 2–7 (the rest of the brief) pending owner acceptance.
+- The `SCHEDULED` trap in §11 D2 of that plan: `CONTENT_TRANSITIONS` offers
+  APPROVED → SCHEDULED for every content entity, and **nothing publishes a
+  scheduled row** — only `Article` even has a `scheduledFor` column. Content
+  moved there is parked, not scheduled. Plausibly the other half of the owner's
+  publish report, and it needs a decision plus an ADR either way.
+
+## 2026-09-09 — changes-16 PRs 7–10: the Videos section goes public (Modules 12/08, ADR-068)
+
+Completes the programme the two entries above began. The `videos` flag is now
+seeded **on**, which is the whole difference: a flag-off learn section is
+ABSENT rather than disabled (changes-11 D25), so until this entry no tab
+appeared and no route was claimed.
+
+### PR 7 — index and category views
+
+`/learn/[track]/videos` and `/learn/[track]/videos/categories/[category]`, plus
+`videos` in `learnSectionsFor()`. Both flags are checked on both routes
+(`courses` and `videos`), matching the quiz index's reasoning: a video index
+inside a switched-off learning area is a page with no way back to anything.
+
+**The category chips are LINKS, and that is the one real difference from
+`QuizShelf`.** That shelf filters in `useState`, because a quiz category is
+free text with no page behind it and `?category=charting` is not a URL anyone
+bookmarks. A video category IS a page — its own title, its own canonical, its
+own metadata — so these navigate (D26). The consequence worth naming: the
+index never has to hold every topic in one payload in order to narrow it later,
+because each category view loads its own rows.
+
+A category with no published topics **in this track** has no page: the loader
+only returns categories that have rows here, so the view 404s rather than
+rendering an empty shelf. The same category still renders under the other
+school with different rows and a different count — ADR-068 §1's accepted
+consequence, not a bug to reconcile.
+
+### PR 8 — the detail page
+
+Breadcrumb → title → player → body → links → related rail, in a
+`Container size="narrow"` (never a `max-w-*` utility — it loses to
+`.container-page` at equal specificity, the trap the glossary pass recorded).
+
+`video-player.tsx` is the source switch, and the two branches are genuinely
+different elements rather than one component with a prop. An **upload** is a
+same-origin `<video>` streaming from `/uploads/[file]`, which already serves
+Range requests. An **embed** is `VideoFacade`, which injects the provider's
+iframe only on click — so an unplayed page makes no third-party request and
+sets no third-party cookie (ADR-015 #9). The uploaded branch got its own facade
+too, for a non-aesthetic reason: a `<video>` with no poster renders a black box
+until it has metadata, and three of them on one page is three requests before
+the reader has asked for anything. Both branches now cost zero media bytes
+until pressed.
+
+The file never parses a URL and has no fallback branch, because it cannot need
+one: `@repo/core` already resolved each row into a `VideoSourceView` and
+dropped anything it could not make safe.
+
+**A topic with no recording is not an error state.** The contract's capability
+rule allows a body instead, so the player, the `#watch` anchor and the
+`VideoObject` graph are all conditional and the page reads as a written guide
+when they are absent. `video-json-ld.tsx` returns null rather than describing a
+video that does not exist — the same discipline `CourseJsonLd` follows, and the
+reason `duration` and `interactionStatistic` are absent from the graph even
+when there IS a video: we store neither, and a wrong `duration` is a reason for
+Google to drop a result rather than round it.
+
+`uploadDate` is the TOPIC's publication date, not the recording's. Those
+genuinely differ; it is the honest reading available to us, and it is written
+down so it is not "corrected" to a date the schema has no column for.
+
+### PR 9 — navigation, sitemap, and the footer that deliberately did not change
+
+Mega-menu panels, the seeded track trees, and the sitemap all gained Videos.
+Each track now enumerates **four** index URLs from the registry, so registering
+a third track still needs no edit in `sitemap.ts`.
+
+Category views are **not** in the sitemap: they are filtered views over topics
+whose own pages are already listed, so every URL they contain is in there once
+already.
+
+**The footer got no Videos row, on purpose.** Its Learn column is
+track-agnostic (`learn`, `glossary`, `news`) and Videos is per-track, exactly
+like Quizzes — which has no footer row either, for the same reason and since
+the day it shipped. Adding `learn-forex-videos` would have picked one school
+arbitrarily. This follows the existing precedent rather than inventing an
+exception, and it is recorded because "every header destination has a footer
+row" is a comment in the seed that is already loosely true.
+
+### PR 10 — the design pass, and the card that is deliberately not a link
+
+`VideoMasthead` (counted stat strip, generated backdrop), five new generated
+art pieces on the shared engine, per-route skeletons, and `@repo/ui`'s
+`VideoCard`.
+
+**`VideoCard` is the inverse of `QuizCard` and the test says so.** ADR-068 §7:
+a video card carries a play affordance over its thumbnail, and playing is not
+navigating — that is a second target with a different destination. One
+stretched link with a play button inside it has exactly two outcomes, both bad:
+the button sits under the overlay and is dead to a pointer while still being
+focusable, or it punches a hole in the overlay and the card stops being one
+link. So the title is an ordinary anchor, the play control is its own link to
+the player's `#watch` anchor, and `video-card.test.tsx` asserts the exact
+inverse of `quiz-card.test.tsx` — **no** `after:inset-0` anywhere in the card,
+two links, neither nested in the other. The accepted cost is that the card's
+body is not clickable.
+
+A topic with no recording renders **no play control at all** rather than one
+that cannot deliver, and its badge says "Guide" instead of "0 videos" — a zero
+on a page called Videos reads as a fault rather than as a fact. The masthead
+makes the same call: the videos figure is absent, not zero, when a school's
+topics are all written guides.
+
+`videoCoverUrl()` differs from `quizCoverUrl()` in the way the data does: a
+topic HAS a cover column, so the editor's image wins and the four hashed panels
+are the fallback — `courseCoverUrl`'s shape with a hashed panel where that one
+has a track panel. Not keyed by track, for the reason the quiz panels are not:
+one school's shelf showing a single placeholder down the whole grid reads as a
+rendering fault rather than as a house style.
+
+### The drift guards earned their keep, and then got fixed properly
+
+Adding the fourth surface failed three existing assertions — which is the
+system working. The fix was not to type "videos" into three more lists:
+`LEARN_TRACK_SURFACES` was exported in PR 1 for exactly this, and
+`learn-sections.test.ts` and `mega-menu.test.ts` now ITERATE it. A fifth
+surface fails in one place with a message that names it.
+
+That registry also settled an ordering question the code had got wrong: it
+declares section-bar order as `index, videos, quizzes, glossary`, so Videos
+sits **second**, not after Quizzes. The section bar, the mega-menu panel and
+the seeded nav rows were all reordered to match, and the seeded Quizzes and
+Glossary rows renumbered with them. One registry, one sequence, four places
+reading it.
+
+### Tests
+
+`packages/ui/src/components/video-card.test.tsx` new, 10 cases: no overlay
+anywhere, no anchor wrapping the card, both controls present with their own
+names and neither nested, no play control on a video-less topic, the "Guide"
+badge instead of a zero count, the caller's tone on the chip, the no-artwork
+fallback, the highlight ring, and `ms-`/no-`ml-` on the play glyph so RTL needs
+no rule of its own.
+
+`@repo/ui` 218/218 · `@repo/web` 259/259 · `@repo/core` 19/19 (videos
+integration) · workspace `typecheck` and `lint` clean, 13/13 tasks each ·
+`governance:check`, `check:phantom-deps`, `check:catalog-completeness`,
+`check:permission-keys` and `check:reserved-paths` all OK.
+
+**Verified in the running app.** `/learn/forex/videos` lists all three forex
+topics with both category chips; `/learn/forex/videos/categories/getting-started`
+scopes to two; `/learn/crypto/videos` shows the crypto three. The detail page
+renders the facade, both links, the related rail and a `VideoObject` graph; the
+guide-only topic renders none of the player, the `#watch` anchor or the graph.
+A topic loaded under the wrong school 404s. Both schools' mega-menu panels
+carry Videos, the section bar shows it second, and the sitemap lists eight
+index URLs plus every topic. Console and server log clean on every page.
+
+### One operational note worth keeping
+
+Two things in this session looked like bugs and were both stale process state,
+not code. A long-running `next dev` holds the Prisma client it started with, so
+an admin screen rendered empty against a populated database until it was
+restarted (recorded in the entry above). The same server also caches the
+`navigation` tag, and a seed script runs OUTSIDE Next and so cannot call
+`revalidateTag` — so newly seeded menu rows do not appear until the server
+restarts. Neither is worth a code change; both are worth recognising in under a
+minute next time.
+
+### Follow-up: the fourth copy of the hash
+
+`@repo/utils`'s `stableHash`/`pickByHash` landed mid-programme to collapse the
+FNV-1a loop that four surfaces had each grown their own copy of. Three had been
+migrated; `learn/_content/learn-media.ts` still carried the last one, feeding
+both `quizCoverUrl` and the new `videoCoverUrl`. It now uses the shared helper.
+
+**Verified byte-identical before switching, because it had to be.** That file
+says so itself: panel ordering is load-bearing, and a hash that disagreed by a
+single bit would silently change the picture on every quiz and every video
+topic. Both implementations were run over the same eleven slugs — the seeded
+ones plus the empty string and a single character — and picked the same panel
+every time, which is what the shared function being the same FNV-1a with the
+same constants and the same modulo predicts. The rendered index confirms it:
+the same panels resolve after the change as before.
+
+### Owed
+
+- E2E for the three public routes and the three admin screens, axe, RTL smoke
+  and a Lighthouse budget covering `/learn/[track]/videos/*` — Module 14, with
+  the rest of the learn area's.
+- Captions on self-hosted video. `video-player.tsx` deliberately renders no
+  `<track>`: there is no caption file to point one at, and an empty track
+  element advertises captions that do not exist. The written body is the text
+  alternative today; real captions belong with Module 14's a11y gate.
+- `changes-16` is otherwise **complete** — PRs 0–10, all ten.
+
+## 2026-09-10 — changes-18 PRs 2–7: the glossary topic gets an editor, the quiz list gets colour, and two helpers come out of hiding (Modules 09/11/12, ADR-070)
+
+Continues the entry above, which shipped PR 1 (the two defects). This is the
+rest of the owner's brief, minus the one question §11 Q1 still holds open.
+
+### PR 2 — the permission audit, answered from the seed
+
+`glossary.publish` is held by `super_admin` (ALL), `admin` (everything bar
+three keys), `content_manager` (every `content` group key) and `editor`
+(explicitly). The seeded account is a **super admin**, so the Publish button
+was rendering correctly and simply did nothing — the owner's report was PR 1's
+defect end to end, with no permission component. The topic screens gate on
+`glossary.view/create/update/delete` and every write re-gates in its own
+action; no new keys were added, for ADR-058 #8's reason.
+
+### PR 3 — `/admin/glossary/topics` becomes a table plus an editor
+
+`topics-manager.tsx` is DELETED — 291 lines of inline per-row editing. That
+shape was defensible while a topic was five fields; it stopped being defensible
+the moment a topic grew a rich-text description and SEO copy, neither of which
+fits in a table cell.
+
+What replaced it: `topics-table.tsx` (DataTable, toolbar search, status filter
+— code-style.md #9), `topics/[id]` (an editor modelled on the term editor), and
+`topics-controls.tsx` (a name-only New Topic dialog). Reordering survived the
+move as Move up / Move down **row actions** rather than drag and drop — plan
+§8.2, and this repo still has no DnD dependency. Reorder acts on the FULL list,
+never the filtered view, because positions are absolute and swapping two rows
+that are only adjacent under a filter would move them past rows the editor
+cannot see.
+
+**The schema change is additive and was applied with `migrate dev`, not a
+reset.** `description` VarChar(500) → `Text`, plus a nullable
+`seoKeywords VarChar(255)`. Widening a column and adding a nullable one loses
+no data, so the pre-launch reset policy did not need invoking and the owner's
+seeded content survived. ADR-070 §3 records why the field is `seoKeywords` and
+not `seoFocusKeyword`.
+
+`saveGlossaryTopic` now sanitizes `description` on save (security.md #8) — it
+did not before, because the field was a plain caption until this PR.
+
+### PR 4 — multilingual, and topics reachable while writing a term
+
+Multilingual needed no decision: ADR-043 already settled it. The topic editor
+gets the locale switcher the term editor has, one translation row per locale,
+drafts held per locale so switching language does not discard unsaved edits.
+Only `en` is active; the machinery is there for all four.
+
+The term editor's topic picker gained a **Create topic** affordance, the shape
+the article editor's inline category creation already uses. It creates
+name-only, adds the result to the local option list AND selects it, and runs
+with `skipRefresh` — refreshing the page from inside that dialog would discard
+every unsaved field in the editor behind it.
+
+### PR 5 — the quiz list, and duplicate for three entities
+
+The three badges on a quiz row were three identical outlines, so the row read
+as grey noise. Now: listing is `info`, a category is toned by `pickByHash`, and
+deleted is `destructive`. The glossary table's topic badge got the same
+treatment.
+
+**The category tone is DERIVED, not looked up**, and deliberately by the same
+function the public quiz card uses — `Quiz.category` is free text with no
+registry to enumerate, so a fixed map would go stale the first time an editor
+typed a new one. The admin's four tones are listed in the same order as the
+public card's, so a category lands on the same slot on both surfaces and
+"Crypto Basics" is one colour across the product.
+
+A **Live** column joins Status, because they answer different questions: status
+is where a quiz sits in the review machine, Live is whether a learner can open
+it. They disagree exactly when a PUBLISHED quiz is not visibility PUBLIC —
+`publicQuizWhere()`'s own rule, which was invisible from this screen.
+
+`duplicateQuiz` and `duplicateGlossaryTerm` join `duplicateLesson` and
+`duplicateArticle`, plus `duplicateGlossaryTopic`. Three notes worth keeping:
+attempts do NOT follow a duplicated quiz (they are learners' records against
+the quiz they actually sat, and copying them would invent history and corrupt
+`/admin/learn/progress`); `publishedAt` is cleared, because `status: DRAFT`
+alone would leave a date claiming otherwise; and nothing is re-pointed at the
+copy — `Lesson.quizId` and `Course.finalQuizId` stay where they are, since the
+consumers hold the FK (ADR-058) and re-pointing them would swap the quiz under
+a live lesson. A duplicated topic is `isActive: false` for the sharper reason
+that an active copy would appear on `/glossary/topics` immediately as a second
+topic with no terms in it.
+
+### PR 6 — the media picker
+
+`max-w-3xl` → `max-w-5xl`, a `60vh` grid at 3/5 columns, and a toned header
+band. The thumbnails ARE the content of that dialog and were getting a quarter
+of a 48rem box each. The band reuses `EditorSection`'s accent treatment rather
+than inventing a colour — no hex literals (code-style.md #1), and the admin
+already has a vocabulary for "this band means something".
+
+### PR 7 — the public topic pages
+
+`/glossary/topics/[topic]` never got the pass ADR-069 gave `/glossary`. It now
+has the masthead + `AmbientMotif` band, a three-crumb breadcrumb whose last
+crumb is named but NOT linked, a counted strip, term CARDS with the design
+system's `card-hover` (each carrying the topic badge, which is the owner's
+"clearly show the category exists"), a related-topics chip row ordered by the
+editor's own `sortOrder` — the `ArchiveTaxonomy` pattern from /news, not a new
+recommender — and a `loading.tsx` shaped like the page.
+
+**The correctness half matters more than the design half.** `description` is
+rich text now, and three public loaders were returning it raw into a
+line-clamped card and a `<meta name="description">`. `GlossaryTopicView.description`
+is flattened through `htmlToText`; `GlossaryTopicDetail` carries
+`descriptionHtml` for the one surface that renders prose. ADR-069 recorded
+exactly this bug for `simpleExplanation` after it shipped; this is the same
+bug caught before it could.
+
+### Two helpers came out of hiding
+
+`stableHash` / `pickByHash` in `@repo/utils`: four copies of the same FNV-1a
+loop already existed (`learn-media.ts`, `quiz-labels.ts`, `video-labels.ts`)
+and the admin needed a fifth. Four copies of a hash whose only requirement is
+that everyone computes the same number is a drift bug waiting to be written.
+The pinned-value test would fail if the algorithm ever changed, which is what
+stops a refactor silently recolouring every category on the site.
+
+`slugify` moved from `@repo/core` to `@repo/utils`, unchanged character for
+character, with its assertion moved beside it plus five more. It had to move:
+`@repo/core` imports Prisma, so the one place that knows how a slug is spelled
+could only be reached by server code, and the new `SlugField` previews the slug
+as the editor types. `@repo/core` re-exports the name, so no import changed.
+The Arabic range in that regex is load-bearing and now has a test saying so —
+without it every Arabic title slugs to `""` and every row collides on
+`@@unique([locale, slug])`.
+
+### Verified
+
+`@repo/web` **261/261**, `@repo/utils` 166/166, `@repo/contracts` 261/261.
+Typecheck, lint and `check:phantom-deps` clean across the workspace. The
+migration applied cleanly to the running database.
+
+`learn-sections.test.ts`, recorded as red in the entry above, is **green** —
+it was fixed in the working tree while this was in progress and now derives
+its expectation from `LEARN_TRACK_SURFACES.length` instead of a literal 3.
+
+### Not verified, and why
+
+**The dev server could not render any Tiptap-bearing editor route.** Every one
+returns 500 with "Jest worker encountered 2 child process exceptions" —
+including `/admin/articles/[id]`, which nothing in this work touches, and
+`/glossary`, whose page is unchanged. Non-editor routes (`/admin/users`,
+`/admin/theme`, `/admin/media`, `/admin/glossary/topics`, `/admin/glossary`,
+`/admin/learn/quizzes`, `/glossary/topics`) all return 200.
+
+The dev server process was holding ~2.9 GB with ~3.4 GB free of 16 GB, so this
+reads as the compile worker running out of memory on the editor module graph
+rather than as a code fault — consistent with this machine's known inability to
+run a full `pnpm build`. It is recorded rather than worked around: **the topic
+editor, the term editor's inline topic dialog and the wider media picker have
+NOT been seen rendering.** They typecheck, they lint, and their service layers are
+tested; that is not the same thing. A dev-server restart is the next step and
+it is the owner's process to restart.
+
+### Owed
+
+- §11 Q1 of the plan is still open: "a divider between static or courses
+  topics" has two readings and neither is built. Course-derived topics do not
+  exist as a concept — `GlossaryTopic` has no relation to `Course`.
+- §11 D2 is still a decision, not a change: `SCHEDULED` strands content for
+  every entity except `Article`, and nothing publishes a scheduled row.
+- E2E for the topic editor and the rebuilt topics list joins what Module 14
+  already owes the glossary screens.
+
+## 2026-09-11 — changes-19: scheduling stops parking content, and the PRs that shipped it get their tests (Modules 11/12/09/01, ADR-071)
+
+`changes-18-plan.md` §11 D2 recorded a button that lied. `CONTENT_TRANSITIONS`
+had offered `APPROVED → SCHEDULED` for all five content entities since Module
+11, **none of them had a `scheduledFor` column**, and nothing anywhere
+published a scheduled row — so an editor who used it parked the content
+permanently and was never asked _when_. The owner chose to build the real thing
+rather than remove the state, which is ADR-071 and `changes-19-plan.md`.
+
+PRs 1–4 of that plan were in the working tree already: the column and index on
+`Course`, `Lesson`, `Quiz`, `GlossaryTerm` and `VideoTopic`; `scheduledFor` on
+`transitionContentStatus`; `publishDueContent`; the five public where-helpers;
+the `datetime-local` field shared with the article panel; the five status
+actions. **They had never been type-checked, linted or tested** — this entry is
+PR 5, and running the gate on them is most of what it found.
+
+### What running the gate found
+
+Four defects, none of them visible from reading the diff:
+
+**`@repo/web` typecheck was red on the article editor.**
+`publish-panel.tsx` imported the extracted `ScheduleField` as
+`../../_components/editor/schedule-field.tsx` — one `..` short, resolving to
+`admin/articles/_components/` — so `PublishLabels extends ScheduleFieldLabels`
+resolved to nothing and `page.tsx` reported `scheduleFor` as an unknown
+property on a labels object that in fact declares it. Two errors, one cause.
+
+**`@repo/core` typecheck was red in three readers.** `CourseAdminRow`,
+`LessonAdminDetail` and `VideoTopicAdminDetail` all declare `scheduledFor`, and
+all three mappers omitted it; `CourseAdminDetail` never declared it at all
+while `learn/courses/[id]/page.tsx` already formatted `detail.scheduledFor` for
+the panel. So the course editor could not have displayed a schedule it had
+saved a moment earlier.
+
+**`content-status-panel-contract.test.ts` was red.** The guard written in
+changes-18 PR 1 asserts the panel awaits `save()` and then calls
+`transitionTo` — and asserted it against the literal string
+`await transitionTo(to);`, which PR 4 replaced with a two-argument call. The
+guard is now written against the call rather than its arguments, and gained the
+two assertions ADR-071 needs: the panel sends a date for SCHEDULED **and only**
+for SCHEDULED, and every one of the five call sites forwards the second
+argument.
+
+That last one is PR 1's bug one level down and is the reason it is a guard
+rather than a comment: a call site written `transitionTo={(to) => action(id, to)}`
+type-checks perfectly and silently drops the date, exactly as `async ()`
+silently dropped `thenTransitionTo`. The symptom would be a `ScheduleInPastError`
+on a date the editor did fill in.
+
+**A schedule survived being called off.** `transitionContentStatus` cleared
+`scheduledFor` on PUBLISHED and on DRAFT — the article rule, copied verbatim.
+The article machine can write it that way because DRAFT and PUBLISHED are the
+only two moves out of SCHEDULED it has. **The seven-state machine also allows
+SCHEDULED → APPROVED**, so pulling a scheduled term back to APPROVED left the
+date on the row, and every editor formats `detail.scheduledFor` unconditionally
+— an APPROVED row rendering "Scheduled: 14 Sept, 09:00" for a moment that will
+never come. It is now one line that says the rule instead of enumerating
+destinations: a schedule survives only a move that is itself a schedule.
+
+### The tests
+
+`content.integration.test.ts` gains nine cases against a real MariaDB (22 → 31):
+SCHEDULED with no date and SCHEDULED with a past date are both refused
+(`ScheduleInPastError`) and the row does not move; SCHEDULED needs `*.publish`
+exactly as PUBLISHED does; a scheduled row is invisible a second before its
+moment and **public a second after it with no sweep having run anywhere in the
+test** — ADR-071 #1's load-bearing property, that visibility is decided by the
+query so a sweep that is late, failed or never configured delays nothing;
+`effectivePublishedAt` reads the promised time while the row is still unswept;
+the sweep flips a due row, stamps `publishedAt` from `scheduledFor` rather than
+from the clock (asserted with a sweep half an hour late), and a second sweep
+does not restamp it; an un-due row is left alone; a **course** is swept too,
+because `publishDueContent` loops five delegates and a glossary-only test would
+pass with four of them missing from that map; and the SCHEDULED → APPROVED
+regression above.
+
+`app/api/cron/publish-due/route.test.ts` is new: an unset `CRON_SECRET` is 503
+and runs no sweep — an unset variable must never mean "anyone may publish";
+missing, empty, `Basic`, empty-bearer, wrong and bare-token all return an
+identical 401; a one-character token does not throw, which is the point of
+comparing SHA-256 digests rather than raw strings (`timingSafeEqual` throws on
+a length mismatch, and that throw would leak the secret's length through a
+500); both sweeps receive **one** instant, so articles and content agree on
+what "due" meant for that run; and nothing is cached.
+
+### Verified
+
+`@repo/core` `content.integration` 31/31, `learn.integration` +
+`videos.integration` + `quizzes.integration` 97/97, `public-content.integration`
+
+- `articles.integration` green. `@repo/web` **272/272** (was 261). Workspace
+  `typecheck` 13/13 clean. `lint` clean for `@repo/core` and `@repo/web` run
+  per-package — the parallel `pnpm lint` still OOMs four packages on this machine,
+  which is the known local resource limit and not a code result.
+  `check:phantom-deps` and `check:permission-keys` OK.
+
+### Owed
+
+- **E2E**, which Module 14 already owes every one of these screens. Nothing in
+  this entry clicks a button in a browser: the panel's contract is guarded as
+  source, following `admin-dialog-conventions.test.ts`, because `apps/web` has
+  no jsdom environment and these panels sit inside client components whose
+  parents are async server components awaiting a session.
+- **A caller for the sweep.** `/api/cron/publish-due` exists and is tested; no
+  deployment invokes it. Nothing is broken until one does — ADR-071 #1 is
+  precisely the property that makes the sweep optional — but `status` on a due
+  row stays `SCHEDULED` and `publishedAt` stays null until something calls it.
+- Sub-five-minute punctuality is not owed: `cacheLife` sets that floor
+  deliberately (ADR-015 #6, inherited).
+
+### changes-14, the owner's brief, is now closed
+
+Every line of `docs/changes/changes-14-admin-side-update.md` has shipped: the
+media picker (changes-18 PR 6), the topics table and editor with rich text,
+autofilled slug, SEO keywords and duplicate (PR 3), inline topic creation from
+the term editor (PR 4), the tonal quiz badges, the Live column and duplicate for
+three entities (PR 5), the public topic pages (PR 7), the two defects — Publish
+publishing nothing and the five-minute sign-out (PR 1) — the permission audit
+(PR 2), and scheduling here. §11 Q1, the divider between "static or courses"
+topics, was **declined** by the owner on 2026-09-10, not deferred: course-derived
+topics are not a concept and the picker stays one flat list.
+
+## 2026-09-11 — the homepage refused to link to /learn, and a registry claim nothing checked (Modules 12/11, no new ADR)
+
+Three small corrections found while sweeping for what the public site still
+owes. No new decision: each is a claim that was true when written and went
+stale when something else landed.
+
+### The Explore carousel would not link to `/learn`
+
+`EXPLORE_DESTINATIONS` carries a `status` field that means "a page exists
+behind this card", and `explore.tsx` renders a `soon` card as a flat,
+non-interactive tile — no link, no hover lift — precisely so a card never
+promises a destination that 404s. The Learn card was `soon`. `/learn` has had
+a route since changes-11 Phase 4, so for the stretch since then the homepage
+advertised the learning area as coming soon while refusing to navigate to it.
+
+`/tools` and `/markets` are still correctly `soon` — neither has a route; both
+fall through `[...slug]` to a 404, which is the outcome the field exists to
+avoid.
+
+### The field is now checked, because no type could check it
+
+`status` is the one entry in that registry that is an assertion **about the
+filesystem**, made in a file that has no reason to be touched when a route
+lands. That is the whole failure mode, so the fix is a guard, not a comment:
+`explore-destinations.test.ts` resolves each destination's route key through
+`ROUTE_PATHS` to the page file Next.js would serve and asserts the claim both
+ways — a `live` card must have a page, a `soon` card must not.
+
+**The second half is the half that catches it.** A test that only checked
+`live` cards would have passed for the entire life of the bug. Re-introducing
+the bug was run before the fix was restored: the suite goes red on
+`learn is "soon" and has page at /learn` and green again when flipped back.
+
+The catch-all is deliberately not counted as "a page exists". `[...slug]`
+answers every unmatched path, finds no published CMS page and 404s — counting
+it would make every card pass forever.
+
+### Two staler things beside it
+
+`/glossary/topics` had no `loading.tsx`. changes-18 PR 7 called for one on both
+topic routes and only `[topic]` got it. The new skeleton mirrors the page's
+three bands — masthead, the A–Z/Topics strip, the card grid. The strip is a
+placeholder ROW rather than two chip shapes on purpose: `GlossaryTabs` returns
+null below two tabs, so drawing tabs that may never arrive would cause the
+re-layout a skeleton exists to prevent.
+
+`.claude/skills/content/SKILL.md` still read "Public routes (PRs 7–10) are not
+built yet and the `videos` flag is seeded OFF." All three routes exist, the
+flag is seeded ON at `seed.ts:394`, and both CLAUDE.md and the DEVLOG entry of
+2026-09-09 record changes-16 as complete — so the skill was the one document
+contradicting the other three. Corrected to name the routes.
+
+### Verified
+
+`@repo/web` **283/283** (was 272; +11 from the new guard). `lint` and
+`typecheck` clean for `@repo/web` run per-package. `governance:check` OK.
+
+### Owed
+
+Unchanged, and none of it touched here: Module 12's one blocking exit
+criterion — Lighthouse budgets wired into CI — has nothing behind it (no
+`lighthouserc`, no budget file, no CI step); public E2E is two specs
+(`about-section`, `article-page`) against a site with learn, glossary, videos,
+quizzes and news; there is no axe run anywhere; and `sitemap.ts`/`robots.ts`
+ship with no snapshot test. `/tools` and `/markets` remain unbuilt by
+intention.
+
 ## 2026-09-11 — changes-20 Phase 1: the reference UI, reverse-engineered into a token doc (Modules 02/07/09, no code, ADR pending)
 
 Phase 1 of the full UI redesign (`docs/changes/changes-20-Ui.md`). This phase
@@ -10852,3 +14183,92 @@ stands. ADR-050's header is marked partially superseded (header lines only).
 - Admin dashboard, learn-progress and settings-hub card titles are now
   24px. Phase 5 decides per screen where the compact `size="sm"` title is
   meant.
+
+## 2026-09-11 — changes-20 Phase 4: /admin/design-system, the permanent specimen board (Modules 07/09, Q13)
+
+`/admin/design-system` renders every token and every shared component in
+every variant, size and state, for side-by-side comparison with the
+reference. Per the owner's Q13 decision it is admin-only, English-only and
+**production-available**, unlike the dev-only kitchen sink it replaces.
+
+### What it shows
+
+- **Tokens.**
+  - Every semantic colour, read **live** from the rendered page with its hex
+    value, so it shows the active admin theme, not a copy.
+  - The whole type scale, with computed size and line-height.
+  - Radius and shadow tiers, and the icon sizes.
+  - Swatches and type steps re-read when `<html>`'s class or style changes,
+    so a mode switch or a theme save updates them.
+- **Components.**
+  - Buttons: every variant and size, icon sizes, and default / focus /
+    disabled states (focus is shown statically with the component's own ring
+    classes; hover and press are live).
+  - Inputs, SearchInput sizes, Textarea.
+  - The ADR-057 AdminCombobox demo carried over from the owner's kitchen
+    sink: ten options searchable, three plain, plus the toolbar sizes.
+  - Checkbox, radio and switch states; badges in every size × variant, the
+    live dot and CountBadge placements.
+  - Avatars and tooltips.
+  - Dialog, ConfirmDialog, Sheet, DropdownMenu, Popover, toast.
+  - Default Table and a working compact DataTable with filters, selection and
+    the pager.
+  - Tabs, ViewChips, FilterBar, Pagination with PaginationBar, Breadcrumb,
+    NavItem.
+  - PageHeader (both forms), MetricCard, Card at both sizes, every type role.
+  - Alerts, Empty, Progress sizes, Kbd.
+- **Two switches in the header** apply to every section:
+  - "Show dark mode alongside" repeats each section in a `.dark` pane with
+    the theme's real dark tokens.
+  - "Right-to-left" sets `dir="rtl"` on the panes.
+  - Popups portal to `<body>` and follow the page instead; the comment says
+    so.
+
+### How it meets the admin conventions
+
+- Every string is an `admin.designSystem.*` key in `en.json`: page chrome,
+  section titles and descriptions, state names, sample content. ADR-043 #2:
+  English only, still keyed.
+- Identifiers (variant, size, token names) are shown through `humanizeKey`
+  (ADR-044 #5).
+- Title and description come through the new `PageHeader` (ADR-044 #8).
+- Dropdowns are AdminCombobox (ADR-057, lint), and every dialog has a title
+  and a description (ADR-057 #5; `admin-dialog-conventions.test.ts` passes).
+- STAFF-gated by the admin root layout. It reads and mutates nothing, so
+  there is no permission key.
+
+### Verified
+
+- `@repo/web`: **294/294**. The new `admin-design-system.test.ts` fails on:
+  - a production gate
+  - a missing title or description
+  - **any catalog key the page uses that is absent from `en.json`**. It
+    immediately caught one inconsistency, where the data-table demo bound
+    `t` to the `sample` namespace; renamed to `s` rather than loosening the
+    test.
+  - a section id without its catalog entries
+  - a raw Select import
+- `typecheck` and `lint` clean on `@repo/web`. A `react-hooks` warning on
+  the live-value hook was fixed properly: stable module-level readers plus a
+  MutationObserver, instead of re-reading on every render.
+- **Live**: the route compiles and answers with the STAFF-gate redirect to
+  `/admin/sign-in`, and the dev log shows no compile or module errors. The
+  rendered board needs a signed-in staff session, which this verification
+  deliberately does not have, so its visual check is the owner's.
+  - The log's only errors are stale "No link element found for chunk
+    …globals.css" hot-reload rejections from open tabs after `globals.css`
+    changed. A page reload clears them.
+
+### Not done, and why
+
+- **The old kitchen sink is still in the tree.** Q13 says the new page
+  replaces it, but removing the folder also discards the owner's uncommitted
+  edits to it. The ADR-057 demo those edits added now lives in the new page,
+  so nothing is lost by removing it. The deletion was blocked by the
+  session's permission guard and is left for the owner: one folder,
+  `apps/web/app/(admin)/admin/%5Fdev`.
+- **Not committed.** The page imports `AdminCombobox`, and it and the
+  `@repo/ui` Combobox under it are the owner's **untracked** ADR-057 files.
+  No committed code references them yet, so committing this page alone
+  would leave `main` failing to build until those are committed. The commit
+  waits on the owner's choice.

@@ -28,6 +28,8 @@ export default async function SocialSettingsPage() {
           links={links}
           labels={{
             add: t("socialAdd"),
+            addDescription: t("dialogDesc.addSocialLink"),
+            editDescription: t("dialogDesc.editSocialLink"),
             edit: t("edit"),
             delete: t("delete"),
             save: t("save"),

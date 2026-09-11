@@ -13,6 +13,7 @@ import {
   Dialog,
   DialogContent,
   DialogFooter,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@repo/ui/components/dialog";
@@ -29,6 +30,7 @@ export function CreateRoleDialog({
   maxLevel: number;
   labels: {
     createRole: string;
+    createRoleDescription: string;
     name: string;
     key: string;
     level: string;
@@ -81,6 +83,7 @@ export function CreateRoleDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{labels.createRole}</DialogTitle>
+          <DialogDescription>{labels.createRoleDescription}</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-1.5">

@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900" width="1440" height="900" role="presentation" aria-hidden="true"><defs>
+<linearGradient id="g-video-play" x1="0" y1="0" x2="1" y2="1">
+<stop offset="0" stop-color="#2E251C"/>
+<stop offset=".55" stop-color="#221C16"/>
+<stop offset="1" stop-color="#14110E"/>
+</linearGradient>
+<radialGradient id="warm-video-play" cx=".5" cy=".5" r=".5">
+<stop offset="0" stop-color="#E8B98C" stop-opacity=".55"/>
+<stop offset="1" stop-color="#E8B98C" stop-opacity="0"/>
+</radialGradient>
+<radialGradient id="cool-video-play" cx=".5" cy=".5" r=".5">
+<stop offset="0" stop-color="#7FA3C4" stop-opacity=".38"/>
+<stop offset="1" stop-color="#7FA3C4" stop-opacity="0"/>
+</radialGradient>
+<linearGradient id="fade-video-play" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#E8B98C" stop-opacity=".5"/>
+<stop offset="1" stop-color="#E8B98C" stop-opacity="0"/>
+</linearGradient>
+<pattern id="grid-video-play" width="64" height="64" patternUnits="userSpaceOnUse">
+<path d="M64 0H0V64" fill="none" stroke="#F5EFE8" stroke-opacity=".05" stroke-width="1"/>
+</pattern>
+<radialGradient id="vig-video-play" cx=".5" cy=".45" r=".75">
+<stop offset=".55" stop-color="#14110E" stop-opacity="0"/>
+<stop offset="1" stop-color="#14110E" stop-opacity=".42"/>
+</radialGradient>
+</defs><rect width="1440" height="900" fill="url(#g-video-play)"/><ellipse cx="522.48" cy="239.41" rx="388.07" ry="302.69" fill="url(#warm-video-play)"/><ellipse cx="651.47" cy="426.93" rx="569.92" ry="444.54" fill="url(#cool-video-play)"/><ellipse cx="709.32" cy="255.9" rx="541.69" ry="422.52" fill="url(#warm-video-play)"/><rect width="1440" height="900" fill="url(#grid-video-play)"/><circle cx="720" cy="450" r="216" fill="none" stroke="#F5EFE8" stroke-opacity=".13" stroke-width="2"/><circle cx="720" cy="450" r="324" fill="none" stroke="#F5EFE8" stroke-opacity=".13" stroke-width="2"/><circle cx="720" cy="450" r="432" fill="none" stroke="#F5EFE8" stroke-opacity=".13" stroke-width="2"/><circle cx="720" cy="450" r="52" fill="#E8B98C" fill-opacity=".18"/><circle cx="720" cy="440" r="17" fill="#E8B98C"/><path d="M693 484 a27 27 0 0 1 54 0" fill="#E8B98C"/><circle cx="932.09" cy="490.9" r="26" fill="#7FA3C4" fill-opacity=".14"/><circle cx="932.09" cy="485.9" r="9" fill="#7FA3C4" fill-opacity=".9"/><path d="M918.09 508.9 a14 14 0 0 1 28 0" fill="#7FA3C4" fill-opacity=".9"/><circle cx="963.98" cy="236.81" r="26" fill="#E8B98C" fill-opacity=".14"/><circle cx="963.98" cy="231.81" r="9" fill="#E8B98C" fill-opacity=".9"/><path d="M949.98 254.81 a14 14 0 0 1 28 0" fill="#E8B98C" fill-opacity=".9"/><circle cx="772.01" cy="21.14" r="26" fill="#E8B98C" fill-opacity=".14"/><circle cx="772.01" cy="16.14" r="9" fill="#E8B98C" fill-opacity=".9"/><path d="M758.01 39.14 a14 14 0 0 1 28 0" fill="#E8B98C" fill-opacity=".9"/><circle cx="650.85" cy="245.37" r="26" fill="#7FA3C4" fill-opacity=".14"/><circle cx="650.85" cy="240.37" r="9" fill="#7FA3C4" fill-opacity=".9"/><path d="M636.85 263.37 a14 14 0 0 1 28 0" fill="#7FA3C4" fill-opacity=".9"/><circle cx="976.36" cy="648.13" r="26" fill="#E8B98C" fill-opacity=".14"/><circle cx="976.36" cy="643.13" r="9" fill="#E8B98C" fill-opacity=".9"/><path d="M962.36 666.13 a14 14 0 0 1 28 0" fill="#E8B98C" fill-opacity=".9"/><circle cx="983.69" cy="792.19" r="26" fill="#E8B98C" fill-opacity=".14"/><circle cx="983.69" cy="787.19" r="9" fill="#E8B98C" fill-opacity=".9"/><path d="M969.69 810.19 a14 14 0 0 1 28 0" fill="#E8B98C" fill-opacity=".9"/><circle cx="927.99" cy="508.27" r="26" fill="#7FA3C4" fill-opacity=".14"/><circle cx="927.99" cy="503.27" r="9" fill="#7FA3C4" fill-opacity=".9"/><path d="M913.99 526.27 a14 14 0 0 1 28 0" fill="#7FA3C4" fill-opacity=".9"/><circle cx="1038.58" cy="390.98" r="26" fill="#E8B98C" fill-opacity=".14"/><circle cx="1038.58" cy="385.98" r="9" fill="#E8B98C" fill-opacity=".9"/><path d="M1024.58 408.98 a14 14 0 0 1 28 0" fill="#E8B98C" fill-opacity=".9"/><circle cx="334.48" cy="644.94" r="26" fill="#E8B98C" fill-opacity=".14"/><circle cx="334.48" cy="639.94" r="9" fill="#E8B98C" fill-opacity=".9"/><path d="M320.48 662.94 a14 14 0 0 1 28 0" fill="#E8B98C" fill-opacity=".9"/><rect width="1440" height="900" fill="url(#vig-video-play)"/></svg>

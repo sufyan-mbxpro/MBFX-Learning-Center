@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { storeImage } from "@repo/core";
 import { uploadPurposeSchema } from "@repo/contracts";
-import { gateForPurpose } from "../../../_actions/media-actions.ts";
+import { gateForPurpose, readUploadCategory } from "../../../_lib/media-upload.ts";
 import { handleUploadError } from "../_lib/handle-upload-error.ts";
 
 // XHR-uploadable twin of uploadImageAction (media-actions.ts). A Server
@@ -24,7 +24,12 @@ export async function POST(request: Request): Promise<NextResponse> {
       return NextResponse.json({ error: "No file was received" }, { status: 400 });
     }
     const bytes = new Uint8Array(await file.arrayBuffer());
-    const stored = await storeImage(subject.id, { bytes, fileName: file.name, purpose });
+    const stored = await storeImage(subject.id, {
+      bytes,
+      fileName: file.name,
+      purpose,
+      category: readUploadCategory(formData),
+    });
     return NextResponse.json(stored);
   } catch (error) {
     return handleUploadError(error);

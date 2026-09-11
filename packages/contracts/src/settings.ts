@@ -63,6 +63,8 @@ export function isKnownHomeSectionKey(key: string): key is HomeSectionKey {
  */
 export const HOME_SECTION_BUILT_KEYS = [
   "learning_videos",
+  "learning_paths",
+  "featured_lessons",
   "hero",
   "explore_platform",
   "feature_highlights",
@@ -81,11 +83,9 @@ export const HOME_SECTION_BUILT_KEYS = [
  * failure instead of silently joining the placeholders.
  */
 export const HOME_SECTION_STUB_KEYS = [
-  "learning_paths",
   "forex_rates",
   "economic_events",
   "popular_tools",
-  "featured_lessons",
   "market_sentiment",
   "trading_sessions",
 ] as const satisfies readonly string[];

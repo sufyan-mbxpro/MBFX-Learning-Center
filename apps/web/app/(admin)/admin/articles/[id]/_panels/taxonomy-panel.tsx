@@ -34,20 +34,14 @@ import {
 } from "@repo/ui/components/dialog";
 import { Input } from "@repo/ui/components/input";
 import { Label } from "@repo/ui/components/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@repo/ui/components/select";
 import { Textarea } from "@repo/ui/components/textarea";
 import {
   createArticleCategoryAction,
   createArticleTagAction,
 } from "../../../_actions/article-actions.ts";
+import { AdminCombobox } from "../../../_components/combobox.tsx";
 import { useServerAction } from "../../../_hooks/use-server-action.ts";
-import { EditorSection, Field } from "./editor-section.tsx";
+import { EditorSection, Field } from "../../../_components/editor/editor-section.tsx";
 
 export interface TaxonomyTerm {
   id: string;
@@ -65,7 +59,9 @@ export interface TaxonomyLabels {
   addCategory: string;
   addTag: string;
   newCategory: string;
+  newCategoryDescription: string;
   newTag: string;
+  newTagDescription: string;
   name: string;
   tagName: string;
   slugOptional: string;
@@ -85,6 +81,7 @@ function NewTermDialog({
   title,
   nameLabel,
   slugLabel,
+  description: dialogDescription,
   descriptionLabel,
   createLabel,
   cancelLabel,
@@ -96,6 +93,8 @@ function NewTermDialog({
   title: string;
   nameLabel: string;
   slugLabel: string;
+  /** One line saying what this modal does — NOT a field label (ADR-057 #5). */
+  description: string;
   /** Omit for tags — the model has no description column. */
   descriptionLabel?: string;
   createLabel: string;
@@ -122,7 +121,7 @@ function NewTermDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{slugLabel}</DialogDescription>
+          <DialogDescription>{dialogDescription}</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-1.5">
@@ -235,20 +234,15 @@ export function TaxonomyPanel({
         }
       >
         <Field id="article-category" label={labels.category}>
-          <Select value={categoryId} onValueChange={(v) => onCategoryChange(v ?? categoryId)}>
-            <SelectTrigger id="article-category">
-              <SelectValue>
-                {allCategories.find((c) => c.id === categoryId)?.name ?? ""}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {allCategories.map((category) => (
-                <SelectItem key={category.id} value={category.id}>
-                  {`${category.name} (${category.count})`}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <AdminCombobox
+            id="article-category"
+            value={categoryId}
+            onValueChange={(next) => onCategoryChange(next || categoryId)}
+            options={allCategories.map((category) => ({
+              value: category.id,
+              label: `${category.name} (${category.count})`,
+            }))}
+          />
         </Field>
       </EditorSection>
 
@@ -305,6 +299,7 @@ export function TaxonomyPanel({
             if (!next) setNewCategory(false);
           }}
           title={labels.newCategory}
+          description={labels.newCategoryDescription}
           nameLabel={labels.name}
           slugLabel={labels.slugOptional}
           descriptionLabel={labels.description}
@@ -333,6 +328,7 @@ export function TaxonomyPanel({
             if (!next) setNewTag(false);
           }}
           title={labels.newTag}
+          description={labels.newTagDescription}
           nameLabel={labels.tagName}
           slugLabel={labels.slugOptional}
           createLabel={labels.create}

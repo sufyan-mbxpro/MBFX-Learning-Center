@@ -125,6 +125,7 @@ export default async function ArticlesAdminPage({ searchParams }: PageProps<"/ad
             categories={categories.map((c) => ({ id: c.id, name: c.name ?? c.id }))}
             labels={{
               newArticle: t("newArticle"),
+              newArticleDescription: t("dialogDesc.newArticle"),
               create: t("create"),
               cancel: t("cancel"),
               close: t("close"),

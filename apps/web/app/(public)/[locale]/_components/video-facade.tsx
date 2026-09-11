@@ -5,6 +5,14 @@
 // on click, so a page with a featured video costs nothing until played.
 // The embed URL arrives pre-derived by @repo/utils parseVideoUrl; raw URLs
 // are never trusted here.
+//
+// Shared across sections, which is why it lives here rather than under
+// `news/_components/` where it was written (ADR-068 Consequences). It was
+// already being imported four levels up by the lesson page, and the Videos
+// section makes a third consumer — a component filed under News that three
+// sections depend on is filed wrong. `_components/video-tile.tsx` is
+// deliberately NOT this component: same mechanism, different job, and its own
+// header says why.
 import { useState } from "react";
 import Image from "next/image";
 

@@ -28,7 +28,16 @@ import type {
   UpdateArticleMetaInput,
 } from "@repo/contracts";
 import { recordAudit } from "./index.ts";
-import { PublishPermissionError, sanitizeRichText, slugify } from "./content.ts";
+import {
+  PublishPermissionError,
+  ScheduleInPastError,
+  sanitizeRichText,
+  slugify,
+} from "./content.ts";
+// ADR-071 moved the class to content.ts when the other five entities gained a
+// schedule. Re-exported so every existing importer — and the integration
+// suite, which reaches it as `articles.ScheduleInPastError` — is unchanged.
+export { ScheduleInPastError };
 
 // ─── Transition map (ADR-015 #4) ─────────────────────────────
 
@@ -67,13 +76,6 @@ export class InvalidVideoUrlError extends Error {
   constructor() {
     super("Video URL is not from a whitelisted provider (YouTube, Vimeo, Dailymotion)");
     this.name = "InvalidVideoUrlError";
-  }
-}
-
-export class ScheduleInPastError extends Error {
-  constructor() {
-    super("Scheduled time must be in the future");
-    this.name = "ScheduleInPastError";
   }
 }
 

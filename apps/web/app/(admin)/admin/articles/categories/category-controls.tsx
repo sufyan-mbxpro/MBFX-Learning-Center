@@ -16,19 +16,13 @@ import {
   Dialog,
   DialogContent,
   DialogFooter,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@repo/ui/components/dialog";
 import { Empty, EmptyDescription, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
 import { Input } from "@repo/ui/components/input";
 import { Label } from "@repo/ui/components/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@repo/ui/components/select";
 import { Switch } from "@repo/ui/components/switch";
 import { Textarea } from "@repo/ui/components/textarea";
 import {
@@ -37,6 +31,7 @@ import {
   saveArticleCategoryTranslationAction,
   updateArticleCategoryAction,
 } from "../../_actions/article-actions.ts";
+import { AdminCombobox } from "../../_components/combobox.tsx";
 import { useClientTable } from "../../_hooks/use-client-table.ts";
 import { useServerAction } from "../../_hooks/use-server-action.ts";
 
@@ -78,7 +73,9 @@ export interface CategoryLabels {
   saved: string;
   create: string;
   newCategory: string;
+  newCategoryDescription: string;
   edit: string;
+  editDescription: string;
   delete: string;
   cancel: string;
   confirm: string;
@@ -163,25 +160,20 @@ function CategoryEditDialog({
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{category ? labels.edit : labels.newCategory}</DialogTitle>
+          <DialogDescription>
+            {category ? labels.editDescription : labels.newCategoryDescription}
+          </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-3">
           {category && (
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="category-locale">{labels.locale}</Label>
-              <Select value={locale} onValueChange={(v) => switchLocale(v ?? locale)}>
-                <SelectTrigger id="category-locale" className="w-full">
-                  <SelectValue>
-                    {locales.find((l) => l.code === locale)?.label ?? locale}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {locales.map((l) => (
-                    <SelectItem key={l.code} value={l.code}>
-                      {l.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <AdminCombobox
+                id="category-locale"
+                value={locale}
+                onValueChange={(next) => switchLocale(next || locale)}
+                options={locales.map((l) => ({ value: l.code, label: l.label }))}
+              />
             </div>
           )}
           <div className="flex flex-col gap-1.5">

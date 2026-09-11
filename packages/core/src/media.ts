@@ -8,11 +8,19 @@
 // implement `StorageDriver` against the bucket and select it in
 // `resolveStorageDriver()`; nothing above the driver changes.
 import { randomBytes } from "node:crypto";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { revalidateTag } from "next/cache";
-import { db, type MediaKind } from "@repo/db";
-import type { SettingKey, UploadPurpose } from "@repo/contracts";
+import { db, type MediaKind, type ReferenceSourceType } from "@repo/db";
+import {
+  clampPageSize,
+  folderForCategory,
+  categoryOfFolder,
+  MEDIA_CATEGORIES,
+  type MediaCategory,
+  type SettingKey,
+  type UploadPurpose,
+} from "@repo/contracts";
 import { getSetting } from "@repo/settings";
 import { recordAudit } from "./index.ts";
 import { revalidatePageTags } from "./cms/revalidate.ts";
@@ -133,6 +141,19 @@ export interface StorageDriver {
   put(key: string, bytes: Uint8Array, mimeType: string): Promise<string>;
   /** Raw bytes for a key this driver stored, or null when absent. */
   get(key: string): Promise<Uint8Array | null>;
+  /**
+   * Bytes `[start, end]` inclusive, without materialising the whole object.
+   * Optional so an existing driver keeps working — callers fall back to
+   * `get()` and slice, which is what every driver did before this existed.
+   *
+   * It matters at video scale: seeking in a 100 MB lesson video used to
+   * allocate 100 MB per request to return a few hundred KB. changes-12 M2's
+   * S3 driver implements this as a native ranged GET, so the seam is the
+   * same shape at both ends.
+   */
+  getRange?(key: string, start: number, end: number): Promise<Uint8Array | null>;
+  /** Total byte length for a key, or null when absent — lets a range be validated without a read. */
+  size?(key: string): Promise<number | null>;
   /** Remove a key this driver stored — best-effort; a missing key is not an error (ADR-034 §3: the old object, after replace). */
   delete(key: string): Promise<void>;
 }
@@ -153,6 +174,29 @@ export function createLocalDiskStorage(rootDir = uploadsRootDir()): StorageDrive
       if (!OBJECT_KEY_PATTERN.test(key)) return null;
       try {
         return new Uint8Array(await readFile(join(rootDir, key)));
+      } catch {
+        return null;
+      }
+    },
+    async getRange(key, start, end) {
+      if (!OBJECT_KEY_PATTERN.test(key)) return null;
+      let handle;
+      try {
+        handle = await open(join(rootDir, key), "r");
+        const length = end - start + 1;
+        const buffer = new Uint8Array(length);
+        const { bytesRead } = await handle.read(buffer, 0, length, start);
+        return bytesRead === length ? buffer : buffer.subarray(0, bytesRead);
+      } catch {
+        return null;
+      } finally {
+        await handle?.close();
+      }
+    },
+    async size(key) {
+      if (!OBJECT_KEY_PATTERN.test(key)) return null;
+      try {
+        return (await stat(join(rootDir, key))).size;
       } catch {
         return null;
       }
@@ -200,6 +244,15 @@ export interface StoreImageInput {
   bytes: Uint8Array;
   fileName: string;
   purpose: UploadPurpose;
+  /**
+   * Where in the library this lands (ADR-066 §4). Required, and never
+   * inferred from `purpose` — that column picks the permission gate, not the
+   * shelf, and an article's header image and its inline diagram share a
+   * purpose while belonging on different shelves.
+   */
+  category: MediaCategory;
+  /** An explicit folder wins over `category`; it must still sit under a registered category. */
+  folder?: string;
 }
 
 /** Pure checks shared by the service and its unit tests — unchanged since ADR-017; `storeMedia`'s per-kind, settings-backed cap (below) is the path every new caller uses. */
@@ -330,10 +383,7 @@ export interface StoredMediaAsset {
   kind: MediaKind;
 }
 
-export interface StoreMediaInput {
-  bytes: Uint8Array;
-  fileName: string;
-  purpose: UploadPurpose;
+export interface StoreMediaInput extends StoreImageInput {
   /** Restricts which kinds this call accepts — omit to accept any of the four. */
   allowedKinds?: MediaKind[];
 }
@@ -348,6 +398,10 @@ export async function storeMedia(
   // Display-only: keep the original name for the media list, trimmed to
   // the column width and stripped of path separators.
   const fileName = input.fileName.replace(/^.*[\\/]/, "").slice(0, 255) || key;
+  const folder = input.folder ?? folderForCategory(input.category);
+  // Never a reason to fail an upload: an unrecognised container simply has
+  // no dimensions, and the grid falls back to its aspect-ratio box.
+  const dimensions = sniffed.kind === "IMAGE" ? readImageDimensions(input.bytes) : null;
 
   const row = await db.mediaAsset.create({
     data: {
@@ -359,6 +413,9 @@ export async function storeMedia(
       purpose: input.purpose,
       uploadedBy: actorId,
       kind: sniffed.kind,
+      folder,
+      width: dimensions?.width ?? null,
+      height: dimensions?.height ?? null,
     },
   });
   await recordAudit({
@@ -373,6 +430,7 @@ export async function storeMedia(
         size: row.size,
         purpose: input.purpose,
         kind: sniffed.kind,
+        folder,
       },
     },
   });
@@ -384,6 +442,120 @@ export async function storeMedia(
     fileName,
     kind: sniffed.kind,
   };
+}
+
+// ─── Intrinsic dimensions (ADR-067 / changes-13 D7) ──────────
+
+/**
+ * Width and height from a container's header — the first few dozen bytes for
+ * every format we accept. Deliberately NOT `sharp`: decoding a whole image to
+ * learn two integers is the wrong trade, and the columns have been sitting
+ * unpopulated since ADR-034 declared them.
+ *
+ * Feeds three things: a tile that reserves its space before the bytes arrive,
+ * a `next/image` `srcset` computed from real intrinsics, and changes-12 M7's
+ * "no upscaling" rule, whose profile choice is a function of the long edge.
+ *
+ * Returns null for anything it does not recognise — never throws, and never
+ * blocks an upload.
+ */
+export function readImageDimensions(bytes: Uint8Array): { width: number; height: number } | null {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+
+  // PNG: IHDR is always the first chunk, at a fixed offset.
+  if (startsWith(bytes, [0x89, 0x50, 0x4e, 0x47]) && bytes.length >= 24) {
+    return { width: view.getUint32(16), height: view.getUint32(20) };
+  }
+
+  // GIF: little-endian logical screen descriptor.
+  if (startsWith(bytes, [0x47, 0x49, 0x46, 0x38]) && bytes.length >= 10) {
+    return { width: view.getUint16(6, true), height: view.getUint16(8, true) };
+  }
+
+  // WebP: three sub-formats, each carrying the size in a different place.
+  if (
+    startsWith(bytes, [0x52, 0x49, 0x46, 0x46]) &&
+    startsWith(bytes, [0x57, 0x45, 0x42, 0x50], 8) &&
+    bytes.length >= 30
+  ) {
+    const format = new TextDecoder("ascii").decode(bytes.subarray(12, 16));
+    if (format === "VP8 ") {
+      return {
+        width: view.getUint16(26, true) & 0x3fff,
+        height: view.getUint16(28, true) & 0x3fff,
+      };
+    }
+    if (format === "VP8L") {
+      // 14 bits each, packed across four bytes, both stored minus one.
+      const bits = view.getUint32(21, true);
+      return { width: (bits & 0x3fff) + 1, height: ((bits >> 14) & 0x3fff) + 1 };
+    }
+    if (format === "VP8X") {
+      const read24 = (offset: number) =>
+        (bytes[offset] ?? 0) | ((bytes[offset + 1] ?? 0) << 8) | ((bytes[offset + 2] ?? 0) << 16);
+      return { width: read24(24) + 1, height: read24(27) + 1 };
+    }
+    return null;
+  }
+
+  // JPEG: walk the marker chain to the first start-of-frame.
+  if (startsWith(bytes, [0xff, 0xd8, 0xff])) return readJpegDimensions(bytes, view);
+
+  // SVG: width/height attributes, else the viewBox's extent.
+  const head = new TextDecoder("utf-8", { fatal: false }).decode(bytes.subarray(0, 2048));
+  if (/<svg[\s>]/i.test(head)) return readSvgDimensions(head);
+
+  return null;
+}
+
+/** SOFn markers carry the frame size; every other segment declares its own length, so the chain is walkable without decoding. */
+function readJpegDimensions(
+  bytes: Uint8Array,
+  view: DataView,
+): { width: number; height: number } | null {
+  let offset = 2;
+  while (offset + 9 < bytes.length) {
+    if (bytes[offset] !== 0xff) {
+      offset += 1; // resync past fill bytes rather than give up
+      continue;
+    }
+    const marker = bytes[offset + 1] ?? 0;
+    // Standalone markers (padding, restart) carry no length field.
+    if (marker === 0xff || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd9)) {
+      offset += 2;
+      continue;
+    }
+    const isStartOfFrame = marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker);
+    if (isStartOfFrame) {
+      return { height: view.getUint16(offset + 5), width: view.getUint16(offset + 7) };
+    }
+    const length = view.getUint16(offset + 2);
+    if (length < 2) return null; // malformed: a length that cannot advance
+    offset += 2 + length;
+  }
+  return null;
+}
+
+function readSvgDimensions(head: string): { width: number; height: number } | null {
+  const attribute = (name: string) => {
+    const match = new RegExp(`\\b${name}\\s*=\\s*["']\\s*([0-9.]+)`, "i").exec(head);
+    return match ? Number.parseFloat(match[1] ?? "") : Number.NaN;
+  };
+  const width = attribute("width");
+  const height = attribute("height");
+  if (Number.isFinite(width) && Number.isFinite(height)) {
+    return { width: Math.round(width), height: Math.round(height) };
+  }
+  const viewBox = /\bviewBox\s*=\s*["']\s*([-\d.\s,]+)["']/i.exec(head);
+  const parts =
+    viewBox?.[1]
+      ?.trim()
+      .split(/[\s,]+/)
+      .map(Number) ?? [];
+  if (parts.length === 4 && parts.every((n) => Number.isFinite(n))) {
+    return { width: Math.round(parts[2] as number), height: Math.round(parts[3] as number) };
+  }
+  return null;
 }
 
 /** Thin wrapper, kind-restricted to IMAGE (ADR-034 §1) — Module 15's callers do not change. */
@@ -409,6 +581,78 @@ export async function readStoredFile(key: string): Promise<StoredFile | null> {
   return { bytes, mimeType: row.mimeType };
 }
 
+export interface StoredFileMeta {
+  mimeType: string;
+  size: number;
+  kind: MediaKind;
+  /** The original client filename, kept for display — and for a download's suggested name. */
+  fileName: string;
+}
+
+/**
+ * ADR-034 §1 specified `Content-Disposition: attachment` for anything that is
+ * not meant to render inline, and the serving route never implemented it
+ * (changes-13 §9 #6). A DOCUMENT is the one kind nothing in this repository
+ * embeds: images, video and audio are placed in pages, a PDF is linked. So a
+ * PDF opening same-origin is a navigation nobody asked for, into a viewer
+ * whose behaviour is the browser's business, on our origin.
+ *
+ * Returns `null` for every other kind — the decision belongs here rather than
+ * in the route handler, which composes headers and decides nothing
+ * (architecture.md #1).
+ *
+ * Both filename forms are emitted, per RFC 6266: a quoted ASCII fallback for
+ * old parsers and `filename*` (RFC 5987) for the real name. The fallback is
+ * scrubbed of quotes, backslashes and control characters, because a filename
+ * is attacker-adjacent input — it is whatever the uploader's file was called.
+ */
+export function contentDispositionFor(kind: MediaKind, fileName: string): string | null {
+  if (kind !== "DOCUMENT") return null;
+  // Everything outside printable ASCII goes, which is the header-injection
+  // defense as well as the encoding one: CR and LF are below 0x20.
+  const ascii = fileName.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "_");
+  // A name scrubbed down to punctuation ("…" → "_") is not a filename any
+  // more, so it gets a generic one rather than a row of underscores.
+  const fallback = /[a-z0-9]/i.test(ascii) ? ascii.trim() : "download";
+  return `attachment; filename="${fallback}"; filename*=UTF-8''${encodeURIComponent(fileName)}`;
+}
+
+/**
+ * What the serving route needs to answer a `Range` request without reading
+ * the object: the MIME recorded at upload and the true byte length. The
+ * driver's own `size()` wins where it has one (the file on disk is the
+ * truth); the `MediaAsset.size` column is the fallback and is written by the
+ * same call that stored the bytes.
+ */
+export async function readStoredFileMeta(key: string): Promise<StoredFileMeta | null> {
+  if (!OBJECT_KEY_PATTERN.test(key)) return null;
+  const row = await db.mediaAsset.findUnique({
+    where: { key },
+    select: { mimeType: true, size: true, kind: true, fileName: true },
+  });
+  if (!row) return null;
+  const driver = resolveStorageDriver();
+  const size = (await driver.size?.(key)) ?? row.size;
+  return { mimeType: row.mimeType, size, kind: row.kind, fileName: row.fileName };
+}
+
+/**
+ * Bytes `[start, end]` inclusive for a key the MediaAsset table knows.
+ * Falls back to a whole-object read and a slice for a driver with no
+ * `getRange` — correct either way, just not cheap.
+ */
+export async function readStoredFileRange(
+  key: string,
+  start: number,
+  end: number,
+): Promise<Uint8Array | null> {
+  if (!OBJECT_KEY_PATTERN.test(key)) return null;
+  const driver = resolveStorageDriver();
+  if (driver.getRange) return driver.getRange(key, start, end);
+  const bytes = await driver.get(key);
+  return bytes ? bytes.subarray(start, end + 1) : null;
+}
+
 export async function loadMediaAsset(id: string): Promise<StoredImage | null> {
   const row = await db.mediaAsset.findUnique({ where: { id } });
   if (!row) return null;
@@ -427,6 +671,8 @@ export interface MediaAssetRow {
   id: string;
   key: string;
   url: string;
+  /** What a GRID renders. Today `url` for an image; changes-12 M7 makes it the `thumb` derivative and no UI moves. */
+  thumbnailUrl: string;
   fileName: string;
   mimeType: string;
   size: number;
@@ -434,9 +680,14 @@ export interface MediaAssetRow {
   title: string | null;
   altText: string | null;
   folder: string;
+  /** The folder's first segment (ADR-066 §1), or null for a path filed before it. */
+  category: MediaCategory | null;
+  width: number | null;
+  height: number | null;
   tags: string[];
   posterAssetId: string | null;
   createdAt: Date;
+  /** 0 unless the read asked for it — `withUsage` (ADR-067 §4). Never the delete guard's input. */
   usageCount: number;
 }
 
@@ -451,9 +702,26 @@ interface RawMediaAssetRow {
   title: string | null;
   altText: string | null;
   folder: string;
+  width: number | null;
+  height: number | null;
   tags: unknown;
   posterAssetId: string | null;
   createdAt: Date;
+}
+
+/**
+ * The one place a grid tile's image URL is decided (changes-13 D6). It is an
+ * identity function on an image today because no derivatives exist yet; when
+ * changes-12 M7 generates them, this body returns the `thumb` row and every
+ * consumer already reads it. The `StorageDriver` lesson applied to
+ * derivatives: build the seam before the implementation.
+ *
+ * A non-image has no thumbnail — the grids render a kind icon, and an empty
+ * string is the honest answer rather than a URL that would 404 into an
+ * `<img>`.
+ */
+export function resolveThumbnailUrl(row: { url: string; kind: MediaKind }): string {
+  return row.kind === "IMAGE" ? row.url : "";
 }
 
 function toMediaAssetRow(row: RawMediaAssetRow, usageCount: number): MediaAssetRow {
@@ -461,6 +729,7 @@ function toMediaAssetRow(row: RawMediaAssetRow, usageCount: number): MediaAssetR
     id: row.id,
     key: row.key,
     url: row.url,
+    thumbnailUrl: resolveThumbnailUrl(row),
     fileName: row.fileName,
     mimeType: row.mimeType,
     size: row.size,
@@ -468,6 +737,9 @@ function toMediaAssetRow(row: RawMediaAssetRow, usageCount: number): MediaAssetR
     title: row.title,
     altText: row.altText,
     folder: row.folder,
+    category: categoryOfFolder(row.folder),
+    width: row.width,
+    height: row.height,
     tags: Array.isArray(row.tags) ? (row.tags as string[]) : [],
     posterAssetId: row.posterAssetId,
     createdAt: row.createdAt,
@@ -485,33 +757,196 @@ async function usageCountsByAssetId(ids: string[]): Promise<Map<string, number>>
   return new Map(rows.map((r) => [r.refId, r._count.refId]));
 }
 
-/** Text search covers `fileName`/`title`/`altText`; tags are JSON (ADR-034 Consequences: not indexable on MariaDB) and are filtered in memory over this page of results. */
-export async function listMediaAssets(filter?: {
+// ─── Paged browsing (ADR-067) ────────────────────────────────
+
+export interface ListMediaAssetsFilter {
+  /** Matches `/news` and everything beneath it — never `/newsroom`. */
+  category?: MediaCategory;
+  /** An exact folder; wins over `category` when both are given. */
+  folder?: string;
   kind?: MediaKind;
+  kinds?: MediaKind[];
   query?: string;
   tag?: string;
-}): Promise<MediaAssetRow[]> {
+  cursor?: string;
+  /** Clamped to [1, 100] — see `clampPageSize`. There is no "everything". */
+  limit?: number;
+  /** Off by default: the picker does not render usage and must not pay a groupBy for it (ADR-067 §4). */
+  withUsage?: boolean;
+}
+
+export interface ListMediaAssetsPage {
+  items: MediaAssetRow[];
+  /** Opaque; pass back as `cursor`. Null means this was the last page. */
+  nextCursor: string | null;
+}
+
+/** `createdAt|id`, base64url. The id tiebreak matters: a batch upload writes several rows in the same millisecond. */
+export function encodeMediaCursor(row: { createdAt: Date; id: string }): string {
+  return Buffer.from(`${row.createdAt.toISOString()}|${row.id}`, "utf8").toString("base64url");
+}
+
+export function decodeMediaCursor(cursor: string): { createdAt: Date; id: string } | null {
+  const [timestamp, id] = Buffer.from(cursor, "base64url").toString("utf8").split("|");
+  if (!timestamp || !id) return null;
+  const createdAt = new Date(timestamp);
+  return Number.isNaN(createdAt.getTime()) ? null : { createdAt, id };
+}
+
+/**
+ * One page of the library, newest first.
+ *
+ * **There is no unbounded variant of this function, and adding one needs a
+ * superseding ADR** (ADR-067 §1). The owner's rule — never load the whole
+ * library because a picker opened — is enforced by this signature: the return
+ * type is a page, `limit` clamps, and no argument means "everything". A caller
+ * who wants more asks again with `nextCursor`.
+ *
+ * Keyset, not offset: an admin uploading into the library they are scrolling
+ * inserts rows at the top, and offset paging would repeat and skip around it.
+ *
+ * Text search covers `fileName`/`title`/`altText`. Tags stay JSON (ADR-034
+ * Consequences: not indexable on MariaDB) and are filtered in memory — so the
+ * tag filter narrows THIS page while `nextCursor` still comes from the raw
+ * rows, which keeps paging correct even when a page filters down to nothing.
+ */
+export async function listMediaAssets(
+  filter?: ListMediaAssetsFilter,
+): Promise<ListMediaAssetsPage> {
+  const limit = clampPageSize(filter?.limit);
+  const kinds = filter?.kinds ?? (filter?.kind ? [filter.kind] : undefined);
+  const cursor = filter?.cursor ? decodeMediaCursor(filter.cursor) : null;
+
+  const conditions: Record<string, unknown>[] = [];
+  if (filter?.folder) {
+    conditions.push({ folder: filter.folder });
+  } else if (filter?.category) {
+    const folder = folderForCategory(filter.category);
+    // Two clauses, not `startsWith: "/news"` — that would also match
+    // `/newsroom`, and a category boundary has to be a path boundary.
+    conditions.push({ OR: [{ folder }, { folder: { startsWith: `${folder}/` } }] });
+  }
+  if (filter?.query) {
+    conditions.push({
+      OR: [
+        { fileName: { contains: filter.query } },
+        { title: { contains: filter.query } },
+        { altText: { contains: filter.query } },
+      ],
+    });
+  }
+  if (cursor) {
+    conditions.push({
+      OR: [
+        { createdAt: { lt: cursor.createdAt } },
+        { createdAt: cursor.createdAt, id: { lt: cursor.id } },
+      ],
+    });
+  }
+
   const rows = await db.mediaAsset.findMany({
     where: {
       deletedAt: null,
-      kind: filter?.kind,
-      ...(filter?.query
-        ? {
-            OR: [
-              { fileName: { contains: filter.query } },
-              { title: { contains: filter.query } },
-              { altText: { contains: filter.query } },
-            ],
-          }
-        : {}),
+      ...(kinds ? { kind: { in: kinds } } : {}),
+      ...(conditions.length > 0 ? { AND: conditions } : {}),
     },
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: limit + 1, // the extra row answers "is there a next page" without a count
   });
-  const usage = await usageCountsByAssetId(rows.map((r) => r.id));
-  const mapped = rows.map((r) => toMediaAssetRow(r, usage.get(r.id) ?? 0));
-  if (!filter?.tag) return mapped;
+
+  const hasMore = rows.length > limit;
+  const page = hasMore ? rows.slice(0, limit) : rows;
+  const last = page.at(-1);
+  const nextCursor = hasMore && last ? encodeMediaCursor(last) : null;
+
+  const usage = filter?.withUsage
+    ? await usageCountsByAssetId(page.map((r) => r.id))
+    : new Map<string, number>();
+  const mapped = page.map((r) => toMediaAssetRow(r, usage.get(r.id) ?? 0));
+
+  if (!filter?.tag) return { items: mapped, nextCursor };
   const tag = filter.tag.toLowerCase();
-  return mapped.filter((r) => r.tags.some((t) => t.toLowerCase() === tag));
+  return { items: mapped.filter((r) => r.tags.some((t) => t.toLowerCase() === tag)), nextCursor };
+}
+
+export type MediaKindCounts = Record<MediaKind, number>;
+
+export interface MediaFacets {
+  byCategory: Record<MediaCategory, MediaKindCounts>;
+  /** Across every category, including assets filed outside one. */
+  total: MediaKindCounts;
+}
+
+function emptyKindCounts(): MediaKindCounts {
+  return { IMAGE: 0, VIDEO: 0, AUDIO: 0, DOCUMENT: 0 };
+}
+
+/**
+ * Counts per (category, kind) — one grouped aggregate, which is what lets the
+ * picker show how much is behind each tab and disable a category that holds
+ * nothing of the current kind. Bounded by the number of distinct folders, not
+ * by the number of assets.
+ */
+export async function getMediaFacets(): Promise<MediaFacets> {
+  const rows = await db.mediaAsset.groupBy({
+    by: ["folder", "kind"],
+    where: { deletedAt: null },
+    _count: { _all: true },
+  });
+
+  const byCategory = Object.fromEntries(
+    MEDIA_CATEGORIES.map((category) => [category, emptyKindCounts()]),
+  ) as Record<MediaCategory, MediaKindCounts>;
+  const total = emptyKindCounts();
+
+  for (const row of rows) {
+    const count = row._count._all;
+    total[row.kind] += count;
+    const category = categoryOfFolder(row.folder);
+    if (category) byCategory[category][row.kind] += count;
+  }
+  return { byCategory, total };
+}
+
+/**
+ * The assets most recently placed by this kind of source — the picker's
+ * "Recently Used" strip. Most picks are re-picks of something placed minutes
+ * ago, so this turns the common case into a zero-scroll case.
+ *
+ * Ordered by when the REFERENCE was written, not when the asset was uploaded:
+ * "used recently" and "uploaded recently" are different questions, and the
+ * grid beneath already answers the second.
+ */
+export async function getRecentlyUsedMedia(filter?: {
+  sourceType?: ReferenceSourceType;
+  kinds?: MediaKind[];
+  limit?: number;
+}): Promise<MediaAssetRow[]> {
+  const limit = Math.min(Math.max(filter?.limit ?? 12, 1), 24);
+  const refs = await db.contentReference.findMany({
+    where: { refType: "MEDIA", ...(filter?.sourceType ? { sourceType: filter.sourceType } : {}) },
+    orderBy: { createdAt: "desc" },
+    // Over-fetch, because one asset placed in six fields is six rows and we
+    // want `limit` distinct ASSETS. Bounded either way.
+    take: limit * 5,
+    select: { refId: true },
+  });
+  const ids = [...new Set(refs.map((r) => r.refId))].slice(0, limit);
+  if (ids.length === 0) return [];
+
+  const rows = await db.mediaAsset.findMany({
+    where: {
+      id: { in: ids },
+      deletedAt: null,
+      ...(filter?.kinds ? { kind: { in: filter.kinds } } : {}),
+    },
+  });
+  // Restore the reference order the database lost in the `in` lookup.
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  return ids.flatMap((id) => {
+    const row = byId.get(id);
+    return row ? [toMediaAssetRow(row, 0)] : [];
+  });
 }
 
 /**
@@ -654,6 +1089,7 @@ export async function replaceMedia(
   const fileName = input.fileName.replace(/^.*[\\/]/, "").slice(0, 255) || key;
   const oldKey = existing.key;
 
+  const dimensions = sniffed.kind === "IMAGE" ? readImageDimensions(input.bytes) : null;
   await db.mediaAsset.update({
     where: { id },
     data: {
@@ -662,6 +1098,10 @@ export async function replaceMedia(
       fileName,
       mimeType: sniffed.mimeType,
       size: input.bytes.length,
+      // Re-read rather than kept: replacement bytes are a different image,
+      // and stale intrinsics are worse than none (they size the tile wrong).
+      width: dimensions?.width ?? null,
+      height: dimensions?.height ?? null,
       version: { increment: 1 },
     },
   });

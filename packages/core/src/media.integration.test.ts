@@ -69,6 +69,7 @@ describe("storeMedia", () => {
       bytes: PNG,
       fileName: "logo.png",
       purpose: "brand",
+      category: "brand",
     });
     expect(asset.kind).toBe("IMAGE");
     const row = await ctx.db.mediaAsset.findUniqueOrThrow({ where: { id: asset.id } });
@@ -88,6 +89,7 @@ describe("storeMedia", () => {
       bytes: PDF,
       fileName: "brochure.pdf",
       purpose: "content",
+      category: "general",
     });
     expect(asset.kind).toBe("DOCUMENT");
   });
@@ -101,6 +103,7 @@ describe("storeMedia", () => {
         bytes: PDF,
         fileName: "brochure.pdf",
         purpose: "content",
+        category: "general",
         allowedKinds: ["IMAGE"],
       }),
     ).rejects.toThrow(media.UploadRejectedError);
@@ -111,7 +114,12 @@ describe("storeMedia", () => {
     media.setStorageDriverForTests(driver);
 
     await expect(
-      media.storeImage(actor.id, { bytes: PDF, fileName: "brochure.pdf", purpose: "content" }),
+      media.storeImage(actor.id, {
+        bytes: PDF,
+        fileName: "brochure.pdf",
+        purpose: "content",
+        category: "general",
+      }),
     ).rejects.toThrow(media.UploadRejectedError);
   });
 
@@ -135,7 +143,12 @@ describe("storeMedia", () => {
       },
     });
     await expect(
-      media.storeMedia(actor.id, { bytes: PDF, fileName: "big.pdf", purpose: "content" }),
+      media.storeMedia(actor.id, {
+        bytes: PDF,
+        fileName: "big.pdf",
+        purpose: "content",
+        category: "general",
+      }),
     ).rejects.toThrow(/larger than/);
 
     // Restore for later tests in this file.
@@ -155,6 +168,7 @@ describe("replaceMedia", () => {
       bytes: PNG,
       fileName: "logo.png",
       purpose: "brand",
+      category: "brand",
     });
     const before = await ctx.db.mediaAsset.findUniqueOrThrow({ where: { id: asset.id } });
     expect(store.has(before.key)).toBe(true);
@@ -181,6 +195,7 @@ describe("replaceMedia", () => {
       bytes: PNG,
       fileName: "logo.png",
       purpose: "brand",
+      category: "brand",
     });
     await expect(
       media.replaceMedia(actor.id, asset.id, { bytes: PDF, fileName: "not-an-image.pdf" }),
@@ -205,6 +220,7 @@ describe("updateMediaMeta", () => {
       bytes: PNG,
       fileName: "logo.png",
       purpose: "brand",
+      category: "brand",
     });
     await media.updateMediaMeta(actor.id, asset.id, {
       title: "Brand logo",
@@ -232,6 +248,7 @@ describe("deleteMedia — usage-guarded (ADR-034 §4)", () => {
       bytes: PNG,
       fileName: "logo.png",
       purpose: "brand",
+      category: "brand",
     });
     await media.deleteMedia(actor.id, asset.id);
 
@@ -248,6 +265,7 @@ describe("deleteMedia — usage-guarded (ADR-034 §4)", () => {
       bytes: PNG,
       fileName: "logo.png",
       purpose: "brand",
+      category: "brand",
     });
     await ctx.db.contentReference.create({
       data: {
@@ -281,6 +299,7 @@ describe("ADR-035: setBrandAsset/clearBrandAsset sync a MEDIA reference (closes 
       bytes: PNG,
       fileName: "logo.png",
       purpose: "brand",
+      category: "brand",
     });
 
     await brandAssets.setBrandAsset(actor.id, { key: "logo_light", mediaAssetId: asset.id });
@@ -309,6 +328,7 @@ describe("ADR-035: setBrandAsset/clearBrandAsset sync a MEDIA reference (closes 
       bytes: PNG,
       fileName: "favicon.png",
       purpose: "brand",
+      category: "brand",
     });
     await brandAssets.setBrandAsset(actor.id, { key: "favicon", mediaAssetId: asset.id });
 
@@ -328,19 +348,240 @@ describe("listMediaAssets", () => {
       bytes: PNG,
       fileName: "kept.png",
       purpose: "content",
+      category: "general",
     });
     const doc = await media.storeMedia(actor.id, {
       bytes: PDF,
       fileName: "deleted.pdf",
       purpose: "content",
+      category: "general",
     });
     await media.deleteMedia(actor.id, doc.id);
 
     const images = await media.listMediaAssets({ kind: "IMAGE" });
-    expect(images.some((r) => r.id === image.id)).toBe(true);
+    expect(images.items.some((r) => r.id === image.id)).toBe(true);
 
     const documents = await media.listMediaAssets({ kind: "DOCUMENT" });
-    expect(documents.some((r) => r.id === doc.id)).toBe(false);
+    expect(documents.items.some((r) => r.id === doc.id)).toBe(false);
+  });
+
+  // ADR-067 — the page is the only shape, and nothing can ask for more.
+
+  it("returns a bounded page and a cursor that walks the rest without skipping or repeating", async () => {
+    const { driver } = fakeDriver();
+    media.setStorageDriverForTests(driver);
+
+    const ids: string[] = [];
+    for (let index = 0; index < 7; index += 1) {
+      const stored = await media.storeMedia(actor.id, {
+        bytes: PNG,
+        fileName: `page-${index}.png`,
+        purpose: "content",
+        category: "news",
+      });
+      ids.push(stored.id);
+    }
+
+    const first = await media.listMediaAssets({ category: "news", limit: 3 });
+    expect(first.items).toHaveLength(3);
+    expect(first.nextCursor).not.toBeNull();
+
+    const second = await media.listMediaAssets({
+      category: "news",
+      limit: 3,
+      cursor: first.nextCursor ?? undefined,
+    });
+    const third = await media.listMediaAssets({
+      category: "news",
+      limit: 3,
+      cursor: second.nextCursor ?? undefined,
+    });
+
+    const walked = [...first.items, ...second.items, ...third.items].map((r) => r.id);
+    expect(walked).toHaveLength(7);
+    expect(new Set(walked).size).toBe(7); // no repeats across the cursor boundary
+    expect([...walked].sort()).toEqual([...ids].sort()); // and none skipped
+    expect(third.nextCursor).toBeNull();
+  });
+
+  it("clamps an oversized or absent limit rather than answering with everything", async () => {
+    const { driver } = fakeDriver();
+    media.setStorageDriverForTests(driver);
+    await media.storeMedia(actor.id, {
+      bytes: PNG,
+      fileName: "clamp.png",
+      purpose: "content",
+      category: "general",
+    });
+
+    // No input produces an unbounded read — ADR-067 §1.
+    const huge = await media.listMediaAssets({ limit: 10_000 });
+    expect(huge.items.length).toBeLessThanOrEqual(100);
+    const zero = await media.listMediaAssets({ limit: 0 });
+    expect(zero.items).toHaveLength(1);
+  });
+
+  it("scopes a category to its own path boundary, never a name that merely starts the same", async () => {
+    const { driver } = fakeDriver();
+    media.setStorageDriverForTests(driver);
+
+    const inside = await media.storeMedia(actor.id, {
+      bytes: PNG,
+      fileName: "inside.png",
+      purpose: "content",
+      category: "news",
+      folder: "/news/2026-covers",
+    });
+    const elsewhere = await media.storeMedia(actor.id, {
+      bytes: PNG,
+      fileName: "elsewhere.png",
+      purpose: "content",
+      category: "learn",
+    });
+
+    const news = await media.listMediaAssets({ category: "news" });
+    const newsIds = news.items.map((r) => r.id);
+    expect(newsIds).toContain(inside.id);
+    expect(newsIds).not.toContain(elsewhere.id);
+    expect(news.items.find((r) => r.id === inside.id)?.category).toBe("news");
+  });
+
+  it("finds a match that is not on the first page — search is the server's job now", async () => {
+    const { driver } = fakeDriver();
+    media.setStorageDriverForTests(driver);
+
+    for (let index = 0; index < 5; index += 1) {
+      await media.storeMedia(actor.id, {
+        bytes: PNG,
+        fileName: `filler-${index}.png`,
+        purpose: "content",
+        category: "general",
+      });
+    }
+    const needle = await media.storeMedia(actor.id, {
+      bytes: PNG,
+      fileName: "needle-in-haystack.png",
+      purpose: "content",
+      category: "general",
+    });
+    for (let index = 0; index < 5; index += 1) {
+      await media.storeMedia(actor.id, {
+        bytes: PNG,
+        fileName: `after-${index}.png`,
+        purpose: "content",
+        category: "general",
+      });
+    }
+
+    // The needle is outside any first page of 3, so a client-side filter
+    // over page 1 could never have found it.
+    const found = await media.listMediaAssets({ query: "needle-in", limit: 3 });
+    expect(found.items.map((r) => r.id)).toContain(needle.id);
+  });
+
+  it("records intrinsic dimensions on upload, and tolerates a header too short to carry them", async () => {
+    const { driver } = fakeDriver();
+    media.setStorageDriverForTests(driver);
+
+    // A real IHDR. The shared PNG fixture is 12 bytes — enough to sniff the
+    // type, not enough to hold a size — which is itself the "no dimensions,
+    // still a valid upload" case asserted below.
+    const sized = new Uint8Array(24);
+    sized.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    new DataView(sized.buffer).setUint32(16, 1280);
+    new DataView(sized.buffer).setUint32(20, 720);
+
+    const stored = await media.storeMedia(actor.id, {
+      bytes: sized,
+      fileName: "sized.png",
+      purpose: "content",
+      category: "general",
+    });
+    const detail = await media.getMediaAssetDetail(stored.id);
+    expect(detail?.width).toBe(1280);
+    expect(detail?.height).toBe(720);
+    expect(detail?.thumbnailUrl).toBe(detail?.url);
+
+    const truncated = await media.storeMedia(actor.id, {
+      bytes: PNG,
+      fileName: "no-header.png",
+      purpose: "content",
+      category: "general",
+    });
+    const truncatedDetail = await media.getMediaAssetDetail(truncated.id);
+    expect(truncatedDetail?.width).toBeNull();
+    expect(truncatedDetail?.id).toBe(truncated.id); // the upload still succeeded
+  });
+
+  it("counts usage only when asked (ADR-067 §4)", async () => {
+    const brandAssets = await import("./brand-assets.ts");
+    const { driver } = fakeDriver();
+    media.setStorageDriverForTests(driver);
+    const asset = await media.storeMedia(actor.id, {
+      bytes: PNG,
+      fileName: "used.png",
+      purpose: "brand",
+      category: "brand",
+    });
+    await brandAssets.setBrandAsset(actor.id, { key: "favicon", mediaAssetId: asset.id });
+
+    const withoutUsage = await media.listMediaAssets({ query: "used.png" });
+    expect(withoutUsage.items[0]?.usageCount).toBe(0);
+
+    const withUsage = await media.listMediaAssets({ query: "used.png", withUsage: true });
+    expect(withUsage.items[0]?.usageCount).toBe(1);
+
+    // The delete guard reads ContentReference directly and is unaffected.
+    await expect(media.deleteMedia(actor.id, asset.id)).rejects.toThrow(media.MediaAssetInUseError);
+    await brandAssets.clearBrandAsset(actor.id, "favicon");
+  });
+});
+
+describe("getMediaFacets", () => {
+  it("counts per category and kind, and excludes soft-deleted rows", async () => {
+    const { driver } = fakeDriver();
+    media.setStorageDriverForTests(driver);
+
+    await media.storeMedia(actor.id, {
+      bytes: PNG,
+      fileName: "facet-a.png",
+      purpose: "content",
+      category: "news",
+    });
+    const removed = await media.storeMedia(actor.id, {
+      bytes: PDF,
+      fileName: "facet-b.pdf",
+      purpose: "content",
+      category: "news",
+    });
+    await media.deleteMedia(actor.id, removed.id);
+
+    const facets = await media.getMediaFacets();
+    expect(facets.byCategory.news.IMAGE).toBeGreaterThanOrEqual(1);
+    expect(facets.byCategory.news.DOCUMENT).toBe(0);
+    expect(facets.total.IMAGE).toBeGreaterThanOrEqual(facets.byCategory.news.IMAGE);
+  });
+});
+
+describe("getRecentlyUsedMedia", () => {
+  it("returns assets in reference order, and nothing at all when none are placed", async () => {
+    const brandAssets = await import("./brand-assets.ts");
+    const { driver } = fakeDriver();
+    media.setStorageDriverForTests(driver);
+
+    expect(await media.getRecentlyUsedMedia({ sourceType: "ARTICLE" })).toEqual([]);
+
+    const asset = await media.storeMedia(actor.id, {
+      bytes: PNG,
+      fileName: "recent.png",
+      purpose: "brand",
+      category: "brand",
+    });
+    await brandAssets.setBrandAsset(actor.id, { key: "logo_light", mediaAssetId: asset.id });
+
+    const recent = await media.getRecentlyUsedMedia({ sourceType: "BRAND" });
+    expect(recent.map((r) => r.id)).toContain(asset.id);
+    await brandAssets.clearBrandAsset(actor.id, "logo_light");
   });
 });
 
@@ -353,11 +594,13 @@ describe("getMediaUrls — the batched lookup renderTree's resolveMediaUrls call
       bytes: PNG,
       fileName: "a.png",
       purpose: "content",
+      category: "general",
     });
     const deleted = await media.storeMedia(actor.id, {
       bytes: PNG,
       fileName: "b.png",
       purpose: "content",
+      category: "general",
     });
     await media.deleteMedia(actor.id, deleted.id);
 

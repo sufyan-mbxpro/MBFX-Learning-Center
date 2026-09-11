@@ -11,13 +11,6 @@ import { humanizeKey } from "@repo/utils";
 import { Button } from "@repo/ui/components/button";
 import { ConfirmDialog } from "@repo/ui/components/confirm-dialog";
 import { Input } from "@repo/ui/components/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@repo/ui/components/select";
 import { ResetPasswordDialog } from "../../_components/reset-password-dialog.tsx";
 import {
   assignRoleAction,
@@ -26,6 +19,7 @@ import {
   setOverrideAction,
   setUserStatusAction,
 } from "../../_actions/user-actions.ts";
+import { AdminCombobox } from "../../_components/combobox.tsx";
 import { useServerAction } from "../../_hooks/use-server-action.ts";
 
 // ─── Account status ──────────────────────────────────────────
@@ -52,23 +46,16 @@ export function StatusControl({
 
   return (
     <>
-      <Select
+      <AdminCombobox
+        aria-label={labels.status}
+        disabled={pending}
+        className="w-44"
         value={status}
         onValueChange={(value) => {
-          if (value && value !== status) setTarget(value as string);
+          if (value && value !== status) setTarget(value);
         }}
-      >
-        <SelectTrigger aria-label={labels.status} disabled={pending} className="min-w-44">
-          <SelectValue>{statusLabels[status] ?? status}</SelectValue>
-        </SelectTrigger>
-        <SelectContent>
-          {Object.entries(statusLabels).map(([value, label]) => (
-            <SelectItem key={value} value={value}>
-              {label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+        options={Object.entries(statusLabels).map(([value, label]) => ({ value, label }))}
+      />
       <ConfirmDialog
         open={target !== null}
         onOpenChange={(next) => {
@@ -179,18 +166,17 @@ export function RoleControls({
         ))}
       </ul>
       <div className="flex items-center gap-2">
-        <Select value={selected} onValueChange={(value) => setSelected((value as string) ?? "")}>
-          <SelectTrigger aria-label={labels.assignRole} className="min-w-48">
-            <SelectValue>{assignable.find((r) => r.key === selected)?.name ?? "—"}</SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {assignable.map((r) => (
-              <SelectItem key={r.key} value={r.key}>
-                {r.name} · {labels.level} {r.level}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <AdminCombobox
+          aria-label={labels.assignRole}
+          className="w-48"
+          placeholder="—"
+          value={selected}
+          onValueChange={setSelected}
+          options={assignable.map((r) => ({
+            value: r.key,
+            label: `${r.name} · ${labels.level} ${r.level}`,
+          }))}
+        />
         <Button
           size="sm"
           disabled={pending || !selected}
@@ -271,30 +257,24 @@ export function OverrideControls({
         ))}
       </ul>
       <div className="flex flex-wrap items-center gap-2">
-        <Select
+        <AdminCombobox
+          aria-label={labels.permission}
+          className="w-56"
+          placeholder="—"
           value={permission}
-          onValueChange={(value) => setPermission((value as string) ?? "")}
-        >
-          <SelectTrigger aria-label={labels.permission} className="min-w-56">
-            <SelectValue>{permission || "—"}</SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {permissionKeys.map((key) => (
-              <SelectItem key={key} value={key}>
-                {key}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={effect} onValueChange={(value) => setEffect((value as string) ?? "DENY")}>
-          <SelectTrigger aria-label={labels.permission} className="min-w-28">
-            <SelectValue>{effect === "ALLOW" ? labels.allow : labels.deny}</SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ALLOW">{labels.allow}</SelectItem>
-            <SelectItem value="DENY">{labels.deny}</SelectItem>
-          </SelectContent>
-        </Select>
+          onValueChange={setPermission}
+          options={permissionKeys.map((key) => ({ value: key, label: key }))}
+        />
+        <AdminCombobox
+          aria-label={labels.permission}
+          className="w-28"
+          value={effect}
+          onValueChange={(value) => setEffect(value || "DENY")}
+          options={[
+            { value: "ALLOW", label: labels.allow },
+            { value: "DENY", label: labels.deny },
+          ]}
+        />
         <Input
           value={reason}
           onChange={(e) => setReason(e.target.value)}

@@ -256,22 +256,45 @@ erDiagram
 
 ## Content — base + translation pattern
 
-Course/Module/Lesson/GlossaryTerm all follow: locale-invariant base row,
-slug lives on the translation, `(locale, slug)` unique per model. Articles,
-tools, and static pages follow identically once added (plan.md A7 — not
-blocking Phase 0). `authorId` is a loose reference (no FK) to `User.id`.
+Course/CourseSection/Lesson/GlossaryTerm all follow: locale-invariant base
+row, slug lives on the translation, `(locale, slug)` unique per model.
+Articles, tools, and static pages follow identically once added (plan.md A7 —
+not blocking Phase 0). `authorId` is a loose reference (no FK) to `User.id`.
+
+**ADR-055 renamed `Module` to `CourseSection`** (changes-11 PR 1.2) — the old
+name collided with this repository's own build-unit vocabulary. A section
+groups lessons on the page only and never appears in a URL, so reordering the
+curriculum breaks no link. `Course.track` holds a `LEARN_TRACKS` registry key
+validated in `@repo/contracts`, not a FK: a track is site structure, which
+ADR-042 keeps in code.
+
+A lesson is a bag of optional **capabilities** (body content, `videoUrl`,
+attachments, `externalUrl`, and `quizId` from Phase 6) rather than a typed
+row; `lessonInputSchema` enforces that at least one is present.
+`coverAssetId` / `heroAssetId` are `MediaAsset` ids held as plain strings, the
+same convention as `Article.coverImageAssetId` (ADR-035) — `MediaAsset` carries
+no back-relations.
 
 ```mermaid
 erDiagram
   Course ||--o{ CourseTranslation : "translations"
-  Course ||--o{ Module : "modules"
-  Module ||--o{ ModuleTranslation : "translations"
-  Module ||--o{ Lesson : "lessons"
+  Course ||--o{ CourseSection : "sections"
+  CourseSection ||--o{ CourseSectionTranslation : "translations"
+  CourseSection ||--o{ Lesson : "lessons"
   Lesson ||--o{ LessonTranslation : "translations"
+  Lesson ||--o{ LessonAttachment : "attachments"
+  Lesson ||--o{ LessonProgress : "progress"
+  Course ||--o{ CourseEnrollment : "enrollments"
+  User ||--o{ LessonProgress : "progress"
+  User ||--o{ CourseEnrollment : "enrollments"
   GlossaryTerm ||--o{ GlossaryTermTranslation : "translations"
 
   Course {
     string id PK
+    string track "LEARN_TRACKS key, validated in @repo/contracts"
+    string coverAssetId "MediaAsset id, loose ref (ADR-035 convention)"
+    string externalUrl "https only, never fetched server-side"
+    int lessonCount "denormalised, service-maintained"
     ContentStatus status
     string authorId "loose ref to User.id, no FK"
     boolean deletedAt
@@ -281,15 +304,31 @@ erDiagram
     string locale
     string slug "unique per (locale, slug)"
   }
-  Module {
+  CourseSection {
     string id PK
     string courseId FK
+    int sortOrder "grouping only, never in a URL"
+  }
+  CourseSectionTranslation {
+    string sectionId FK
+    string locale
   }
   Lesson {
     string id PK
-    string moduleId FK
+    string sectionId FK
+    string videoUrl "embed URL, rebuilt at render, never stored as HTML"
+    string externalUrl "https only, framed only via parseVideoUrl"
+    string heroAssetId "MediaAsset id, loose ref"
+    CompletionRule completionRule "MANUAL | QUIZ_PASS"
+    boolean isRequired "false does not block course completion"
     string prerequisiteLessonId "loose ref, no FK"
     boolean deletedAt
+  }
+  LessonAttachment {
+    string id PK
+    string lessonId FK
+    string assetId "MediaAsset id, loose ref"
+    int sortOrder
   }
   LessonTranslation {
     string lessonId FK
@@ -297,9 +336,25 @@ erDiagram
     string slug "unique per (locale, slug)"
     string sourceHash "flips translationStatus to OUTDATED on source change"
   }
+  LessonProgress {
+    string id PK
+    string userId FK
+    string lessonId FK
+    string courseId "denormalised: course rollups without joining via sections"
+    LessonProgressStatus status "IN_PROGRESS | COMPLETED"
+    datetime completedAt
+  }
+  CourseEnrollment {
+    string id PK
+    string userId FK
+    string courseId FK
+    string lastLessonId "drives Continue Learning"
+    int lessonsCompleted "denormalised, same tx as LessonProgress"
+    datetime completedAt
+  }
   GlossaryTerm {
     string id PK
-    string category
+    string category "ADR-055: replaced by GlossaryTopic in Phase 10"
   }
   GlossaryTermTranslation {
     string termId FK

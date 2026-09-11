@@ -22,6 +22,8 @@ export default async function ArticleTagsPage() {
     save: t("save"),
     saved: t("saved"),
     newTag: t("newTag"),
+    newTagDescription: t("dialogDesc.newTag"),
+    editDescription: t("dialogDesc.editTag"),
     edit: t("edit"),
     delete: t("delete"),
     cancel: t("cancel"),

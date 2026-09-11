@@ -4,9 +4,9 @@
 import type { SeoCheckId } from "@repo/utils";
 import type { ImageUploadLabels } from "../../_components/image-upload-field.tsx";
 import type { RichTextLabels } from "../../_components/rich-text-editor.tsx";
-import type { ContentStatsLabels } from "./_panels/content-stats.tsx";
-import type { SeoAnalysisLabels } from "./_panels/seo-analysis.tsx";
-import type { FaqLabels } from "./_panels/faq-panel.tsx";
+import type { ContentStatsLabels } from "../../_components/editor/content-stats.tsx";
+import type { SeoAnalysisLabels } from "../../_components/editor/seo-analysis.tsx";
+import type { FaqLabels } from "../../_components/editor/faq-panel.tsx";
 import type { RelatedLabels } from "./_panels/related-panel.tsx";
 import type { PublishLabels } from "./_panels/publish-panel.tsx";
 import type { TaxonomyLabels } from "./_panels/taxonomy-panel.tsx";

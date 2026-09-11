@@ -241,6 +241,7 @@ describe("FK integrity", () => {
   it("cascades a Course delete to its translations", async () => {
     const course = await db.course.create({
       data: {
+        track: "forex",
         translations: {
           create: { locale: "en", title: "FK Test Course", slug: "fk-test-course" },
         },
@@ -277,10 +278,11 @@ describe("FK integrity", () => {
 
 describe("unique constraints", () => {
   it("rejects a (locale, slug) collision across two different lessons", async () => {
-    const module_ = await db.module.create({
+    const section = await db.courseSection.create({
       data: {
         course: {
           create: {
+            track: "forex",
             translations: {
               create: { locale: "en", title: "Slug Test", slug: "slug-test-course" },
             },
@@ -291,7 +293,7 @@ describe("unique constraints", () => {
 
     await db.lesson.create({
       data: {
-        moduleId: module_.id,
+        sectionId: section.id,
         translations: {
           create: { locale: "en", title: "First", slug: "duplicate-slug" },
         },
@@ -301,7 +303,7 @@ describe("unique constraints", () => {
     await expect(
       db.lesson.create({
         data: {
-          moduleId: module_.id,
+          sectionId: section.id,
           translations: {
             create: { locale: "en", title: "Second", slug: "duplicate-slug" },
           },
@@ -313,10 +315,11 @@ describe("unique constraints", () => {
 
 describe("soft-delete convention", () => {
   it("excludes deletedAt rows from a fixture query scoped to non-deleted content", async () => {
-    const module_ = await db.module.create({
+    const section = await db.courseSection.create({
       data: {
         course: {
           create: {
+            track: "forex",
             translations: {
               create: { locale: "en", title: "Soft Delete Test", slug: "soft-delete-test" },
             },
@@ -327,7 +330,7 @@ describe("soft-delete convention", () => {
 
     const lesson = await db.lesson.create({
       data: {
-        moduleId: module_.id,
+        sectionId: section.id,
         translations: { create: { locale: "en", title: "Doomed", slug: "soft-delete-lesson" } },
       },
     });
@@ -335,11 +338,11 @@ describe("soft-delete convention", () => {
     await db.lesson.update({ where: { id: lesson.id }, data: { deletedAt: new Date() } });
 
     const visible = await db.lesson.findMany({
-      where: { moduleId: module_.id, deletedAt: null },
+      where: { sectionId: section.id, deletedAt: null },
     });
     expect(visible.map((l) => l.id)).not.toContain(lesson.id);
 
-    const withDeleted = await db.lesson.findMany({ where: { moduleId: module_.id } });
+    const withDeleted = await db.lesson.findMany({ where: { sectionId: section.id } });
     expect(withDeleted.map((l) => l.id)).toContain(lesson.id);
   });
 });

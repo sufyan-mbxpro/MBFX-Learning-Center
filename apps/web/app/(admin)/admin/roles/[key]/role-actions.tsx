@@ -16,6 +16,7 @@ import {
   Dialog,
   DialogContent,
   DialogFooter,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@repo/ui/components/dialog";
@@ -48,6 +49,7 @@ export function RoleActions({
   maxLevel: number;
   labels: {
     edit: string;
+    editDescription: string;
     clone: string;
     delete: string;
     save: string;
@@ -127,6 +129,7 @@ export function RoleActions({
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{labels.edit}</DialogTitle>
+            <DialogDescription>{labels.editDescription}</DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-1.5">

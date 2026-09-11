@@ -15,6 +15,16 @@ export const RELATED = "related";
 export const ARTICLE = "article";
 
 /**
+ * Course recommendations (ADR-055). Deliberately reuses `ContentRelation`
+ * rather than adding a `CourseRecommendation` table: this model is already
+ * generic, ordered, duplicate-proof by unique constraint, and drops
+ * self-references — every property the feature needs. Two constants, no new
+ * persistence.
+ */
+export const COURSE = "course";
+export const RECOMMENDED = "recommended";
+
+/**
  * Full replacement of one (source, targetType, relationType) relation set,
  * ordered by array position. Same "replace, never merge" rule as tag
  * assignments and role permissions.

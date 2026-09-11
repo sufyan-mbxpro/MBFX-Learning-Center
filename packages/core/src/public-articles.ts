@@ -42,13 +42,11 @@ export function publicArticleWhere(now: Date) {
   };
 }
 
-/** A due-but-unswept SCHEDULED article's publish time is its scheduled one. */
-export function effectivePublishedAt(row: {
-  publishedAt: Date | null;
-  scheduledFor: Date | null;
-}): Date | null {
-  return row.publishedAt ?? row.scheduledFor;
-}
+// ADR-071 — the same rule now applies to five more entities, so the function
+// lives in content.ts. Re-exported: this module is where every article caller
+// already imports it from.
+import { effectivePublishedAt } from "./content.ts";
+export { effectivePublishedAt };
 
 export interface ArticleListEntry {
   articleId: string;

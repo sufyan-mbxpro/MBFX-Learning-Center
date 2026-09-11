@@ -28,7 +28,7 @@ const IDLE_STATE = {
   fileName: null,
 } as const;
 
-function postWithProgress<T>(
+export function postWithProgress<T>(
   url: string,
   formData: FormData,
   onProgress: (percent: number) => void,
@@ -117,4 +117,107 @@ export function useUploadProgress<T>(url: string, options?: { autoResetMs?: numb
   }, [state.status, autoResetMs]);
 
   return { ...state, upload, retry, reset };
+}
+
+// ─── Many files at once (changes-13 PR 6) ────────────────────
+
+export interface QueuedUpload<T> {
+  /** Stable across the queue's life — the File object itself is the identity, but React needs a key. */
+  id: string;
+  fileName: string;
+  status: UploadStatus;
+  progress: number;
+  error: string | null;
+  result: T | null;
+}
+
+/**
+ * Uploading a folder of images used to mean picking one file, waiting,
+ * picking the next. This queues them.
+ *
+ * Concurrency is 2, not "all of them": each upload holds its whole body in
+ * the server's memory (`file.arrayBuffer()` in the route handler), so a
+ * ten-wide fan-out is a self-inflicted memory spike on the exact operation
+ * that already handles the largest payloads in the product. Two keeps a
+ * slow connection busy without that.
+ *
+ * One failure does not cancel the batch — the failed row keeps its message
+ * and its own Retry, and the rest carry on. A queue that abandons nine good
+ * uploads because the tenth was a .docx would be worse than no queue.
+ */
+export function useUploadQueue<T>(url: string, options?: { concurrency?: number }) {
+  const concurrency = options?.concurrency ?? 2;
+  const [items, setItems] = useState<QueuedUpload<T>[]>([]);
+  const nextId = useRef(0);
+
+  const patch = useCallback((id: string, changes: Partial<QueuedUpload<T>>) => {
+    setItems((current) => current.map((item) => (item.id === id ? { ...item, ...changes } : item)));
+  }, []);
+
+  const send = useCallback(
+    async (id: string, file: File, fields?: Record<string, string>): Promise<T | undefined> => {
+      const formData = new FormData();
+      formData.set("file", file);
+      for (const [key, value] of Object.entries(fields ?? {})) formData.set(key, value);
+      patch(id, { status: "uploading", progress: 0, error: null });
+      try {
+        const result = await postWithProgress<T>(url, formData, (progress) =>
+          patch(id, { progress }),
+        );
+        patch(id, { status: "success", progress: 100, result });
+        return result;
+      } catch (error: unknown) {
+        patch(id, {
+          status: "error",
+          progress: 0,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return undefined;
+      }
+    },
+    [patch, url],
+  );
+
+  const enqueue = useCallback(
+    async (files: File[], fields?: Record<string, string>): Promise<T[]> => {
+      const queued = files.map((file) => ({
+        id: `upload-${(nextId.current += 1)}`,
+        file,
+        fileName: file.name,
+      }));
+      setItems((current) => [
+        ...current,
+        ...queued.map(({ id, fileName }) => ({
+          id,
+          fileName,
+          status: "idle" as UploadStatus,
+          progress: 0,
+          error: null,
+          result: null,
+        })),
+      ]);
+
+      const results: T[] = [];
+      const pending = [...queued];
+      // `concurrency` workers pulling from one list — a shared cursor, not a
+      // chunked split, so a slow file never idles the other lane.
+      const workers = Array.from({ length: Math.min(concurrency, pending.length) }, async () => {
+        for (;;) {
+          const next = pending.shift();
+          if (!next) return;
+          const result = await send(next.id, next.file, fields);
+          if (result !== undefined) results.push(result);
+        }
+      });
+      await Promise.all(workers);
+      return results;
+    },
+    [concurrency, send],
+  );
+
+  const clearFinished = useCallback(() => {
+    setItems((current) => current.filter((item) => item.status !== "success"));
+  }, []);
+
+  return { items, enqueue, clearFinished, active: items.some((i) => i.status === "uploading") };
 }

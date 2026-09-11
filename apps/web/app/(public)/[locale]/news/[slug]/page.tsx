@@ -27,9 +27,10 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@repo/ui/components/accordion";
+import { RichText } from "@repo/ui/components/rich-text";
 import { ListingHeader } from "../_components/listing-header.tsx";
 import { ShareRow } from "../_components/share-row.tsx";
-import { VideoFacade } from "../_components/video-facade.tsx";
+import { VideoFacade } from "../../_components/video-facade.tsx";
 
 function featureKeyFor(view: ArticleView): "news" | "analysis" {
   return view.kind === "NEWS" ? "news" : "analysis";
@@ -261,15 +262,7 @@ export default async function ArticlePage({ params }: PageProps<"/[locale]/news/
                     /* Sanitized SERVER-SIDE ON SAVE (ADR-009/security.md #8) —
                        this renders already-clean HTML; the save path is the
                        boundary. */
-                    <div
-                      /* changes-10: `min-w-0 break-words` and the table
-                         scroll container, for the same reason the editor has
-                         them — authors can now insert tables and long code,
-                         and a wide one must scroll inside the column rather
-                         than widen the article. */
-                      className="flex min-w-0 flex-col gap-4 leading-relaxed break-words [&_a]:text-primary-interactive [&_a]:underline-offset-4 [&_a:hover]:underline [&_blockquote]:my-2 [&_blockquote]:border-y [&_blockquote]:border-border [&_blockquote]:py-6 [&_blockquote]:text-center [&_blockquote]:text-lg [&_blockquote]:font-medium [&_blockquote]:text-foreground [&_blockquote]:italic [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:font-mono [&_code]:text-sm [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:text-lg [&_h3]:font-semibold [&_h4]:font-semibold [&_img]:rounded-lg [&_ol]:list-decimal [&_ol]:ps-5 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:bg-muted [&_pre]:p-4 [&_table]:block [&_table]:w-full [&_table]:overflow-x-auto [&_table]:text-sm [&_td]:border [&_td]:p-2 [&_th]:border [&_th]:bg-muted/40 [&_th]:p-2 [&_th]:text-start [&_ul]:list-disc [&_ul]:ps-5"
-                      dangerouslySetInnerHTML={{ __html: view.body }}
-                    />
+                    <RichText html={view.body} />
                   )}
                 </>
               )}

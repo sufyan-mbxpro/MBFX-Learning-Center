@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900" width="1440" height="900" role="presentation" aria-hidden="true"><defs>
+<linearGradient id="g-video-signal" x1="0" y1="0" x2="1" y2="1">
+<stop offset="0" stop-color="#2E251C"/>
+<stop offset=".55" stop-color="#221C16"/>
+<stop offset="1" stop-color="#14110E"/>
+</linearGradient>
+<radialGradient id="warm-video-signal" cx=".5" cy=".5" r=".5">
+<stop offset="0" stop-color="#E8B98C" stop-opacity=".55"/>
+<stop offset="1" stop-color="#E8B98C" stop-opacity="0"/>
+</radialGradient>
+<radialGradient id="cool-video-signal" cx=".5" cy=".5" r=".5">
+<stop offset="0" stop-color="#7FA3C4" stop-opacity=".38"/>
+<stop offset="1" stop-color="#7FA3C4" stop-opacity="0"/>
+</radialGradient>
+<linearGradient id="fade-video-signal" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#E8B98C" stop-opacity=".5"/>
+<stop offset="1" stop-color="#E8B98C" stop-opacity="0"/>
+</linearGradient>
+<pattern id="grid-video-signal" width="64" height="64" patternUnits="userSpaceOnUse">
+<path d="M64 0H0V64" fill="none" stroke="#F5EFE8" stroke-opacity=".05" stroke-width="1"/>
+</pattern>
+<radialGradient id="vig-video-signal" cx=".5" cy=".45" r=".75">
+<stop offset=".55" stop-color="#14110E" stop-opacity="0"/>
+<stop offset="1" stop-color="#14110E" stop-opacity=".42"/>
+</radialGradient>
+</defs><rect width="1440" height="900" fill="url(#g-video-signal)"/><ellipse cx="443.04" cy="102.87" rx="554.18" ry="432.26" fill="url(#warm-video-signal)"/><ellipse cx="280.43" cy="529.21" rx="352.62" ry="275.04" fill="url(#cool-video-signal)"/><ellipse cx="590.07" cy="481.53" rx="576.79" ry="449.9" fill="url(#warm-video-signal)"/><rect width="1440" height="900" fill="url(#grid-video-signal)"/><path d="M129.6 547.75 L199.06 586.58 L268.52 558.93 L337.98 566.2 L407.44 575.97 L476.89 545.41 L546.35 522.07 L615.81 537.12 L685.27 583.12 L754.73 526.68 L824.19 486.15 L893.65 434.64 L963.11 431.4 L1032.56 478.34 L1102.02 477.44 L1171.48 466.23 L1240.94 464.3 L1310.4 459.98 L1310.4 900 L129.6 900 Z" fill="url(#fade-video-signal)" fill-opacity=".9"/>
+<path d="M129.6 547.75 L199.06 586.58 L268.52 558.93 L337.98 566.2 L407.44 575.97 L476.89 545.41 L546.35 522.07 L615.81 537.12 L685.27 583.12 L754.73 526.68 L824.19 486.15 L893.65 434.64 L963.11 431.4 L1032.56 478.34 L1102.02 477.44 L1171.48 466.23 L1240.94 464.3 L1310.4 459.98" fill="none" stroke="#E8B98C" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+<line x1="893.65" y1="108" x2="893.65" y2="434.64" stroke="#F5EFE8" stroke-opacity=".3" stroke-width="2" stroke-dasharray="8 8"/>
+<circle cx="893.65" cy="434.64" r="14" fill="#E8B98C" fill-opacity=".25"/>
+<circle cx="893.65" cy="434.64" r="7" fill="#F5EFE8"/><rect width="1440" height="900" fill="url(#vig-video-signal)"/></svg>

@@ -80,6 +80,7 @@ import { useUploadProgress } from "../_hooks/use-upload-progress.ts";
 import { UploadProgress } from "./upload-progress.tsx";
 import { describeOversizeFile } from "./media-constraints.ts";
 import { MediaPickerDialog } from "./media-picker-dialog.tsx";
+import type { MediaCategory } from "@repo/contracts";
 import {
   EDITORIAL_EXTENSIONS,
   EDITOR_ALIGNMENTS,
@@ -234,6 +235,7 @@ export function RichTextEditor({
   onChange,
   labels,
   className,
+  mediaCategory = "general",
   /** Opt-in source view. Body-length prose wants it; a one-line hint doesn't. */
   allowHtmlMode = false,
 }: {
@@ -243,6 +245,14 @@ export function RichTextEditor({
   onChange: (html: string) => void;
   labels: RichTextLabels;
   className?: string;
+  /**
+   * Where an in-body image lands (ADR-066 §4). Defaulted, unlike
+   * `ImageUploadField`'s: this editor is embedded in a dozen forms whose
+   * bodies are prose rather than a named asset slot, and `general` is the
+   * honest answer for a surface that has not said otherwise. A host that
+   * knows better — the article editor — passes its own.
+   */
+  mediaCategory?: MediaCategory;
   allowHtmlMode?: boolean;
 }) {
   const t = useTranslations("admin");
@@ -365,7 +375,7 @@ export function RichTextEditor({
       return;
     }
     setSizeError(null);
-    const stored = await upload.upload(file, { purpose: "content" });
+    const stored = await upload.upload(file, { purpose: "content", category: mediaCategory });
     if (stored) e.chain().focus().setImage({ src: stored.url, alt: file.name }).run();
     if (fileRef.current) fileRef.current.value = "";
   };
@@ -807,6 +817,7 @@ export function RichTextEditor({
             open={pickerOpen}
             onOpenChange={setPickerOpen}
             purpose="content"
+            category={mediaCategory}
             kinds={["IMAGE"]}
             title={labels.image}
             onSelect={(picked) => {

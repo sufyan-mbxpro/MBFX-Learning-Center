@@ -20,14 +20,8 @@ import {
 } from "@repo/ui/components/dialog";
 import { Input } from "@repo/ui/components/input";
 import { Label } from "@repo/ui/components/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@repo/ui/components/select";
 import { Switch } from "@repo/ui/components/switch";
+import { AdminCombobox } from "../../_components/combobox.tsx";
 import { quickUpdateArticleAction } from "../../_actions/article-actions.ts";
 import { useServerAction } from "../../_hooks/use-server-action.ts";
 
@@ -83,18 +77,12 @@ export function QuickEditDialog({
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="quick-category">{labels.categoryLabel}</Label>
-            <Select value={categoryId} onValueChange={(v) => setCategoryId(v ?? "")}>
-              <SelectTrigger id="quick-category">
-                <SelectValue>{categories.find((c) => c.id === categoryId)?.name ?? ""}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {categories.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <AdminCombobox
+              id="quick-category"
+              value={categoryId}
+              onValueChange={setCategoryId}
+              options={categories.map((c) => ({ value: c.id, label: c.name }))}
+            />
           </div>
           <label className="flex items-center justify-between gap-2 text-sm">
             {labels.featuredLabel}

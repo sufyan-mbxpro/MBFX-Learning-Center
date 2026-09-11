@@ -13,7 +13,6 @@ import {
   uploadPurposeSchema,
   type ListMediaAssetsQuery,
   type UpdateMediaMetaInput,
-  type UploadPurpose,
 } from "@repo/contracts";
 import {
   clearBrandAsset,
@@ -24,26 +23,12 @@ import {
   storeImage,
   storeMedia,
   updateMediaMeta,
-  type MediaAssetRow,
+  type ListMediaAssetsPage,
   type StoredImage,
   type StoredMediaAsset,
 } from "@repo/core";
-import { requireAnyPermission, requirePermission, type Subject } from "@repo/rbac";
-
-// Exported so the XHR-uploadable route handlers under `api/uploads/*`
-// (real upload-progress events; see that folder's comment) reuse this
-// exact gate rather than a second copy that could drift.
-export async function gateForPurpose(purpose: UploadPurpose): Promise<Subject> {
-  switch (purpose) {
-    case "brand":
-      return requirePermission("theme.update");
-    case "setting":
-      return requirePermission("settings.update");
-    case "article":
-    case "content":
-      return requireAnyPermission(["analysis.update", "news.manage"]);
-  }
-}
+import { requirePermission } from "@repo/rbac";
+import { gateForPurpose, readUploadCategory } from "../_lib/media-upload.ts";
 
 /**
  * FormData: `file` (the image) + `purpose`. Returns the stored asset so the
@@ -56,24 +41,48 @@ export async function uploadImageAction(formData: FormData): Promise<StoredImage
   const file = formData.get("file");
   if (!(file instanceof File)) throw new Error("No file was received");
   const bytes = new Uint8Array(await file.arrayBuffer());
-  return storeImage(subject.id, { bytes, fileName: file.name, purpose });
+  return storeImage(subject.id, {
+    bytes,
+    fileName: file.name,
+    purpose,
+    category: readUploadCategory(formData),
+  });
 }
 
-// ─── Media library (ADR-034) ─────────────────────────────────
+// ─── Media library (ADR-034, paged by ADR-067) ───────────────
 
-export async function listMediaAssetsAction(query: unknown): Promise<MediaAssetRow[]> {
+/**
+ * Kept for the retained (hidden) Website Builder picker — ADR-042 retains
+ * that code, so it stays compiling. It returns a PAGE, not an array: under
+ * ADR-067 §1 no signature in this repo may claim to hand back "the list", and
+ * hidden code is not exempt. Live surfaces use `GET /admin/api/media`, which
+ * can be aborted.
+ */
+export async function listMediaAssetsAction(query: unknown): Promise<ListMediaAssetsPage> {
   await requirePermission("media.view");
   const parsed: ListMediaAssetsQuery = listMediaAssetsQuerySchema.parse(query);
-  return listMediaAssets({ kind: parsed.kind, query: parsed.q });
+  return listMediaAssets({
+    category: parsed.category,
+    kind: parsed.kind,
+    kinds: parsed.kinds,
+    query: parsed.q,
+    cursor: parsed.cursor,
+    limit: parsed.limit,
+  });
 }
 
-/** FormData: `file` + optional `kind` (a UI hint only — the server decides by magic bytes regardless, ADR-034 §1). */
+/** FormData: `file` + `category` (the kind is decided by magic bytes regardless, ADR-034 §1). */
 export async function uploadMediaAction(formData: FormData): Promise<StoredMediaAsset> {
   const subject = await requirePermission("media.upload");
   const file = formData.get("file");
   if (!(file instanceof File)) throw new Error("No file was received");
   const bytes = new Uint8Array(await file.arrayBuffer());
-  return storeMedia(subject.id, { bytes, fileName: file.name, purpose: "content" });
+  return storeMedia(subject.id, {
+    bytes,
+    fileName: file.name,
+    purpose: "content",
+    category: readUploadCategory(formData),
+  });
 }
 
 export async function updateMediaMetaAction(

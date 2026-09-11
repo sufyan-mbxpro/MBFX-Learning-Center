@@ -8,7 +8,13 @@
 // against the live registry and the live catalog, and that binding a spec
 // to real menu rows cannot make a destination disappear.
 import { describe, expect, it } from "vitest";
-import { isRouteKey, ROUTE_PATHS } from "@repo/contracts";
+import {
+  isRouteKey,
+  learnTrackPath,
+  LEARN_TRACK_KEYS,
+  LEARN_TRACK_SURFACES,
+  ROUTE_PATHS,
+} from "@repo/contracts";
 import en from "@repo/i18n/messages/en.json";
 import {
   MEGA_MENU_ICONS,
@@ -148,5 +154,64 @@ describe("resolveMegaMenuPanel — binding the spec to live menu rows", () => {
       columns: [{ key: "c", titleKey: "mega.about.company", routeKeys: ["about"] }],
     };
     expect(resolveMegaMenuPanel(spec, ABOUT_CHILDREN).viewAll).toBeNull();
+  });
+});
+
+// ─── The track panels (ADR-065 §4) ───────────────────────────
+//
+// Two panels built from the same shape, one per school. What is worth pinning
+// beyond the generic loops above is that each one lists ITS OWN track's three
+// surfaces — a copy-paste that left "Learn Crypto" pointing at forex quizzes
+// would pass every check in this file except this one.
+describe("MEGA_MENU_PANELS — the schools", () => {
+  it("gives every registered track a panel", () => {
+    for (const track of LEARN_TRACK_KEYS) {
+      expect(panelForHref(learnTrackPath(track)), track).not.toBeNull();
+    }
+  });
+
+  it("lists only that track's surfaces, then the umbrella", () => {
+    for (const track of LEARN_TRACK_KEYS) {
+      const panel = panelForHref(learnTrackPath(track));
+      const keys = panel?.columns.flatMap((column) => column.routeKeys) ?? [];
+      // Built from the registry rather than typed here, so a fifth surface
+      // fails in ONE place with a message that names it — the lesson
+      // ADR-068 Consequences records about hardcoded surface lists.
+      expect(keys).toEqual([
+        ...LEARN_TRACK_SURFACES.map((surface) =>
+          surface === "index" ? `learn-${track}` : `learn-${track}-${surface}`,
+        ),
+        "learn",
+      ]);
+    }
+  });
+
+  // The footer would say "Learn Forex · View all" over a link to the page
+  // covering BOTH schools. The umbrella is a labelled row instead.
+  it("declares no view-all footer", () => {
+    for (const track of LEARN_TRACK_KEYS) {
+      expect(panelForHref(learnTrackPath(track))?.viewAll).toBeUndefined();
+    }
+  });
+
+  it("resolves against live menu rows the way the seed builds them", () => {
+    const children: MegaResolvableItem[] = [
+      child("learn-forex", "Courses"),
+      child("learn-forex-quizzes", "Quizzes"),
+      child("learn-forex-glossary", "Glossary"),
+      child("learn", "All learning"),
+    ];
+    const resolved = resolveMegaMenuPanel(MEGA_MENU_PANELS["learn-forex"], children);
+    expect(resolved.columns).toHaveLength(1);
+    expect(resolved.columns[0]?.items.map((i) => i.item.label)).toEqual([
+      "Courses",
+      "Quizzes",
+      "Glossary",
+      "All learning",
+    ]);
+    // Every row carries a glyph: the panel's rows are icon + label + one line,
+    // and a single missing icon reads as a broken row rather than a plain one.
+    expect(resolved.columns[0]?.items.every((i) => i.icon !== undefined)).toBe(true);
+    expect(resolved.columns[0]?.items.at(-1)?.item.href).toBe(ROUTE_PATHS.learn);
   });
 });

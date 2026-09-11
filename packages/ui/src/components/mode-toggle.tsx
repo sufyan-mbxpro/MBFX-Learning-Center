@@ -4,9 +4,9 @@
 // light/dark; admins control branding, never the mode. Label comes from the
 // caller's catalog — @repo/ui carries no i18n.
 import { Moon, Sun } from "lucide-react";
-import { useTheme } from "next-themes";
 
 import { Button } from "@repo/ui/components/button";
+import { useTheme } from "@repo/ui/components/theme-provider";
 
 function ModeToggle({ label }: { label: string }) {
   const { resolvedTheme, setTheme } = useTheme();

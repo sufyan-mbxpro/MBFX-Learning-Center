@@ -2,7 +2,7 @@
 
 // The learning showcase's video tile.
 //
-// A facade, exactly like `news/_components/video-facade.tsx` (ADR-015 #9):
+// A facade, exactly like `video-facade.tsx` beside it (ADR-015 #9):
 // poster only until someone presses play, at which point the iframe is
 // injected. A homepage carrying six videos costs six inline SVGs and zero
 // third-party requests until a visitor asks for one.

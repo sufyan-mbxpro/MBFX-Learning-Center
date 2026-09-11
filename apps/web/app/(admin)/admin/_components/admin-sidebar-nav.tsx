@@ -8,11 +8,16 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Tags,
+  ChartLine,
+  CircleHelp,
   BookOpen,
   Flag,
+  GraduationCap,
   IdCard,
   Image,
   LayoutDashboard,
+  ListChecks,
   ListTree,
   Newspaper,
   Palette,
@@ -22,6 +27,8 @@ import {
   Users,
   Globe,
   ExternalLink,
+  FolderOpen,
+  Video,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@repo/ui/lib/utils";
@@ -32,6 +39,13 @@ const ICONS: Record<string, LucideIcon> = {
   roles: Shield,
   employees: IdCard,
   glossary: BookOpen,
+  learnCourses: GraduationCap,
+  learnLessons: ListChecks,
+  learnQuizzes: CircleHelp,
+  learnProgress: ChartLine,
+  learnVideos: Video,
+  videoCategories: FolderOpen,
+  glossaryTopics: Tags,
   articles: Newspaper,
   websiteMedia: Image,
   website: Globe,
