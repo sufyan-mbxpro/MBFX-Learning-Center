@@ -20,15 +20,15 @@ changes here first.
 The capture was analysed mechanically: every `class` attribute was tallied
 (about 2,000 elements), and each page's DOM was outlined. Findings:
 
-| Fact                                                                               | Evidence                                                                                                                                                         |
-| ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **shadcn/ui "new-york" v3 defaults** on **Tailwind v3** and **Radix**              | `hsl(var(--x))` colour vars; `ring-offset-background`, `data-[state=…]` and `radix-_r_` ids                                                                      |
-| Font is **Inter** (variable, 100–900), loaded via `next/font`                      | `.inter_…__className`, "Rendered Fonts: Inter / Inter-Bold"                                                                                                      |
-| Icons are **lucide**, all at `stroke-width="2"`                                    | all 405 `<svg>` elements have class `lucide lucide-*`                                                                                                            |
-| Palette = stock shadcn **slate** neutrals + a **brand override** on `<html style>` | `:root` block (slate) and an inline style (`--primary: 29 46% 56%` …)                                                                                            |
-| The brand override comes from an admin theme                                       | SSR payload `"colors":{"primary":"#C28D5A","secondary":"#2A2A29","success":"#3382E2","error":"#E23C36","warning":"#FFA310","info":"#004284","accent":"#EAE5DE"}` |
-| **No dark palette was captured**                                                   | the `.dark` selector never appears; `html.light`, plus `dark:` utilities in the markup                                                                           |
-| It is an **admin CRM**; there are no public/marketing pages in the capture         | the four pages above                                                                                                                                             |
+| Fact                                                                                                                 | Evidence                                                                                                                                                         |
+| -------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **shadcn/ui `default` style** (Tailwind v3, Radix) — "new-york" in the first draft; corrected by capture 2 (ADR-074) | `hsl(var(--x))` colour vars; `ring-offset-background`, `data-[state=…]` and `radix-_r_` ids                                                                      |
+| Font is **Inter** (variable, 100–900), loaded via `next/font`                                                        | `.inter_…__className`, "Rendered Fonts: Inter / Inter-Bold"                                                                                                      |
+| Icons are **lucide**, all at `stroke-width="2"`                                                                      | all 405 `<svg>` elements have class `lucide lucide-*`                                                                                                            |
+| Palette = stock shadcn **slate** neutrals + a **brand override** on `<html style>`                                   | `:root` block (slate) and an inline style (`--primary: 29 46% 56%` …)                                                                                            |
+| The brand override comes from an admin theme                                                                         | SSR payload `"colors":{"primary":"#C28D5A","secondary":"#2A2A29","success":"#3382E2","error":"#E23C36","warning":"#FFA310","info":"#004284","accent":"#EAE5DE"}` |
+| **No dark palette was captured**                                                                                     | the `.dark` selector never appears; `html.light`, plus `dark:` utilities in the markup                                                                           |
+| It is an **admin CRM**; there are no public/marketing pages in the capture                                           | the four pages above                                                                                                                                             |
 
 **What we take:** dimensions, type, colour roles, radius, shadow, icon
 conventions and layout rhythm.
@@ -360,11 +360,12 @@ That default becomes `size-4` at h-10/h-9 and `size-3.5` at h-8 and below.
 
 ## 6. Component anatomy
 
-Rows marked **(inferred)** — and all of §6.4, §6.5, and the checkbox, radio
-and switch rows of §6.7 — are **provisional — shadcn defaults**. They were not
-open or visible in the capture, so their spec is the shadcn new-york v3
-default, which is the system the reference is built on. The owner's second
-capture replaces them before Phase 3 restyles those components (Q12).
+**Confirmed 2026-09-11 (ADR-074).** Rows marked **(inferred)**, and all of
+§6.4, §6.5 and the checkbox/radio/switch rows of §6.7, were provisional. They
+are now **superseded by §6.14**, the second capture (`capture-2.md`). That
+capture proved the reference is shadcn/ui's **`default`** style, not
+"new-york" as first written, and took the unseen components from that
+registry. Where §6.14 and an earlier row disagree, §6.14 wins.
 
 **Accessibility overrides visual copying** (ADR-072 §1). Wherever a
 reference pairing fails our contrast rules, the spec below already carries the
@@ -382,9 +383,12 @@ accessible variant closest to the reference look.
     the tonal status is `danger`)
   - `CountBadge` (new)
   - Avatar (`shape="square"`)
-- **Held for the second capture:** Checkbox, Switch, Radio (not yet a
-  component), Textarea, Tooltip (not yet a component), and the Select and
-  Combobox **popups and items**.
+- **Group 1 completion and group 2 (overlays)**, unblocked by capture 2:
+  - Checkbox, Switch, RadioGroup (new), Textarea, Tooltip (new)
+  - the Select and Combobox popups and items
+  - DropdownMenu, Popover (new), Dialog, AlertDialog, Sheet, Command, Toast
+    (Sonner)
+  - All per §6.14.
 - Tonal ink follows **ADR-073**: every `*-interactive` holds 4.5:1 on its own
   tint up to /15.
 
@@ -602,6 +606,61 @@ optional `link`-style action.
 | Live dot                  | `animate-pulse`                                                                             |
 
 All of it is subject to the existing reduced-motion reset.
+
+### 6.14 Capture 2 — the confirmed specs (ADR-074)
+
+These are the shadcn `default` recipes (verbatim in `capture-2.md`),
+translated as follows:
+
+- Radix `data-[state=open|checked]` becomes Base UI's `data-open` /
+  `data-checked`.
+- Physical `left`/`right`/`pl`/`pr` become logical `start`/`end`/`ps`/`pe`
+  (code-style #3).
+- Arbitrary lengths become scale values: `min-w-[8rem]` → `min-w-32`,
+  `max-h-[300px]` → `max-h-75`, `min-h-[80px]` → `min-h-20`,
+  `max-w-[420px]` → `max-w-105`.
+- **⚑** marks an accessible deviation from the reference (ADR-072 §1).
+
+**Form controls**
+
+| Component  | Spec                                                                                                                                                                                                                                                                     |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Checkbox   | `size-4 rounded-sm border` + focus ring; ⚑ boundary `border-primary-interactive` in every state (raw bronze is 2.9:1, under the 3:1 a control boundary needs); checked `bg-primary text-primary-foreground`; `Check` icon `size-4` (reference: `h-4 w-4`, on a 16px box) |
+| RadioGroup | group `grid gap-2`; item `aspect-square size-4 rounded-full border`, ⚑ `border-primary-interactive text-primary-interactive`; indicator `Circle` `size-2.5 fill-current`                                                                                                 |
+| Switch     | track `h-6 w-11 rounded-full border-2 border-transparent`, unchecked `bg-input` (3:1), checked ⚑ `bg-primary-interactive`; thumb `size-5 rounded-full bg-background shadow-lg`, `translate-x-5` checked (RTL mirrored)                                                   |
+| Textarea   | `min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-base md:text-sm placeholder:text-muted-foreground` + the Input focus ring                                                                                                                   |
+
+**Popups and items (Select, DropdownMenu, Combobox, Command)**
+
+| Part                                     | Spec                                                                                                                                                                                                                                                                                                 |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Popup surface                            | `min-w-32 rounded-md border bg-popover p-1 text-popover-foreground shadow-md` (dropdown sub-menu: `shadow-lg`); Select keeps `min-w-(--anchor-width)` (ADR-057)                                                                                                                                      |
+| Item                                     | `relative flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none select-none` · highlight `bg-accent text-accent-foreground` · disabled `pointer-events-none opacity-50` · icons `size-4`                                                                                               |
+| Select item / checkbox item / radio item | **indicator at the START**: `ps-8 pe-2`, indicator box `absolute start-2 size-3.5` holding `Check size-4` (radio: `Circle size-2 fill-current`)                                                                                                                                                      |
+| Label                                    | `px-2 py-1.5 text-sm font-semibold` (Select: `ps-8 pe-2`)                                                                                                                                                                                                                                            |
+| Separator                                | `-mx-1 my-1 h-px bg-muted` (Command: `bg-border`)                                                                                                                                                                                                                                                    |
+| Shortcut                                 | `ms-auto text-xs tracking-widest opacity-60`                                                                                                                                                                                                                                                         |
+| Sub-trigger                              | item recipe + `ChevronRight` at `ms-auto` (RTL-flipped)                                                                                                                                                                                                                                              |
+| Command / Combobox search                | wrapper `flex items-center border-b px-3`; `Search` `me-2 size-4 shrink-0 opacity-50`; input `h-11 w-full bg-transparent py-3 text-sm outline-none`; list `max-h-75 overflow-y-auto`; empty `py-6 text-center text-sm`; group `p-1`, heading `px-2 py-1.5 text-xs font-medium text-muted-foreground` |
+
+**Overlays**
+
+| Component      | Spec                                                                                                                                                                                                                                                                                                                                                                                                        |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Scrim          | **`--color-overlay` = `rgb(0 0 0 / 0.8)`** (was 10%) — dialog, alert-dialog and sheet                                                                                                                                                                                                                                                                                                                       |
+| Dialog         | `grid w-full max-w-lg gap-4 border bg-background p-6 shadow-lg sm:rounded-lg`, centred; close `absolute top-4 end-4 rounded-sm opacity-70 hover:opacity-100`, `X size-4`; header `flex flex-col gap-1.5 text-center sm:text-start`; title `text-lg font-semibold leading-none tracking-tight`; description `text-sm text-muted-foreground`; footer `flex flex-col-reverse gap-2 sm:flex-row sm:justify-end` |
+| AlertDialog    | the Dialog anatomy; actions are Buttons (`destructive` solid for the destroying action, `outline` for cancel)                                                                                                                                                                                                                                                                                               |
+| Sheet          | `fixed z-50 flex flex-col gap-4 bg-background p-6 shadow-lg`; start/end `inset-y-0 h-full w-3/4 sm:max-w-sm` with `border-e`/`border-s`; top/bottom `inset-x-0` with `border-b`/`border-t`; close as Dialog; title `text-lg font-semibold text-foreground`; header `gap-2`                                                                                                                                  |
+| Popover        | `w-72 rounded-md border bg-popover p-4 text-popover-foreground shadow-md outline-none`                                                                                                                                                                                                                                                                                                                      |
+| Tooltip        | `rounded-md border bg-popover px-3 py-1.5 text-sm text-popover-foreground shadow-md`                                                                                                                                                                                                                                                                                                                        |
+| Toast (Sonner) | card `rounded-md border border-border bg-background p-4 text-foreground shadow-lg`; title `text-sm font-semibold`; description `text-sm text-muted-foreground`; action `bg-primary text-primary-foreground`; cancel `bg-muted text-muted-foreground`; `position="bottom-right"` (mirrors in RTL), width `max-w-105`                                                                                         |
+
+**Navigation and feedback**
+
+| Component  | Spec                                                                                                                                                                                                                                                                                             |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Breadcrumb | list `flex flex-wrap items-center gap-1.5 break-words text-sm text-muted-foreground sm:gap-2.5`; item `inline-flex items-center gap-1.5`; link `transition-colors hover:text-foreground`; page `font-normal text-foreground`; separator `ChevronRight size-3.5` (RTL-flipped); ellipsis `size-9` |
+| Alert      | `relative w-full rounded-lg border p-4`, icon `absolute start-4 top-4`, content `ps-7`; default `bg-background text-foreground`; ⚑ destructive `border-destructive/50 text-destructive-interactive` (raw red fails 4.5:1)                                                                        |
 
 ---
 

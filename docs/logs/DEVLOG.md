@@ -10487,3 +10487,95 @@ primary `#84603D`. The fills are unchanged.
   question for Phase 5, not a Badge one.
 - **Alert's destructive variant still uses the raw `text-destructive` ink.**
   For its component group.
+
+## 2026-09-11 — changes-20 capture 2 and group 1 completion: the reference is shadcn `default`, and the form controls land (Module 07, ADR-074)
+
+The owner asked for the second capture to be taken ("capture yourself") rather
+than supplied.
+
+### How the capture was taken, and why not by screenshot
+
+The reference is a production CRM. Its open menus, dialogs, form controls and
+toasts render only behind its `/backbone/*` login, and the first capture names
+no host. Signing into a production admin to screenshot a menu is not
+acceptable. The brief does name the library, though ("we're using
+https://ui.shadcn.com"), so the capture was taken from shadcn's registry, but
+only after proving the registry IS the reference:
+
+1. Fetch 26 components in both published styles (`new-york`, `default`).
+2. Score every registry class literal against every captured class attribute.
+3. Inspect every near-miss token by token.
+
+| Component             | `new-york` exact | `default` exact |
+| --------------------- | ---------------- | --------------- |
+| Button                | 2/10             | 6/10            |
+| Table                 | 4/8              | 6/8             |
+| Card                  | 2/4              | 4/5             |
+| Badge                 | 2/5              | 4/5             |
+| Input (token overlap) | 75%              | 96%             |
+
+Every `default` delta is either a call-site override (`pl-10`, `flex-1`,
+`w-[180px]`) or a one-token patch-version difference. **The reference is
+shadcn `default` (Tailwind v3), unmodified.** Phase 1 had called it
+"new-york"; that was wrong. **ADR-074** corrects it (ADR-072's text is
+append-only) and confirms the provisional specs. `docs/design-system/
+capture-2.md` holds the method, the table and the verbatim recipes, and
+`tokens.md` §6.14 holds our translation of them.
+
+### What the capture changed from the inference
+
+- **The overlay scrim is `black/80`**, not 10%. The token changes in group 2.
+- **Select and dropdown indicators sit at the START** (`ps-8`, `start-2`).
+- **Popup separators are `bg-muted`.**
+
+### Accessible deviations (ADR-072 §1, recorded in ADR-074 §3)
+
+- **Checkbox and radio:** the reference draws their boundary in raw bronze,
+  2.9:1 on white, under the 3:1 a control edge needs. Ours is
+  `--primary-interactive` in every state; the checked fill stays the brand
+  `--primary`.
+- **Switch:** the checked track is `--primary-interactive`. On raw bronze the
+  white thumb is also 2.9:1.
+- **Alert:** the destructive ink becomes `-interactive` in group 2.
+
+### Group 1, completed (`@repo/ui`)
+
+- **Checkbox:** 16px, `rounded-sm`, derived bronze boundary, brand fill when
+  checked. The Field integration is kept.
+- **Switch:** 44×24 track, 20px thumb with `shadow-lg`, `--input` off and
+  `--primary-interactive` on, mirrored in RTL. The unused `size` prop is
+  removed (zero call sites; the reference has one size).
+- **Textarea:** the Input's box at an 80px minimum; `field-sizing-content` is
+  kept.
+- **`RadioGroup` / `RadioGroupItem`** (new, on Base UI's radio-group + radio)
+  and **`Tooltip`** (new, on Base UI's tooltip, with a 10px `size="sm"` for
+  chart tooltips). There is still one implementation each.
+- **Select popup and items:** a bordered popover card with `p-1`,
+  `rounded-sm` items at `py-1.5 ps-8 pe-2`, the check at `start-2`, and a
+  semibold label.
+  - `SelectContent`'s line also carried the owner's uncommitted ADR-057
+    popup-width change (`min-w-(--anchor-width) max-w-(--available-width)`).
+    The two are inseparable on one line, so it rides in this commit, intact.
+    §6.14 specifies exactly that width.
+- **The Combobox popup** gets the Command recipe: `border-b px-3` search row,
+  `h-11` input, `max-h-75` list, `py-6` empty state, start-side check.
+  - It is in the owner's untracked `combobox.tsx`, so it stays in the working
+    tree.
+
+### Verified
+
+- `@repo/ui`: **276/276**. `primitives-anatomy.test.tsx` adds form-control,
+  tooltip and select-item anatomy, including every accessible deviation.
+- `typecheck` and `lint` clean on `@repo/ui` and `@repo/web`.
+- **Live**: no unauthenticated page renders these admin controls, so their
+  exact compiled classes were mounted on the running page and measured.
+
+  | Control                                  | Light | Dark | Floor |
+  | ---------------------------------------- | ----- | ---- | ----- |
+  | Checkbox boundary                        | 5.64  | 6.37 | 3:1   |
+  | Switch on: track vs page, thumb vs track | 5.64  | 6.37 | 3:1   |
+  | Switch off / textarea border             | 3.23  | 3.44 | 3:1   |
+
+  Geometry: 16px checkbox, 44×24 switch, 80px textarea, 32px start inset on
+  select items. The radii measure 2px/4px because the stored `Theme` row is
+  still the pre-ADR-072 4px base; it is still not reseeded.

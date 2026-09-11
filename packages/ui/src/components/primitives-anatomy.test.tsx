@@ -10,7 +10,19 @@ import { Button } from "./button.tsx";
 import { CountBadge } from "./count-badge.tsx";
 import { Input } from "./input.tsx";
 import { SearchInput } from "./search-input.tsx";
-import { Select, SelectTrigger, SelectValue, selectTriggerVariants } from "./select.tsx";
+import { Checkbox } from "./checkbox.tsx";
+import { RadioGroup, RadioGroupItem } from "./radio-group.tsx";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  selectTriggerVariants,
+} from "./select.tsx";
+import { Switch } from "./switch.tsx";
+import { Textarea } from "./textarea.tsx";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./tooltip.tsx";
 
 afterEach(cleanup);
 
@@ -213,6 +225,129 @@ describe("Badge and CountBadge (tokens.md §6.6)", () => {
     expect(tokens(container.firstElementChild)).toContain("-end-1.5");
     rerender(<CountBadge count={0} />);
     expect(container.firstElementChild).toBeNull();
+  });
+});
+
+// Capture 2 (ADR-074, tokens.md §6.14). The form controls carry the
+// accessible deviation the ADR records: their boundary and checked track are
+// --primary-interactive, because raw bronze on white is 2.9:1 — under the
+// 3:1 WCAG 1.4.11 asks of a control's edge.
+describe("Form controls (tokens.md §6.14)", () => {
+  it("Checkbox: a 16px rounded-sm box on the derived bronze line, brand fill when checked", () => {
+    render(<Checkbox aria-label="c" defaultChecked />);
+    const t = tokens(screen.getByRole("checkbox"));
+    expect(t).toEqual(
+      expect.arrayContaining([
+        "size-4",
+        "rounded-sm",
+        "border-primary-interactive",
+        "data-checked:bg-primary",
+        "data-checked:text-primary-foreground",
+      ]),
+    );
+    expect(t).not.toContain("border-primary");
+  });
+
+  it("RadioGroup: 16px ring and dot on --primary-interactive", () => {
+    render(
+      <RadioGroup aria-label="r" defaultValue="a">
+        <RadioGroupItem value="a" aria-label="a" />
+      </RadioGroup>,
+    );
+    const t = tokens(screen.getByRole("radio"));
+    expect(t).toEqual(
+      expect.arrayContaining([
+        "size-4",
+        "rounded-full",
+        "border-primary-interactive",
+        "text-primary-interactive",
+      ]),
+    );
+  });
+
+  it("Switch: 44x24 track, --input when off, --primary-interactive when on, mirrored in RTL", () => {
+    const { container } = render(<Switch aria-label="s" />);
+    const t = tokens(screen.getByRole("switch"));
+    expect(t).toEqual(
+      expect.arrayContaining([
+        "h-6",
+        "w-11",
+        "data-unchecked:bg-input",
+        "data-checked:bg-primary-interactive",
+      ]),
+    );
+    const thumb = container.querySelector("[data-slot=switch-thumb]");
+    expect(tokens(thumb)).toEqual(
+      expect.arrayContaining([
+        "size-5",
+        "data-checked:translate-x-5",
+        "rtl:data-checked:-translate-x-5",
+      ]),
+    );
+  });
+
+  it("Textarea wears the Input's box at an 80px minimum", () => {
+    render(<Textarea aria-label="t" />);
+    const t = tokens(screen.getByLabelText("t"));
+    expect(t).toEqual(
+      expect.arrayContaining([
+        "min-h-20",
+        "rounded-md",
+        "border-input",
+        "bg-background",
+        "focus-visible:ring-2",
+      ]),
+    );
+  });
+
+  it("Tooltip: bordered popover card, 14px, and a 10px `sm` for chart tooltips", () => {
+    const { unmount } = render(
+      <TooltipProvider>
+        <Tooltip open>
+          <TooltipTrigger>t</TooltipTrigger>
+          <TooltipContent>Tip</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>,
+    );
+    const t = tokens(screen.getByText("Tip"));
+    expect(t).toEqual(
+      expect.arrayContaining([
+        "rounded-md",
+        "border",
+        "bg-popover",
+        "px-3",
+        "py-1.5",
+        "text-sm",
+        "shadow-md",
+      ]),
+    );
+    unmount();
+    render(
+      <TooltipProvider>
+        <Tooltip open>
+          <TooltipTrigger>t</TooltipTrigger>
+          <TooltipContent size="sm">Tip</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>,
+    );
+    expect(tokens(screen.getByText("Tip"))).toContain("text-3xs");
+  });
+
+  it("Select items put the check indicator at the START, like the reference", () => {
+    render(
+      <Select open value="a">
+        <SelectTrigger aria-label="pick">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="a">Alpha</SelectItem>
+        </SelectContent>
+      </Select>,
+    );
+    const item = screen.getByRole("option", { name: "Alpha" });
+    expect(tokens(item)).toEqual(expect.arrayContaining(["ps-8", "pe-2", "rounded-sm", "py-1.5"]));
+    const indicator = item.querySelector("span.absolute");
+    expect(tokens(indicator)).toContain("start-2");
   });
 });
 
