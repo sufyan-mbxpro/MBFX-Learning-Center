@@ -4,12 +4,29 @@ import * as React from "react";
 
 import { cn } from "@repo/ui/lib/utils";
 
-function Table({ className, ...props }: React.ComponentProps<"table">) {
+// changes-20 / ADR-072 — the reference's table (tokens.md §6.9), which the
+// capture shows is shadcn `default` exactly (capture-2): 48px header cells in
+// muted medium text, 16px body padding, border-b rows with a muted hover.
+//
+// Two densities, both measured from the reference and switched by one
+// attribute on <table> so a whole table changes together:
+//   default — p-4 cells, text-sm (the reference's simple tables in cards)
+//   compact — px-2.5 py-2 cells at 11px (its Users Directory list)
+// The header stays h-12 in both, as the reference keeps it.
+
+type TableDensity = "default" | "compact";
+
+function Table({
+  className,
+  density = "default",
+  ...props
+}: React.ComponentProps<"table"> & { density?: TableDensity }) {
   return (
     <div data-slot="table-container" className="relative w-full overflow-x-auto">
       <table
         data-slot="table"
-        className={cn("w-full caption-bottom text-sm", className)}
+        data-density={density}
+        className={cn("group/table w-full caption-bottom text-sm", className)}
         {...props}
       />
     </div>
@@ -20,12 +37,11 @@ function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
   return (
     <thead
       data-slot="table-header"
-      // changes-08 #7: the header band is a DIFFERENT surface from the
-      // rows, so a long table never reads as one undifferentiated block.
-      // The row hover tint is cancelled inside the header — a header is
-      // not a row, and letting it light up made the two look identical
-      // exactly when the pointer was over them.
-      className={cn("bg-muted/60 [&_tr]:border-b [&_tr]:hover:bg-transparent", className)}
+      // The header row does not take the row hover — a header is not a row
+      // (changes-08 #7). Whether the band is FILLED is the caller's choice:
+      // the reference leaves simple tables unfilled and fills its dense
+      // admin lists (`bg-muted/50`), which is what DataTable passes.
+      className={cn("[&_tr]:border-b [&_tr]:hover:bg-transparent", className)}
       {...props}
     />
   );
@@ -69,7 +85,7 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
     <th
       data-slot="table-head"
       className={cn(
-        "h-10 px-2 text-start align-middle font-medium whitespace-nowrap text-foreground [&:has([role=checkbox])]:pe-0",
+        "h-12 px-4 text-start align-middle font-medium whitespace-nowrap text-muted-foreground group-data-[density=compact]/table:px-2.5 group-data-[density=compact]/table:py-2 group-data-[density=compact]/table:text-2xs [&:has([role=checkbox])]:pe-0",
         className,
       )}
       {...props}
@@ -81,7 +97,10 @@ function TableCell({ className, ...props }: React.ComponentProps<"td">) {
   return (
     <td
       data-slot="table-cell"
-      className={cn("p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pe-0", className)}
+      className={cn(
+        "p-4 align-middle whitespace-nowrap group-data-[density=compact]/table:px-2.5 group-data-[density=compact]/table:py-2 group-data-[density=compact]/table:text-2xs [&:has([role=checkbox])]:pe-0",
+        className,
+      )}
       {...props}
     />
   );
@@ -98,3 +117,4 @@ function TableCaption({ className, ...props }: React.ComponentProps<"caption">) 
 }
 
 export { Table, TableHeader, TableBody, TableFooter, TableHead, TableRow, TableCell, TableCaption };
+export type { TableDensity };

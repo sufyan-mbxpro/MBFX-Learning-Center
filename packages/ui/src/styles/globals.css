@@ -717,6 +717,17 @@
     display: none;
   }
 
+  /* A horizontally scrolling control row with its scrollbar hidden but still
+     scrollable (trackpad, touch, shift+wheel, arrow keys) — the reference's
+     view-chip row (ViewChips, changes-20). The named utility replaces the
+     reference's arbitrary `[scrollbar-width:none]` (no arbitrary values). */
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
   /* == Public design system: image wipe (ADR-018 rule 2) ===========
    *
    * ImageReveal's entrance effect — a directional clip-path wipe, distinct

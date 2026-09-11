@@ -3,7 +3,21 @@ import { cloneElement } from "react";
 
 import { cn } from "@repo/ui/lib/utils";
 import { Button } from "@repo/ui/components/button";
-import { ChevronLeftIcon, ChevronRightIcon, MoreHorizontalIcon } from "lucide-react";
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  ChevronsLeftIcon,
+  ChevronsRightIcon,
+  MoreHorizontalIcon,
+} from "lucide-react";
+
+// changes-20 / ADR-072 (tokens.md §6.10) — the reference's pager: outlined
+// 36px Previous/Next (and First/Last) buttons around ghost page numbers with
+// the current page outlined. The reference mixes 36px buttons with 40px page
+// numbers in one row; the owner's Q11 decision unifies everything on 36px.
+// Every visible string and accessible name arrives from the caller's catalog
+// (code-style #2) — the English defaults remain only for the existing public
+// call site, which passes its own.
 
 function Pagination({ className, ...props }: React.ComponentProps<"nav">) {
   return (
@@ -21,7 +35,7 @@ function PaginationContent({ className, ...props }: React.ComponentProps<"ul">) 
   return (
     <ul
       data-slot="pagination-content"
-      className={cn("flex items-center gap-0.5", className)}
+      className={cn("flex flex-row items-center gap-1", className)}
       {...props}
     />
   );
@@ -41,13 +55,16 @@ type PaginationLinkProps = {
    * plain <a> when omitted, so the stock usage still works.
    */
   render?: React.ReactElement<Record<string, unknown>>;
+  /** Forces the outlined treatment (Previous/Next/First/Last always carry it). */
+  outlined?: boolean;
 } & Pick<React.ComponentProps<typeof Button>, "size"> &
   React.ComponentProps<"a">;
 
 function PaginationLink({
   className,
   isActive,
-  size = "icon",
+  outlined = false,
+  size = "icon-sm",
   render,
   ...props
 }: PaginationLinkProps) {
@@ -61,9 +78,9 @@ function PaginationLink({
   };
   return (
     <Button
-      variant={isActive ? "outline" : "ghost"}
+      variant={isActive || outlined ? "outline" : "ghost"}
       size={size}
-      className={cn(className)}
+      className={cn("tabular-nums", className)}
       nativeButton={false}
       render={render ? cloneElement(render, anchorProps) : <a {...anchorProps} />}
     />
@@ -73,17 +90,13 @@ function PaginationLink({
 function PaginationPrevious({
   className,
   text = "Previous",
+  "aria-label": ariaLabel = "Go to previous page",
   ...props
 }: React.ComponentProps<typeof PaginationLink> & { text?: string }) {
   return (
-    <PaginationLink
-      aria-label="Go to previous page"
-      size="default"
-      className={cn("ps-1.5!", className)}
-      {...props}
-    >
+    <PaginationLink aria-label={ariaLabel} size="sm" outlined className={className} {...props}>
       <ChevronLeftIcon data-icon="inline-start" className="rtl:rotate-180" />
-      <span className="hidden sm:block">{text}</span>
+      <span className="hidden sm:inline">{text}</span>
     </PaginationLink>
   );
 }
@@ -91,43 +104,110 @@ function PaginationPrevious({
 function PaginationNext({
   className,
   text = "Next",
+  "aria-label": ariaLabel = "Go to next page",
   ...props
 }: React.ComponentProps<typeof PaginationLink> & { text?: string }) {
   return (
-    <PaginationLink
-      aria-label="Go to next page"
-      size="default"
-      className={cn("pe-1.5!", className)}
-      {...props}
-    >
-      <span className="hidden sm:block">{text}</span>
+    <PaginationLink aria-label={ariaLabel} size="sm" outlined className={className} {...props}>
+      <span className="hidden sm:inline">{text}</span>
       <ChevronRightIcon data-icon="inline-end" className="rtl:rotate-180" />
     </PaginationLink>
   );
 }
 
-function PaginationEllipsis({ className, ...props }: React.ComponentProps<"span">) {
+/** Jump to the first page. Icon-only, so its accessible name is required. */
+function PaginationFirst({
+  className,
+  ...props
+}: React.ComponentProps<typeof PaginationLink> & { "aria-label": string }) {
+  return (
+    <PaginationLink
+      size="sm"
+      outlined
+      className={cn("hidden sm:inline-flex", className)}
+      {...props}
+    >
+      <ChevronsLeftIcon className="rtl:rotate-180" />
+    </PaginationLink>
+  );
+}
+
+/** Jump to the last page. Icon-only, so its accessible name is required. */
+function PaginationLast({
+  className,
+  ...props
+}: React.ComponentProps<typeof PaginationLink> & { "aria-label": string }) {
+  return (
+    <PaginationLink
+      size="sm"
+      outlined
+      className={cn("hidden sm:inline-flex", className)}
+      {...props}
+    >
+      <ChevronsRightIcon className="rtl:rotate-180" />
+    </PaginationLink>
+  );
+}
+
+function PaginationEllipsis({
+  className,
+  label = "More pages",
+  ...props
+}: React.ComponentProps<"span"> & { label?: string }) {
   return (
     <span
       aria-hidden
       data-slot="pagination-ellipsis"
       className={cn(
-        "flex size-8 items-center justify-center [&_svg:not([class*='size-'])]:size-4",
+        "flex size-9 items-center justify-center [&_svg:not([class*='size-'])]:size-4",
         className,
       )}
       {...props}
     >
       <MoreHorizontalIcon />
-      <span className="sr-only">More pages</span>
+      <span className="sr-only">{label}</span>
     </span>
+  );
+}
+
+/**
+ * The reference's pager footer: "Showing 1 to 15 of 9,986 results" at the
+ * start, the controls at the end, `px-4 py-3 border-t` under a table. The
+ * text is the caller's (a catalog string); this owns only the placement.
+ */
+function PaginationBar({
+  className,
+  summary,
+  children,
+  ...props
+}: React.ComponentProps<"div"> & { summary?: React.ReactNode }) {
+  return (
+    <div
+      data-slot="pagination-bar"
+      className={cn(
+        "flex flex-col items-center gap-4 border-t px-4 py-3 sm:flex-row sm:justify-between",
+        className,
+      )}
+      {...props}
+    >
+      {summary !== undefined && (
+        <div className="text-sm text-muted-foreground" data-slot="pagination-summary">
+          {summary}
+        </div>
+      )}
+      {children}
+    </div>
   );
 }
 
 export {
   Pagination,
+  PaginationBar,
   PaginationContent,
   PaginationEllipsis,
+  PaginationFirst,
   PaginationItem,
+  PaginationLast,
   PaginationLink,
   PaginationNext,
   PaginationPrevious,

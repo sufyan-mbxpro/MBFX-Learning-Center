@@ -10667,3 +10667,95 @@ accessible deviations.
 - Its accordion rows and plain links sit at different start insets.
 - These are composition at the call site, which is exactly what Phase 5
   migrates.
+
+## 2026-09-11 — changes-20 Phase 3 group 3: tables, pagination, tabs and the filter row (Module 07, ADR-072 §9)
+
+The data surfaces, against `tokens.md` §6.8–§6.10. Every one was confirmed by
+the first capture, and capture 2 showed each recipe is shadcn `default`
+exactly. No new decision.
+
+### One reconciliation, recorded rather than silently resolved
+
+The approved spec (§6.9) gives the default table header **no fill**, as in
+the reference's Users Directory. changes-08 #7, an earlier owner decision
+guarded by `data-table.test.tsx`, made the header band its own surface so
+that "a header never reads as a row". Both hold:
+
+- a plain `Table` header is unfilled;
+- `DataTable` (the admin list, compact per ADR-072 §9) fills it with
+  `bg-muted/50`, which is the reference's own dense-list recipe (its Account
+  Types table).
+
+The header row still never takes the row hover.
+
+### What changed (`@repo/ui`)
+
+- **Table.** One `density` for the whole table, set as `data-density` on
+  `<table>` and read by every cell through a `group/table` variant:
+  - `default`: `p-4` cells, 14px
+  - `compact`: `px-2.5 py-2`, 11px (the Users Directory)
+  - Header cells are the reference's `h-12 px-4`, muted and medium.
+- **DataTable.**
+  - `density="compact"` by default.
+  - The toolbar search is a `SearchInput size="sm"` (36px, glyph included);
+    the old bare Input had no icon.
+  - The table block is `rounded-md border bg-card`, and the pager moved
+    **inside** it as a `px-4 py-3 border-t` footer: page summary at the
+    start, controls at the end, Previous/Next carrying RTL-flipped chevrons.
+  - Sorted column headers turn foreground; sort buttons get a focus ring.
+- **Pagination.**
+  - Unified on 36px per Q11: page links `size-9` ghost, the current page
+    outlined. Previous and Next are outlined `sm` buttons, as in the
+    reference; they were ghost.
+  - New `PaginationFirst`/`PaginationLast`, icon-only, so an `aria-label`
+    is required.
+  - New `PaginationBar`, the reference's footer layout.
+  - The ellipsis label is a prop now; Previous/Next take `aria-label`.
+- **Tabs.** The 40px `bg-muted` tray with no border (it had
+  `border-border/60`), `rounded-sm px-3 py-1.5` triggers, and the active tab
+  on the background with `shadow-sm`. The `line` underline extension is
+  kept. Panels get a focus ring.
+- **`ViewChips` / `ViewChip`** (new, on Base UI's ToggleGroup): the
+  reference's "Default / IB & Referrals / …" row.
+  - `rounded-full` pills, `flex-1 min-w-27.5`, `text-xs`; the selected one
+    is brand-filled and `aria-pressed`.
+  - A view is always selected, so un-toggling the active chip is ignored.
+  - It is a toggle group, not Tabs, because nothing owns a panel.
+- **`FilterBar` / `FilterBarRow` / `FilterBarItem`** (new). Layout only:
+  wrapping rows, `gap-2`, and equal filter slots with a 150px floor
+  (`min-w-37.5`), as a `role="toolbar"`. Inside a DataTable, filters still
+  go in `filters` (ADR-044 #9).
+- **`.no-scrollbar`** (new utility) replaces the reference's arbitrary
+  `[scrollbar-width:none]`.
+
+### Verified
+
+- `@repo/ui`: **303/303**. The new `data-anatomy.test.tsx` covers:
+  - table densities and header treatment
+  - DataTable compact by default, its filled header, the `sm` SearchInput,
+    and the pager inside the bordered block
+  - pagination at 36px throughout
+  - the Tabs tray
+  - ViewChips selection and never-empty selection
+  - the FilterBar layout
+
+  All existing `data-table.test.tsx` behaviour tests pass unchanged.
+
+- `@repo/web`: **285/285**. `typecheck` and `lint` clean on `@repo/ui` and
+  `@repo/web`.
+- **Live** (compiled classes mounted on the running page, because the news
+  archive has too few articles to paginate and DataTable is admin-only):
+
+  | Part           | Measured                                 |
+  | -------------- | ---------------------------------------- |
+  | Compact header | 48px, 10px inline padding, 11px muted    |
+  | Compact cell   | 10px / 8px padding, 11px                 |
+  | Default cell   | 16px padding, 14px                       |
+  | Page link      | 36×36                                    |
+  | Tabs tray      | 40px, muted, no border                   |
+  | Active tab     | raised on white                          |
+  | View chip      | 110px minimum, pill, bronze when pressed |
+  | `no-scrollbar` | resolves to `scrollbar-width: none`      |
+
+  The compact-density group variant is proven to resolve from the `<table>`
+  attribute.

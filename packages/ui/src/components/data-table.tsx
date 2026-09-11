@@ -8,6 +8,12 @@
 // No user-facing string has a hardcoded default (code-style.md #2): every
 // label arrives via the `labels` prop so the calling surface passes values
 // from its message catalog.
+//
+// changes-20 / ADR-072 §9 (tokens.md §6.9–§6.10): an admin list is the
+// reference's Users Directory — COMPACT density by default, the toolbar's
+// SearchInput at the 36px filter-row size, and the pager as a px-4 py-3
+// footer INSIDE the bordered table block (summary at the start, controls at
+// the end), exactly where the reference draws it.
 import { useEffect, useState } from "react";
 import {
   flexRender,
@@ -22,11 +28,19 @@ import {
   type SortingState,
   type VisibilityState,
 } from "@tanstack/react-table";
-import { ChevronDown, ChevronsUpDown, ChevronUp, Columns3, Download } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsUpDown,
+  ChevronUp,
+  Columns3,
+  Download,
+} from "lucide-react";
 
 import { cn } from "@repo/ui/lib/utils";
 import { Button } from "@repo/ui/components/button";
-import { Input } from "@repo/ui/components/input";
+import { SearchInput } from "@repo/ui/components/search-input";
 import { Skeleton } from "@repo/ui/components/skeleton";
 import {
   DropdownMenu,
@@ -43,6 +57,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  type TableDensity,
 } from "@repo/ui/components/table";
 
 // `meta.label` gives human-readable (translated) names to the column
@@ -105,6 +120,11 @@ export interface DataTableProps<TData, TValue> {
    * above the table is the layout this prop exists to replace.
    */
   filters?: React.ReactNode;
+  /**
+   * Row density. Admin lists default to `compact`, the reference's Users
+   * Directory (ADR-072 §9); pass `default` for a roomier table.
+   */
+  density?: TableDensity;
 }
 
 function toCsv<TData>(rows: Row<TData>[], visibleColumnIds: string[]): string {
@@ -139,6 +159,7 @@ export function DataTable<TData, TValue>({
   pageSizeOptions,
   emptyState,
   filters,
+  density = "compact",
 }: DataTableProps<TData, TValue>) {
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
@@ -194,12 +215,13 @@ export function DataTable<TData, TValue>({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2" data-slot="data-table-toolbar">
-        <Input
+        <SearchInput
+          size="sm"
           value={searchValue}
           onChange={(e) => setSearchValue(e.target.value)}
           placeholder={labels.search}
           aria-label={labels.search}
-          className="w-full min-w-0 sm:max-w-64"
+          wrapperClassName="sm:max-w-80 sm:flex-1"
           data-slot="data-table-search"
         />
         {filters}
@@ -253,9 +275,14 @@ export function DataTable<TData, TValue>({
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-md border" aria-busy={isLoading || undefined}>
-        <Table>
-          <TableHeader>
+      <div
+        className="overflow-hidden rounded-md border bg-card text-card-foreground"
+        aria-busy={isLoading || undefined}
+      >
+        <Table density={density}>
+          {/* The reference's dense admin lists fill the header band, which
+              also keeps changes-08 #7: a header never reads as a row. */}
+          <TableHeader className="bg-muted/50">
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
                 {headerGroup.headers.map((header) => {
@@ -267,8 +294,9 @@ export function DataTable<TData, TValue>({
                         <button
                           type="button"
                           className={cn(
-                            "flex items-center gap-1 text-start font-medium",
-                            "hover:text-foreground",
+                            "-mx-1 inline-flex items-center gap-1 rounded-sm px-1 text-start font-medium transition-colors outline-none",
+                            "hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
+                            sortDir && "text-foreground",
                           )}
                           onClick={header.column.getToggleSortingHandler()}
                           aria-sort={
@@ -330,52 +358,59 @@ export function DataTable<TData, TValue>({
             )}
           </TableBody>
         </Table>
-      </div>
 
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        {pageSizeOptions && pageSizeOptions.length > 0 && pageSizeLabel && (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button variant="outline" size="sm" data-slot="data-table-page-size">
-                  {pageSizeLabel(pagination.pageSize)}
-                  <ChevronDown data-icon="inline-end" aria-hidden />
-                </Button>
-              }
-            />
-            <DropdownMenuContent align="end">
-              <DropdownMenuRadioGroup
-                value={String(pagination.pageSize)}
-                onValueChange={(value) => table.setPageSize(Number(value))}
-              >
-                {pageSizeOptions.map((size) => (
-                  <DropdownMenuRadioItem key={size} value={String(size)}>
-                    {pageSizeLabel(size)}
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-        <span className="text-sm text-muted-foreground" data-slot="data-table-page">
-          {labels.page(pagination.pageIndex + 1, Math.max(pageCount, 1))}
-        </span>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => table.previousPage()}
-          disabled={!table.getCanPreviousPage()}
+        <div
+          className="flex flex-col gap-4 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+          data-slot="data-table-footer"
         >
-          {labels.previous}
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => table.nextPage()}
-          disabled={!table.getCanNextPage()}
-        >
-          {labels.next}
-        </Button>
+          <span className="text-sm text-muted-foreground" data-slot="data-table-page">
+            {labels.page(pagination.pageIndex + 1, Math.max(pageCount, 1))}
+          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            {pageSizeOptions && pageSizeOptions.length > 0 && pageSizeLabel && (
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button variant="outline" size="sm" data-slot="data-table-page-size">
+                      {pageSizeLabel(pagination.pageSize)}
+                      <ChevronDown data-icon="inline-end" aria-hidden />
+                    </Button>
+                  }
+                />
+                <DropdownMenuContent align="end">
+                  <DropdownMenuRadioGroup
+                    value={String(pagination.pageSize)}
+                    onValueChange={(value) => table.setPageSize(Number(value))}
+                  >
+                    {pageSizeOptions.map((size) => (
+                      <DropdownMenuRadioItem key={size} value={String(size)}>
+                        {pageSizeLabel(size)}
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => table.previousPage()}
+              disabled={!table.getCanPreviousPage()}
+            >
+              <ChevronLeft data-icon="inline-start" aria-hidden className="rtl:rotate-180" />
+              {labels.previous}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => table.nextPage()}
+              disabled={!table.getCanNextPage()}
+            >
+              {labels.next}
+              <ChevronRight data-icon="inline-end" aria-hidden className="rtl:rotate-180" />
+            </Button>
+          </div>
+        </div>
       </div>
     </div>
   );

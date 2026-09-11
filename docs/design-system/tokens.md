@@ -383,6 +383,18 @@ accessible variant closest to the reference look.
     the tonal status is `danger`)
   - `CountBadge` (new)
   - Avatar (`shape="square"`)
+- **Group 3 (data), built 2026-09-11:**
+  - Table: a `density` of default (`p-4`, 14px) or compact (`px-2.5 py-2`,
+    11px), set on `<table>`; muted 48px header cells.
+  - DataTable: compact by default; `bg-muted/50` header band; SearchInput
+    `sm` in the toolbar; the pager as a `px-4 py-3 border-t` footer inside
+    the bordered block.
+  - Pagination: everything 36px (Q11); outlined Previous/Next plus new
+    First/Last; new `PaginationBar`.
+  - Tabs: the 40px muted tray.
+  - New `ViewChips`/`ViewChip` (Base UI ToggleGroup) and `FilterBar` /
+    `FilterBarRow` / `FilterBarItem`.
+  - New `no-scrollbar` utility.
 - **Group 1 completion and group 2 (overlays)**, unblocked by capture 2:
   - Checkbox, Switch, RadioGroup (new), Textarea, Tooltip (new)
   - the Select and Combobox popups and items

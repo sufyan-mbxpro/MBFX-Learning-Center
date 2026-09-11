@@ -57,8 +57,16 @@ hold 4.5:1 exactly up to that tint.
 
 - `Badge` centres its own text (flex centring in every size; `leading-none`
   on the fixed-height `sm`/`xs` sizes).
-- `Table`'s header band is its own surface (`bg-muted/60`), with the row
-  hover tint cancelled inside it — a header must never read as a row.
+- `Table`'s header row never takes the row hover — a header must never read
+  as a row. A plain `Table` header is unfilled (the reference's simple
+  tables); `DataTable` fills it `bg-muted/50` (the reference's dense admin
+  lists), so an admin list's header is still its own surface (changes-08 #7).
+- `Table` has one `density` for the whole table (`default` p-4 / `compact`
+  px-2.5 py-2 11px) set on `<table>`; `DataTable` defaults to `compact`
+  (ADR-072 §9). Never pad an individual cell to fake a density.
+- A view switcher above a list is `ViewChips` (a toggle group), not Tabs —
+  nothing there owns a panel. Filters above something other than a
+  DataTable use `FilterBar`; inside a DataTable they go in `filters`.
 - `DataTable` takes a `filters` slot rendered in its own toolbar beside
   the search box. Screens pass their Selects there rather than stacking a
   filter bar above the table.
