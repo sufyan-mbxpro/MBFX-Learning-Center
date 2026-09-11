@@ -312,7 +312,7 @@ export function ArticleEditor({
             {labels.viewLive}
           </Button>
         )}
-        <Button size="sm" disabled={pending || !canSave} onClick={save}>
+        <Button size="sm" disabled={!canSave} loading={pending} onClick={save}>
           {headerPublishes ? labels.publishPost : labels.updatePost}
         </Button>
         <DropdownMenu>

@@ -191,7 +191,7 @@ export function QuizRunner({ quiz, locale }: { quiz: QuizView; locale: string })
           />
         </dl>
         <div>
-          <Button size="lg" disabled={busy} onClick={() => void start()}>
+          <Button size="lg" loading={busy} onClick={() => void start()}>
             {t("quizzes.start")}
           </Button>
         </div>
@@ -282,12 +282,12 @@ export function QuizRunner({ quiz, locale }: { quiz: QuizView; locale: string })
 
       <div>
         {answered ? (
-          <Button disabled={busy} onClick={() => void next()}>
+          <Button loading={busy} onClick={() => void next()}>
             {position === quiz.questions.length ? t("quizzes.finish") : t("quizzes.next")}
             <ArrowRight data-icon="inline-end" aria-hidden className="rtl:rotate-180" />
           </Button>
         ) : (
-          <Button disabled={busy || selection.length === 0} onClick={() => void answer()}>
+          <Button disabled={selection.length === 0} loading={busy} onClick={() => void answer()}>
             {t("quizzes.submitAnswer")}
           </Button>
         )}

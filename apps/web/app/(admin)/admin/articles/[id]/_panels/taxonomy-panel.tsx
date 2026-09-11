@@ -166,7 +166,7 @@ function NewTermDialog({
           <Button variant="ghost" disabled={pending} onClick={() => onOpenChange(false)}>
             {cancelLabel}
           </Button>
-          <Button disabled={pending || name.trim() === ""} onClick={submit}>
+          <Button disabled={name.trim() === ""} loading={pending} onClick={submit}>
             {createLabel}
           </Button>
         </DialogFooter>

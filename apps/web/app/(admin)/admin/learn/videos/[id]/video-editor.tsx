@@ -229,7 +229,8 @@ export function VideoEditor({
           {canUpdate && (
             <Button
               size="sm"
-              disabled={pending || !canSave}
+              disabled={!canSave}
+              loading={pending}
               onClick={() => run(() => submitForm(), { successMessage: labels.saved })}
             >
               {labels.updateTopic}

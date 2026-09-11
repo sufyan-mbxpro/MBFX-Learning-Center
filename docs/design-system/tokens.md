@@ -452,6 +452,41 @@ accessible variant closest to the reference look.
 
   No per-page scale exception was needed. **changes-20 is complete.**
 
+- **changes-21 Phase A (loaders and feedback states), 2026-09-12.** §6 had
+  no loader spec; this is it. One system, all in `@repo/ui`, built from the
+  anatomy above rather than new values:
+  - **`Button loading`** — disabled plus `aria-busy`; the Spinner takes the
+    icon slot (a leading or only icon hides) and the label stays. The spinner
+    is `size="inherit"`, so §5's button icon rule sizes it (16px, 14px at `xs`
+    and below), and `tone="current"`, because the primary-filled mark is
+    bronze on bronze on a `default` button. It goes on the button that
+    started the work; siblings waiting on it stay `disabled`.
+  - **`Spinner`** — `inherit` · `xs` 12 · `sm` 14 · `default` 16 · `lg` 20
+    (§5's icon steps) · `section` 40 · `page` 64 · `overlay` 80 (the three
+    loader scales). `brand` (primary fill) or `current` tone. Toasts use it
+    too, so there is one pending glyph.
+  - **`Skeleton`** — every block pulses AND sweeps (`shimmer`); the app had
+    both looks before. Primitives are named for what they stand in for and
+    carry this document's dimensions: `SkeletonText` (ragged, short last
+    line), `SkeletonHeading` (page 36 · section 24 · compact 20),
+    `SkeletonAvatar` (§6.7), `SkeletonImage` (video · square · 4/3 · 16/6),
+    `SkeletonButton` (§6.1 names), `SkeletonField` (label → 8px → 40px),
+    `SkeletonCard` (Card's shell, ADR-075) and `SkeletonTable` (DataTable's
+    48px muted header, compact rows, the §6.10 pager footer).
+  - **Page archetypes** (`page-skeletons.tsx`) — `TablePageSkeleton`,
+    `FormPageSkeleton`, `EditorPageSkeleton`, `DetailPageSkeleton`,
+    `DashboardSkeleton`, `PageHeaderSkeleton`, `MetricCardSkeleton`. A
+    route announces once (`label` → one `role="status"`) or not at all
+    (`aria-hidden`); never per block. Public loaders take no label, because
+    a public fallback reads no translations.
+  - **Card skeletons live beside their cards** (`CourseCardSkeleton`,
+    `QuizCardSkeleton`, `VideoCardSkeleton`), in the cards' own
+    `rounded-2xl ring` shells (Q16).
+  - **`EmptyState` / `ErrorState`** compose `Empty` (§6.9, Q12). Sizes `sm`
+    (in a panel or menu), `default`, and `lg` (a route boundary: the title is
+    the h1 and the dashed border drops). The error tile is `bg-destructive/10`
+    behind `-destructive-interactive` ink (ADR-073) with `role="alert"`.
+
 ### 6.1 Button
 
 Base: `inline-flex items-center justify-center gap-2 whitespace-nowrap

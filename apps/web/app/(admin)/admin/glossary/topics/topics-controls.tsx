@@ -85,7 +85,7 @@ export function NewTopicButton({ labels }: { labels: NewTopicLabels }) {
           <Button variant="outline" onClick={() => setOpen(false)}>
             {labels.cancel}
           </Button>
-          <Button disabled={pending || name.trim() === ""} onClick={create}>
+          <Button disabled={name.trim() === ""} loading={pending} onClick={create}>
             {labels.create}
           </Button>
         </DialogFooter>

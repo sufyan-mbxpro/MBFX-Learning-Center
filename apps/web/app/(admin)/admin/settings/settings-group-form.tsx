@@ -335,7 +335,7 @@ export function SettingsGroupForm({
             {changedKeys.length} · {changedKeys.map((key) => humanizeKey(key)).join(", ")}
           </span>
         )}
-        <Button type="submit" disabled={pending || !dirty}>
+        <Button type="submit" disabled={!dirty} loading={pending}>
           {labels.save}
         </Button>
       </div>

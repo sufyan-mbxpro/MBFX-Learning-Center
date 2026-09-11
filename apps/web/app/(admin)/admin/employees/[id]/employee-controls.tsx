@@ -242,7 +242,8 @@ export function EmployeeEditDialog({
             </Button>
             <Button
               onClick={submit}
-              disabled={pending || !form.firstName.trim() || !form.lastName.trim()}
+              disabled={!form.firstName.trim() || !form.lastName.trim()}
+              loading={pending}
             >
               {labels.save}
             </Button>

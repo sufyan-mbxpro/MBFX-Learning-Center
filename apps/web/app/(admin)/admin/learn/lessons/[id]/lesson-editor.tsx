@@ -246,7 +246,8 @@ export function LessonEditor({
           {canUpdate && (
             <Button
               size="sm"
-              disabled={pending || !canSave}
+              disabled={!canSave}
+              loading={pending}
               onClick={() => run(() => submitForm(), { successMessage: labels.saved })}
             >
               {labels.updateLesson}

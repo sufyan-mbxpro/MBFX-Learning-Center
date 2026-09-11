@@ -239,7 +239,8 @@ export function CourseEditor({
           {canUpdate && (
             <Button
               size="sm"
-              disabled={pending || !canSave}
+              disabled={!canSave}
+              loading={pending}
               onClick={() => run(() => submitForm(), { successMessage: labels.saved })}
             >
               {labels.updateCourse}

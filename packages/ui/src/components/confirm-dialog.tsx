@@ -18,7 +18,6 @@ import {
   AlertDialogTrigger,
 } from "@repo/ui/components/alert-dialog";
 import { Button } from "@repo/ui/components/button";
-import { Spinner } from "@repo/ui/components/spinner";
 
 function ConfirmDialog({
   trigger,
@@ -65,7 +64,7 @@ function ConfirmDialog({
           <AlertDialogCancel disabled={pending}>{cancelLabel}</AlertDialogCancel>
           <Button
             variant={destructive ? "destructive" : "default"}
-            disabled={pending}
+            loading={pending}
             onClick={() =>
               startTransition(async () => {
                 await onConfirm();
@@ -73,7 +72,6 @@ function ConfirmDialog({
               })
             }
           >
-            {pending && <Spinner aria-hidden />}
             {confirmLabel}
           </Button>
         </AlertDialogFooter>

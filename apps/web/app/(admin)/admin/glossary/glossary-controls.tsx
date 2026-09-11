@@ -131,7 +131,7 @@ export function NewTermButton({
             <Button variant="ghost" onClick={() => setOpen(false)}>
               {labels.cancel}
             </Button>
-            <Button disabled={pending} onClick={create}>
+            <Button loading={pending} onClick={create}>
               {labels.create}
             </Button>
           </DialogFooter>

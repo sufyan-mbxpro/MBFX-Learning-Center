@@ -11,6 +11,7 @@ import { getSetting, isFeatureVisible } from "@repo/settings";
 import { formatBytes, parseVideoUrl } from "@repo/utils";
 import { Button } from "@repo/ui/components/button";
 import { Container } from "@repo/ui/components/container";
+import { EmptyState } from "@repo/ui/components/empty";
 import { ExternalBadge } from "@repo/ui/components/external-badge";
 import { LessonNav } from "@repo/ui/components/lesson-nav";
 import { RichText } from "@repo/ui/components/rich-text";
@@ -260,7 +261,7 @@ export default async function LessonPage({
             {view.content ? (
               <RichText html={view.content} />
             ) : (
-              <p className="text-sm text-muted-foreground">{t("lesson.emptyBody")}</p>
+              <EmptyState size="sm" icon={<FileText aria-hidden />} title={t("lesson.emptyBody")} />
             )}
 
             {view.externalUrl && (

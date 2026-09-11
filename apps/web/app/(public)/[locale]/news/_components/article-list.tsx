@@ -15,6 +15,7 @@ import type { ArticleListEntry } from "@repo/core";
 import { Link } from "@repo/i18n/navigation";
 import { Badge } from "@repo/ui/components/badge";
 import { Card, CardContent } from "@repo/ui/components/card";
+import { EmptyState } from "@repo/ui/components/empty";
 import { cn } from "@repo/ui/lib/utils";
 
 import { ArticleMedia } from "./article-media.tsx";
@@ -77,7 +78,7 @@ export async function ArticleCards({
     variant === "featured" || variant === "compact" ? variant : "standard";
 
   if (entries.length === 0) {
-    return <p className="py-12 text-center text-muted-foreground">{t("empty")}</p>;
+    return <EmptyState title={t("empty")} />;
   }
 
   return (

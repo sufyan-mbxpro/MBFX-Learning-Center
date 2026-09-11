@@ -18,22 +18,25 @@
 // loading. Announcing forty empty boxes on top of that is noise.
 import { Container } from "@repo/ui/components/container";
 import { Section } from "@repo/ui/components/section";
-import { Skeleton } from "@repo/ui/components/skeleton";
+import {
+  Skeleton,
+  SkeletonCard,
+  SkeletonHeading,
+  SkeletonImage,
+  SkeletonText,
+} from "@repo/ui/components/skeleton";
 
+/** A standard ArticleCards card: `Card`'s shell (changes-20 Phase 5) with a
+ * flush 16:9 cover — the ratio ArticleMedia gives it, so the swap is a fill. */
 function CardSkeleton() {
   return (
-    <div className="flex flex-col gap-3 overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/10">
-      {/* 16/9, the ratio ArticleMedia gives a standard card — a skeleton at
-          the wrong ratio is a layout shift with extra steps. */}
-      <Skeleton className="aspect-video w-full rounded-none" />
-      <div className="flex flex-col gap-2 p-5 pt-0">
-        <Skeleton className="h-5 w-24 rounded-full" />
-        <Skeleton className="h-5 w-full" />
-        <Skeleton className="h-5 w-3/4" />
-        <Skeleton className="h-4 w-full" />
-        <Skeleton className="mt-2 h-4 w-32" />
-      </div>
-    </div>
+    <SkeletonCard media="video">
+      <Skeleton className="h-5 w-24 rounded-full" />
+      <Skeleton className="h-5 w-full" />
+      <Skeleton className="h-5 w-3/4" />
+      <Skeleton className="h-4 w-full" />
+      <Skeleton className="mt-2 h-4 w-32" />
+    </SkeletonCard>
   );
 }
 
@@ -54,45 +57,32 @@ export default function NewsLoading() {
         </Container>
       </Section>
 
-      {/* The stat band. */}
-      <Section spacing="sm" tone="muted">
-        <Container className="grid grid-cols-1 gap-6 sm:grid-cols-3">
-          {Array.from({ length: 3 }, (_, index) => (
-            <div key={index} className="flex flex-col items-center gap-2">
-              <Skeleton className="h-9 w-20" />
-              <Skeleton className="h-4 w-28" />
-            </div>
-          ))}
-        </Container>
-      </Section>
-
-      {/* The spotlight: lead story beside two runners-up. */}
+      {/* The spotlight: lead story beside two runners-up. The stat band that
+          used to sit above it is gone from the page (news design pass, second
+          pass), so its placeholder is gone too — reserving a band that never
+          arrives is the jump a skeleton exists to prevent. Cards are `Card`'s
+          shell, as ArticleCards' are since changes-20 Phase 5. */}
       <Section spacing="md">
         <Container className="flex flex-col gap-8">
-          <Skeleton className="h-9 w-64" />
+          <SkeletonHeading size="page" />
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-(--grid-3-2)">
-            <div className="flex flex-col gap-3 overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/10">
-              <Skeleton className="aspect-video w-full rounded-none" />
-              <div className="flex flex-col gap-3 p-6 pt-0">
-                <Skeleton className="h-5 w-28 rounded-full" />
-                <Skeleton className="h-8 w-full" />
-                <Skeleton className="h-8 w-2/3" />
-                <Skeleton className="h-4 w-full" />
-              </div>
-            </div>
+            <SkeletonCard media="video">
+              <Skeleton className="h-5 w-28 rounded-full" />
+              <Skeleton className="h-8 w-full" />
+              <Skeleton className="h-8 w-2/3" />
+              <Skeleton className="h-4 w-full" />
+            </SkeletonCard>
             <div className="flex flex-col gap-4">
               {Array.from({ length: 2 }, (_, index) => (
-                <div
-                  key={index}
-                  className="flex flex-1 items-start gap-4 rounded-2xl bg-card p-4 ring-1 ring-foreground/10"
-                >
-                  <Skeleton className="aspect-4/3 w-28 shrink-0 rounded-lg" />
-                  <div className="flex flex-1 flex-col gap-2">
-                    <Skeleton className="h-4 w-20" />
-                    <Skeleton className="h-4 w-full" />
-                    <Skeleton className="h-4 w-4/5" />
+                <SkeletonCard key={index} size="sm" className="flex-1">
+                  <div className="flex items-start gap-4">
+                    <SkeletonImage ratio="4/3" className="w-28 shrink-0" />
+                    <div className="flex flex-1 flex-col gap-2">
+                      <Skeleton className="h-4 w-20" />
+                      <SkeletonText lines={2} />
+                    </div>
                   </div>
-                </div>
+                </SkeletonCard>
               ))}
             </div>
           </div>

@@ -30,6 +30,7 @@ import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardContent, CardHeader } from "@repo/ui/components/card";
 import type { CourseLevelTone } from "@repo/ui/components/course-card";
+import { EmptyState } from "@repo/ui/components/empty";
 import { cn } from "@repo/ui/lib/utils";
 
 export interface SidebarCourse {
@@ -106,7 +107,7 @@ export function CourseSidebar({
         {visible.length === 0 ? (
           // Reachable: a track chip can be selected whose only course is the
           // one being read. The way out is offered rather than described.
-          <p className="py-2 text-sm text-muted-foreground">{t("course.moreCoursesEmpty")}</p>
+          <EmptyState size="sm" title={t("course.moreCoursesEmpty")} />
         ) : (
           <ul className="flex flex-col gap-2">
             {visible.map((course) => (

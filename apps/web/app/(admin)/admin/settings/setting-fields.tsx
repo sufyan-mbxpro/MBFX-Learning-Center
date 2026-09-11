@@ -14,6 +14,7 @@ import { Checkbox } from "@repo/ui/components/checkbox";
 import { Input } from "@repo/ui/components/input";
 import { Label } from "@repo/ui/components/label";
 import { ConfirmDialog } from "@repo/ui/components/confirm-dialog";
+import { EmptyState } from "@repo/ui/components/empty";
 import { AdminCombobox } from "../_components/combobox.tsx";
 
 export interface SettingFieldsLabels {
@@ -178,7 +179,7 @@ export function ListField({
 
   return (
     <div className="flex flex-col gap-2">
-      {rows.length === 0 && <p className="text-sm text-muted-foreground">{labels.emptyList}</p>}
+      {rows.length === 0 && <EmptyState size="sm" title={labels.emptyList} />}
 
       {rows.map((row, index) => (
         <div

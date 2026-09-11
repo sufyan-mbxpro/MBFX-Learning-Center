@@ -105,7 +105,8 @@ export function NewVideoTopicDialog({
           </Button>
           <Button
             size="sm"
-            disabled={pending || title.trim() === "" || track === ""}
+            disabled={title.trim() === "" || track === ""}
+            loading={pending}
             onClick={() =>
               run(
                 async () => {

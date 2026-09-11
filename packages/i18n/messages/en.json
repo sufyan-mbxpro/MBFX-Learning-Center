@@ -1,7 +1,8 @@
 {
   "common": {
     "siteName": "MBX Learning Center",
-    "siteDescription": "Free forex education, tools, and analysis."
+    "siteDescription": "Free forex education, tools, and analysis.",
+    "loading": "Loading…"
   },
   "home": {
     "placeholder": "Public surface — scaffold placeholder. See docs/logs/DEVLOG.md for module status.",
@@ -122,11 +123,13 @@
   },
   "error": {
     "title": "Something went wrong",
-    "retry": "Try again"
+    "retry": "Try again",
+    "description": "Something stopped this page from loading. Try again, or come back in a moment."
   },
   "notFound": {
     "title": "Page not found",
-    "backHome": "Back to home"
+    "backHome": "Back to home",
+    "description": "The page may have moved, or the address may be mistyped."
   },
   "notTranslated": {
     "title": "Not yet translated",
@@ -255,7 +258,7 @@
         },
         "feedback": {
           "title": "Feedback",
-          "description": "Alerts, empty states, progress and keyboard hints."
+          "description": "Alerts, empty and error states, loaders, skeletons, progress and keyboard hints."
         }
       },
       "sample": {
@@ -366,6 +369,11 @@
         "emptyTitle": "Nothing here yet",
         "emptyBody": "Create the first item to get started.",
         "emptyAction": "Create item",
+        "errorTitle": "Couldn't load this list",
+        "errorBody": "Check your connection and try again.",
+        "retry": "Try again",
+        "loadingLabel": "Loading",
+        "saving": "Saving",
         "commandHint": "Command palette",
         "typeSample": "The quick brown fox jumps over the lazy dog",
         "colId": "ID",

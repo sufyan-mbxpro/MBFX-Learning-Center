@@ -45,6 +45,7 @@ import {
   type CurriculumSection,
 } from "@repo/ui/components/curriculum-list";
 import { ExternalBadge } from "@repo/ui/components/external-badge";
+import { Skeleton, SkeletonButton, SkeletonText } from "@repo/ui/components/skeleton";
 import { cn } from "@repo/ui/lib/utils";
 
 export interface CourseCardLabels extends CurriculumLabels {
@@ -66,6 +67,39 @@ export interface CourseCardLabels extends CurriculumLabels {
  * (`_lib/learn-labels.ts`), so the same level is the same colour everywhere.
  */
 export type CourseLevelTone = "success" | "info" | "warning" | "eyebrow";
+
+/**
+ * changes-21 Phase A — the card's pending shape, kept beside the card so the
+ * two cannot drift: the same shell, the square cover from `sm`, the title/CTA
+ * row, two badge pills and the summary. It claims only LAYOUT — no title
+ * width that implies a particular course.
+ */
+export function CourseCardSkeleton({ className }: { className?: string }) {
+  return (
+    <div
+      aria-hidden
+      className={cn(
+        "flex min-w-0 flex-col rounded-2xl bg-card ring-1 ring-foreground/10",
+        className,
+      )}
+    >
+      <div className="flex flex-col gap-4 sm:flex-row">
+        <Skeleton className="aspect-video w-full shrink-0 rounded-none rounded-t-2xl sm:aspect-square sm:w-44 sm:rounded-s-2xl sm:rounded-e-none" />
+        <div className="flex min-w-0 flex-1 flex-col gap-2 p-4 ps-0 max-sm:ps-4 max-sm:pt-0">
+          <div className="flex items-start justify-between gap-3">
+            <Skeleton className="h-5 w-40 max-w-full" />
+            <SkeletonButton size="sm" />
+          </div>
+          <div className="flex gap-1.5">
+            <Skeleton className="h-5 w-20 rounded-full" />
+            <Skeleton className="h-5 w-24 rounded-full" />
+          </div>
+          <SkeletonText lines={2} />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function CourseCard({
   href,

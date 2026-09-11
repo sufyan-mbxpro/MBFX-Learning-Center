@@ -16,6 +16,7 @@
 // asked for less motion gets plain tinted blocks, not stilled ones.
 import { Container } from "@repo/ui/components/container";
 import { Section } from "@repo/ui/components/section";
+import { QuizCardSkeleton } from "@repo/ui/components/quiz-card";
 import { Skeleton } from "@repo/ui/components/skeleton";
 
 export default function QuizIndexLoading() {
@@ -51,32 +52,6 @@ export default function QuizIndexLoading() {
           </div>
         </Container>
       </Section>
-    </div>
-  );
-}
-
-/** The card's own anatomy — a 16:9 panel over a copy column that ends in the
- * score meter and its CTA. */
-function QuizCardSkeleton() {
-  return (
-    <div className="flex flex-col rounded-2xl bg-card ring-1 ring-foreground/10">
-      <Skeleton className="shimmer aspect-video w-full rounded-t-2xl" />
-      <div className="flex flex-col gap-2.5 p-5">
-        <Skeleton className="shimmer h-5 w-40" />
-        <Skeleton className="shimmer h-4 w-full" />
-        <Skeleton className="shimmer h-4 w-2/3" />
-        <div className="flex flex-col gap-1.5 pt-3">
-          <div className="flex justify-between gap-3">
-            <Skeleton className="shimmer h-3 w-20" />
-            <Skeleton className="shimmer h-3 w-10" />
-          </div>
-          <Skeleton className="shimmer h-2 w-full rounded-full" />
-        </div>
-        <div className="flex items-center justify-between gap-3 pt-1">
-          <Skeleton className="shimmer h-3 w-16" />
-          <Skeleton className="shimmer h-8 w-24 rounded-md" />
-        </div>
-      </div>
     </div>
   );
 }

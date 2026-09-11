@@ -444,7 +444,7 @@ export function QuizEditor({
 
         {/* ADR-044 #8: Save sits at the inline END of its section. */}
         <div className="flex justify-end">
-          <Button disabled={pending || !canSave || !canUpdate} onClick={save}>
+          <Button disabled={!canSave || !canUpdate} loading={pending} onClick={save}>
             {t("quizzes.save")}
           </Button>
         </div>

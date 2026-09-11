@@ -141,7 +141,8 @@ export function NewArticleDialog({
           </Button>
           <Button
             size="sm"
-            disabled={pending || !newCategory}
+            disabled={!newCategory}
+            loading={pending}
             onClick={() =>
               run(
                 async () => {

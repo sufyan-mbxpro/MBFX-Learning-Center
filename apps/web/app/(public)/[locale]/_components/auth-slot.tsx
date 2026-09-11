@@ -13,6 +13,7 @@ import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Link } from "@repo/i18n/navigation";
 import { Button } from "@repo/ui/components/button";
+import { Skeleton, SkeletonButton } from "@repo/ui/components/skeleton";
 
 type AuthState =
   { status: "loading" } | { status: "anonymous" } | { status: "learner"; name: string };
@@ -47,8 +48,16 @@ export function AuthSlot() {
     };
   }, []);
 
+  // The anonymous pair's own shape — the link and the 36px pill — because that
+  // is what most visitors resolve to, so the header does not shift when the
+  // session answers (changes-21 Phase A; it was an ad-hoc pulsing span).
   if (state.status === "loading") {
-    return <span className="h-5 w-16 animate-pulse rounded bg-muted" aria-hidden />;
+    return (
+      <div aria-hidden className="flex items-center gap-2 sm:gap-3">
+        <Skeleton className="h-5 w-12" />
+        <SkeletonButton size="sm" shape="pill" />
+      </div>
+    );
   }
 
   // Both learner entry points (ADR-052). The staff screen at /admin/sign-in

@@ -49,6 +49,16 @@ hold 4.5:1 exactly up to that tint.
   `selectTriggerVariants`.
 - **Badge meanings:** `destructive` is the SOLID alert pill; a destructive
   STATUS is `danger` (tonal).
+- **Pending, empty and error states are components** (changes-21 Phase A,
+  tokens.md §6 build status):
+  - `Button loading` goes on the button that STARTED the work; siblings stay
+    `disabled`. Never hand-place `{pending && <Spinner />}`.
+  - A route loader is a `page-skeletons.tsx` archetype, and a card's skeleton
+    is exported beside the card. Never an app-local copy.
+  - "Nothing here" is `EmptyState` and "this failed" is `ErrorState`, never a
+    muted `<p>` or red text.
+  - A loader announces once (`label`) or not at all.
+  - `apps/web/app/loading-states.test.ts` fails on any of the old patterns.
 - **Provisional components** (checkbox, switch, radio, textarea, tooltip,
   dropdown popups/items) are not restyled until their spec is confirmed from
   the owner's second capture.

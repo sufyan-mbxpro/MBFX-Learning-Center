@@ -18,6 +18,7 @@
 // motion gets plain tinted blocks, not stilled ones.
 import { Container } from "@repo/ui/components/container";
 import { Section } from "@repo/ui/components/section";
+import { CourseCardSkeleton } from "@repo/ui/components/course-card";
 import { Skeleton } from "@repo/ui/components/skeleton";
 
 export default function LearnLoading() {
@@ -63,27 +64,6 @@ export default function LearnLoading() {
           </div>
         </Container>
       </Section>
-    </div>
-  );
-}
-
-/** The card's own anatomy — square cover beside a copy column from sm. */
-function CourseCardSkeleton() {
-  return (
-    <div className="flex flex-col gap-4 rounded-2xl bg-card ring-1 ring-foreground/10 sm:flex-row">
-      <Skeleton className="shimmer aspect-video w-full rounded-t-2xl sm:aspect-square sm:w-44 sm:rounded-s-2xl sm:rounded-e-none" />
-      <div className="flex flex-1 flex-col gap-2.5 p-4 ps-0 max-sm:ps-4 max-sm:pt-0">
-        <div className="flex items-start justify-between gap-3">
-          <Skeleton className="shimmer h-5 w-40" />
-          <Skeleton className="shimmer h-8 w-20 rounded-md" />
-        </div>
-        <div className="flex gap-1.5">
-          <Skeleton className="shimmer h-5 w-20 rounded-full" />
-          <Skeleton className="shimmer h-5 w-24 rounded-full" />
-        </div>
-        <Skeleton className="shimmer h-4 w-full" />
-        <Skeleton className="shimmer h-4 w-3/4" />
-      </div>
     </div>
   );
 }

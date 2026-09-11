@@ -8,18 +8,21 @@
 import { cn } from "@repo/ui/lib/utils";
 import { Spinner } from "@repo/ui/components/spinner";
 
-function PageLoader({ label, className }: { label: string; className?: string }) {
+// `label` is optional on the PAGE loader only (changes-21 Phase A): without one
+// it is a decorative, `aria-hidden` mark for a surface whose navigation is
+// already announced and whose fallback must read no request data (the cached
+// public site). With one, it is a single `role="status"` region.
+function PageLoader({ label, className }: { label?: string; className?: string }) {
   return (
     <div
-      role="status"
-      aria-live="polite"
+      {...(label ? { role: "status", "aria-live": "polite" as const } : { "aria-hidden": true })}
       className={cn(
         "flex min-h-(--height-half-screen) flex-1 flex-col items-center justify-center gap-5 text-muted-foreground",
         className,
       )}
     >
-      <Spinner aria-hidden className="brand-loader-zoom size-16" />
-      <p className="text-sm">{label}</p>
+      <Spinner aria-hidden size="page" className="brand-loader-zoom" />
+      {label && <p className="text-sm">{label}</p>}
     </div>
   );
 }
@@ -34,7 +37,7 @@ function SectionLoader({ label, className }: { label: string; className?: string
         className,
       )}
     >
-      <Spinner aria-hidden className="brand-loader-zoom size-10" />
+      <Spinner aria-hidden size="section" className="brand-loader-zoom" />
       <p className="text-sm">{label}</p>
     </div>
   );

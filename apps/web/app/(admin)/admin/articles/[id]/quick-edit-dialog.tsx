@@ -93,7 +93,8 @@ export function QuickEditDialog({
         <DialogFooter>
           <DialogClose render={<Button variant="ghost">{labels.cancel}</Button>} />
           <Button
-            disabled={pending || title.trim() === ""}
+            disabled={title.trim() === ""}
+            loading={pending}
             onClick={() =>
               run(
                 async () => {

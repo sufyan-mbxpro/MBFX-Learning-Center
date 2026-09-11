@@ -203,7 +203,8 @@ function SectionDialog({
           </Button>
           <Button
             size="sm"
-            disabled={pending || title.trim() === ""}
+            disabled={title.trim() === ""}
+            loading={pending}
             onClick={() =>
               run(
                 () =>
@@ -523,7 +524,8 @@ function SectionCard({
             </div>
             <Button
               size="sm"
-              disabled={pending || newLesson.trim() === ""}
+              disabled={newLesson.trim() === ""}
+              loading={pending}
               onClick={() =>
                 run(() => createLessonAction({ sectionId: section.id, title: newLesson.trim() }), {
                   onDone: () => {
@@ -624,7 +626,8 @@ export function CurriculumPanel({
           </div>
           <Button
             size="sm"
-            disabled={pending || newSection.trim() === ""}
+            disabled={newSection.trim() === ""}
+            loading={pending}
             onClick={() =>
               run(() => createSectionAction(courseId, newSection.trim()), {
                 onDone: () => {

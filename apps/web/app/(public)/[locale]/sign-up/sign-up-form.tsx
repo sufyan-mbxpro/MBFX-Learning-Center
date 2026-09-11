@@ -4,7 +4,6 @@ import { useState, useTransition } from "react";
 import { Button } from "@repo/ui/components/button";
 import { Input } from "@repo/ui/components/input";
 import { Label } from "@repo/ui/components/label";
-import { Spinner } from "@repo/ui/components/spinner";
 import { signUpWithPassword } from "../../../_lib/credentials.ts";
 
 type Failure = "taken" | "failed";
@@ -104,8 +103,7 @@ export function SignUpForm({
           {failure === "taken" ? labels.taken : labels.failed}
         </p>
       )}
-      <Button type="submit" disabled={pending} className="w-full">
-        {pending && <Spinner aria-hidden data-icon="inline-start" />}
+      <Button type="submit" loading={pending} className="w-full">
         {labels.submit}
       </Button>
     </form>

@@ -36,9 +36,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@repo/ui/components/dialog";
-import { Empty, EmptyTitle } from "@repo/ui/components/empty";
+import { EmptyState, ErrorState } from "@repo/ui/components/empty";
 import { SearchInput } from "@repo/ui/components/search-input";
-import { Spinner } from "@repo/ui/components/spinner";
+import { Skeleton } from "@repo/ui/components/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@repo/ui/components/tabs";
 import { cn } from "@repo/ui/lib/utils";
 import { AdminCombobox } from "./combobox.tsx";
@@ -191,6 +191,7 @@ function MediaPickerBody({
   const sentinelRef = useRef<HTMLLIElement>(null);
 
   const browser = useMediaBrowser({ category, kind, kinds, query, sourceType });
+  const tError = useTranslations("error");
 
   const uploadUrl =
     kinds.length === 1 && kinds[0] === "IMAGE"
@@ -347,16 +348,32 @@ function MediaPickerBody({
         </section>
       )}
 
+      {/* changes-21 Phase A: the shared states — tiles in the grid's own
+          columns while a page loads, ErrorState with a working retry (was red
+          text with no way out), EmptyState. */}
       {browser.status === "loading" ? (
-        <div className="flex justify-center py-10">
-          <Spinner aria-label={t("loading")} />
+        <div
+          role="status"
+          aria-live="polite"
+          className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5"
+        >
+          <span className="sr-only">{t("loading")}</span>
+          {Array.from({ length: 10 }, (_, index) => (
+            <Skeleton key={index} className="aspect-square w-full rounded-lg" />
+          ))}
         </div>
       ) : browser.status === "error" ? (
-        <p className="py-8 text-center text-sm text-destructive">{browser.error}</p>
+        <ErrorState
+          title={tError("title")}
+          description={browser.error}
+          action={
+            <Button size="sm" variant="outline" onClick={browser.refresh}>
+              {tError("retry")}
+            </Button>
+          }
+        />
       ) : browser.items.length === 0 ? (
-        <Empty className="py-8">
-          <EmptyTitle>{query.trim() ? t("noResults") : t("mediaCategoryEmpty")}</EmptyTitle>
-        </Empty>
+        <EmptyState title={query.trim() ? t("noResults") : t("mediaCategoryEmpty")} />
       ) : (
         <>
           {/* Taller and one column wider than the dialog used to allow: at

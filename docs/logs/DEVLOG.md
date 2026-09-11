@@ -14786,3 +14786,158 @@ different from the header.
 
 - Commit (awaiting the owner). axe, Lighthouse and E2E still belong to
   Module 14.
+
+## 2026-09-12 — changes-21 Phase A: one loader system; every async view gets a deliberate pending, empty and error state (Modules 07/09/12, no new ADR)
+
+The brief asked for an inventory of every loading and feedback pattern, then
+one system in `@repo/ui`, then every ad-hoc one replaced. Every value traces to
+`docs/design-system/tokens.md` §5/§6 (ADR-072). §6 had no loader spec, so its
+build-status list now records one (§6, "changes-21 Phase A").
+
+### Inventory (before)
+
+- **28 route files**:
+  - 13 admin `loading.tsx`: 12 app-local skeletons plus the generic spinner.
+  - 13 public skeletons.
+  - Bare-text public `error.tsx` and `not-found.tsx`, and no `global-error.tsx`.
+- **About 40 action buttons in 36 files only greyed out** while their work
+  ran. Three sign-in submits and `ConfirmDialog` hand-placed a Spinner.
+- **Two skeleton looks.** Half pulsed; half pulsed and swept (`shimmer`).
+- **Admin skeletons at pre-redesign heights:** a 28px title against
+  PageHeader's 36px, 32px controls against 40px. **Public card skeletons**
+  used a copied card anatomy, and the news ones used a shell ArticleCards
+  dropped in changes-20 Phase 5.
+- **Other one-offs:**
+  - Sonner used lucide's `Loader2`.
+  - The header auth slot was a hand-rolled pulsing span.
+  - The media library and picker showed a lone spinner, then red text with
+    no retry.
+  - Six "nothing here" messages were muted `<p>`s.
+
+### The system (`@repo/ui`)
+
+- **`Button loading`** — disabled plus `aria-busy`; the Spinner takes the icon
+  slot and the label stays. `inherit` size (the button's icon rule sizes it),
+  `current` tone.
+- **`Spinner` sizes** — `inherit`/xs/sm/default/lg (tokens §5) plus
+  `section`/`page`/`overlay`; `brand` or `current` tone.
+- **`Skeleton` primitives** — `SkeletonText`, `SkeletonHeading`,
+  `SkeletonAvatar`, `SkeletonImage`, `SkeletonButton`, `SkeletonField`,
+  `SkeletonCard` (Card's ADR-075 shell) and `SkeletonTable` (DataTable's 48px
+  muted header, compact rows, the §6.10 pager).
+- **Page archetypes** in `page-skeletons.tsx` — table, form, editor, detail,
+  dashboard, header, metric card.
+- **Card skeletons beside their cards** — `CourseCardSkeleton`,
+  `QuizCardSkeleton`, `VideoCardSkeleton`.
+- **`EmptyState` / `ErrorState`** — compose `Empty` (§6.9) in sm / default /
+  lg. The error tile is `bg-destructive/10` behind `-interactive` ink
+  (ADR-073), with `role="alert"`.
+- **`PageLoader`'s label is optional** — without one it is a decorative,
+  `aria-hidden` mark.
+- **Announcement rule:** a loader announces once (`label` → one
+  `role="status"`) or not at all; never per block.
+
+### Replaced (after)
+
+- **Buttons: 44 `loading` props in 36 files**, plus `ConfirmDialog`.
+  - A background agent converted 33 files. Its diff was reviewed line by
+    line: pending moved out of `disabled`, every validation term kept, and
+    Cancel / stepper / row-action buttons left `disabled`.
+  - The publish panel, the content-status panel and lesson feedback share
+    one `pending` across several buttons. They now track the clicked target,
+    so only that button spins.
+- **Routes:**
+  - Admin: 27 `loading.tsx`. 12 rewired to `@repo/ui` archetypes, 14 new,
+    and the generic spinner kept as the fallback. The app-local
+    `skeletons.tsx` is deleted.
+  - Public: 17 `loading.tsx`, 6 of them new.
+  - The five error/404 pages use `ErrorState`/`EmptyState` at `lg`, and
+    there is a new `global-error.tsx`.
+- **In-component:**
+  - The media library and picker show tile skeletons in the grid's own
+    columns, and `ErrorState` with a working retry (`browser.refresh` had
+    existed, unused).
+  - The auth slot reserves the anonymous pair's own shape.
+  - Toasts use the brand Spinner.
+  - 20 `EmptyState`/`ErrorState` call sites.
+- **The dashboard moved into an `admin/(dashboard)` route group**, so it owns
+  a dashboard skeleton while `admin/loading.tsx` stays the generic fallback.
+  The URL is unchanged.
+
+### Views that had no loading state and now do
+
+- **Public routes with no boundary at all:**
+  - `/glossary` and `/glossary/[term]` now have shaped skeletons.
+  - `/`, `/economic-calendar`, `/analysis`, `/sign-in`, `/sign-up` and the
+    CMS path fall to the new textless `[locale]/loading.tsx`.
+- **Admin routes on the generic spinner only:** `/admin`, learn videos
+  (index, categories, record), `/admin/media` and `/admin/features`.
+- **Actions:** about 40 buttons that greyed out with no sign of work.
+
+### Found and fixed
+
+- **The three sign-in spinners were invisible.** Primary-filled mark on a
+  primary button: bronze on bronze. `tone="current"` fixes it.
+- **Nine admin record routes drew their list's table skeleton** over an
+  editor or detail page: articles, employees, glossary term, topic, course,
+  lesson, quiz, role and user.
+- **Three public routes drew another route's shape:**
+  - `/learn/[track]/quizzes/[quiz]` drew a card grid.
+  - `/learn/[track]/glossary` drew a course shelf.
+  - `/news/preview/[id]` drew a listing.
+- **`/news` reserved a stat band** that the 2026-09-07 second pass removed: a
+  guaranteed jump.
+- **A root-layout error rendered Next's unstyled page.** There was no
+  `global-error.tsx`.
+
+### Decided without asking (reversible; flagged for the owner)
+
+1. **Shimmer is part of `Skeleton`, everywhere.** It was the later, documented
+   choice (learn design pass), and it is covered by reduced motion.
+2. **Public loaders are textless and read no translations**, so a fallback
+   cannot pull request data into the cached shell. Admin loaders announce
+   once.
+3. **A loading button keeps its label** (no "Saving…" swap), so no new
+   catalog keys and no width jump.
+4. **`global-error.tsx` is literal English**, the exception
+   `global-not-found.tsx` already documents: no intl context exists there.
+
+### Verified
+
+- `@repo/ui` **366/366**, run in batches. The new
+  `feedback-states.test.tsx` has 29 cases.
+- `@repo/web` **524/524**. The new `loading-states.test.ts` (20 cases) fails
+  on:
+  - a record route inheriting its list's skeleton
+  - an app-local skeleton copy
+  - `animate-spin`/`Loader2`
+  - a hand-placed `{pending && <Spinner}`
+  - a hand-rolled pulse
+  - a translating public loader
+  - an error/404 page off the shared states
+  - a missing public boundary
+- `typecheck` clean (`@repo/ui`, `@repo/web`, after `next typegen` for the
+  moved dashboard). `eslint` clean on all 129 changed files; Prettier clean;
+  `check:catalog-completeness` OK (only the inactive `ar`/`es`/`ur` warn).
+- `/admin/design-system`'s Feedback section shows every new piece: spinner
+  sizes, loading buttons, skeleton primitives, a metric-card skeleton,
+  `SectionLoader`, and `EmptyState`/`ErrorState` in two sizes. Its keys are
+  in `en.json`, and `admin-design-system.test.ts` passes.
+- **Not verified live.** The running dev server (the owner's terminal, PID
+  12892) answers 500 on every route, `/glossary` included: its Turbopack
+  PostCSS worker crashed ("Node.js subprocess crashed while evaluating
+  loaders [postcss]").
+  - The same `globals.css` compiled standalone through `@tailwindcss/postcss`
+    in 0.5s, with every new class present. So the failure is the process,
+    not the source.
+  - It needs a restart; this session did not kill a process it did not
+    start.
+
+### Owed
+
+- The live pass (loaders, 404/error pages, media states) once the dev server
+  is restarted.
+- **Commit.** The tree also holds the owner's uncommitted ADR-076 work.
+  Phase A edits four of the same files: three learn skeletons and `en.json`.
+  So the two cannot be split into clean commits without the owner's call on
+  order.

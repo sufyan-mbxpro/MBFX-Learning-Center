@@ -103,7 +103,7 @@ export function ResetPasswordDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
             {labels.cancel}
           </Button>
-          <Button onClick={submit} disabled={pending || password.length < 8}>
+          <Button onClick={submit} disabled={password.length < 8} loading={pending}>
             {labels.confirm}
           </Button>
         </DialogFooter>

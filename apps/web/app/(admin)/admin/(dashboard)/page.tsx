@@ -22,15 +22,15 @@ import {
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader } from "@repo/ui/components/card";
 import { MetaText, SectionTitle, SectionTitleCompact } from "@repo/ui/components/typography";
-import { AdminPage } from "./_components/admin-page.tsx";
-import { DashboardActivityFeed } from "./_components/dashboard-activity-feed.tsx";
+import { AdminPage } from "../_components/admin-page.tsx";
+import { DashboardActivityFeed } from "../_components/dashboard-activity-feed.tsx";
 import {
   DashboardGrowthChart,
   DashboardStatusChart,
   DashboardStatusLegend,
-} from "./_components/dashboard-charts.tsx";
-import { DashboardRangeSelect } from "./_components/dashboard-range-select.tsx";
-import { DashboardStatCard } from "./_components/dashboard-stat-card.tsx";
+} from "../_components/dashboard-charts.tsx";
+import { DashboardRangeSelect } from "../_components/dashboard-range-select.tsx";
+import { DashboardStatCard } from "../_components/dashboard-stat-card.tsx";
 
 const STATUS_LABEL_KEYS: Record<string, string> = {
   DRAFT: "statusDraft",

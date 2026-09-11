@@ -86,7 +86,7 @@ export function ProfileForm({
         </div>
       </div>
       <div className="flex justify-end">
-        <Button onClick={submit} disabled={pending || !form.name.trim()}>
+        <Button onClick={submit} disabled={!form.name.trim()} loading={pending}>
           {labels.save}
         </Button>
       </div>
@@ -162,7 +162,11 @@ export function ChangePasswordForm({
         />
       </div>
       <div className="sm:col-span-2 xl:col-span-3">
-        <Button onClick={submit} disabled={pending || !current || next.length < 8 || !confirm}>
+        <Button
+          onClick={submit}
+          disabled={!current || next.length < 8 || !confirm}
+          loading={pending}
+        >
           {labels.change}
         </Button>
       </div>

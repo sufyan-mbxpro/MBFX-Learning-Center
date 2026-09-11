@@ -181,7 +181,8 @@ export function TopicEditor({
           </DropdownMenu>
 
           <Button
-            disabled={pending || !canSave || !canUpdate}
+            disabled={!canSave || !canUpdate}
+            loading={pending}
             onClick={() => run(() => submitForm(), { successMessage: labels.saved })}
           >
             {labels.save}

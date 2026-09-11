@@ -84,7 +84,9 @@ import {
   EmptyContent,
   EmptyDescription,
   EmptyMedia,
+  EmptyState,
   EmptyTitle,
+  ErrorState,
 } from "@repo/ui/components/empty";
 import { FilterBar, FilterBarItem, FilterBarRow } from "@repo/ui/components/filter-bar";
 import { Input } from "@repo/ui/components/input";
@@ -93,6 +95,18 @@ import { Label } from "@repo/ui/components/label";
 import { MetricCard } from "@repo/ui/components/metric-card";
 import { NavItem, NavItemGroup } from "@repo/ui/components/nav-item";
 import { PageHeader } from "@repo/ui/components/page-header";
+import { SectionLoader } from "@repo/ui/components/page-loader";
+import { MetricCardSkeleton } from "@repo/ui/components/page-skeletons";
+import {
+  SkeletonAvatar,
+  SkeletonButton,
+  SkeletonCard,
+  SkeletonField,
+  SkeletonHeading,
+  SkeletonTable,
+  SkeletonText,
+} from "@repo/ui/components/skeleton";
+import { Spinner } from "@repo/ui/components/spinner";
 import {
   Pagination,
   PaginationBar,
@@ -1280,6 +1294,27 @@ export function DesignSystem() {
                 <AlertDescription>{s("alertSuccessBody")}</AlertDescription>
               </Alert>
             </div>
+            {/* changes-21 Phase A: the composed states are the call-site API;
+                the Empty parts stay public for the rare bespoke layout. */}
+            <div className="grid max-w-3xl grid-cols-1 gap-4 md:grid-cols-2">
+              <EmptyState
+                icon={<Inbox aria-hidden />}
+                title={s("emptyTitle")}
+                description={s("emptyBody")}
+                action={<Button size="sm">{s("emptyAction")}</Button>}
+              />
+              <ErrorState
+                title={s("errorTitle")}
+                description={s("errorBody")}
+                action={
+                  <Button size="sm" variant="outline">
+                    {s("retry")}
+                  </Button>
+                }
+              />
+              <EmptyState size="sm" icon={<Inbox aria-hidden />} title={s("emptyTitle")} />
+              <ErrorState size="sm" title={s("errorTitle")} />
+            </div>
             <Empty className="max-w-md">
               <EmptyMedia>
                 <Inbox aria-hidden />
@@ -1290,6 +1325,50 @@ export function DesignSystem() {
                 <Button size="sm">{s("emptyAction")}</Button>
               </EmptyContent>
             </Empty>
+            <Row label={humanizeKey("spinner")}>
+              <div className="flex flex-wrap items-center gap-4">
+                {(["xs", "sm", "default", "lg", "section"] as const).map((size) => (
+                  <Spinner key={size} size={size} aria-label={s("loadingLabel")} />
+                ))}
+              </div>
+            </Row>
+            <Row label={humanizeKey("buttonLoading")}>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button loading>{s("saving")}</Button>
+                <Button loading variant="outline">
+                  {s("saving")}
+                </Button>
+                <Button loading variant="destructive" size="sm">
+                  {s("saving")}
+                </Button>
+                <Button loading size="xs">
+                  {s("saving")}
+                </Button>
+                <Button loading size="icon" aria-label={s("saving")}>
+                  <Inbox aria-hidden />
+                </Button>
+              </div>
+            </Row>
+            <SectionLoader label={s("loadingLabel")} className="max-w-md" />
+            <Row label={humanizeKey("skeletons")}>
+              <div className="grid w-full max-w-3xl grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center gap-3">
+                    <SkeletonAvatar />
+                    <SkeletonHeading size="compact" />
+                  </div>
+                  <SkeletonText lines={3} />
+                  <SkeletonField />
+                  <div className="flex gap-2">
+                    <SkeletonButton />
+                    <SkeletonButton size="sm" shape="pill" />
+                  </div>
+                </div>
+                <SkeletonCard media="video" />
+                <MetricCardSkeleton />
+                <SkeletonTable rows={3} columns={4} footer={false} className="md:col-span-2" />
+              </div>
+            </Row>
             <Row label={humanizeKey("progress")}>
               <div className="flex w-full max-w-md flex-col gap-3">
                 <Progress size="xs" value={25} />

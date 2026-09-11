@@ -179,7 +179,8 @@ export function RoleControls({
         />
         <Button
           size="sm"
-          disabled={pending || !selected}
+          disabled={!selected}
+          loading={pending}
           onClick={() =>
             run(() => assignRoleAction(userId, selected), { onDone: () => setSelected("") })
           }
@@ -284,7 +285,8 @@ export function OverrideControls({
         />
         <Button
           size="sm"
-          disabled={pending || !permission || reason.trim().length < 3}
+          disabled={!permission || reason.trim().length < 3}
+          loading={pending}
           onClick={() =>
             run(() => setOverrideAction(userId, permission, effect, reason), {
               onDone: () => setReason(""),

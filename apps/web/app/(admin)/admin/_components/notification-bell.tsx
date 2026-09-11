@@ -17,6 +17,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@repo/ui/components/dropdown-menu";
+import { EmptyState } from "@repo/ui/components/empty";
 import { cn } from "@repo/ui/lib/utils";
 import {
   markAllNotificationsReadAction,
@@ -92,7 +93,8 @@ export function NotificationBell({
         </div>
         <DropdownMenuSeparator />
         {items.length === 0 ? (
-          <p className="px-1.5 py-4 text-center text-sm text-muted-foreground">{labels.empty}</p>
+          // Borderless: the menu is already the container.
+          <EmptyState size="sm" title={labels.empty} className="border-none" />
         ) : (
           <DropdownMenuGroup className="max-h-80 overflow-y-auto">
             {items.map((item) => {

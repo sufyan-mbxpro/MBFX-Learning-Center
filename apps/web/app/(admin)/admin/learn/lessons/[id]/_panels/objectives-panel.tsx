@@ -12,6 +12,7 @@ import { useState } from "react";
 import { ArrowDown, ArrowUp, Plus, Target, Trash2 } from "lucide-react";
 import { Button } from "@repo/ui/components/button";
 import { ConfirmDialog } from "@repo/ui/components/confirm-dialog";
+import { EmptyState } from "@repo/ui/components/empty";
 import { Input } from "@repo/ui/components/input";
 import { EditorSection } from "../../../../_components/editor/editor-section.tsx";
 
@@ -73,7 +74,7 @@ export function ObjectivesPanel({
       }
     >
       {value.length === 0 ? (
-        <p className="text-xs text-muted-foreground">{labels.empty}</p>
+        <EmptyState size="sm" icon={<Target aria-hidden />} title={labels.empty} />
       ) : (
         <ol className="flex flex-col gap-1.5">
           {value.map((objective, index) => (

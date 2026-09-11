@@ -136,7 +136,8 @@ export function CreateRoleDialog({
           </Button>
           <Button
             onClick={submit}
-            disabled={pending || !name.trim() || !key || level < 0 || level >= maxLevel}
+            disabled={!name.trim() || !key || level < 0 || level >= maxLevel}
+            loading={pending}
           >
             {labels.save}
           </Button>

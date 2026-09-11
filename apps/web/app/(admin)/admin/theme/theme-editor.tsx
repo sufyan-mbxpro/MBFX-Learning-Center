@@ -403,7 +403,7 @@ export function ThemeEditor({
       {/* changes-08 #3: Save sits at the inline-END of its section, where every
       // other confirming action in the admin already sits (dialog footers,
       // "New X" buttons) — not at the start. */}
-      <Button onClick={save} disabled={pending || !dirty} className="self-end">
+      <Button onClick={save} disabled={!dirty} loading={pending} className="self-end">
         {labels.save}
       </Button>
     </div>

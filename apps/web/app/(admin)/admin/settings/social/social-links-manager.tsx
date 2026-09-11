@@ -430,7 +430,8 @@ export function SocialLinksManager({
             </Button>
             <Button
               onClick={submit}
-              disabled={pending || !form.label || !form.url || (!editing && !form.platform)}
+              disabled={!form.label || !form.url || (!editing && !form.platform)}
+              loading={pending}
             >
               {labels.save}
             </Button>

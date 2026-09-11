@@ -22,6 +22,7 @@
 // uploads/*` — a Server Action's transport exposes no progress events).
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import Image from "next/image";
 import { FileText, Music, Trash2, Upload, Video } from "lucide-react";
 import { Badge } from "@repo/ui/components/badge";
@@ -35,8 +36,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@repo/ui/components/dialog";
-import { Empty, EmptyTitle } from "@repo/ui/components/empty";
-import { Spinner } from "@repo/ui/components/spinner";
+import { EmptyState, ErrorState } from "@repo/ui/components/empty";
+import { Skeleton } from "@repo/ui/components/skeleton";
 import { Input } from "@repo/ui/components/input";
 import { SearchInput } from "@repo/ui/components/search-input";
 import { ControlSizeProvider } from "@repo/ui/components/control-size";
@@ -350,6 +351,7 @@ export function MediaLibrary({
   // filter this replaced could never find an asset outside the first page,
   // which stopped being a preference and became a bug the moment paging
   // existed.
+  const tError = useTranslations("error");
   const browser = useMediaBrowser({
     category,
     kind: kindTab,
@@ -482,16 +484,33 @@ export function MediaLibrary({
         />
       )}
 
+      {/* changes-21 Phase A: the three non-grid states are the shared ones —
+          tiles in the grid's own columns while a page loads (was a lone
+          spinner that collapsed the area), ErrorState with a working retry
+          (was red text with no way out), EmptyState. */}
       {browser.status === "loading" ? (
-        <div className="flex justify-center py-10">
-          <Spinner aria-label={labels.loading} />
+        <div
+          role="status"
+          aria-live="polite"
+          className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5"
+        >
+          <span className="sr-only">{labels.loading}</span>
+          {Array.from({ length: 10 }, (_, index) => (
+            <Skeleton key={index} className="aspect-square w-full rounded-lg" />
+          ))}
         </div>
       ) : browser.status === "error" ? (
-        <p className="py-8 text-center text-sm text-destructive">{browser.error}</p>
+        <ErrorState
+          title={tError("title")}
+          description={browser.error}
+          action={
+            <Button size="sm" variant="outline" onClick={browser.refresh}>
+              {tError("retry")}
+            </Button>
+          }
+        />
       ) : browser.items.length === 0 ? (
-        <Empty className="border">
-          <EmptyTitle>{labels.noResults}</EmptyTitle>
-        </Empty>
+        <EmptyState title={labels.noResults} />
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
           {browser.items.map((asset) => (

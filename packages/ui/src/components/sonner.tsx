@@ -2,13 +2,8 @@
 
 import { useTheme } from "@repo/ui/components/theme-provider";
 import { Toaster as Sonner, type ToasterProps } from "sonner";
-import {
-  CircleCheckIcon,
-  InfoIcon,
-  TriangleAlertIcon,
-  OctagonXIcon,
-  Loader2Icon,
-} from "lucide-react";
+import { CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon } from "lucide-react";
+import { Spinner } from "@repo/ui/components/spinner";
 
 // changes-20 / ADR-074 — the reference's toast (tokens.md §6.14), mapped onto
 // Sonner, the one toast system (ADR-072 §10): a bordered card on the page
@@ -29,7 +24,9 @@ const Toaster = ({ ...props }: ToasterProps) => {
         info: <InfoIcon className="size-4" />,
         warning: <TriangleAlertIcon className="size-4" />,
         error: <OctagonXIcon className="size-4" />,
-        loading: <Loader2Icon className="size-4 animate-spin" />,
+        // The brand mark, not lucide's ring: one pending glyph app-wide
+        // (changes-21 Phase A).
+        loading: <Spinner />,
       }}
       style={
         {

@@ -123,7 +123,8 @@ export function CategoriesManager({
                 </Button>
                 <Button
                   size="sm"
-                  disabled={pending || newName.trim() === ""}
+                  disabled={newName.trim() === ""}
+                  loading={pending}
                   onClick={() =>
                     run(
                       () =>

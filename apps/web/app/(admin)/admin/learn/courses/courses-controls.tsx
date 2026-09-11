@@ -170,7 +170,8 @@ export function NewCourseDialog({
           </Button>
           <Button
             size="sm"
-            disabled={pending || track === "" || title.trim() === ""}
+            disabled={track === "" || title.trim() === ""}
+            loading={pending}
             onClick={() =>
               run(
                 async () => {

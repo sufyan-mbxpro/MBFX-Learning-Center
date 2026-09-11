@@ -26,6 +26,7 @@
 import { Film, Play } from "lucide-react";
 
 import { Badge } from "@repo/ui/components/badge";
+import { Skeleton, SkeletonText } from "@repo/ui/components/skeleton";
 import { cn } from "@repo/ui/lib/utils";
 
 /**
@@ -45,6 +46,29 @@ export interface VideoCardLabels {
   noArtwork: string;
   /** Shown when the topic has no attached video — a written guide. */
   readGuide: string;
+}
+
+/**
+ * changes-21 Phase A — the card's pending shape, beside the card so they
+ * cannot drift: a 16:9 thumbnail over a short copy column. Shorter than the
+ * quiz card's, because the play control lives ON the thumbnail (ADR-068 §7).
+ */
+export function VideoCardSkeleton({ className }: { className?: string }) {
+  return (
+    <div
+      aria-hidden
+      className={cn(
+        "flex h-full min-w-0 flex-col rounded-2xl bg-card ring-1 ring-foreground/10",
+        className,
+      )}
+    >
+      <Skeleton className="aspect-video w-full rounded-none rounded-t-2xl" />
+      <div className="flex flex-col gap-2 p-5">
+        <Skeleton className="h-5 w-44 max-w-full" />
+        <SkeletonText lines={2} />
+      </div>
+    </div>
+  );
 }
 
 export function VideoCard({

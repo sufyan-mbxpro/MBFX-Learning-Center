@@ -170,7 +170,7 @@ function TagEditDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
             {labels.cancel}
           </Button>
-          <Button onClick={submit} disabled={pending || form.name.trim() === ""}>
+          <Button onClick={submit} disabled={form.name.trim() === ""} loading={pending}>
             {labels.save}
           </Button>
         </DialogFooter>

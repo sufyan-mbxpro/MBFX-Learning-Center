@@ -114,6 +114,9 @@ export function PublishPanel({
   const [scheduleFor, setScheduleFor] = useState("");
   const [archiveOpen, setArchiveOpen] = useState(false);
   const { run, pending } = useServerAction();
+  // Which transition the pending work belongs to, so only THAT button shows
+  // the spinner; the rest wait disabled (changes-21 Phase A).
+  const [moving, setMoving] = useState<string | null>(null);
 
   const transitions = legalTransitions.filter(
     (to) => canPublish || (to !== "PUBLISHED" && to !== "SCHEDULED"),
@@ -178,7 +181,12 @@ export function PublishPanel({
                 (to === "SCHEDULED" && scheduleFor === "") ||
                 (savesFirst(to) && !canSave)
               }
-              onClick={() => (to === "ARCHIVED" ? setArchiveOpen(true) : transition(to))}
+              loading={pending && moving === to}
+              onClick={() => {
+                if (to === "ARCHIVED") return setArchiveOpen(true);
+                setMoving(to);
+                void transition(to);
+              }}
             >
               {Icon && <Icon data-icon="inline-start" aria-hidden />}
               {labels.transitions[to] ?? to}

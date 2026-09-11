@@ -105,6 +105,9 @@ export function ContentStatusPanel({
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [scheduleFor, setScheduleFor] = useState("");
   const { run, pending } = useServerAction();
+  // Which transition the pending work belongs to, so only THAT button shows
+  // the spinner; the rest wait disabled (changes-21 Phase A).
+  const [moving, setMoving] = useState<string | null>(null);
 
   const transitions = legalTransitions.filter((to) => canPublish || !PUBLISHING.includes(to));
 
@@ -180,7 +183,12 @@ export function ContentStatusPanel({
                 variant={TRANSITION_VARIANT[to] ?? "outline"}
                 size="sm"
                 disabled={pending || (PUBLISHING.includes(to) && !canSave)}
-                onClick={() => (to === "ARCHIVED" ? setArchiveOpen(true) : move(to))}
+                loading={pending && moving === to}
+                onClick={() => {
+                  if (to === "ARCHIVED") return setArchiveOpen(true);
+                  setMoving(to);
+                  move(to);
+                }}
               >
                 {Icon && <Icon data-icon="inline-start" aria-hidden />}
                 {labels.transitions[to] ?? to}

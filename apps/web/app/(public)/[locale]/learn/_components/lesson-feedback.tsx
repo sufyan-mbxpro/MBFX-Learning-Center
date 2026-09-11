@@ -54,6 +54,8 @@ function noopSubscribe(): () => void {
 export function LessonFeedback({ lessonId }: { lessonId: string }) {
   const t = useTranslations("learn");
   const [state, setState] = useState<"asking" | "sending" | "thanks" | "error">("asking");
+  // The vote in flight, so only the button that was pressed shows the spinner.
+  const [choice, setChoice] = useState<boolean | null>(null);
 
   const alreadyVoted = useSyncExternalStore(
     noopSubscribe,
@@ -63,6 +65,7 @@ export function LessonFeedback({ lessonId }: { lessonId: string }) {
   );
 
   async function vote(helpful: boolean) {
+    setChoice(helpful);
     setState("sending");
     try {
       const response = await fetch("/api/learn/feedback", {
@@ -94,6 +97,7 @@ export function LessonFeedback({ lessonId }: { lessonId: string }) {
           variant="outline"
           size="sm"
           disabled={state === "sending"}
+          loading={state === "sending" && choice === true}
           onClick={() => void vote(true)}
         >
           <ThumbsUp data-icon="inline-start" aria-hidden />
@@ -103,6 +107,7 @@ export function LessonFeedback({ lessonId }: { lessonId: string }) {
           variant="outline"
           size="sm"
           disabled={state === "sending"}
+          loading={state === "sending" && choice === false}
           onClick={() => void vote(false)}
         >
           <ThumbsDown data-icon="inline-start" aria-hidden />

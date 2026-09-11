@@ -170,7 +170,8 @@ export function RoleActions({
             </Button>
             <Button
               onClick={saveMeta}
-              disabled={pending || !form.name.trim() || form.level < 0 || form.level >= maxLevel}
+              disabled={!form.name.trim() || form.level < 0 || form.level >= maxLevel}
+              loading={pending}
             >
               {labels.save}
             </Button>

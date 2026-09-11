@@ -240,7 +240,8 @@ export function GlossaryEditor({
           {canUpdate && (
             <Button
               size="sm"
-              disabled={pending || !canSave}
+              disabled={!canSave}
+              loading={pending}
               onClick={() => run(() => submitForm(), { successMessage: labels.saved })}
             >
               {labels.updateTerm}
@@ -590,7 +591,8 @@ export function GlossaryEditor({
               {labels.cancel}
             </Button>
             <Button
-              disabled={pending || newTopicName.trim() === ""}
+              disabled={newTopicName.trim() === ""}
+              loading={pending}
               onClick={() =>
                 run(
                   async () => {
