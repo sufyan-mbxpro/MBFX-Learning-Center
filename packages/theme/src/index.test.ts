@@ -10,7 +10,9 @@ import {
   DEFAULT_LAYOUT,
   DEFAULT_LIGHT_SURFACE,
   deriveInteractive,
+  deriveTonalInk,
   isCuratedFontKey,
+  TONAL_TINT_CONTRACT,
   tokensToCss,
   validateMode,
   validateTheme,
@@ -432,7 +434,97 @@ describe("ADR-072 — brand primary #C28D5A and its derived states", () => {
     expect(issues.filter((i) => i.severity === "error")).toEqual([]);
     const advisory = issues.find((i) => i.field === "primary" && i.label.includes("link text"));
     expect(advisory?.severity).toBe("warning");
-    expect(advisory?.remedy).toContain("#936B44");
+    // ADR-073: the remedy names the colour the renderer actually emits.
+    expect(advisory?.remedy).toContain(lightVars["--primary-interactive"]!.toUpperCase());
+  });
+});
+
+/** `color` over `background` at `amount` — how the browser composites bg-x/15. */
+function tint(color: string, background: string, amount: number): string {
+  const rgb = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const [c, b] = [rgb(color), rgb(background)];
+  return `#${c
+    .map((v, i) =>
+      Math.round(v * amount + b[i]! * (1 - amount))
+        .toString(16)
+        .padStart(2, "0"),
+    )
+    .join("")}`;
+}
+
+// ADR-073: tonal chips and intent buttons put *-interactive text on a tint of
+// its own hue. Measured against the bare page, the defaults landed at
+// 3.95–4.41:1 inside their own chips — below the small-text floor the chips
+// are set at. These pin the fix.
+describe("ADR-073 — *-interactive holds 4.5:1 on its own tint", () => {
+  const PAIRS = [
+    ["primary", "primary"],
+    ["success", "success"],
+    ["destructive", "error"],
+    ["warning", "warning"],
+    ["info", "info"],
+  ] as const;
+
+  it("exports the tint the contract is written against", () => {
+    expect(TONAL_TINT_CONTRACT).toBe(0.15);
+  });
+
+  it.each(PAIRS)(
+    "--%s-interactive clears 4.5:1 on its /10 and /15 tints, light mode",
+    (token, field) => {
+      const ink = lightVars[`--${token}-interactive`]!;
+      const bg = DEFAULT_LIGHT_SURFACE.background;
+      for (const a of [0.1, TONAL_TINT_CONTRACT]) {
+        expect(contrastRatio(ink, tint(DEFAULT_BRAND[field], bg, a))).toBeGreaterThanOrEqual(4.5);
+      }
+      expect(contrastRatio(ink, bg)).toBeGreaterThanOrEqual(4.5);
+    },
+  );
+
+  it.each(PAIRS)(
+    "--%s-interactive clears 4.5:1 on its /10 and /15 tints, dark mode",
+    (token, field) => {
+      const ink = darkVars[`--${token}-interactive`]!;
+      const bg = DEFAULT_DARK_SURFACE.background;
+      const fill = { ...DEFAULT_BRAND, ...DEFAULT_DARK_BRAND_OVERRIDES }[field];
+      for (const a of [0.1, TONAL_TINT_CONTRACT]) {
+        expect(contrastRatio(ink, tint(fill, bg, a))).toBeGreaterThanOrEqual(4.5);
+      }
+      expect(contrastRatio(ink, bg)).toBeGreaterThanOrEqual(4.5);
+    },
+  );
+
+  it("deriveTonalInk is what tokensToCss emits", () => {
+    expect(lightVars["--success-interactive"]).toBe(
+      deriveTonalInk(DEFAULT_BRAND.success, DEFAULT_LIGHT_SURFACE.background),
+    );
+  });
+
+  it("random palettes: every *-interactive clears 4.5:1 on its 15% tint AND on the page", () => {
+    const hexColor = fc
+      .integer({ min: 0, max: 0xffffff })
+      .map((n) => `#${n.toString(16).padStart(6, "0")}`);
+    fc.assert(
+      fc.property(hexColor, hexColor, hexColor, (primary, success, error) => {
+        const brand = { ...DEFAULT_BRAND, primary, success, error };
+        const vars = cssVars(
+          tokensToCss({ brand, surface: DEFAULT_LIGHT_SURFACE, layout: DEFAULT_LAYOUT }),
+        );
+        const bg = DEFAULT_LIGHT_SURFACE.background;
+        for (const [token, fill] of [
+          ["primary", primary],
+          ["success", success],
+          ["destructive", error],
+        ] as const) {
+          const ink = vars[`--${token}-interactive`]!;
+          expect(contrastRatio(ink, tint(fill, bg, TONAL_TINT_CONTRACT))).toBeGreaterThanOrEqual(
+            4.5 - 0.01,
+          );
+          expect(contrastRatio(ink, bg)).toBeGreaterThanOrEqual(4.5 - 0.01);
+        }
+      }),
+      { numRuns: 200 },
+    );
   });
 });
 

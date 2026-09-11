@@ -121,19 +121,19 @@ in dark mode):
 These are computed by `tokensToCss`. Values shown are for the proposed palette
 (`primary #C28D5A`), light / dark:
 
-| Token                       | Rule                                              | Light                                                                         | Dark                              |
-| --------------------------- | ------------------------------------------------- | ----------------------------------------------------------------------------- | --------------------------------- |
-| `--primary-foreground`      | `readableOn(primary)`                             | **`#1A1A1A`** (6.01:1). The reference paints `#F8FAFC` at **2.77:1** — see Q1 | `#1A1A1A`                         |
-| `--primary-interactive`     | `deriveInteractive(primary, bg)` → 4.5:1          | `#936B44`                                                                     | `#C28D5A`                         |
-| `--primary-hover`           | `shade(primary, −14%)`                            | `#A7794E`                                                                     | same                              |
-| `--primary-active`          | `shade(primary, −26%)`                            | derived                                                                       | derived                           |
-| `--primary-subtle`          | `shade(primary, +85%)`                            | `#F6EEE6`                                                                     | derived                           |
-| `--success-interactive`     | 4.5:1                                             | `#2D72C7`                                                                     | `#3E7DCB` (lightened from 4.14:1) |
-| `--destructive-interactive` | 4.5:1                                             | `#D93A34`                                                                     | `#DB423C` (lightened from 4.39:1) |
-| `--warning-interactive`     | 4.5:1                                             | `#A3680A`                                                                     | `#FFA310`                         |
-| `--info-interactive`        | 4.5:1                                             | `#004284`                                                                     | `#527EAB`                         |
-| `--warning-foreground`      | `readableOn(warning)`                             | `#1A1A1A` (8.7:1). The reference paints white at 1.91:1                       | same                              |
-| **`--ring`** ⚠ Q8           | today: `deriveInteractive(success, bg, 3)` (blue) | **proposed: `deriveInteractive(primary, bg, 3)` = `#BA8756`**                 | `#C28D5A`                         |
+| Token                       | Rule                                                                                | Light                                                                         | Dark      |
+| --------------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | --------- |
+| `--primary-foreground`      | `readableOn(primary)`                                                               | **`#1A1A1A`** (6.01:1). The reference paints `#F8FAFC` at **2.77:1** — see Q1 | `#1A1A1A` |
+| `--primary-interactive`     | `deriveTonalInk(primary, bg)` → 4.5:1 on page **and** on its own 15% tint (ADR-073) | `#84603D`                                                                     | `#C28D5A` |
+| `--primary-hover`           | `shade(primary, −14%)`                                                              | `#A7794E`                                                                     | same      |
+| `--primary-active`          | `shade(primary, −26%)`                                                              | derived                                                                       | derived   |
+| `--primary-subtle`          | `shade(primary, +85%)`                                                              | `#F6EEE6`                                                                     | derived   |
+| `--success-interactive`     | tint-aware 4.5:1 (ADR-073)                                                          | `#2969B7`                                                                     | `#4683CE` |
+| `--destructive-interactive` | tint-aware 4.5:1 (ADR-073)                                                          | `#BF332E`                                                                     | `#DE524C` |
+| `--warning-interactive`     | tint-aware 4.5:1 (ADR-073)                                                          | `#99620A`                                                                     | `#FFA310` |
+| `--info-interactive`        | tint-aware 4.5:1 (ADR-073)                                                          | `#004284`                                                                     | `#5C86B0` |
+| `--warning-foreground`      | `readableOn(warning)`                                                               | `#1A1A1A` (8.7:1). The reference paints white at 1.91:1                       | same      |
+| **`--ring`** ⚠ Q8           | today: `deriveInteractive(success, bg, 3)` (blue)                                   | **proposed: `deriveInteractive(primary, bg, 3)` = `#BA8756`**                 | `#C28D5A` |
 
 The ring change is an **engine change**, so it needs an ADR. The reference's
 focus ring _is_ the primary (`--ring: 29 46% 56%`), and a bronze ring on
@@ -370,24 +370,42 @@ capture replaces them before Phase 3 restyles those components (Q12).
 reference pairing fails our contrast rules, the spec below already carries the
 accessible variant closest to the reference look.
 
+**Build status (Phase 3):**
+
+- **Group 1 (primitives), built 2026-09-11:**
+  - Button, including `size="2xs"`/`"icon-2xs"`, `icon-lg` = `size-11`, and
+    an `emphasis` prop
+  - Input (`size` default/sm/xs)
+  - `SearchInput` (new)
+  - Select and Combobox **triggers**, via a shared `selectTriggerVariants`
+  - Badge (`size`, `outline-*` variants, `live` prop; `destructive` is solid,
+    the tonal status is `danger`)
+  - `CountBadge` (new)
+  - Avatar (`shape="square"`)
+- **Held for the second capture:** Checkbox, Switch, Radio (not yet a
+  component), Textarea, Tooltip (not yet a component), and the Select and
+  Combobox **popups and items**.
+- Tonal ink follows **ADR-073**: every `*-interactive` holds 4.5:1 on its own
+  tint up to /15.
+
 ### 6.1 Button
 
 Base: `inline-flex items-center justify-center gap-2 whitespace-nowrap
 rounded-md text-sm font-medium transition-colors` + the focus and disabled
 recipes (§1.5).
 
-| Size          | Spec                          | Reference use                                   | Today      |
-| ------------- | ----------------------------- | ----------------------------------------------- | ---------- |
-| `default`     | **h-10 px-4 py-2**, icon 16   | primary page actions, auth submit               | h-8 px-2.5 |
-| `sm`          | **h-9 px-3**                  | top-bar, pagination prev/next, sidebar Sign out | h-7        |
-| `xs`          | **h-8 px-3 text-xs**, icon 14 | card-header controls                            | h-6        |
-| `2xs` _(new)_ | **h-7 px-2 text-xs**          | small inline actions                            | —          |
-| `lg`          | h-11 px-8 (inferred)          | —                                               | h-9        |
-| `xl` (public) | kept (ADR-018)                | —                                               | h-11       |
-| `icon`        | **size-10**                   | pagination page, avatar trigger                 | size-8     |
-| `icon-sm`     | **size-9**                    | refresh beside a filter                         | size-7     |
-| `icon-xs`     | **size-8**                    | row action (default table), sidebar collapse    | size-6     |
-| `icon-2xs`    | **size-6**, icon 14           | row action (dense table)                        | —          |
+| Size          | Spec                                                            | Reference use                                   | Today      |
+| ------------- | --------------------------------------------------------------- | ----------------------------------------------- | ---------- |
+| `default`     | **h-10 px-4 py-2**, icon 16                                     | primary page actions, auth submit               | h-8 px-2.5 |
+| `sm`          | **h-9 px-3**                                                    | top-bar, pagination prev/next, sidebar Sign out | h-7        |
+| `xs`          | **h-8 px-3 text-xs**, icon 14                                   | card-header controls                            | h-6        |
+| `2xs` _(new)_ | **h-7 px-2 text-xs**                                            | small inline actions                            | —          |
+| `lg`          | h-11 px-8 (inferred)                                            | —                                               | h-9        |
+| `xl` (public) | **h-12 px-6 text-base**, icon 20 (ADR-018; one step above `lg`) | hero/CTA bands                                  | h-11       |
+| `icon`        | **size-10**                                                     | pagination page, avatar trigger                 | size-8     |
+| `icon-sm`     | **size-9**                                                      | refresh beside a filter                         | size-7     |
+| `icon-xs`     | **size-8**                                                      | row action (default table), sidebar collapse    | size-6     |
+| `icon-2xs`    | **size-6**, icon 14                                             | row action (dense table)                        | —          |
 
 | Variant                        | Spec                                                                                                |
 | ------------------------------ | --------------------------------------------------------------------------------------------------- |
@@ -465,15 +483,15 @@ Base: `inline-flex items-center rounded-full border font-semibold transition-col
 | `sm`      | `h-5 px-1.5 text-3xs font-medium`  | "Live" beside the page description            |
 | `xs`      | `h-4 px-1.5 text-3xs leading-none` | status in dense tables (reference 9px → 10px) |
 
-| Variant                                           | Spec                                                                                                                                                            |
-| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `default`                                         | `border-transparent bg-primary text-primary-foreground`                                                                                                         |
-| `secondary`                                       | `border-transparent bg-secondary text-secondary-foreground`. The screenshot's dark "N/A" / "PK" country pills                                                   |
-| `outline`                                         | `text-foreground`                                                                                                                                               |
-| `destructive`                                     | `border-transparent bg-destructive text-destructive-foreground`                                                                                                 |
-| `success` / `warning` / `info` / `danger` (tonal) | `bg-{s}/10 text-{s}-interactive border-{s}/20` (reference: `border-none` in the Users table and `/20` in feeds; we take `/20` for one recipe)                   |
-| `status-outline`                                  | `text-{s}-interactive border-{s}` + optional `bg-{s}/10`, optional **live dot** (`size-2 rounded-full bg-{s} animate-pulse`, `me-2`; `size-1.5 me-1.5` at `sm`) |
-| `eyebrow`, `pill` (public)                        | kept                                                                                                                                                            |
+| Variant                                              | Spec                                                                                                                                                                                                                   |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `default`                                            | `border-transparent bg-primary text-primary-foreground`                                                                                                                                                                |
+| `secondary`                                          | `border-transparent bg-secondary text-secondary-foreground`. The screenshot's dark "N/A" / "PK" country pills                                                                                                          |
+| `outline`                                            | `text-foreground`                                                                                                                                                                                                      |
+| `destructive`                                        | `border-transparent bg-destructive text-destructive-foreground`                                                                                                                                                        |
+| `success` / `warning` / `info` / `danger` (tonal)    | `bg-{s}/10 text-{s}-interactive border-{s}/20`. Tonal surfaces rest at /10 and never exceed /15 — the tint the ink is contracted against (ADR-073)                                                                     |
+| `outline-success` / `-warning` / `-info` / `-danger` | `border-{s}-interactive text-{s}-interactive` — the LINE is the -interactive value too (raw warning is 2:1 as a border). Pulsing **live dot** via the `live` prop (`bg-current`, `size-2` default / `size-1.5` sm, xs) |
+| `eyebrow`, `pill` (public)                           | kept                                                                                                                                                                                                                   |
 
 **Count pill** (a nav-badge component, not a badge variant):
 `rounded-full bg-destructive text-destructive-foreground px-2 py-0.5 text-3xs

@@ -2,9 +2,35 @@
 
 import * as React from "react";
 import { Select as SelectPrimitive } from "@base-ui/react/select";
+import { cva } from "class-variance-authority";
 
 import { cn } from "@repo/ui/lib/utils";
 import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from "lucide-react";
+
+// changes-20 / ADR-072 — the dropdown TRIGGER is the same box as an Input
+// (tokens.md §6.3): 40px, --input border, page background, the 2px offset
+// ring. Shared with the searchable Combobox trigger so the two branches of
+// ADR-057's dropdown cannot drift apart in shape. Toolbar filters use `sm`
+// (the reference's 36px, 12px-text filter row).
+//
+// The POPUP and ITEM styles below are deliberately untouched: their spec is
+// "provisional — shadcn defaults" until the owner's second capture lands
+// (ADR-072 §9), and no provisional component is restyled before then.
+const selectTriggerVariants = cva(
+  "flex items-center justify-between gap-2 rounded-md border border-input bg-background px-3 py-2 whitespace-nowrap transition-colors outline-none select-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-2 aria-invalid:ring-destructive/20 data-placeholder:text-muted-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0",
+  {
+    variants: {
+      size: {
+        default: "h-10 text-sm",
+        sm: "h-9 text-xs",
+        xs: "h-8 text-xs",
+      },
+    },
+    defaultVariants: { size: "default" },
+  },
+);
+
+type SelectTriggerSize = "default" | "sm" | "xs";
 
 const Select = SelectPrimitive.Root;
 
@@ -34,21 +60,25 @@ function SelectTrigger({
   children,
   ...props
 }: SelectPrimitive.Trigger.Props & {
-  size?: "sm" | "default";
+  size?: SelectTriggerSize;
 }) {
   return (
     <SelectPrimitive.Trigger
       data-slot="select-trigger"
       data-size={size}
       className={cn(
-        "flex w-fit items-center justify-between gap-1.5 rounded-lg border border-input bg-transparent py-2 pe-2 ps-2.5 text-sm whitespace-nowrap transition-colors outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 data-placeholder:text-muted-foreground data-[size=default]:h-8 data-[size=sm]:h-7 data-[size=sm]:rounded-[min(var(--radius-md),10px)] *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-1.5 dark:bg-input/30 dark:hover:bg-input/50 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        selectTriggerVariants({ size }),
+        "w-fit *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-1.5",
         className,
       )}
       {...props}
     >
       {children}
+      {/* The reference's plain-select indicator: chevron-down at half
+          opacity. The searchable Combobox uses chevrons-up-down instead,
+          so the glyph tells a user which kind of dropdown this is. */}
       <SelectPrimitive.Icon
-        render={<ChevronDownIcon className="pointer-events-none size-4 text-muted-foreground" />}
+        render={<ChevronDownIcon className="pointer-events-none size-4 opacity-50" />}
       />
     </SelectPrimitive.Trigger>
   );
@@ -187,4 +217,6 @@ export {
   SelectSeparator,
   SelectTrigger,
   SelectValue,
+  selectTriggerVariants,
 };
+export type { SelectTriggerSize };

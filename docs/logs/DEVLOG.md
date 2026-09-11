@@ -10352,3 +10352,138 @@ mechanisms, and `tokens.md` is marked approved with §9 decisions.
 - Phase 3: component restyle.
 - Post-Phase-5: the public visual pass (spacing only, no per-page scale
   exceptions).
+
+## 2026-09-11 — changes-20 Phase 3 group 1: the primitives, and tonal ink that holds on its own tint (Modules 07/02, ADR-073)
+
+Phase 2 was committed as its own checkpoint (`33a1b7a`). It was built in a
+temporary index so the owner's six pre-staged renames and every uncommitted
+hunk in the shared files stayed out of it. Group 1 of Phase 3 restyles the
+primitives whose specs the reference capture confirms. Components with a
+provisional spec are not touched, per the owner's instruction:
+
+- checkbox and switch (radio does not exist yet)
+- textarea
+- tooltip (does not exist yet)
+- the Select and Combobox popups and items
+
+They wait for the second capture.
+
+### The finding that became ADR-073
+
+The reference draws status as tonal text on a 10% tint of the same hue.
+ADR-072 already swapped the raw-hue ink for our `*-interactive` derivation,
+but that derivation was only ever measured against the **page**. Inside its
+own chip the defaults were:
+
+| Ink in its own chip | Light  | Dark   |
+| ------------------- | ------ | ------ |
+| success             | 4.25:1 | 4.41:1 |
+| destructive         | 3.95:1 | 4.37:1 |
+| primary             | 4.34:1 | pass   |
+
+All are below the small-text floor the chips are set at. This was already
+shipping in the tinted Button intents, the public `eyebrow` badge and the
+course-card level chips. The fast-check contract could not see it, because it
+never measures against a tint.
+
+**ADR-073** (written before the code) fixes this in the engine:
+
+- `deriveTonalInk()` derives every `*-interactive` against its own hue at
+  `TONAL_TINT_CONTRACT` (15%) over the background. That tint is the harder
+  surface in both modes, so the ink clears the bare page too.
+- Tonal surfaces rest at /10 and hover at /15. The old `/12`, `/15`, `/20`
+  and `/30` steps are folded in.
+- `validateMode`'s link-text remedy uses the same derivation, so the editor
+  names the colour the renderer emits.
+
+New light inks: success `#2969B7`, destructive `#BF332E`, warning `#99620A`,
+primary `#84603D`. The fills are unchanged.
+
+### Components (`@repo/ui`)
+
+- **Button.** The reference anatomy: `rounded-md`, and the 2px ring with a 2px
+  offset in the bronze `--ring`. Size names are unchanged and the values
+  follow the reference (default 40, sm 36, xs 32, the new `2xs` 28, lg 44).
+  `xl` goes to 48 so it stays above `lg`, and the icon sizes are 40/36/32 plus
+  the new `icon-2xs` at 24.
+  - Hover is `--primary-hover` (ADR-003); outline and ghost hover to the warm
+    `--accent`.
+  - `destructive` is **solid** (ADR-072 §9); the intents are tonal /10 → /15.
+  - `link` is `--primary-interactive`. It was raw `--primary`, a latent
+    ADR-018 rule 5 violation.
+  - An `emphasis` prop replaces the sign-in submit's one-off shadow and ring.
+- **Input.** `size` default/sm/xs (40/36/32), page background, `--input`
+  border. The native numeric `size` attribute is deliberately omitted.
+- **`SearchInput`** (new). One search field whose glyph inset and padding are
+  matched per size. Logical insets, decorative icon, `type="search"`.
+- **Dropdown triggers.** A shared `selectTriggerVariants` for the Select and
+  the searchable Combobox, so ADR-057's two branches cannot drift. The
+  indicator tells the kind: chevron-down for a Select, chevrons-up-down when
+  searchable.
+- **Badge.** `size` default/sm/xs (22/20/16px; 9px folded into 10px). Tonal
+  `success`/`warning`/`info`/`danger`, and `outline-*` whose LINE is the
+  `-interactive` value (raw warning is 2:1 as a border). A `live` prop draws
+  the pulsing dot. `destructive` is now the solid alert pill, so the two
+  admin "Deleted" chips move to `danger`.
+- **`CountBadge`** (new). The capped red count (99+ / 999+). It hides at zero
+  and has an inline or logical-corner placement.
+- **Avatar.** 40px default (sm 32, lg 48), initials on `bg-primary`, no
+  hairline ring, and `shape="square"` for the rounded-xl identity tile.
+
+### Tests
+
+- `@repo/theme`: **68/68**, adding:
+  - every default `*-interactive` ≥ 4.5:1 on its /10 and /15 tint and on the
+    page, in both modes
+  - a fast-check property over random palettes against the tint
+  - the remedy equals the emitted value
+- `@repo/ui`: **270/270**. The new `primitives-anatomy.test.tsx` pins every
+  spec'd size, radius, focus ring, hover token, ink and shape. The
+  `button.test.tsx` intent test covers the solid destructive and the /15
+  ceiling.
+  - Six tint pins moved from `/12` and `/15` to `/10`. They are in
+    `course-card`/`quiz-card`/`video-card.test.tsx`, which are **the owner's
+    untracked files**, so those edits stay in the working tree and out of the
+    commit.
+  - For the same reason, the Combobox trigger-anatomy tests (shared 40px box,
+    chevrons-up-down when searchable) live in the owner's untracked
+    `combobox.test.tsx`, as do the `combobox.tsx` trigger edits. The
+    committed `primitives-anatomy.test.tsx` covers the Select trigger and
+    the shared `selectTriggerVariants` directly.
+  - The two "Deleted" chips move to `danger`. One is in `articles-table.tsx`
+    (committed); the other is in the untracked `courses-table.tsx` (working
+    tree only).
+- `@repo/web`: **285/285**.
+- `typecheck` and `lint` clean on theme, ui and web.
+
+### Live verification (dev server, browser)
+
+- `/admin/sign-in`: inputs and the button measure 40px in Inter, and the
+  bronze button's dark label is 6.01:1.
+- `/learn/forex`: `xl`/`lg`/`sm`/`xs` buttons measure 48/44/36/32px and pills
+  are fully rounded.
+- Tonal recipes, mounted on the real page surface and composited in-browser:
+
+  | Recipe  | Light | Dark |
+  | ------- | ----- | ---- |
+  | success | 4.86  | 5.02 |
+  | warning | 4.77  | 7.80 |
+  | info    | 8.34  | 4.68 |
+  | danger  | 4.87  | 4.97 |
+  | eyebrow | 5.13  | 5.62 |
+
+  All clear 4.5:1.
+
+### Found, not fixed here
+
+- **The database was never reseeded.** The active `Theme` row was last
+  updated 2026-09-09 and still holds the warm surfaces, the 4px radius and the
+  drifted raw font stack. That is why pages show `--input #8F8F8F` and 4px
+  corners instead of ADR-072's defaults. Confirmed with a read-only query; the
+  seed is the owner's to run.
+- **CourseCard's level chips sit on the cover ART**, not a token surface, so no
+  ink derivation can guarantee them. In dark mode they measured about 3.9–4.1
+  against the tint as composited on the cover container. A composition
+  question for Phase 5, not a Badge one.
+- **Alert's destructive variant still uses the raw `text-destructive` ink.**
+  For its component group.

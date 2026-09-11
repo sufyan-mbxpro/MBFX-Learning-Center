@@ -23,9 +23,40 @@ wired to Zod v4 via react-hook-form resolver; `DataTable` on TanStack Table
 v8 (server pagination/sort/filter, column visibility, selection, bulk
 actions, CSV export).
 
+## The design system is the reference UI's (changes-20, ADR-072/073)
+
+`docs/design-system/tokens.md` is binding: sizes, radius, elevation and
+anatomy for every component. Read it before touching a component's classes.
+
+**Accessibility overrides visual copying.** A reference pairing that fails
+contrast ships as the closest accessible variant, recorded as a deviation.
+
+**Tonal surfaces** (a status hue at /10 behind that hue's `*-interactive`
+ink) rest at /10 and hover at /15, never stronger. ADR-073 derives the ink to
+hold 4.5:1 exactly up to that tint.
+
+**Size names are stable; values follow the reference:**
+
+| Component        | Sizes                                               |
+| ---------------- | --------------------------------------------------- |
+| Button           | default 40 · sm 36 · xs 32 · 2xs 28 · lg 44 · xl 48 |
+| Input            | default 40 · sm 36 · xs 32                          |
+| Dropdown trigger | default 40 · sm 36 · xs 32                          |
+| Avatar           | sm 32 · default 40 · lg 48                          |
+
+- **Use the component, not a recipe:** `SearchInput`, not an Input with a
+  hand-placed magnifier; `CountBadge`, not a red span. Dropdown triggers share
+  `selectTriggerVariants`.
+- **Badge meanings:** `destructive` is the SOLID alert pill; a destructive
+  STATUS is `danger` (tonal).
+- **Provisional components** (checkbox, switch, radio, textarea, tooltip,
+  dropdown popups/items) are not restyled until their spec is confirmed from
+  the owner's second capture.
+
 ## Admin-surface conventions the primitives carry (ADR-044/045)
 
-- `Badge` centres its own text (`leading-none` + flex centring).
+- `Badge` centres its own text (flex centring in every size; `leading-none`
+  on the fixed-height `sm`/`xs` sizes).
 - `Table`'s header band is its own surface (`bg-muted/60`), with the row
   hover tint cancelled inside it — a header must never read as a row.
 - `DataTable` takes a `filters` slot rendered in its own toolbar beside

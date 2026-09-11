@@ -48,18 +48,28 @@ describe("Button — Base UI nativeButton semantics", () => {
 // carries its consequence. Pinning them here because the whole point is
 // that "Archive" and "Publish" must NOT resolve to the same classes —
 // a regression that reverts one to `default` is invisible to typecheck.
-describe("Button — intent variants (ADR-046)", () => {
+describe("Button — intent variants (ADR-046, ADR-073)", () => {
   const INTENTS = ["success", "warning", "info", "destructive"] as const;
+  const TONAL = ["success", "warning", "info"] as const;
 
-  it.each(INTENTS)("the %s variant tints from its own semantic token", (variant) => {
+  it.each(TONAL)("the %s variant tints from its own token at /10, hovering at /15", (variant) => {
     const { getByRole } = render(<Button variant={variant}>Act</Button>);
     const className = getByRole("button").className;
-    const token = variant === "destructive" ? "destructive" : variant;
-    expect(className).toContain(`bg-${token}/10`);
-    // Labels use the *-interactive derivation @repo/theme contrast-checks
-    // (ADR-003), never the raw fill hue. `destructive` predates that and
-    // keeps its own label token.
-    if (variant !== "destructive") expect(className).toContain(`text-${token}-interactive`);
+    expect(className).toContain(`bg-${variant}/10`);
+    expect(className).toContain(`hover:bg-${variant}/15`);
+    // Labels use the *-interactive derivation, which ADR-073 guarantees at
+    // 4.5:1 on its own tint up to /15 — never the raw fill hue, and never a
+    // tint above the contract (the old dark-mode /20–/30 steps).
+    expect(className).toContain(`text-${variant}-interactive`);
+    expect(className).not.toMatch(/bg-\w+\/(2|3)0/);
+  });
+
+  it("destructive is SOLID, like the reference (ADR-072 §9)", () => {
+    const { getByRole } = render(<Button variant="destructive">Delete</Button>);
+    const className = getByRole("button").className;
+    expect(className).toContain("bg-destructive");
+    expect(className).toContain("text-destructive-foreground");
+    expect(className).not.toContain("bg-destructive/10");
   });
 
   it("no two intents resolve to the same class string", () => {

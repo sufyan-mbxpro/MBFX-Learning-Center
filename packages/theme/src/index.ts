@@ -265,7 +265,9 @@ function readableOn(bg: string, light: string, dark: string): string {
  * Rather than making an admin abandon their brand colour, keep it for identity
  * (fills, borders, chart series, swatches) and derive a same-hue sibling for
  * interactive text until it clears the threshold. #C28D5A resolves to
- * #936B44 on white, which passes 4.5:1 and still reads as the brand.
+ * #936B44 against bare white, which passes 4.5:1 and still reads as the
+ * brand. The emitted tokens go through deriveTonalInk below (ADR-073), which
+ * asks the same question against a harder surface.
  *
  * ADR-018 rule 5 is the other half of this: because raw --primary clears
  * neither 4.5:1 nor the 3:1 non-text floor, it is for FILLS and large shapes
@@ -284,6 +286,37 @@ export function deriveInteractive(color: string, background: string, target = 4.
   }
   // Out of headroom — fall back to a guaranteed-legible text colour.
   return direction < 0 ? "#1A1A1A" : "#FFFFFF";
+}
+
+/**
+ * How strong a tint of its own hue an `*-interactive` ink is contracted to
+ * stay legible on (ADR-073). Tonal chips and intent buttons rest at /10 and
+ * hover at /15 — the reference's status language — so the ink must hold on
+ * the /15 surface, not only on the bare page.
+ */
+export const TONAL_TINT_CONTRACT = 0.15;
+
+/** `color` laid over `background` at `amount` opacity, as the browser composites it. */
+function mixOver(color: string, background: string, amount: number): string {
+  const c = hexToRgb(color);
+  const b = hexToRgb(background);
+  return rgbToHex(
+    c[0] * amount + b[0] * (1 - amount),
+    c[1] * amount + b[1] * (1 - amount),
+    c[2] * amount + b[2] * (1 - amount),
+  );
+}
+
+/**
+ * The derivation every `*-interactive` token uses (ADR-073): deriveInteractive
+ * measured against the colour's own tint at TONAL_TINT_CONTRACT, which is the
+ * harder surface in both modes — darker than a light page, lighter than a
+ * dark one — so an ink that clears it clears the bare page as well.
+ * Measured against the page alone, success/destructive/primary landed at
+ * 3.95–4.41:1 inside their own tonal chips.
+ */
+export function deriveTonalInk(color: string, background: string, target = 4.5): string {
+  return deriveInteractive(color, mixOver(color, background, TONAL_TINT_CONTRACT), target);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -326,9 +359,11 @@ export function tokensToCss({ brand, surface, layout, overrides }: ModeInput): s
     "--input": surface.borderMedium,
 
     // Primary. Identity value and interactive value are deliberately separate.
+    // Every *-interactive ink is tint-aware (ADR-073): legible on the page AND
+    // inside its own tonal chip, up to TONAL_TINT_CONTRACT.
     "--primary": b.primary,
     "--primary-foreground": readableOn(b.primary, onDark, onLight),
-    "--primary-interactive": deriveInteractive(b.primary, bg),
+    "--primary-interactive": deriveTonalInk(b.primary, bg),
     // Derived, never admin-editable (ADR-003).
     "--primary-hover": shade(b.primary, -0.14),
     "--primary-active": shade(b.primary, -0.26),
@@ -342,19 +377,19 @@ export function tokensToCss({ brand, surface, layout, overrides }: ModeInput): s
 
     "--success": b.success,
     "--success-foreground": readableOn(b.success, onDark, onLight),
-    "--success-interactive": deriveInteractive(b.success, bg),
+    "--success-interactive": deriveTonalInk(b.success, bg),
 
     "--destructive": b.error,
     "--destructive-foreground": readableOn(b.error, onDark, onLight),
-    "--destructive-interactive": deriveInteractive(b.error, bg),
+    "--destructive-interactive": deriveTonalInk(b.error, bg),
 
     "--warning": b.warning,
     "--warning-foreground": readableOn(b.warning, onDark, onLight),
-    "--warning-interactive": deriveInteractive(b.warning, bg),
+    "--warning-interactive": deriveTonalInk(b.warning, bg),
 
     "--info": b.info,
     "--info-foreground": readableOn(b.info, onDark, onLight),
-    "--info-interactive": deriveInteractive(b.info, bg),
+    "--info-interactive": deriveTonalInk(b.info, bg),
 
     // The focus ring is a graphical indicator, so 3:1 is the correct bar,
     // not 4.5:1. Its hue is the PRIMARY (ADR-072 §5) — the reference's ring
@@ -472,7 +507,9 @@ export function validateMode(
   for (const key of fills) {
     const ratio = contrastRatio(b[key], bg);
     if (ratio < 4.5) {
-      const derived = deriveInteractive(b[key], bg);
+      // The same derivation tokensToCss emits (ADR-073), so the remedy names
+      // the colour the renderer actually uses.
+      const derived = deriveTonalInk(b[key], bg);
       issues.push({
         field: key,
         mode,
