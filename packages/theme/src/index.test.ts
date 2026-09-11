@@ -17,7 +17,11 @@ import {
 } from "./index.ts";
 
 describe("contrastRatio — known WCAG reference pairs", () => {
-  it("#E8B98C on #FFFFFF ≈ 1.79 (the brand primary's documented failure point)", () => {
+  it("#C28D5A on #FFFFFF ≈ 2.9 (the brand primary's documented failure point, plan.md)", () => {
+    expect(contrastRatio("#C28D5A", "#FFFFFF")).toBeCloseTo(2.9, 1);
+  });
+
+  it("#E8B98C on #FFFFFF ≈ 1.79 (the changes-03 primary ADR-072 replaced)", () => {
     expect(contrastRatio("#E8B98C", "#FFFFFF")).toBeCloseTo(1.79, 1);
   });
 
@@ -142,7 +146,7 @@ describe("validateTheme / validateMode — contrast checks are advisory only (ch
   });
 
   it("a raw swatch failing as link text is advisory, since a derived variant exists", () => {
-    // DEFAULT_BRAND.primary (#E8B98C) is the documented ~1.79:1 case.
+    // DEFAULT_BRAND.primary (#C28D5A) is the documented ~2.9:1 case.
     const issues = validateMode(DEFAULT_BRAND, DEFAULT_LIGHT_SURFACE, "light");
     const advisory = issues.find((i) => i.field === "primary" && i.label.includes("link text"));
     expect(advisory?.severity).toBe("warning");
@@ -171,9 +175,10 @@ describe("validateTheme / validateMode — contrast checks are advisory only (ch
   });
 
   it("an input-border failure carries a concrete remedy value — editing the light background alone (not the border) is the reported way admins trip this floor, and unlike button-label/link-text the renderer has no derived stand-in to fall back on, so the admin needs a value to type in", () => {
-    // #8F8F8F (the shipped borderMedium) clears 3:1 on white but not on this
-    // slightly darker, still-plausible light background (~2.79:1 — matches
-    // the reported case) — the border swatch itself is untouched.
+    // The shipped borderMedium (#7F8FA5 since ADR-072) clears 3:1 on white
+    // but not on this slightly darker, still-plausible light background
+    // (~2.7:1 — the shape of the reported case) — the border swatch itself
+    // is untouched.
     const editedSurface = { ...DEFAULT_LIGHT_SURFACE, background: "#E8E8E8" };
     const issues = validateMode(DEFAULT_BRAND, editedSurface, "light");
     const issue = issues.find((i) => i.field === "borderMedium");
@@ -291,7 +296,7 @@ describe("buildThemeStyleSheet — CSS snapshot", () => {
     expect(css).not.toMatch(/--background:\d+ \d+ \d+;/); // no rgbChannels triple
     expect(css).toContain("--brand-font-sans:");
     expect(css).toContain("--brand-font-mono:");
-    expect(css).toContain("--brand-base-font-size:14px;");
+    expect(css).toContain("--brand-base-font-size:16px;");
     expect(css).not.toContain("--font-sans:var(--font-sans)"); // no circular self-reference
     expect(css).toMatchSnapshot();
   });
@@ -317,20 +322,25 @@ describe("curated fonts (ADR-005)", () => {
     expect(isCuratedFontKey("systemmono")).toBe(true);
   });
 
-  // ADR-039. The default is a real curated key, so @repo/ui owes it a
-  // --font-{key} family; asserting the emitted var() (rather than just the
-  // key) is what would catch a default silently reverting to a literal
-  // stack — the failure mode that would make "Outfit everywhere" a no-op.
-  it("Outfit is the default sans and emits a var(--font-outfit) reference", () => {
-    expect(DEFAULT_LAYOUT.fontSans).toBe("outfit");
-    expect(isCuratedFontKey("outfit")).toBe(true);
+  // ADR-072 (superseding ADR-039). The default is a real curated key, so
+  // @repo/ui owes it a --font-{key} family; asserting the emitted var()
+  // (rather than just the key) is what would catch a default silently
+  // reverting to a literal stack — the failure mode that would make "Inter
+  // everywhere" a no-op.
+  it("Inter is the default sans and emits a var(--font-inter) reference", () => {
+    expect(DEFAULT_LAYOUT.fontSans).toBe("inter");
+    expect(isCuratedFontKey("inter")).toBe(true);
     const css = buildThemeStyleSheet({
       key: "default",
       lightCss: "",
       darkCss: "",
       layout: DEFAULT_LAYOUT,
     });
-    expect(css).toContain("--brand-font-sans:var(--font-outfit);");
+    expect(css).toContain("--brand-font-sans:var(--font-inter);");
+  });
+
+  it("Outfit stays selectable after ADR-072 — superseding a default deletes no admin choice", () => {
+    expect(isCuratedFontKey("outfit")).toBe(true);
   });
 
   it("rejects an arbitrary/unregistered font key", () => {
@@ -349,47 +359,69 @@ describe("BRAND_FIELD_REGISTRY", () => {
   });
 });
 
-// ADR-018 (public design system): the brief pinned #E8B98C as the brand
-// primary and showed a read-only "Derived states" pair in the admin theme
-// screen. These pin BOTH halves of that — the values the engine actually
-// emits, and the reason raw --primary must never be used for thin or small
-// elements. Without this, a future palette nudge could silently break the
-// design-system rule the section components are built on.
-describe("ADR-018 — brand primary #E8B98C and its derived states", () => {
-  it("matches the derived pair the brief's admin screenshot shows (#8B6F54 light / #E8B98C dark)", () => {
-    expect(DEFAULT_BRAND.primary).toBe("#E8B98C");
+/** Parses tokensToCss's `--x:v;` output into a lookup. */
+function cssVars(css: string): Record<string, string> {
+  return Object.fromEntries([...css.matchAll(/(--[a-z-]+):([^;]+);/g)].map((m) => [m[1], m[2]]));
+}
+const lightVars = cssVars(
+  tokensToCss({ brand: DEFAULT_BRAND, surface: DEFAULT_LIGHT_SURFACE, layout: DEFAULT_LAYOUT }),
+);
+const darkVars = cssVars(
+  tokensToCss({
+    brand: DEFAULT_BRAND,
+    surface: DEFAULT_DARK_SURFACE,
+    layout: DEFAULT_LAYOUT,
+    overrides: DEFAULT_DARK_BRAND_OVERRIDES,
+  }),
+);
+
+// ADR-072 (changes-20): the reference's bronze primary, adopted under the
+// rule that accessibility overrides visual copying. These pin the values the
+// engine actually emits and the reasons behind them — and, via ADR-018 rule
+// 5, why raw --primary is still never used for thin or small elements.
+describe("ADR-072 — brand primary #C28D5A and its derived states", () => {
+  it("derives #936B44 as link text on white, and uses the raw swatch on dark", () => {
+    expect(DEFAULT_BRAND.primary).toBe("#C28D5A");
     expect(deriveInteractive(DEFAULT_BRAND.primary, DEFAULT_LIGHT_SURFACE.background)).toBe(
-      "#8b6f54",
+      "#936b44",
     );
     // On the dark surface the raw swatch already clears 4.5:1, so the
     // engine returns it untouched — the brand colour IS the link colour there.
     expect(deriveInteractive(DEFAULT_BRAND.primary, DEFAULT_DARK_SURFACE.background)).toBe(
-      "#E8B98C",
+      "#C28D5A",
     );
   });
 
-  it("keeps a legible button label — the blocking fill check passes at ~9.74:1", () => {
-    // tokensToCss picks label ink from the fixed INK_LIGHT/INK_DARK pair,
-    // so this is the same number validateMode's blocking check evaluates.
-    const best = Math.max(
-      contrastRatio(DEFAULT_BRAND.primary, "#FFFFFF"),
-      contrastRatio(DEFAULT_BRAND.primary, "#1A1A1A"),
-    );
-    expect(best).toBeGreaterThanOrEqual(4.5);
-    expect(best).toBeCloseTo(9.74, 1);
+  it("labels bronze fills with DARK ink at ~6.0:1 — never the reference's white at 2.77:1", () => {
+    expect(lightVars["--primary-foreground"]).toBe("#1A1A1A");
+    expect(darkVars["--primary-foreground"]).toBe("#1A1A1A");
+    expect(contrastRatio(DEFAULT_BRAND.primary, "#1A1A1A")).toBeCloseTo(6.01, 1);
+    expect(contrastRatio(DEFAULT_BRAND.primary, "#FFFFFF")).toBeLessThan(4.5);
+  });
+
+  it("labels the warning fill with dark ink too — the reference's white is 1.91:1", () => {
+    expect(lightVars["--warning-foreground"]).toBe("#1A1A1A");
+    expect(contrastRatio(DEFAULT_BRAND.warning, "#1A1A1A")).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("keeps white labels legible on success and error (the reason they are not the reference's hex)", () => {
+    expect(lightVars["--success-foreground"]).toBe("#FFFFFF");
+    expect(lightVars["--destructive-foreground"]).toBe("#FFFFFF");
+    expect(contrastRatio(DEFAULT_BRAND.success, "#FFFFFF")).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(DEFAULT_BRAND.error, "#FFFFFF")).toBeGreaterThanOrEqual(4.5);
   });
 
   it("raw --primary clears NEITHER text nor non-text floors on a light surface — ADR-018 rule 5's reason", () => {
-    // 1.79:1 is below 4.5:1 (text) AND below 3:1 (non-text UI). A tan 1px
-    // border or small icon glyph drawn in raw --primary on white is
-    // effectively invisible, and validateMode only flags the TEXT case —
-    // so the rule ("fills and large shapes only") is structural, not linted.
+    // 2.9:1 is below 4.5:1 (text) AND below 3:1 (non-text UI). A 1px bronze
+    // border or small icon glyph in raw --primary on white fails, and
+    // validateMode only flags the TEXT case — so the rule ("fills and large
+    // shapes only") is structural, not linted.
     const ratio = contrastRatio(DEFAULT_BRAND.primary, DEFAULT_LIGHT_SURFACE.background);
     expect(ratio).toBeLessThan(3.0);
-    expect(ratio).toBeCloseTo(1.79, 1);
+    expect(ratio).toBeCloseTo(2.9, 1);
   });
 
-  it("the palette change introduces no BLOCKING validation issue — only the existing link-text advisory", () => {
+  it("the palette introduces no BLOCKING validation issue — only the link-text advisory", () => {
     const { issues, canSave } = validateTheme(
       DEFAULT_BRAND,
       DEFAULT_LIGHT_SURFACE,
@@ -400,6 +432,43 @@ describe("ADR-018 — brand primary #E8B98C and its derived states", () => {
     expect(issues.filter((i) => i.severity === "error")).toEqual([]);
     const advisory = issues.find((i) => i.field === "primary" && i.label.includes("link text"));
     expect(advisory?.severity).toBe("warning");
-    expect(advisory?.remedy).toContain("#8B6F54");
+    expect(advisory?.remedy).toContain("#936B44");
+  });
+});
+
+describe("ADR-072 — focus ring and input border", () => {
+  it("derives --ring from the PRIMARY (bronze), at the 3:1 non-text floor, in both modes", () => {
+    expect(lightVars["--ring"]).toBe(deriveInteractive(DEFAULT_BRAND.primary, "#FFFFFF", 3.0));
+    expect(darkVars["--ring"]).toBe(
+      deriveInteractive(DEFAULT_BRAND.primary, DEFAULT_DARK_SURFACE.background, 3.0),
+    );
+    expect(
+      contrastRatio(lightVars["--ring"]!, DEFAULT_LIGHT_SURFACE.background),
+    ).toBeGreaterThanOrEqual(3);
+    expect(
+      contrastRatio(darkVars["--ring"]!, DEFAULT_DARK_SURFACE.background),
+    ).toBeGreaterThanOrEqual(3);
+  });
+
+  it("a different primary moves the ring — it follows the admin's brand, not a constant", () => {
+    const vars = cssVars(
+      tokensToCss({
+        brand: { ...DEFAULT_BRAND, primary: "#1D4ED8" },
+        surface: DEFAULT_LIGHT_SURFACE,
+        layout: DEFAULT_LAYOUT,
+      }),
+    );
+    expect(vars["--ring"]).toBe("#1D4ED8");
+  });
+
+  it("the light input border clears 3:1 on BOTH the background and the muted surface", () => {
+    const { borderMedium, background, surfaceMuted } = DEFAULT_LIGHT_SURFACE;
+    expect(contrastRatio(borderMedium, background)).toBeGreaterThanOrEqual(3);
+    expect(contrastRatio(borderMedium, surfaceMuted)).toBeGreaterThanOrEqual(3);
+  });
+
+  it("the dark input border clears 3:1 on the dark background", () => {
+    const { borderMedium, background } = DEFAULT_DARK_SURFACE;
+    expect(contrastRatio(borderMedium, background)).toBeGreaterThanOrEqual(3);
   });
 });

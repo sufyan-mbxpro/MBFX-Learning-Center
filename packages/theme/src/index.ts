@@ -28,8 +28,11 @@ export interface CuratedFont {
 
 export const CURATED_FONTS: CuratedFont[] = [
   { key: "system", label: "System UI", category: "sans" },
-  // The brand typeface and the DEFAULT_LAYOUT.fontSans default (ADR-039).
+  // Outfit was the brand typeface under ADR-039; ADR-072 moved the default
+  // to Inter. It stays a selectable key — superseding a default deletes
+  // nothing an admin may have picked.
   { key: "outfit", label: "Outfit", category: "sans" },
+  // The brand typeface and the DEFAULT_LAYOUT.fontSans default (ADR-072).
   { key: "inter", label: "Inter", category: "sans" },
   { key: "roboto", label: "Roboto", category: "sans" },
   { key: "opensans", label: "Open Sans", category: "sans" },
@@ -113,12 +116,25 @@ export interface LayoutTokens {
 export type BrandOverrides = Partial<BrandColors>;
 
 // ─────────────────────────────────────────────────────────────
-// Defaults — the values currently in the admin
+// Defaults (ADR-072 — the changes-20 design system)
+//
+// These are DEFAULTS, not the palette. The admin theme editor writes a
+// Theme row and loadActiveTheme reads it; these values apply only where no
+// row exists, and are what the seed writes into the default row. A
+// redesign changes them here and nowhere else — never as literals in CSS.
+//
+// Mirrored by hand into packages/db/prisma/default-theme-tokens.json (the
+// seed can't import this package, architecture.md #8); seed-sync.test.ts
+// fails the moment the two disagree.
 // ─────────────────────────────────────────────────────────────
 
 export const DEFAULT_BRAND: BrandColors = {
-  primary: "#E8B98C",
+  // The reference's bronze. Its label ink is engine-derived (#1A1A1A,
+  // 6.01:1), NOT the reference's white (2.77:1) — ADR-072 §1.
+  primary: "#C28D5A",
   secondary: "#2A2A29",
+  // The AA-safe siblings of the reference's #3382E2/#E23C36: white labels
+  // clear 4.5:1 on these and not on those (ADR-072 §3).
   success: "#2D72C7",
   error: "#D93A34",
   warning: "#FFA310",
@@ -126,47 +142,56 @@ export const DEFAULT_BRAND: BrandColors = {
   accent: "#EAE5DE",
 };
 
+/** Slate neutrals (ADR-072 §4). */
 export const DEFAULT_LIGHT_SURFACE: SurfacePalette = {
   background: "#FFFFFF",
   surface: "#FFFFFF",
-  surfaceMuted: "#F8F8F8",
-  textPrimary: "#1A1A1A",
-  textSecondary: "#666666",
-  textMuted: "#999999",
-  borderLight: "#E5E5E5",
-  borderMedium: "#8F8F8F",
+  surfaceMuted: "#F1F5F9",
+  textPrimary: "#020817",
+  textSecondary: "#64748B",
+  textMuted: "#94A3B8",
+  borderLight: "#E2E8F0",
+  // The input border. The reference reuses its divider colour (1.23:1); no
+  // named slate step sits near 3:1 (400 = 2.56, 500 = 4.76), so this is the
+  // point on the slate ramp that clears 3:1 on BOTH background and muted.
+  borderMedium: "#7F8FA5",
 };
 
+/** shadcn slate dark — the canonical partner of the light set above. */
 export const DEFAULT_DARK_SURFACE: SurfacePalette = {
-  background: "#141413",
-  surface: "#1C1C1A",
-  surfaceMuted: "#252523",
-  textPrimary: "#F5F4F2",
-  textSecondary: "#A8A6A2",
-  textMuted: "#78766F",
-  borderLight: "#2E2E2B",
-  borderMedium: "#6B6B67",
+  background: "#020817",
+  surface: "#020817",
+  surfaceMuted: "#1E293B",
+  textPrimary: "#F8FAFC",
+  textSecondary: "#94A3B8",
+  textMuted: "#64748B",
+  borderLight: "#1E293B",
+  // 3:1 on the dark background, same derivation as the light value.
+  borderMedium: "#4F5E73",
 };
 
 /**
  * #EAE5DE is a light-surface tint — on a dark background it becomes a
  * near-white block. #2A2A29 is near-black and disappears entirely. These two
  * are the only defaults that need a dark counterpart; the four status colours
- * and the primary all survive the mode switch.
+ * and the primary all survive the mode switch. Dark accent is the muted
+ * surface because the reference says so in its own markup: its active and
+ * hover nav states are `dark:bg-muted`.
  */
 export const DEFAULT_DARK_BRAND_OVERRIDES: BrandOverrides = {
-  accent: "#332E27",
+  accent: "#1E293B",
   secondary: "#E8E6E3",
 };
 
 export const DEFAULT_LAYOUT: LayoutTokens = {
-  radiusBase: "4px",
+  // sm 4 / md 6 / lg 8 / xl 12 via @repo/ui's radius formula (ADR-072 §8).
+  radiusBase: "6px",
   containerWidth: "1400px",
-  // ADR-039: Outfit is the brand typeface. "system" stays a selectable
-  // registry key — it is simply no longer the default.
-  fontSans: "outfit",
+  // ADR-072: Inter is the brand typeface (superseding ADR-039's Outfit).
+  // "system" and "outfit" stay selectable registry keys.
+  fontSans: "inter",
   fontMono: "systemmono",
-  baseFontSize: "14px",
+  baseFontSize: "16px",
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -231,16 +256,16 @@ function readableOn(bg: string, light: string, dark: string): string {
  * The important function.
  *
  * A brand colour has two jobs that pull against each other: it identifies the
- * product, and it has to be legible as link text. The brand primary #E8B98C
- * does the first well and fails the second at 1.79:1 on white — below even the
- * 3:1 floor for non-text UI. (Its predecessor #C28D5A failed the same way at
- * 2.90:1; the shape of the problem is a property of warm mid-to-light brand
- * tones, not of one particular swatch.)
+ * product, and it has to be legible as link text. The brand primary #C28D5A
+ * does the first well and fails the second at 2.89:1 on white — below even the
+ * 3:1 floor for non-text UI. (#E8B98C, the value between changes-03 and
+ * ADR-072, failed the same way at 1.79:1; the shape of the problem is a
+ * property of warm mid-to-light brand tones, not of one particular swatch.)
  *
  * Rather than making an admin abandon their brand colour, keep it for identity
  * (fills, borders, chart series, swatches) and derive a same-hue sibling for
- * interactive text until it clears the threshold. #E8B98C resolves to
- * #8B6F54 on white, which passes at 4.67:1 and still reads as the brand.
+ * interactive text until it clears the threshold. #C28D5A resolves to
+ * #936B44 on white, which passes 4.5:1 and still reads as the brand.
  *
  * ADR-018 rule 5 is the other half of this: because raw --primary clears
  * neither 4.5:1 nor the 3:1 non-text floor, it is for FILLS and large shapes
@@ -332,8 +357,9 @@ export function tokensToCss({ brand, surface, layout, overrides }: ModeInput): s
     "--info-interactive": deriveInteractive(b.info, bg),
 
     // The focus ring is a graphical indicator, so 3:1 is the correct bar,
-    // not 4.5:1.
-    "--ring": deriveInteractive(b.success, bg, 3.0),
+    // not 4.5:1. Its hue is the PRIMARY (ADR-072 §5) — the reference's ring
+    // is its bronze; it used to be derived from success (blue).
+    "--ring": deriveInteractive(b.primary, bg, 3.0),
 
     "--text-muted": surface.textMuted,
     "--radius": layout.radiusBase,

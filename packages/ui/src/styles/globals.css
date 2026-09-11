@@ -87,39 +87,39 @@
   --font-sans: var(--brand-font-sans);
   --font-mono: var(--brand-font-mono);
 
-  /* A5.5 — size/line-height pairs, now one indirection deep (ADR-054).
-     `@theme inline` SUBSTITUTES these values into every utility at build
-     time, so `.text-xs` compiles to a literal `font-size: 11px` and a
-     redeclared `--text-xs` further down the tree is inert — there is no
-     var() left to intercept. Routing each step through
-     `var(--ui-x, var(--type-x))` puts one back, which is what lets the
-     admin run a larger scale off a single class.
+  /* A5.5 — size/line-height pairs. ONE scale for both surfaces (ADR-072,
+     superseding ADR-054's reader/admin split). `--type-*` in :root (below)
+     is the source of truth; every step here reads it, so the scale is
+     defined exactly once and `.ed-fs-*` can read the same values directly.
 
-     `--type-*` (in :root, below) is the reader's scale and the source of
-     truth. `--ui-*` is deliberately NEVER defined in :root — only
-     `.type-scale-admin` sets it — so every public surface falls through
-     the fallback and compiles to exactly the value it always did. Same
-     indirection the colour tokens above use, applied to type. */
-  --text-xs: var(--ui-xs, var(--type-xs));
-  --text-xs--line-height: var(--ui-xs-lh, var(--type-xs-lh));
-  --text-sm: var(--ui-sm, var(--type-sm));
-  --text-sm--line-height: var(--ui-sm-lh, var(--type-sm-lh));
-  --text-md: var(--ui-md, var(--type-md));
-  --text-md--line-height: var(--ui-md-lh, var(--type-md-lh));
-  --text-base: var(--ui-base, var(--type-base));
-  --text-base--line-height: var(--ui-base-lh, var(--type-base-lh));
-  --text-lg: var(--ui-lg, var(--type-lg));
-  --text-lg--line-height: var(--ui-lg-lh, var(--type-lg-lh));
-  --text-xl: var(--ui-xl, var(--type-xl));
-  --text-xl--line-height: var(--ui-xl-lh, var(--type-xl-lh));
-  --text-2xl: var(--ui-2xl, var(--type-2xl));
-  --text-2xl--line-height: var(--ui-2xl-lh, var(--type-2xl-lh));
-  --text-3xl: var(--ui-3xl, var(--type-3xl));
-  --text-3xl--line-height: var(--ui-3xl-lh, var(--type-3xl-lh));
-  --text-4xl: var(--ui-4xl, var(--type-4xl));
-  --text-4xl--line-height: var(--ui-4xl-lh, var(--type-4xl-lh));
-  --text-5xl: var(--ui-5xl, var(--type-5xl));
-  --text-5xl--line-height: var(--ui-5xl-lh, var(--type-5xl-lh));
+     Ordered smallest to largest, and type-scale.test.ts holds it strictly
+     ascending. `3xs`/`2xs`/`nav` are the named homes of the reference's
+     arbitrary 10/11/13px sizes (task constraint: no arbitrary values);
+     `nav` sits where the retired, unused `md` step (13px) used to. */
+  --text-3xs: var(--type-3xs);
+  --text-3xs--line-height: var(--type-3xs-lh);
+  --text-2xs: var(--type-2xs);
+  --text-2xs--line-height: var(--type-2xs-lh);
+  --text-xs: var(--type-xs);
+  --text-xs--line-height: var(--type-xs-lh);
+  --text-nav: var(--type-nav);
+  --text-nav--line-height: var(--type-nav-lh);
+  --text-sm: var(--type-sm);
+  --text-sm--line-height: var(--type-sm-lh);
+  --text-base: var(--type-base);
+  --text-base--line-height: var(--type-base-lh);
+  --text-lg: var(--type-lg);
+  --text-lg--line-height: var(--type-lg-lh);
+  --text-xl: var(--type-xl);
+  --text-xl--line-height: var(--type-xl-lh);
+  --text-2xl: var(--type-2xl);
+  --text-2xl--line-height: var(--type-2xl-lh);
+  --text-3xl: var(--type-3xl);
+  --text-3xl--line-height: var(--type-3xl-lh);
+  --text-4xl: var(--type-4xl);
+  --text-4xl--line-height: var(--type-4xl-lh);
+  --text-5xl: var(--type-5xl);
+  --text-5xl--line-height: var(--type-5xl-lh);
 
   /* NO named spacing scale (--spacing-sm etc.), deliberately — the
      reference globals.css defined one, and it's a live Tailwind v4
@@ -129,11 +129,13 @@
      computed-style probe, not lint — nothing errors). The default 4px
      numeric scale (`p-4` = 16px) is the review convention instead. */
 
-  /* Shape — all derived from one admin-set radius */
+  /* Shape — all derived from one admin-set radius. At the 6px default
+     (ADR-072) this is sm 4 / md 6 / lg 8 / xl 12: exactly the reference's
+     steps. xl is +6, not +4, so it lands on the reference's 12px. */
   --radius-sm: calc(var(--radius) - 2px);
   --radius-md: var(--radius);
   --radius-lg: calc(var(--radius) + 2px);
-  --radius-xl: calc(var(--radius) + 4px);
+  --radius-xl: calc(var(--radius) + 6px);
   --radius-pill: 9999px;
 
   /* Overlay scrim behind dialogs/sheets — same literal-value exception as
@@ -141,15 +143,23 @@
      independent by design (a light wash over dark UI looks broken). */
   --color-overlay: rgb(0 0 0 / 0.1);
 
-  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.05);
-  --shadow-md: 0 4px 6px rgb(0 0 0 / 0.1);
-  --shadow-lg: 0 10px 15px rgb(0 0 0 / 0.1);
-  --shadow-xl: 0 20px 25px rgb(0 0 0 / 0.15);
+  /* Elevation (ADR-072) — the reference's values, which are Tailwind v3's
+     scale: `sm` is a card at rest, `md` a floating menu/popover, `lg` a
+     dialog/sheet/toast, `2xl` the auth card. `dock` is the mobile bottom
+     nav's soft underlay — the reference's one hand-written shadow, named
+     rather than left arbitrary. */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  --shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+  --shadow-dock: 0 6px 24px -8px rgb(0 0 0 / 0.25);
 
-  /* Layout constants from the design system */
+  /* Layout constants from the design system (ADR-072: 40px controls, a
+     256px sidebar — the reference's h-10 and w-64) */
   --height-header: 64px;
-  --height-input: 36px;
-  --width-sidebar: 240px;
+  --height-input: 40px;
+  --width-sidebar: 256px;
 
   /* == Public design system (ADR-018) ==========================
    *
@@ -176,9 +186,9 @@
    * only ever collide with one, never usefully extend it.
    */
 
-  /* Display type — PUBLIC ONLY (ADR-018 rule 6). The shared --text-xs..5xl
-     ramp above is untouched: it belongs to the admin surface too, where the
-     14px base is deliberate. Fluid, so the hero scales without breakpoints. */
+  /* Display type — PUBLIC ONLY (ADR-018 rule 6). Separate from the shared
+     --text-3xs..5xl ramp above, which both surfaces use (ADR-072), and
+     untouched by it. Fluid, so the hero scales without breakpoints. */
   --text-display-sm: clamp(1.75rem, 1.35rem + 2vw, 2.5rem);
   --text-display-sm--line-height: 1.2;
   --text-display-md: clamp(2.25rem, 1.6rem + 3.2vw, 3.5rem);
@@ -226,69 +236,38 @@
     --container-wide: 1600px;
     --container-narrow: 768px;
 
-    /* The READER's type scale (ADR-054) — the source of truth every
-       --text-* step falls back to, and the sizes the public site and a
-       published article render at. These are the values that used to sit
-       literally in @theme; they moved location, not magnitude, so every
-       public surface renders pixel-identically. */
-    --type-xs: 11px;
+    /* THE type scale (ADR-072) — one scale for the public site AND the
+       admin, superseding ADR-054's reader/admin split. The reference's
+       values: Tailwind's default ramp, plus three named steps for sizes it
+       hand-wrote (3xs 10, 2xs 11, nav 13). Nothing renders below 10px —
+       the reference's 9px badge text is folded into 3xs.
+
+       A page that looks wrong at this scale gets its SPACING adjusted,
+       never a private font size (owner, 2026-09-11). */
+    --type-3xs: 10px;
+    --type-3xs-lh: 14px;
+    --type-2xs: 11px;
+    --type-2xs-lh: 16px;
+    --type-xs: 12px;
     --type-xs-lh: 16px;
-    --type-sm: 12px;
-    --type-sm-lh: 18px;
-    --type-md: 13px;
-    --type-md-lh: 20px;
-    --type-base: 14px;
-    --type-base-lh: 22px;
-    --type-lg: 16px;
-    --type-lg-lh: 24px;
-    --type-xl: 18px;
-    --type-xl-lh: 26px;
-    --type-2xl: 20px;
-    --type-2xl-lh: 28px;
-    --type-3xl: 24px;
-    --type-3xl-lh: 32px;
-    --type-4xl: 28px;
-    --type-4xl-lh: 36px;
-    --type-5xl: 32px;
-    --type-5xl-lh: 40px;
-  }
-
-  /* The ADMIN's type scale (ADR-054). Applied to <html> in both admin root
-     layouts via ADMIN_TYPE_SCALE_CLASS — never in :root, so it cannot leak
-     onto a public render.
-
-     Why the admin needs its own: it lives at the bottom of the scale
-     (114 text-xs + 97 text-sm across app/(admin), against 3 text-2xl), and
-     Outfit is a geometric sans whose character — circular bowls, a
-     single-storey g — does not resolve at 11px. The page h1 was smaller
-     than the public site's body copy.
-
-     ALL ten steps are overridden, including the three the admin does not
-     currently render. Stopping at 2xl left --ui-2xl (24px) equal to the
-     reader's --type-3xl (24px), so the first admin screen to reach for
-     text-3xl would have got no increase at all — a silent dead step. A
-     complete, strictly-ascending scale has no such edge. */
-  .type-scale-admin {
-    --ui-xs: 12px;
-    --ui-xs-lh: 16px;
-    --ui-sm: 13px;
-    --ui-sm-lh: 20px;
-    --ui-md: 14px;
-    --ui-md-lh: 21px;
-    --ui-base: 15px;
-    --ui-base-lh: 24px;
-    --ui-lg: 18px;
-    --ui-lg-lh: 26px;
-    --ui-xl: 20px;
-    --ui-xl-lh: 28px;
-    --ui-2xl: 24px;
-    --ui-2xl-lh: 32px;
-    --ui-3xl: 28px;
-    --ui-3xl-lh: 36px;
-    --ui-4xl: 32px;
-    --ui-4xl-lh: 40px;
-    --ui-5xl: 36px;
-    --ui-5xl-lh: 44px;
+    --type-nav: 13px;
+    --type-nav-lh: 20px;
+    --type-sm: 14px;
+    --type-sm-lh: 20px;
+    --type-base: 16px;
+    --type-base-lh: 24px;
+    --type-lg: 18px;
+    --type-lg-lh: 28px;
+    --type-xl: 20px;
+    --type-xl-lh: 28px;
+    --type-2xl: 24px;
+    --type-2xl-lh: 32px;
+    --type-3xl: 30px;
+    --type-3xl-lh: 36px;
+    --type-4xl: 36px;
+    --type-4xl-lh: 40px;
+    --type-5xl: 48px;
+    --type-5xl-lh: 48px;
   }
 
   * {
@@ -297,10 +276,31 @@
 
   body {
     @apply bg-background text-foreground text-base;
-    font-size: var(--brand-base-font-size, 14px);
+    font-size: var(--brand-base-font-size, 16px);
     font-feature-settings:
       "rlig" 1,
       "calt" 1;
+  }
+
+  /* Scrollbars (ADR-072, the reference's): thin, a pill thumb in the
+     secondary-text ink at 30%, over a faint muted track. Tokens only, so
+     both modes and any admin palette stay coherent. Firefox gets the
+     standard properties; WebKit the pseudo-elements. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklab, var(--muted-foreground) 30%, transparent)
+      color-mix(in oklab, var(--muted) 30%, transparent);
+  }
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: color-mix(in oklab, var(--muted-foreground) 30%, transparent);
+    border-radius: var(--radius-pill);
+  }
+  ::-webkit-scrollbar-track {
+    background-color: color-mix(in oklab, var(--muted) 30%, transparent);
   }
 
   /* Every interactive element gets the same visible focus treatment.
@@ -1125,11 +1125,11 @@
 /* Sizes step the type scale rather than taking a px value, so body copy
    stays on the same rhythm as every other surface (A5.5).
 
-   These read --type-* (the READER's scale) and NOT --text-*, deliberately
-   (ADR-054 #5). This is the one class set that renders on both surfaces —
-   inside the editor, and in the published article — and it carries the
-   AUTHOR's chosen size. On --text-* it would pick up the admin's larger
-   scale and the editor would stop previewing what the reader gets. */
+   These read --type-* directly rather than --text-*. Under ADR-054 that
+   pinned them to the reader's scale while the admin ran a larger one; since
+   ADR-072 there is one scale and the two are equal, but the direct read
+   keeps the AUTHOR's chosen size independent of any future surface
+   override — the editor must always preview what the reader gets. */
 .ed-fs-sm {
   font-size: var(--type-sm);
   line-height: var(--type-sm-lh);

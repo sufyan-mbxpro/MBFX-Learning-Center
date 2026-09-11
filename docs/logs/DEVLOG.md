@@ -10154,3 +10154,201 @@ environment limits recorded in the ADR-054 entry are unchanged).
 `/about`'s HTML). That is a bundle-weight question for Module 14's Lighthouse
 budgets, not part of this fix, and it is not a security issue — the strings are
 catalog labels, not data.
+
+## 2026-09-11 — changes-20 Phase 1: the reference UI, reverse-engineered into a token doc (Modules 02/07/09, no code, ADR pending)
+
+Phase 1 of the full UI redesign (`docs/changes/changes-20-Ui.md`). This phase
+is documentation only. It produced `docs/design-system/tokens.md` and stops
+there for owner approval, as the brief requires.
+
+### What the reference turned out to be
+
+The capture (643 KB: computed styles plus full-body HTML of four admin pages)
+was analysed by tallying every `class` attribute and outlining each page's DOM,
+not by eye. It is **stock shadcn/ui new-york v3 on Tailwind v3 and Radix**, in
+**Inter**, with **lucide** icons at stroke 2, stock **slate** neutrals, and an
+admin brand override injected on `<html style>`. Its SSR payload carries the
+brand hex values, and six of the seven already equal our `DEFAULT_BRAND`.
+
+So the redesign is not a palette change. The gaps are:
+
+- neutrals: warm grays → slate
+- typeface: Outfit → Inter
+- one type scale
+- control heights: 32px → 40px buttons
+- radius: base 4px → 6px
+- cards drawn by border + `shadow-sm` instead of a ring
+- table density
+- the beige accent as the hover colour
+
+No dark palette was captured, so the doc derives shadcn slate dark and takes
+"dark accent = muted" from the reference's own `dark:` utilities.
+
+### Findings that became open questions rather than silent copies
+
+- The reference paints **white on the bronze primary at 2.77:1** and white on
+  warning at 1.91:1. testing.md's theme-contract suite would reject both, and
+  `readableOn` renders `#1A1A1A` instead (Q1).
+- Our `#2D72C7`/`#D93A34` are not drift from the reference's
+  `#3382E2`/`#E23C36`. They are the AA-safe siblings: white labels at
+  4.84 and 4.56 vs 3.87 and 4.26 (Q2).
+- The reference's input border is the divider colour, 1.23:1 (Q4).
+- The primary it uses (`#C28D5A`) is the value changes-03 moved _away from_
+  on 2026-09-03 (Q1).
+
+All contrast numbers were computed with a replica of `@repo/theme`'s own
+`contrastRatio`/`deriveInteractive`, not estimated.
+
+### Decisions the doc proposes (not yet taken)
+
+- One new ADR, ADR-072, before any Phase 2 code.
+- If approved as recommended, it supersedes ADR-039 (Outfit → Inter) and
+  ADR-054 (split reader/admin scale → one scale). The reference's arbitrary
+  9/10/11/13px sizes become named steps `3xs`/`2xs`/`nav`, and 9px is dropped.
+- It also moves the focus ring's source from success to primary, which is an
+  engine change.
+- ADR-003 and ADR-018 rule 5 stay in force.
+
+Tailwind v4's multiplier spacing means every `w-[150px]`-style width in the
+reference is a scale value (`w-37.5`), so the no-arbitrary-values constraint
+needs no new spacing tokens.
+
+### Verified
+
+Nothing to test: no code changed. lucide was confirmed as the only icon
+library in `apps/**` and `packages/**` (0 other imports), so that constraint
+already holds.
+
+### Owed
+
+- Owner answers to Q1–Q17 in `docs/design-system/tokens.md` §9.
+- Then ADR-072, then Phase 2 (tokens).
+
+## 2026-09-11 — changes-20 Phase 2: the design tokens land; one type scale, Inter, slate defaults (Modules 02/07/09, ADR-072)
+
+The owner approved Phase 1 with decisions, recorded in **ADR-072**. It
+supersedes **ADR-039** (Outfit) and **ADR-054** (split type scale), and both
+got header-only Status / Superseded-by edits, which is what governance
+permits. Its first principle is **accessibility overrides visual copying**:
+a reference pairing that fails our contrast rules is replaced by the closest
+accessible variant. The owner also restated a constraint: the colour scheme
+stays admin-dynamic. This phase changes `@repo/theme` **defaults** only. The
+`Theme` row → `tokensToCss` → `#brand-tokens` flow is untouched.
+
+### `@repo/theme`
+
+- **Brand:** `primary` `#E8B98C` → `#C28D5A`. Label ink stays engine-derived
+  (`#1A1A1A`, 6.01:1). The reference's white-on-bronze (2.77:1) is not copied.
+- **Light surfaces:** slate.
+- **Dark surfaces:** shadcn slate dark. Dark `accent` override = `#1E293B`,
+  from the reference's own `dark:bg-muted`.
+- **Input border** (owner: "nearest slate step passing ~3:1"): no named slate
+  step lands near 3:1 (400 = 2.56, 500 = 4.76), so the value is the point on
+  the slate ramp that passes.
+  - Light `#7F8FA5`: 3.29:1 on the background, 3.01:1 on muted.
+  - Dark `#4F5E73`: 3.03:1.
+- **Engine change:** `--ring` now derives from **primary** instead of success
+  (bronze `#ba8756` light, `#C28D5A` dark), still at the 3:1 floor.
+- **`DEFAULT_LAYOUT`:** `radiusBase` 6px, `fontSans` `inter`, `baseFontSize`
+  16px.
+
+### A bug fixed on the way: the seed mirror had drifted
+
+`packages/db/prisma/default-theme-tokens.json` is a hand-kept copy of the
+defaults (the seed cannot import `@repo/theme`). It had drifted:
+
+- It still carried the pre-changes-03 primary.
+- `fontSans` was a raw CSS stack where ADR-005 requires a curated key. It only
+  rendered correctly because `loadActiveTheme` falls back on an unknown key.
+- It had no `baseFontSize` at all.
+
+So a reseed wrote a theme nobody had decided on. The JSON is resynced, and the
+new `packages/theme/src/seed-sync.test.ts` fails the moment it disagrees with
+the exports. It reads the JSON as a file, so no package dependency is added
+(testing.md #2: the regression test lands with the fix).
+
+### `@repo/ui`
+
+**Type scale.** One scale for both surfaces. `.type-scale-admin`, `--ui-*` and
+`lib/type-scale.ts` (`ADMIN_TYPE_SCALE_CLASS`) are deleted, and the class is
+gone from both admin root layouts. Every `--text-*` step is `var(--type-*)`:
+
+| Step          | Size (px) |
+| ------------- | --------- |
+| `3xs` _(new)_ | 10        |
+| `2xs` _(new)_ | 11        |
+| `xs`          | 12        |
+| `nav` _(new)_ | 13        |
+| `sm`          | 14        |
+| `base`        | 16        |
+| `lg`          | 18        |
+| `xl`          | 20        |
+| `2xl`         | 24        |
+| `3xl`         | 30        |
+| `4xl`         | 36        |
+| `5xl`         | 48        |
+
+`nav` takes over from the retired `md` step, which had zero call sites.
+Nothing renders below 10px.
+
+**Other tokens:**
+
+- Radius: `--radius-xl` is now `r + 6`, so the 6px base gives
+  4 / 6 / 8 / 12, exactly the reference.
+- Shadows: `sm`/`md`/`lg`/`xl` redefined to the reference's (Tailwind v3)
+  values; `2xl` and `dock` added.
+- Layout: `--height-input` 40px, `--width-sidebar` 256px.
+- Body fallback 16px.
+- Scrollbars: thin, token-coloured.
+
+**Fonts:** Inter takes over `preload: true`, and Outfit drops to `false`. It
+stays a curated key.
+
+**Docs:** CLAUDE.md (rows 07/09) and code-style #6 are updated for the retired
+mechanisms, and `tokens.md` is marked approved with §9 decisions.
+
+### Verified
+
+- `@repo/theme`: **55/55**. New ADR-072 assertions cover:
+  - dark ink on bronze and on warning
+  - white ink still legible on success/error
+  - ring derived from primary, and following a different primary
+  - input border ≥ 3:1 on background and muted (light) and on background (dark)
+  - Inter emits `var(--font-inter)`, and Outfit stays selectable
+  - the seed mirror
+
+  The snapshot was updated after reviewing its diff: exactly the intended
+  values.
+
+- `@repo/ui`: **219/219**. `type-scale.test.ts` is rewritten for the single
+  scale:
+  - exact values
+  - strictly ascending, nothing below 10px
+  - no `--ui-*` / `.type-scale-admin` / `md`
+  - radius, layout and shadow tokens
+- `@repo/web`: **285/285**. `type-scale.test.ts` now asserts no root layout
+  carries a scale class. It caught my own first comment, which contained the
+  string, and the comment was reworded rather than the test weakened.
+- `typecheck` clean (`@repo/theme`, `@repo/ui`, `@repo/db`, `@repo/web`).
+- `lint` clean on the changed packages and files.
+- `check:phantom-deps` OK, `governance:check` OK.
+- **Live**, against the running dev server:
+  - The compiled CSS has `--type-sm: 14px`, `--type-3xs`/`--type-nav`,
+    `.text-sm { font-size: var(--type-sm) }`, `.rounded-xl` at `r + 6px`,
+    the new `shadow-sm`, and the scrollbar rules.
+  - No `type-scale-admin` or `--ui-*` anywhere.
+  - Inter's font file carries next/font's preload marker and Outfit's does not.
+  - The admin `<html>` has no scale class.
+  - `#brand-tokens` still renders the **stored** `Theme` row (warm surfaces),
+    not the new defaults. That is the dynamic flow working: new defaults reach
+    an existing install only through `pnpm db:seed` (which rewrites the
+    default row's tokens) or an admin theme edit.
+
+### Owed
+
+- The owner reseeds (or edits the theme) to see the slate defaults.
+- The second reference capture (menu, dialog, form controls, toast) updates
+  `tokens.md`'s provisional specs before Phase 3 restyles those components.
+- Phase 3: component restyle.
+- Post-Phase-5: the public visual pass (spacing only, no per-page scale
+  exceptions).

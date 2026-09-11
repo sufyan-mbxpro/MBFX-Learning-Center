@@ -1,10 +1,10 @@
 # ADR-054: The admin gets its own type scale, switched by one class on the admin root
 
-**Status:** Accepted
+**Status:** Superseded
 **Date:** 2026-09-07
 **Module:** 07 (`@repo/ui` — the stylesheet), 09 (admin shell — the two root layouts)
 **Supersedes:** —
-**Superseded by:** —
+**Superseded by:** ADR-072
 
 ## Context
 

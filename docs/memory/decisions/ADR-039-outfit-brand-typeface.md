@@ -1,10 +1,10 @@
 # ADR-039: Outfit is the brand typeface, and the sans default is code-owned
 
-**Status:** Accepted
+**Status:** Superseded
 **Date:** 2026-09-06
 **Module:** 02 (`@repo/theme`) / 07 (`@repo/ui`)
 **Supersedes:** —
-**Superseded by:** —
+**Superseded by:** ADR-072
 
 ## Context
 

@@ -44,7 +44,8 @@ these.
    `super_admin` reads "Super Admin". This is display-only: the identifier
    is untouched everywhere it is actually used, so `requirePermission()`
    and the Module 03 key cross-check are unaffected.
-6. **One typeface.** The admin renders in the brand sans (ADR-039).
+6. **One typeface.** The admin renders in the brand sans (Inter since
+   ADR-072, which superseded ADR-039's Outfit).
    **`<code>` is not used for admin chrome** — it inherits a monospace
    family from Tailwind's preflight, which is exactly the bug rule 5 was
    fixing. A muted `<span>` carries the same meaning. The narrow exception

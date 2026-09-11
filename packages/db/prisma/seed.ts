@@ -612,7 +612,9 @@ const FEATURE_FLAGS = [
 // ./default-theme-tokens.json in sync with Module 02's exports by hand, or
 // better, move seeding of the default theme row into Module 02 once it
 // lands and drop this block here. Values live in JSON, not this file,
-// because code-style.md #1 bans hex literals outside @repo/theme.
+// because code-style.md #1 bans hex literals outside @repo/theme. The hand
+// sync drifted once (fixed with ADR-072); @repo/theme's seed-sync.test.ts
+// now fails the moment the JSON and the exports disagree.
 // ─────────────────────────────────────────────────────────────
 
 const {

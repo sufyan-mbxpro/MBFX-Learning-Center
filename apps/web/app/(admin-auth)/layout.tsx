@@ -4,7 +4,6 @@ import { NextIntlClientProvider } from "next-intl";
 import { getMessages } from "next-intl/server";
 import { buildThemeStyleSheet, getActiveTheme } from "@repo/theme";
 import { curatedFontVariables } from "@repo/ui/fonts";
-import { ADMIN_TYPE_SCALE_CLASS } from "@repo/ui/lib/type-scale";
 import { ThemeProvider } from "@repo/ui/components/theme-provider";
 import "@repo/ui/globals.css";
 
@@ -42,9 +41,10 @@ export default async function AdminAuthRootLayout({ children }: LayoutProps<"/">
   const nonce = (await headers()).get("x-nonce") ?? undefined;
 
   return (
+    // No per-surface scale class: public and admin share one type scale (ADR-072).
     <html
       lang="en"
-      className={`h-full antialiased ${ADMIN_TYPE_SCALE_CLASS} ${curatedFontVariables}`}
+      className={`h-full antialiased ${curatedFontVariables}`}
       suppressHydrationWarning
     >
       <body className="min-h-full" suppressHydrationWarning>

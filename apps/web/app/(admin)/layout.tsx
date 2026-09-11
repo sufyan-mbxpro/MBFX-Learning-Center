@@ -8,7 +8,6 @@ import { getBrandAssets, loadOwnProfile } from "@repo/core";
 import { loadSubject } from "@repo/rbac";
 import { buildThemeStyleSheet, getActiveTheme } from "@repo/theme";
 import { curatedFontVariables } from "@repo/ui/fonts";
-import { ADMIN_TYPE_SCALE_CLASS } from "@repo/ui/lib/type-scale";
 import { ThemeProvider } from "@repo/ui/components/theme-provider";
 import { AdminShell } from "./admin/_components/admin-shell.tsx";
 import { faviconIcons } from "../_lib/favicon.ts";
@@ -93,9 +92,10 @@ export default async function AdminRootLayout({ children }: LayoutProps<"/">) {
     // suppressHydrationWarning on <html>: next-themes stamps the mode class
     // pre-hydration (ADR-008, user-controlled mode — now on the admin
     // surface too, changes-01).
+    // No per-surface scale class: public and admin share one type scale (ADR-072).
     <html
       lang="en"
-      className={`h-full antialiased ${ADMIN_TYPE_SCALE_CLASS} ${curatedFontVariables}`}
+      className={`h-full antialiased ${curatedFontVariables}`}
       suppressHydrationWarning
     >
       {/* suppressHydrationWarning: browser extensions (e.g. ColorZilla's

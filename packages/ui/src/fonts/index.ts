@@ -7,29 +7,32 @@
 // Files come from @fontsource packages (OFL-1.1, real font binaries pulled
 // through the same supply-chain-guarded registry as every other dep) —
 // next/font/local inlines and self-hosts them at build; no runtime request
-// ever leaves our origin. `preload: false` everywhere EXCEPT Outfit: ten
+// ever leaves our origin. `preload: false` everywhere EXCEPT Inter: ten
 // families are declared but only the one the active theme references is
 // ever used, so eager-preloading all of them would be nine wasted
-// downloads per visit. Outfit is the exception because ADR-039 made it the
+// downloads per visit. Inter is the exception because ADR-072 made it the
 // default — it is the family essentially every render actually uses, so
 // preloading it saves a FOUT rather than wasting a request.
 import localFont from "next/font/local";
 
-// The brand typeface (ADR-039) — DEFAULT_LAYOUT.fontSans resolves to
-// `var(--font-outfit)`, so this declaration is what every surface renders
-// in unless a theme row names another curated family.
-const outfit = localFont({
-  src: "../../node_modules/@fontsource-variable/outfit/files/outfit-latin-wght-normal.woff2",
-  weight: "100 900",
-  variable: "--font-outfit",
-  preload: true,
-  fallback: ["sans-serif"],
-});
-
+// The brand typeface (ADR-072, superseding ADR-039's Outfit) —
+// DEFAULT_LAYOUT.fontSans resolves to `var(--font-inter)`, so this
+// declaration is what every surface renders in unless a theme row names
+// another curated family.
 const inter = localFont({
   src: "../../node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2",
   weight: "100 900",
   variable: "--font-inter",
+  preload: true,
+  fallback: ["sans-serif"],
+});
+
+// Still a curated key an admin may have picked (ADR-072 deletes no choice),
+// so its family stays declared — just no longer preloaded.
+const outfit = localFont({
+  src: "../../node_modules/@fontsource-variable/outfit/files/outfit-latin-wght-normal.woff2",
+  weight: "100 900",
+  variable: "--font-outfit",
   preload: false,
   fallback: ["sans-serif"],
 });
