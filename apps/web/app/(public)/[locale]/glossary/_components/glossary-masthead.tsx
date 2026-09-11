@@ -25,8 +25,8 @@ import { Button } from "@repo/ui/components/button";
 import { Container } from "@repo/ui/components/container";
 import { PageHero } from "@repo/ui/components/page-hero";
 import { Section } from "@repo/ui/components/section";
-import { StatCard } from "@repo/ui/components/stat-card";
 
+import { StatStrip, StatStripItem } from "../../_components/stat-strip.tsx";
 import { GlossaryBackdrop } from "./glossary-art.tsx";
 
 export interface GlossaryStats {
@@ -85,44 +85,28 @@ export async function GlossaryMasthead({
       )}
 
       {stats.terms > 0 && (
-        <Section spacing="sm">
-          <Container>
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-3 sm:gap-0 sm:divide-x sm:divide-border">
-              <StatItem
-                icon={<BookOpen aria-hidden className="size-5" />}
-                value={stats.terms}
-                label={t("statTerms")}
-              />
-              <StatItem
-                icon={<Layers aria-hidden className="size-5" />}
-                value={stats.letters}
-                label={t("statLetters")}
-              />
-              {/* Absent, not zero: a glossary whose terms are unfiled has no
-                  topics to count and the strip narrows to two. */}
-              {stats.topics > 0 && (
-                <StatItem
-                  icon={<FolderTree aria-hidden className="size-5" />}
-                  value={stats.topics}
-                  label={t("statTopics")}
-                />
-              )}
-            </div>
-          </Container>
-        </Section>
+        <StatStrip>
+          <StatStripItem
+            icon={<BookOpen aria-hidden className="size-5" />}
+            value={stats.terms}
+            label={t("statTerms")}
+          />
+          <StatStripItem
+            icon={<Layers aria-hidden className="size-5" />}
+            value={stats.letters}
+            label={t("statLetters")}
+          />
+          {/* Absent, not zero: a glossary whose terms are unfiled has no
+              topics to count and the strip narrows to two. */}
+          {stats.topics > 0 && (
+            <StatStripItem
+              icon={<FolderTree aria-hidden className="size-5" />}
+              value={stats.topics}
+              label={t("statTopics")}
+            />
+          )}
+        </StatStrip>
       )}
     </>
-  );
-}
-
-/** StatCard plus the glyph above it — the count-up itself is StatCard's. */
-function StatItem({ icon, value, label }: { icon: React.ReactNode; value: number; label: string }) {
-  return (
-    <div className="flex flex-col items-center gap-2">
-      <span className="flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary-interactive">
-        {icon}
-      </span>
-      <StatCard value={value} label={label} />
-    </div>
   );
 }

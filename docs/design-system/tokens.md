@@ -444,6 +444,13 @@ accessible variant closest to the reference look.
   - **Responsive grids state `grid-cols-1`** (code-style #23): 90 grids
     retrofitted after a phone-width browser pass found three sideways-scroll
     bugs of that shape.
+- **Public spacing pass (ADR-072 §7), 2026-09-11:** 26 public routes checked
+  at 390 and 1440px at the one scale. Two fixes, both spacing, not type:
+  - the header's Sign in link stays on one line, with an 8px gap on phones;
+  - the four masthead figure strips are one `StatStrip` that stays a single
+    row at every width.
+
+  No per-page scale exception was needed. **changes-20 is complete.**
 
 ### 6.1 Button
 

@@ -22,11 +22,9 @@ import { getTranslations } from "next-intl/server";
 
 import { AmbientMotif } from "@repo/ui/components/ambient-motif";
 import { Button } from "@repo/ui/components/button";
-import { Container } from "@repo/ui/components/container";
 import { PageHero } from "@repo/ui/components/page-hero";
-import { Section } from "@repo/ui/components/section";
-import { StatCard } from "@repo/ui/components/stat-card";
 
+import { StatStrip, StatStripItem } from "../../_components/stat-strip.tsx";
 import { LearnBackdrop } from "./learn-art.tsx";
 
 export interface LearnStats {
@@ -99,46 +97,26 @@ export async function LearnMasthead({
       />
 
       {stats.courses > 0 && (
-        <Section spacing="sm" tone="muted">
-          <Container>
-            {/* StatCard's ink is --foreground/--muted-foreground, both derived
-                against --background — which is why this strip is its own
-                muted band under the hero rather than a row inside the brand
-                fill, where neither would be contrast-checked (ADR-018 #5). */}
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-3 sm:gap-0 sm:divide-x sm:divide-border">
-              <StatItem
-                icon={<GraduationCap aria-hidden className="size-5" />}
-                value={stats.courses}
-                label={t("index.statCourses")}
-              />
-              <StatItem
-                icon={<Layers aria-hidden className="size-5" />}
-                value={stats.lessons}
-                label={t("index.statLessons")}
-              />
-              {stats.hours > 0 && (
-                <StatItem
-                  icon={<Clock aria-hidden className="size-5" />}
-                  value={stats.hours}
-                  label={t("index.statHours")}
-                />
-              )}
-            </div>
-          </Container>
-        </Section>
+        <StatStrip tone="muted">
+          <StatStripItem
+            icon={<GraduationCap aria-hidden className="size-5" />}
+            value={stats.courses}
+            label={t("index.statCourses")}
+          />
+          <StatStripItem
+            icon={<Layers aria-hidden className="size-5" />}
+            value={stats.lessons}
+            label={t("index.statLessons")}
+          />
+          {stats.hours > 0 && (
+            <StatStripItem
+              icon={<Clock aria-hidden className="size-5" />}
+              value={stats.hours}
+              label={t("index.statHours")}
+            />
+          )}
+        </StatStrip>
       )}
     </>
-  );
-}
-
-/** StatCard plus the glyph above it — the count-up itself is StatCard's. */
-function StatItem({ icon, value, label }: { icon: React.ReactNode; value: number; label: string }) {
-  return (
-    <div className="flex flex-col items-center gap-2">
-      <span className="flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary-interactive">
-        {icon}
-      </span>
-      <StatCard value={value} label={label} />
-    </div>
   );
 }

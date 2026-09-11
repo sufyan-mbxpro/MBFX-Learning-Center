@@ -80,5 +80,7 @@ plus the local components that duplicate a Phase 3 one.
   (#22).
 - The phone-width browser pass found a recurring grid overflow, fixed
   everywhere and guarded (#23).
+- The post-Phase-5 public spacing pass ran last. It fixed the phone header's
+  Sign in wrap and unified the masthead figure strips as one `StatStrip`.
 
-See the DEVLOG entry of the same date.
+See the DEVLOG entries of the same date.

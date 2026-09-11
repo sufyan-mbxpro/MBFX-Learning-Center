@@ -17,11 +17,9 @@ import { getTranslations } from "next-intl/server";
 import type { QuizCardView } from "@repo/contracts";
 import { AmbientMotif } from "@repo/ui/components/ambient-motif";
 import { Button } from "@repo/ui/components/button";
-import { Container } from "@repo/ui/components/container";
 import { PageHero } from "@repo/ui/components/page-hero";
-import { Section } from "@repo/ui/components/section";
-import { StatCard } from "@repo/ui/components/stat-card";
 
+import { StatStrip, StatStripItem } from "../../_components/stat-strip.tsx";
 import { LearnBackdrop } from "./learn-art.tsx";
 
 export interface QuizStats {
@@ -81,46 +79,26 @@ export async function QuizMasthead({
       />
 
       {stats.quizzes > 0 && (
-        <Section spacing="sm" tone="muted">
-          <Container>
-            {/* StatCard's ink is --foreground/--muted-foreground, both derived
-                against --background — which is why this strip is its own muted
-                band under the hero rather than a row inside the brand fill,
-                where neither would be contrast-checked (ADR-018 #5). */}
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-3 sm:gap-0 sm:divide-x sm:divide-border">
-              <StatItem
-                icon={<Target aria-hidden className="size-5" />}
-                value={stats.quizzes}
-                label={t("quizzes.statQuizzes")}
-              />
-              <StatItem
-                icon={<ListChecks aria-hidden className="size-5" />}
-                value={stats.questions}
-                label={t("quizzes.statQuestions")}
-              />
-              {stats.topics > 0 && (
-                <StatItem
-                  icon={<Tag aria-hidden className="size-5" />}
-                  value={stats.topics}
-                  label={t("quizzes.statTopics")}
-                />
-              )}
-            </div>
-          </Container>
-        </Section>
+        <StatStrip tone="muted">
+          <StatStripItem
+            icon={<Target aria-hidden className="size-5" />}
+            value={stats.quizzes}
+            label={t("quizzes.statQuizzes")}
+          />
+          <StatStripItem
+            icon={<ListChecks aria-hidden className="size-5" />}
+            value={stats.questions}
+            label={t("quizzes.statQuestions")}
+          />
+          {stats.topics > 0 && (
+            <StatStripItem
+              icon={<Tag aria-hidden className="size-5" />}
+              value={stats.topics}
+              label={t("quizzes.statTopics")}
+            />
+          )}
+        </StatStrip>
       )}
     </>
-  );
-}
-
-/** StatCard plus the glyph above it — the count-up itself is StatCard's. */
-function StatItem({ icon, value, label }: { icon: React.ReactNode; value: number; label: string }) {
-  return (
-    <div className="flex flex-col items-center gap-2">
-      <span className="flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary-interactive">
-        {icon}
-      </span>
-      <StatCard value={value} label={label} />
-    </div>
   );
 }

@@ -14652,3 +14652,76 @@ editor's wide aside at 352px.
 
 - Commit (awaiting the owner).
 - Unchanged from before: axe, Lighthouse and E2E belong to Module 14.
+
+## 2026-09-11 — changes-20: the public spacing pass ADR-072 §7 owed, and the redesign closes (Modules 07/12, no new ADR)
+
+Phases 5, 6 and the admin visual pass are committed (`c0c309d`, branch
+`changes-20-phase-5-6`). What remained was the pass Q7 made the condition of
+the one type scale: public text grew (`text-sm` 12 → 14px, body 14 → 16px), and
+a visual pass afterwards fixes spacing, never a private font size. Phase 6's
+browser pass measured sideways scroll only, so this is that pass.
+
+### Method
+
+- Full-page and viewport screenshots of `/`, `/news`, `/learn/forex`,
+  `/glossary`, a lesson and `/economic-calendar` at 1440 and 390px, with the
+  `Reveal` animations forced visible (a full-page capture never scrolls them
+  in, so those bands read as empty otherwise).
+- A sweep of 26 routes, every public template with real slugs, at both widths
+  in same-origin frames. It flags sideways scroll, a single-line control that
+  wraps, and text clipped without an ellipsis. `/economic-calendar` cannot be
+  framed (its embed), so it was checked directly.
+
+### Found and fixed (regression test: `_components/stat-strip.test.ts`)
+
+- **"Sign in" broke onto two lines in the phone header.** At 14px the five
+  header items only just fit 390px. The link is now `whitespace-nowrap`, and
+  the auth pair's gap is 8px below `sm` (12px above). Measured: the link is
+  20px tall (was 40), and the header group ends at 374px, exactly the 16px
+  gutter. Without the tighter gap it ran 4px into the gutter.
+- **The masthead figure strip stacked on phones.** Three figures took 370px of
+  a 390px screen. The strip was copied, with its `StatItem`, into four
+  mastheads (learn, quizzes, videos, glossary). It is now one
+  `StatStrip`/`StatStripItem` in `app/(public)/[locale]/_components/`, and it
+  stays a single row at every width: 127px, three 119px columns, and a long
+  label ("Hours of material") wraps inside its column.
+  - `grid-flow-col auto-cols-fr` rather than `grid-cols-3`: a strip that drops
+    a zero figure (the glossary without topics, videos without recordings)
+    narrows to two equal columns. Before, it left an empty third column at
+    `sm` and up.
+  - Each masthead still chooses its own figures. The quiz and video headers'
+    reason for separate mastheads is about the figures, not the layout, and
+    stands.
+
+### Checked and fine at the new scale
+
+- 23 of 26 routes clean at both widths: no sideways scroll, no wrapped
+  controls, no clipping.
+- The three the sweep flagged are intended:
+  - an article's FAQ question wrapping in its accordion trigger
+  - `/about/security`'s two-line city/role buttons
+  - a 1px screen-reader label in a course progress bar
+- The lesson and course outline rows are title plus subtitle by design.
+  Desktop section rhythm (112/80/48px bands) and 24px card padding hold with
+  the larger text, so no band spacing changed.
+
+### Found, not fixed (content, not spacing)
+
+- **The "Forex-2" course summary is stored with `&nbsp;` between every
+  word**, so its excerpt cannot wrap and is clipped mid-letter on the course
+  card at every width. It is a data problem, most likely a paste into the
+  editor. Re-saving the summary with ordinary spaces fixes this instance. A
+  durable fix would normalise U+00A0 when rich text is flattened to an
+  excerpt. That is a Module 11 decision, so it is left for the owner.
+
+### Verified
+
+- `@repo/web` **486/486** (6 new). `typecheck` and `eslint` clean on
+  `@repo/web`; Prettier clean on every touched file. `@repo/ui` is untouched.
+- Live at 390px: header and strip as measured above, `overflow` 0 on every
+  swept route.
+
+### Status
+
+changes-20 is complete: Phases 1–6, the admin visual pass and this public
+pass. Still owed to Module 14, as before: axe, Lighthouse and E2E.

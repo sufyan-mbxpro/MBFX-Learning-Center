@@ -54,12 +54,16 @@ export function AuthSlot() {
   // Both learner entry points (ADR-052). The staff screen at /admin/sign-in
   // is deliberately absent — the public header advertises no way into the
   // admin portal.
+  // `whitespace-nowrap` + the narrower phone gap: at 14px (ADR-072 §7) the
+  // five header items only just fit a 390px phone, and the link was the one
+  // that gave way — "Sign in" broke onto two lines. The 8px gap is what keeps
+  // the row inside the page gutter once it stays on one.
   if (state.status === "anonymous") {
     return (
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3">
         <Link
           href="/sign-in"
-          className="text-sm font-medium text-primary-interactive underline-offset-4 hover:underline"
+          className="text-sm font-medium whitespace-nowrap text-primary-interactive underline-offset-4 hover:underline"
         >
           {t("signIn")}
         </Link>
