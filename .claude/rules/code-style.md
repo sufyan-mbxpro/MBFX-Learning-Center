@@ -20,8 +20,10 @@ the mechanical rules, so edge cases get judged correctly.
    _value_ is required depends on the surface: **public** namespaces (`common`,
    `home`, `error`, `notFound`, `notTranslated`, `public`, `nav`, `footer`,
    `glossary`, `news`, `auth`, `newsletter`) must be complete for every ACTIVE
-   locale, and
-   `check:catalog-completeness` fails the build if one isn't. **Admin**
+   locale, and `check:catalog-completeness` fails the build if one isn't.
+   **Note:** `next build` PRERENDERS every seeded locale, active or not, and a
+   missing key is a hard `MISSING_MESSAGE` there — so the check passing does
+   not mean the build will. **Admin**
    namespaces (`admin`, `cms`) are English-only by design and are exempt — add
    the key to `en.json` and stop. A new namespace defaults to _public_, so
    getting this wrong errs toward more translation, not less.
@@ -103,8 +105,11 @@ these.
 code.** `Permission.groupName` is page-shaped: `learning` (courses,
 lessons, and so quizzes and videos, which share the lesson keys),
 `glossary`, `media`, `articles`, `website`, `users`, `employees`,
-`newsletter`, `market`, `translations`, `seo`, `email`, `settings`,
-`system`. A new key names one of those; adding a fifteenth group means adding it to
+`newsletter`, `market`, `tools`, `translations`, `seo`, `email`, `settings`,
+`system`. `tools` is the fourteenth, added by ADR-086 #6 and the first use of
+this rule's own escape hatch — `/admin/tools` is its own screen, so its keys
+are its own. Instruments got none: `market.*` has been seeded since Module 01.
+A new key names one of those; adding a group means adding it to
 `PERMISSION_GROUPS` in `@repo/db`'s `permission-groups.ts`, whose ARRAY
 ORDER is the order the role editor draws the cards in — it mirrors the
 admin sidebar, not the alphabet. The registry holds no strings: the

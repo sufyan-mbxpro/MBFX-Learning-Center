@@ -16044,7 +16044,7 @@ Two Prisma details are recorded in the code because both cost time:
   that neither `groupBy` nor `count` survives.
 - **`groupBy` infers its generic from its ARGUMENT.** A contextual return
   type — the interface field's `Promise<{status, _count}[]>` — hijacks that
-  inference and then reports the *argument* as the type error, six times over.
+  inference and then reports the _argument_ as the type error, six times over.
   Assigning the call to an un-annotated local inside the closure is the fix.
 
 **`DASHBOARD_CONTENT_STATUSES` is `Object.values(ContentStatus)`.** The
@@ -16285,9 +16285,9 @@ default palette, not a code change.
   refuses the cycle, so lint and build can only be run per package until that
   dev-only edge is broken.
 - Also failing and not this work's: `apps/web/app/(public)/[locale]/newsletter/
-  _components/token-action.tsx` (`react-hooks/set-state-in-effect`, plus two
+_components/token-action.tsx` (`react-hooks/set-state-in-effect`, plus two
   `useActionState` overload errors) and `app/(admin)/admin/newsletter/
-  subscribers-table.tsx` (`asChild` is not a `Button` prop). Left to the
+subscribers-table.tsx` (`asChild` is not a `Button` prop). Left to the
   changes-21 surface that owns them.
 
 ## 2026-09-12 — changes-25 T0–T1: the tools registry, and three ADRs before it
@@ -16406,3 +16406,296 @@ Coverage on the three files: statements 97.17%, branches 92.98%, functions
 `typecheck` and `lint` clean. `fast-check ^4.9.0` added to `@repo/utils`
 devDependencies; it was already pinned for `@repo/theme` and `@repo/email`, so
 no new version enters the lockfile.
+
+## 2026-09-12 — changes-21 F7+F8+F9: the newsletter is real, the dashboard stops leaking, and the root gate runs again (Modules 17/12/09/05/03/01, ADR-080/078/085)
+
+changes-21's feature track closes. F0–F6 shipped over the preceding commits;
+this lands **F7 (newsletter)**, **F8's two open items** and **F9 (the gate)** —
+and F9 turned out to be the most valuable of the three, because running the
+gate properly for the first time in a while found four real breaks, one of
+them mine.
+
+### F7 — the newsletter (B6, ADR-080)
+
+`newsletter-form.tsx` had shipped hard-`disabled` since changes-03 under
+"Newsletter signup is coming soon", carrying a `TODO(newsletter)` that named
+its own two conditions: a `NewsletterSubscriber` model and an ADR. Both now
+exist, so the placeholder is **deleted, not retired**.
+
+- **Schema** (`20260912123638_newsletter_subscribers_adr080`):
+  `SubscriberStatus` + `NewsletterSubscriber`. Both tokens are stored as
+  SHA-256 hex and never in plaintext — an admin with `newsletter.view` can
+  read this table, and a plaintext unsubscribe token there is a way to
+  unsubscribe anyone from the admin screen. `userId` is `SetNull`, the one
+  relation on `User` that does not cascade: the consent was given
+  independently of the account, so a hard erase nulls the link and **keeps**
+  the subscription.
+- **`@repo/core/newsletter.ts`.** `subscribe()` returns `void` for a new,
+  pending, active and previously-unsubscribed address alike — the
+  anti-enumeration story is that the caller cannot tell them apart, and an
+  ACTIVE row is additionally left untouched (no new token, no second welcome,
+  original `source` preserved). Confirm is single-use and 48h; unsubscribe is
+  long-lived on purpose, because it has to keep working in a message sent
+  months ago. A re-subscribe after unsubscribing goes back through PENDING,
+  never straight to ACTIVE.
+- **Two limits plus a third.** The action holds a per-IP and a per-email Redis
+  budget (security.md #13 wants both: one attacker vs. a distributed
+  mail-bomb aimed at one inbox). `subscribe()` then holds a 10-minute
+  cooldown **on the row**, which is the one that survives a Redis outage —
+  `rateLimit` fails OPEN, and this endpoint sends email.
+- **The one anonymous mutation.** `requirePermission()` cannot be the first
+  line because there is no subject, so it is _swapped_, not skipped: flag +
+  honeypot + schema + per-IP + per-email. `_actions/newsletter.test.ts`
+  asserts each of the five separately, so removing any one turns exactly one
+  test red.
+- **A GET never mutates** (ADR-080 #4). `/newsletter/confirm` and
+  `/newsletter/unsubscribe` are `noindex` static shells whose island POSTs,
+  and `/api/newsletter/unsubscribe` (RFC 8058 one-click) exports no GET at
+  all — verified live: a GET answers **405**.
+- **Admin.** `/admin/newsletter` under People, with counts, toolbar filters,
+  keyset paging, `ConfirmDialog` on both row actions, and a **streamed** CSV
+  export at `GET /admin/api/newsletter/export` (a route, not an action,
+  because an action would have to buffer the whole file into a return value).
+  Formula cells are tab-prefixed, and the export audits **before** it yields a
+  byte, so a cancelled download is still recorded.
+- **`footer.newsletterEnabled` is DELETED.** It meant both "does signup exist"
+  and "is it in the footer", and it sat in the `layout` group ADR-038 paused —
+  so nobody could reach it. The `newsletter` FLAG now answers the first
+  question and `newsletter.placements.*` (group `email`) the second; all four
+  render sites read BOTH and pass their own `source`.
+- A new permission group, `newsletter`, placed with People because the
+  sidebar entry is. `/api/cron/housekeeping` purges pending rows at 7 days and
+  deliveries at 90 — one constant each, never raised (plan Q2).
+
+### F8 — the two items ADR-085 left open
+
+changes-26 had already delivered F8's substance (the content grid) under
+ADR-085. Its scope left F8's §2.2 #9 untouched, and that was the more
+important half:
+
+- **Every platform tile is now gated.** Until today any STAFF member opening
+  `/admin` saw the total user count, the active-employee headcount, the
+  published-article count, the signup growth curve **and the audit-log
+  activity feed**. A dashboard is not a lesser surface — an aggregate over
+  rows someone may not read is still a read of those rows. `OVERVIEW_TILES`
+  is the registry; a hidden tile runs no query and arrives **absent, not
+  zero**, because a zero is a claim about the data and it would be a false
+  one.
+- The growth chart gates **per series** (`showUsers`/`showArticles`): someone
+  may hold `users.view` and not `analysis.view`, and plotting an unread series
+  flat at zero would read as "no signups".
+- **"Active menu items" is gone.** It counted rows for `/admin/navigation`, a
+  screen ADR-038 hid — an unactionable number pointing at a dead end.
+  **Email deliveries** replaced it.
+- `loadAdminDashboardCounts()` — four ungated totals, exported and called by
+  nothing — is deleted rather than left as a convenience, because what it was
+  convenient for is the leak this fixes.
+
+### F9 — the gate, and what running it found
+
+Four breaks, none of which any per-package check would have caught:
+
+1. **The turbo package cycle** the previous entry recorded as blocking root
+   `pnpm lint` and `pnpm build`: `rbac → auth → email → settings → rbac`. The
+   last edge was `@repo/settings`'s **devDependency** on `@repo/rbac`, held
+   for one test. That test moved to `@repo/core`'s
+   `settings-audit.integration.test.ts` — which is where the file's own header
+   already said such a test belongs, core being the one package allowed to
+   depend on both (architecture.md #8). **Root `pnpm lint` and
+   `pnpm typecheck` now pass, 14/14.**
+2. **`export const dynamic = "force-dynamic"` in three route handlers.** It is
+   incompatible with `cacheComponents` (ADR-004) and Next refuses to _compile_
+   the file, so the route answers 500 to every caller. I had copied it from
+   `/api/cron/publish-due` — **which has been 500ing since ADR-071**,
+   silently, because nothing calls it in development. Removed from all three;
+   the sweeps now answer 503 when `CRON_SECRET` is unset, as designed. The
+   regression note lives in the file (testing.md #2).
+3. **My own caching bug**, and the one worth reading twice.
+   `isNewsletterPlacementEnabled` called `loadSetting` (raw) where the footer
+   had previously called `getSetting` (cached). The footer draws on every
+   public page, so that single uncached read took
+   `/[locale]/learn/[track]/[course]` out of prerendering entirely — Prisma
+   reaches for `Date.now()` while timing a query and Cache Components rejects
+   an unstable value. It is the _same_ trap `resolveRecommendations` documents
+   in `public-courses.ts`, and the reason it was worth finding here rather
+   than in production is that the previous symptom was silent: a 200 with a
+   database round trip per view. **This is why the gate includes a build.**
+4. **Missing catalog values in the inactive locales.** The build PRERENDERS
+   every seeded locale, active or not, so a missing key is a hard
+   `MISSING_MESSAGE` there while `check:catalog-completeness` only _warns_
+   (ADR-043 #3 and its `ENFORCED_LOCALES` list). Eight `nav.mega.*` /
+   `nav.appearance` keys from ADR-076 and ADR-064 were `en`-only and failed
+   the build. Filled for `es`/`ar`/`ur` — **not this work's**, done here
+   because without them the F9 gate is unrunnable. The newsletter's own public
+   keys were translated for all four locales in the same pass, so this change
+   adds nothing to that pile.
+
+**`pnpm build` now passes end to end**, and `/newsletter/confirm` and
+`/newsletter/unsubscribe` prerender as `Static` — correct, since the token is
+read client-side at press time.
+
+### A deviation from ADR-080's Enforcement list, recorded rather than hidden
+
+ADR-080 names `newsletter-form.test.tsx` and expects `loading-states.test.ts`
+to fail on a `disabled` newsletter control. Neither is what shipped, and the
+ADR is left unedited (ADRs are append-only):
+
+- `apps/web/app/newsletter-signup.test.ts` does that job instead, as a SOURCE
+  guard. The web app has no jsdom runner — component tests live in
+  `packages/ui` — so the repo's idiom here is `password-fields.test.ts`, not
+  an RTL render. It fails on a `disabled` control, an `unavailableLabel` prop,
+  a lingering TODO, a placement that reads only one of the two switches, and
+  any file still naming the deleted setting.
+- `newsletter-action.test.ts` shipped as `_actions/newsletter.test.ts`,
+  colocated with the action. Same content, different path.
+- One thing that guard taught: every "this must not appear" assertion reads
+  the file with comments STRIPPED, because the forbidden strings are exactly
+  the ones the surrounding comments must name to explain why they are gone. A
+  guard that trips on its own explanation teaches the next reader to delete
+  the explanation.
+
+### Test results
+
+| Package     | Result                                                                                         |
+| ----------- | ---------------------------------------------------------------------------------------------- |
+| `contracts` | 19 files, 326 tests — pass                                                                     |
+| `db`        | 4 files, 32 tests — pass (group order guard updated)                                           |
+| `utils`     | 11 files, 230 tests — pass                                                                     |
+| `rbac`      | 2 files, 28 tests — pass                                                                       |
+| `theme`     | 3 files, 68 tests — pass                                                                       |
+| `settings`  | 2 files, 33 tests — pass (rbac edge gone)                                                      |
+| `i18n`      | 4 files, 22 tests — pass                                                                       |
+| `email`     | 8 files, 93 tests — pass                                                                       |
+| `auth`      | 3 files, 20 tests — pass                                                                       |
+| `core`      | `newsletter.integration.test.ts` **22/22**; `email-admin` + `settings-audit` 20/20; units pass |
+| `web`       | 32 files, **1583 tests** — pass                                                                |
+
+`governance:check`, `check:phantom-deps`, `check:permission-keys`,
+`check:reserved-paths`, `check:email-templates`, `check:home-sections`,
+`check:block-fixtures` and `check:catalog-completeness` all green. Root
+`pnpm lint`, `pnpm typecheck` and `pnpm build` all green.
+
+Also fixed while gating: two type errors in
+`packages/auth/src/auth.integration.test.ts` (a hand-written
+`{ upsert: (args: unknown) => … }` cannot accept Prisma's generic method under
+`strictFunctionTypes`; the imported `db` type can, and typechecks the payload
+too).
+
+### Owed, and what is not this work's
+
+- **Module 14:** E2E for the four new screens, axe on the two new public
+  routes, and a Mailpit-backed journey (signup → confirm → unsubscribe).
+- **Root `pnpm test` still exits 134** (ENOMEM) on this machine, and so does
+  `@repo/core`'s full suite when its 14 Testcontainers files run in parallel.
+  Per-package and per-file runs are the gate here; every suite named above was
+  run and passed.
+- **Not this work's, still red:**
+  `packages/ui/src/components/assessment-card.test.tsx` (3 failures — the
+  component and its test are both untracked, belonging to the in-flight
+  ADR-084 changeset).
+- **A mismatch worth its own decision:** `check:catalog-completeness` treats an
+  inactive locale's gap as a WARNING, but `next build` prerenders that locale
+  and fails hard on it. The check therefore cannot certify a build. Either the
+  build should skip inactive locales or the check should enforce every seeded
+  one — that is an ADR, not a patch, and item 4 above is the third time it has
+  cost someone an afternoon.
+
+## 2026-09-12 — changes-25 T3: `@repo/secrets`, the market store, and the sweep
+
+**Module:** 13 (market layer), 01 (db) · **PR:** T3 · **ADRs:** 086, 087
+
+### `@repo/secrets` — and the proof the move is behaviour-preserving
+
+A new leaf package with no dependencies at all, holding the AES-256-GCM seal
+that lived in `packages/email/src/secret.ts`, parameterised by env-var name.
+`@repo/email`'s `secret.ts` is now a delegation that keeps
+`EMAIL_SECRET_KEY_ENV` and its own two error types, translating the shared
+package's errors at the boundary — callers catch `EmailSecretKeyMissingError`
+by name, and the admin screen renders a warning on it.
+
+**`packages/email/src/secret.test.ts` is unchanged — zero diff — and its 13
+tests still pass.** That is the whole argument the extraction is safe, and it
+is why the file was not touched.
+
+`@repo/secrets`' own suite adds the assertion the single-key version could not
+make: a value sealed under `EMAIL_SECRET_KEY` does **not** open under
+`MARKET_SECRET_KEY`, and the error names the var it was reading. An attacker
+holding one env var gets one secret.
+
+One scaffolding note: the package needs `"types": ["node"]` in its tsconfig,
+which no other package does. It has no runtime dependencies, so nothing else
+drags node's globals in, and `node:crypto` plus `Buffer` are the whole of its
+surface.
+
+### Schema
+
+`MarketProvider` (singleton), `MarketInstrument` (ONE table with a `kind`),
+`MarketDailyBar`, `Tool`, `ToolTranslation`. Migration
+`20260912140807_changes_25_market_platform_and_tools`, applied and seeded.
+
+`Decimal`, not `Float`, for every price: a close is money-shaped and gets
+subtracted from its neighbour to make a return. **Bars, not closes** — a high
+cannot be derived from closing prices, so a week assembled out of closes
+understates its own range and every pivot level computed from it is wrong by
+the same amount.
+
+### The platform
+
+`packages/core/src/market.ts` grows below the original seam, which is
+untouched. `loadProviderDriver()` is the ONE reader of `apiKeyCipher` and
+returns `null` — never throws — for every unconfigured state, because a
+configuration fault on a public page must degrade rather than 500.
+`getRateSnapshot()`, `getDailySeries()`, `getOhlc()` and `foldBars()` carry the
+`market` tag. `market-admin.ts` is the admin's door; `MarketProviderView` has
+no key property, which the integration test asserts at the TYPE level with
+`expectTypeOf` and again at runtime.
+
+`/api/cron/market-sync` is `publish-due`'s twin, and deliberately so — same
+`CRON_SECRET`, same digest comparison, same fail-closed 503, same `userId: null`
+audit, and the same absence of `export const dynamic` (which stops the file
+compiling under `cacheComponents`, as changes-21 F9 found the hard way).
+
+### Three decisions worth recording
+
+1. **A cross with no USD leg is EXCLUDED from the snapshot, not triangulated.**
+   A EUR/GBP bar says nothing about either currency against the dollar.
+   Triangulating would put a derived number in the same map as measured ones,
+   and nothing downstream could tell them apart.
+2. **A malformed bar is DROPPED, never zero-filled.** A zero close reads as a
+   100% crash to every consumer: a log return of −Infinity, a correlation of
+   nothing, a converted amount of zero. The parser drops the day, and a series
+   whose every bar was unusable is an error rather than a silent success that
+   would mark the instrument fresh.
+3. **The cron route evicts the cache only when bars were written.** A sweep
+   that wrote nothing — the provider was down, or everything was current — has
+   no reason to drop a snapshot that is still the best available answer.
+
+### Seed
+
+28 instruments (8 majors as `CURRENCY`, 12 pairs, gold, silver, BTC, ETH, two
+indices, WTI, DXY), a `MANUAL` **disabled** provider, and all eight tools with
+English copy. Create-only, so an admin's words survive the next run. A fresh
+clone reaches for no network on first boot.
+
+`PERMISSION_GROUPS` gains `"tools"` after `"market"` — the fourteenth group and
+the first use of ADR-083's escape hatch. `permission-groups.test.ts` failed on
+the pinned order list, which is the guard working; the list is updated in the
+same commit. Instruments got **no** new keys (ADR-086 #7, this repo's fourth
+such refusal). `tools.view` + `tools.update` go to `content_manager`;
+`tools.publish` stays with admin, because which tools the site offers is not a
+copy decision.
+
+### Tests run
+
+`@repo/secrets` — 21 pass (new). `@repo/email` — 8 files, 93 pass, unchanged.
+`@repo/core` `market.test.ts` — 22 pass (12 new, MSW-mocked, covering the
+"200 + Note means rate-limited" trap on the history path too).
+`market.integration.test.ts` — 26 pass, NEW, Testcontainers: stalest-first
+ordering, budget stop, idempotency within a day, full-then-tail, the fold, the
+snapshot's exclusions, and the key's absence from the view.
+`apps/web/.../market-sync/route.test.ts` — 10 pass, NEW.
+`@repo/db` — 4 files, 32 pass. `pnpm db:seed` runs clean.
+
+`typecheck` and `lint` clean on `@repo/secrets`, `@repo/contracts`,
+`@repo/core`, `@repo/db`, `@repo/email` and `web`.
+`check:phantom-deps` — OK. `check:permission-keys` — OK.

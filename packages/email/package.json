@@ -16,6 +16,7 @@
   "dependencies": {
     "@repo/contracts": "workspace:*",
     "@repo/db": "workspace:*",
+    "@repo/secrets": "workspace:*",
     "@repo/settings": "workspace:*",
     "@repo/theme": "workspace:*",
     "nodemailer": "10.0.3",

@@ -2149,3 +2149,210 @@ model NewsletterSubscriber {
   @@index([userId])
   @@map("newsletter_subscribers")
 }
+
+// ─── Market data platform (Module 13, ADR-087) ───────────────
+//
+// Module 13's original spec said market data never goes into Prisma as a
+// source of truth. That is right about TICKS and wrong about history: a
+// correlation window is history by definition, and re-fetching 250 bars per
+// instrument per page view is not a cache strategy, it is a rate-limit
+// incident. Live rates still live in the Redis-shaped cache; what is stored
+// here is the daily series worth keeping.
+
+enum MarketDriver {
+  /// AlphaVantage FX_DAILY / DIGITAL_CURRENCY_DAILY.
+  ALPHAVANTAGE
+  /// No provider at all. Bars are whatever has been loaded; every rate-backed
+  /// surface degrades to a labelled empty state. Exists so the whole platform
+  /// is testable and demonstrable with no key (ADR-087 #11).
+  MANUAL
+}
+
+enum MarketInstrumentKind {
+  CURRENCY
+  PAIR
+  CRYPTO
+  METAL
+  INDEX
+  COMMODITY
+}
+
+/// The provider, as one row (`id = "default"`).
+///
+/// ADR-087 #5: `apiKeyCipher` is security.md #10's SECOND and last exception.
+/// It is AES-256-GCM-sealed under `MARKET_SECRET_KEY`, which stays in the
+/// environment; it is write-only in the admin UI; `loadProviderDriver()` is
+/// its only reader; and `MarketProviderView` has no key property at all — not
+/// omitted, ABSENT, so there is no shape through which it can be serialised
+/// into an RSC payload by accident.
+///
+/// Gated on `market.providers.manage` rather than super_admin, unlike
+/// ADR-078's SMTP transport: a read-only quote key captures nothing, and
+/// nothing is delivered TO a user through this host.
+model MarketProvider {
+  id     String       @id @default("default")
+  driver MarketDriver @default(MANUAL)
+
+  baseUrl      String? @db.VarChar(255)
+  apiKeyCipher String? @db.Text
+
+  /// Live-rate cache TTL, seconds. The snapshot's `cacheLife` mirrors it.
+  refreshSeconds Int @default(300)
+  /// How long a stale copy stays servable when the provider is down. A stale
+  /// rate is LABELLED, never hidden (ADR-087 #11).
+  staleSeconds   Int @default(86400)
+
+  isEnabled Boolean @default(false)
+
+  lastSyncAt    DateTime?
+  lastSyncError String?   @db.Text
+
+  updatedAt DateTime @updatedAt
+
+  @@map("market_providers")
+}
+
+/// One tradable thing. ONE table with a `kind`, not two (ADR-087 #1) — a
+/// second `MarketCurrency` would need its own admin screen to say the same
+/// thing. `kind` decides who reads it: `CURRENCY` for the converter, `PAIR`
+/// for the pip and position calculators, the rest for correlation and the
+/// risk meter.
+model MarketInstrument {
+  id   String               @id @default(cuid())
+  kind MarketInstrumentKind
+
+  /// "EUR/USD", "EUR", "XAU/USD" — our symbol, not the provider's.
+  symbol      String @db.VarChar(20)
+  displayName String @db.VarChar(80)
+
+  /// Required for PAIR, meaningless otherwise; the contract refines that.
+  base  String? @db.VarChar(10)
+  quote String? @db.VarChar(10)
+
+  /// What the driver calls it, when that differs from `symbol`.
+  providerSymbol String? @db.VarChar(40)
+
+  /// Null means derive from the quote currency (0.01 for JPY, else 0.0001).
+  pipSize  Decimal? @db.Decimal(18, 10)
+  decimals Int      @default(5)
+
+  isActive  Boolean @default(true)
+  sortOrder Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bars MarketDailyBar[]
+
+  @@unique([symbol])
+  @@index([kind, isActive, sortOrder])
+  @@map("market_instruments")
+}
+
+/// One day, for one instrument.
+///
+/// **Bars, not closes** (ADR-087 #2). A high cannot be derived from closing
+/// prices — the period's true high almost never lands on a close, so a range
+/// assembled out of closes understates the real one and every pivot level
+/// computed from that range is wrong by the same amount. The provider returns
+/// all four in one response, so storing four columns costs no extra request.
+///
+/// Nothing but the pivot calculator reads `open`/`high`/`low`. Correlation,
+/// the risk meter and the rate snapshot read `close` and only `close`.
+///
+/// **`Decimal`, not `Float`** (ADR-087 #3): a close is money-shaped and gets
+/// subtracted from its neighbour to make a return.
+model MarketDailyBar {
+  id           String   @id @default(cuid())
+  instrumentId String
+  date         DateTime @db.Date
+
+  open  Decimal @db.Decimal(24, 10)
+  high  Decimal @db.Decimal(24, 10)
+  low   Decimal @db.Decimal(24, 10)
+  close Decimal @db.Decimal(24, 10)
+
+  createdAt DateTime @default(now())
+
+  instrument MarketInstrument @relation(fields: [instrumentId], references: [id], onDelete: Cascade)
+
+  @@unique([instrumentId, date])
+  @@index([instrumentId, date(sort: Desc)])
+  @@map("market_daily_bars")
+}
+
+// ─── Tools (Module 13, ADR-086) ──────────────────────────────
+//
+// ADR-086 #1: the SET of tools is code (`TOOL_KEYS` in `@repo/contracts`) and
+// everything a tool SAYS is data. One table, not eight (#2) — eight tables for
+// eight tools would make adding the ninth a migration, and the fields they
+// would not share are exactly the ones `config` already types.
+
+/// One of `TOOL_KEYS`. There is deliberately **no `status`, no
+/// `scheduledFor` and no seven-state machine** (ADR-086 #8): a tool is a
+/// fixture of the site, not an article — it is on or off. ADR-071 gave
+/// `scheduledFor` to the five entities a reader browses as a feed, where
+/// "publish this on Tuesday" is a real editorial act; scheduling a calculator
+/// solves nothing and would add a fourth switch to a surface that already has
+/// three (the feature flag, `isEnabled`, and the translation's own status).
+model Tool {
+  id  String @id @default(cuid())
+  /// A `TOOL_KEYS` member. Code owns the set; a row for an unknown key is
+  /// ignored by every reader rather than rendering an unroutable page.
+  key String @unique @db.VarChar(40)
+
+  isEnabled Boolean @default(true)
+  sortOrder Int     @default(0)
+
+  /// A `MediaAsset` id, deliberately without an FK (ADR-035). Generated art
+  /// is the fallback when it is null.
+  coverAssetId String?
+
+  /// Validated against `TOOL_CONFIG_SCHEMAS[key]` — one schema, checked by
+  /// the admin form, the server action and the service alike.
+  config Json
+
+  relatedCount Int     @default(6)
+  showRelated  Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  translations ToolTranslation[]
+
+  @@index([isEnabled, sortOrder])
+  @@map("tools")
+}
+
+model ToolTranslation {
+  id     String @id @default(cuid())
+  toolId String
+  locale String @db.VarChar(10)
+
+  title   String  @db.VarChar(160)
+  tagline String? @db.VarChar(220)
+  /// Sanitized server-side on save (security.md #8).
+  intro   String? @db.Text
+  /// The explainer band. Sanitized on save.
+  body    String? @db.LongText
+  /// `[{ question, answer }]` — the shape articles already use.
+  faq     Json?
+
+  seoTitle        String? @db.VarChar(70)
+  seoDescription  String? @db.VarChar(180)
+  seoFocusKeyword String? @db.VarChar(100)
+
+  translationStatus TranslationStatus @default(DRAFT)
+  /// Covers ALL prose, `faq` question AND answer included (ADR-069's rule):
+  /// an FAQ-only edit must flip sibling translations OUTDATED exactly as a
+  /// body edit does.
+  sourceHash        String?           @db.VarChar(64)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tool Tool @relation(fields: [toolId], references: [id], onDelete: Cascade)
+
+  @@unique([toolId, locale])
+  @@map("tool_translations")
+}

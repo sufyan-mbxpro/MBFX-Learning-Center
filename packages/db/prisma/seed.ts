@@ -93,6 +93,11 @@ const PERMISSIONS = [
   ["market", "market.instruments.manage", "Manage instruments"],
   ["market", "calendar.manage", "Manage economic calendar"],
 
+  // Trading tools (Module 13, ADR-086 #6)
+  ["tools", "tools.view", "View trading tools"],
+  ["tools", "tools.update", "Edit tool content and configuration"],
+  ["tools", "tools.publish", "Enable or disable a tool"],
+
   // Translations & locales (Module 06)
   ["translations", "translations.view", "View translations"],
   ["translations", "translations.update", "Edit translations"],
@@ -213,6 +218,11 @@ const ROLES: Array<{
       "translations.approve",
       "seo.update",
       "analytics.view",
+      // ADR-086 #6. A content manager writes the words on a tool page but does
+      // not decide which tools the site offers — that is tools.publish, and it
+      // stays with admin, exactly as a header publish does two lines down.
+      "tools.view",
+      "tools.update",
       // Pages, not parts: a header publish stays with admin and above.
       "cms.pages.view",
       "cms.pages.create",
@@ -301,6 +311,7 @@ const ROLES: Array<{
       "market.providers.manage",
       "market.instruments.manage",
       "calendar.manage",
+      "tools.view",
       "settings.view",
       "integrations.manage",
     ],
@@ -3532,6 +3543,420 @@ export async function seed(db: PrismaClient) {
     });
   }
   console.log("  cms pages: news-collection (published, PR 4.4 migration)");
+
+  // ─────────────────────────────────────────────────────────────
+  // Market platform + trading tools (Module 13, ADR-086 / ADR-087)
+  // ─────────────────────────────────────────────────────────────
+  //
+  // Create-only on content, like every other seeded row: an admin who renames
+  // an instrument or rewrites a tool's intro keeps their words through the next
+  // seed run.
+
+  // The provider is seeded MANUAL and DISABLED. A fresh clone must not reach
+  // for a network on first boot, and every rate-backed tool degrades to a
+  // labelled empty state rather than an error (ADR-087 #11).
+  await db.marketProvider.upsert({
+    where: { id: "default" },
+    update: {},
+    create: { id: "default", driver: "MANUAL", isEnabled: false },
+  });
+
+  const MAJOR_CURRENCIES: [string, string][] = [
+    ["USD", "US Dollar"],
+    ["EUR", "Euro"],
+    ["GBP", "British Pound"],
+    ["JPY", "Japanese Yen"],
+    ["CHF", "Swiss Franc"],
+    ["AUD", "Australian Dollar"],
+    ["CAD", "Canadian Dollar"],
+    ["NZD", "New Zealand Dollar"],
+  ];
+
+  const PAIRS: [string, string, string][] = [
+    ["EUR/USD", "EUR", "USD"],
+    ["GBP/USD", "GBP", "USD"],
+    ["USD/JPY", "USD", "JPY"],
+    ["USD/CHF", "USD", "CHF"],
+    ["AUD/USD", "AUD", "USD"],
+    ["USD/CAD", "USD", "CAD"],
+    ["NZD/USD", "NZD", "USD"],
+    ["EUR/GBP", "EUR", "GBP"],
+    ["EUR/JPY", "EUR", "JPY"],
+    ["GBP/JPY", "GBP", "JPY"],
+    ["EUR/CHF", "EUR", "CHF"],
+    ["AUD/JPY", "AUD", "JPY"],
+  ];
+
+  const OTHER_INSTRUMENTS: [string, string, string, string, string][] = [
+    // symbol, name, kind, base, quote
+    ["XAU/USD", "Gold", "METAL", "XAU", "USD"],
+    ["XAG/USD", "Silver", "METAL", "XAG", "USD"],
+    ["BTC/USD", "Bitcoin", "CRYPTO", "BTC", "USD"],
+    ["ETH/USD", "Ethereum", "CRYPTO", "ETH", "USD"],
+    ["SPX/USD", "S&P 500", "INDEX", "SPX", "USD"],
+    ["NDX/USD", "Nasdaq 100", "INDEX", "NDX", "USD"],
+    ["WTI/USD", "Crude Oil (WTI)", "COMMODITY", "WTI", "USD"],
+    ["DXY/USD", "US Dollar Index", "INDEX", "DXY", "USD"],
+  ];
+
+  let instrumentOrder = 0;
+  const instrumentIdBySymbol = new Map<string, string>();
+
+  async function seedInstrument(input: {
+    symbol: string;
+    displayName: string;
+    kind: "CURRENCY" | "PAIR" | "CRYPTO" | "METAL" | "INDEX" | "COMMODITY";
+    base: string | null;
+    quote: string | null;
+    decimals: number;
+  }) {
+    const row = await db.marketInstrument.upsert({
+      where: { symbol: input.symbol },
+      update: {},
+      create: {
+        symbol: input.symbol,
+        displayName: input.displayName,
+        kind: input.kind,
+        base: input.base,
+        quote: input.quote,
+        decimals: input.decimals,
+        sortOrder: instrumentOrder++,
+      },
+    });
+    instrumentIdBySymbol.set(input.symbol, row.id);
+  }
+
+  for (const [code, name] of MAJOR_CURRENCIES) {
+    await seedInstrument({
+      symbol: code,
+      displayName: name,
+      kind: "CURRENCY",
+      // A CURRENCY row is quoted against USD, which is what lets
+      // getRateSnapshot place it without a second table (ADR-087 #1).
+      base: code,
+      quote: "USD",
+      decimals: code === "JPY" ? 3 : 5,
+    });
+  }
+  for (const [symbol, base, quote] of PAIRS) {
+    await seedInstrument({
+      symbol,
+      displayName: symbol,
+      kind: "PAIR",
+      base,
+      quote,
+      decimals: quote === "JPY" ? 3 : 5,
+    });
+  }
+  for (const [symbol, displayName, kind, base, quote] of OTHER_INSTRUMENTS) {
+    await seedInstrument({
+      symbol,
+      displayName,
+      kind: kind as "CRYPTO" | "METAL" | "INDEX" | "COMMODITY",
+      base,
+      quote,
+      decimals: 2,
+    });
+  }
+  console.log(
+    `  market instruments: ${MAJOR_CURRENCIES.length + PAIRS.length + OTHER_INSTRUMENTS.length}` +
+      " (provider: MANUAL, disabled)",
+  );
+
+  // ─── The eight tools ─────────────────────────────────────────
+  //
+  // ADR-086 #1: the SET is code (TOOL_KEYS) and the CONTENT is data. These
+  // rows are the starting content — every word below is admin-editable, and
+  // none of the behaviour is.
+
+  const id = (symbol: string) => instrumentIdBySymbol.get(symbol) ?? "";
+  const currencyIds = MAJOR_CURRENCIES.map(([code]) => id(code)).filter(Boolean);
+  const pairIds = PAIRS.map(([symbol]) => id(symbol)).filter(Boolean);
+
+  const TOOL_SEEDS: {
+    key: string;
+    sortOrder: number;
+    title: string;
+    tagline: string;
+    intro: string;
+    body: string;
+    config: unknown;
+  }[] = [
+    {
+      key: "position-size",
+      sortOrder: 0,
+      title: "Position Size Calculator",
+      tagline: "Work out how big a trade can be before it risks more than you meant.",
+      intro:
+        "<p>Decide what you are willing to lose first, and let the position size follow from it. " +
+        "Tell us your account balance, the share of it you are prepared to risk, and how far away " +
+        "your stop loss sits — and we will tell you how many units that allows.</p>",
+      body:
+        "<h2>About the Position Size Calculator</h2>" +
+        "<p>Position size is the one decision that is entirely yours. The market decides whether a " +
+        "trade wins; you decide how much it costs when it loses.</p>" +
+        "<p>The arithmetic is short. The amount at risk is your balance multiplied by your risk " +
+        "percentage. Divide that by the stop-loss distance in pips, and again by the value of one " +
+        "pip, and what is left is the position size that makes those two numbers agree.</p>" +
+        "<p>When your account currency is not the pair's quote currency, one more step is needed: " +
+        "the pip value has to be converted. We show that conversion rather than folding it away, " +
+        "because it is the step most spreadsheets get wrong.</p>",
+      config: {
+        defaultAccountCurrency: "USD",
+        defaultPairId: id("EUR/USD"),
+        defaultRiskPercent: 1,
+        minRiskPercent: 0.1,
+        maxRiskPercent: 10,
+        pairIds,
+        accountCurrencyIds: currencyIds,
+      },
+    },
+    {
+      key: "pip-value",
+      sortOrder: 1,
+      title: "Pip Value Calculator",
+      tagline: "What one pip is worth on your position, in your own currency.",
+      intro:
+        "<p>A pip is the smallest ordinary move in a currency pair. What it is <em>worth</em> " +
+        "depends on how much you are trading and what currency your account is held in — which is " +
+        "why the same one-pip move can be ten dollars or nine euros.</p>",
+      body:
+        "<h2>About the Pip Value Calculator</h2>" +
+        "<p>For most pairs a pip is 0.0001. For pairs quoted in Japanese yen it is 0.01, because " +
+        "the yen is quoted to two decimal places rather than four.</p>" +
+        "<p>Multiply the pip size by your position size in units, and you have the value of a pip " +
+        "in the pair's quote currency. If your account is held in a different currency, that " +
+        "figure is converted at the current rate.</p>",
+      config: {
+        defaultAccountCurrency: "USD",
+        defaultPairId: id("EUR/USD"),
+        defaultUnits: 100000,
+        pairIds,
+        accountCurrencyIds: currencyIds,
+      },
+    },
+    {
+      key: "gain-loss",
+      sortOrder: 2,
+      title: "Gain & Loss Percentage Calculator",
+      tagline: "Tell us one of the three figures and we will work out the other two.",
+      intro:
+        "<p>Give us where you started and any one of: the amount you made or lost, the percentage, " +
+        "or where you ended up. We will fill in the rest — and tell you what it takes to get back " +
+        "to level.</p>",
+      body:
+        "<h2>About gains, losses, and getting back to even</h2>" +
+        "<p>Losses and gains are not symmetrical, and this is the tool that shows it. Lose 50% of " +
+        "an account and a 50% gain does not restore it: you need 100%, because the gain is earned " +
+        "on the smaller balance that is left.</p>" +
+        "<p>That asymmetry is the whole argument for position sizing. A string of small, survivable " +
+        "losses is recoverable arithmetic. A large one is not.</p>",
+      config: { defaultStartBalance: 10000, decimals: 2 },
+    },
+    {
+      key: "pivot-points",
+      sortOrder: 3,
+      title: "Pivot Point Calculator",
+      tagline: "Five methods, computed from the last completed period.",
+      intro:
+        "<p>Pivot points turn one period's high, low, open and close into a set of levels for the " +
+        "next one. Pick an interval and a symbol and we will fill the figures in, or enter your " +
+        "own.</p>",
+      body:
+        "<h2>About Pivot Points</h2>" +
+        "<p>Five methods are offered, and they disagree with each other on purpose.</p>" +
+        "<p><strong>Floor</strong> is the classic: the pivot is the average of the high, the low " +
+        "and the close, and the supports and resistances are reflected around it.</p>" +
+        "<p><strong>Woodie</strong> weights the opening price double, so the pivot leans toward " +
+        "where the period began rather than where it ended.</p>" +
+        "<p><strong>Camarilla</strong> is the only method with four levels a side, and its levels " +
+        "are measured from the close rather than from the pivot.</p>" +
+        "<p><strong>DeMark</strong> gives one level a side, and which formula it uses depends on " +
+        "whether the period closed above or below its open.</p>" +
+        "<p><strong>Fibonacci</strong> places its levels at 38.2%, 61.8% and 100% of the period's " +
+        "range, measured from the pivot.</p>" +
+        "<p>Levels are computed from the last COMPLETED period, never from one still trading. A " +
+        "level recalculated every hour out of a half-formed bar is not a level anyone can plan " +
+        "against.</p>",
+      config: {
+        intervals: ["1D", "1W", "1M", "1Y"],
+        defaultInterval: "1D",
+        symbolIds: pairIds,
+        defaultSymbolId: id("EUR/USD"),
+      },
+    },
+    {
+      key: "market-hours",
+      sortOrder: 4,
+      title: "Forex Market Hours",
+      tagline: "Which sessions are open right now, in your own timezone.",
+      intro:
+        "<p>The currency market runs around the clock from Sydney's Sunday open to New York's " +
+        "Friday close, but it is not equally busy throughout. Four sessions overlap in turn, and " +
+        "the overlaps are where most of the volume is.</p>",
+      body:
+        "<h2>About the trading sessions</h2>" +
+        "<p>All four session times are shown in the timezone you pick, and they follow daylight " +
+        "saving automatically — which is why London's hours shift against Tokyo's twice a year " +
+        "even though Tokyo never changes its clocks.</p>" +
+        "<p>The busiest window is the London/New York overlap, when the two largest sessions are " +
+        "open at once. The quietest is the gap between the New York close and the Tokyo open.</p>" +
+        "<p>The market is shut across the weekend. The gap is bounded by two local times, not by " +
+        "a UTC midnight, so it opens and closes at a different clock hour depending where you " +
+        "are reading this.</p>",
+      config: {
+        sessions: [
+          {
+            name: "Sydney",
+            city: "Sydney",
+            timeZone: "Australia/Sydney",
+            open: "07:00",
+            close: "16:00",
+          },
+          { name: "Tokyo", city: "Tokyo", timeZone: "Asia/Tokyo", open: "09:00", close: "18:00" },
+          {
+            name: "London",
+            city: "London",
+            timeZone: "Europe/London",
+            open: "08:00",
+            close: "17:00",
+          },
+          {
+            name: "New York",
+            city: "New York",
+            timeZone: "America/New_York",
+            open: "08:00",
+            close: "17:00",
+          },
+        ],
+        mediumVolumeFrom: 2,
+        highVolumeFrom: 3,
+      },
+    },
+    {
+      key: "currency-converter",
+      sortOrder: 5,
+      title: "Currency Converter",
+      tagline: "Convert between currencies, and see what a markup really costs.",
+      intro:
+        "<p>Convert any amount between the major currencies at the mid-market rate — and then see " +
+        "what a bank, an ATM, a card or an airport kiosk would typically hand you instead.</p>",
+      body:
+        "<h2>About the rates you are shown</h2>" +
+        "<p>The mid-market rate is the midpoint between what buyers are offering and what sellers " +
+        "are asking. It is the rate quoted in the news, and it is not a rate you can get.</p>" +
+        "<p>The other four options apply a typical markup to that rate. They are estimates, not " +
+        "quotes, and they are not attributed to any named provider — what a particular bank or " +
+        "kiosk charges you on a particular day is between you and them. The figures exist to show " +
+        "the SHAPE of the cost, which is usually larger than people expect.</p>" +
+        "<p>Rates come from the last completed daily close, and the page says when that was.</p>",
+      config: {
+        currencyIds,
+        defaultFrom: "USD",
+        defaultTo: "EUR",
+        defaultAmount: 100,
+        decimals: 2,
+        rateMarkups: { bank: 3, atm: 4, card: 2.5, kiosk: 7 },
+        offeredRateTypes: ["market", "bank", "atm", "card", "kiosk"],
+      },
+    },
+    {
+      key: "correlation",
+      sortOrder: 6,
+      title: "Currency Correlation",
+      tagline: "Which pairs move together, and which move apart.",
+      intro:
+        "<p>Two positions in strongly correlated pairs are closer to one position than two. This " +
+        "grid shows how closely each pair has moved with the others over the window you pick.</p>",
+      body:
+        "<h2>What the numbers mean</h2>" +
+        "<p>Each cell is a correlation coefficient between −1 and +1. At +1 the two pairs have " +
+        "moved in lockstep; at −1 they have moved exactly opposite; near 0 their moves have been " +
+        "unrelated.</p>" +
+        "<p>We correlate daily <em>returns</em>, not prices. That distinction matters more than it " +
+        "sounds: two pairs that are both drifting upward will look correlated at the price level " +
+        "even when their day-to-day moves have nothing to do with each other.</p>" +
+        "<p>A cell with too little history shows a dash rather than a number. A coefficient " +
+        "computed from a handful of days is not a small measurement, it is a wrong one.</p>" +
+        "<p>These figures describe a window that has already closed. They are updated once a day " +
+        "and are not a forecast.</p>",
+      config: {
+        windows: ["5d", "10d", "30d", "60d", "90d", "180d", "250d"],
+        defaultWindow: "30d",
+        instrumentIds: pairIds,
+      },
+    },
+    {
+      key: "risk-sentiment",
+      sortOrder: 7,
+      title: "Risk-On / Risk-Off Meter",
+      tagline: "Whether the market has been reaching for risk, or away from it.",
+      intro:
+        "<p>A single score from 0 to 100, built from how a basket of markets has moved relative to " +
+        "its own recent history. High is risk-on; low is risk-off.</p>",
+      body:
+        "<h2>How the score is built</h2>" +
+        "<p>Each market in the basket is scored by where its latest move sits within its own " +
+        "recent range — its percentile rank. A market that usually moves half a percent and has " +
+        "just moved two ranks near the top of its own history, whatever the absolute number.</p>" +
+        "<p>Markets that rise when risk is being taken on — equity indices, commodity currencies — " +
+        "score as they rank. Markets that rise when risk is coming off — gold, the yen — have " +
+        "their rank flipped before it is counted. The weighted average of what is left is the " +
+        "score.</p>" +
+        "<p>A market with too little history is left out and counted, never filled in with a zero. " +
+        "A zero would be a claim that the market was neutral; leaving it out is the truth, which " +
+        "is that we do not know.</p>" +
+        "<p>The score is updated once a day. It describes what has already happened, it is not a " +
+        "forecast, and it is not a recommendation to do anything.</p>",
+      config: {
+        components: [
+          { instrumentId: id("SPX/USD"), weight: 3, direction: "risk-on" },
+          { instrumentId: id("NDX/USD"), weight: 2, direction: "risk-on" },
+          { instrumentId: id("AUD/USD"), weight: 2, direction: "risk-on" },
+          { instrumentId: id("WTI/USD"), weight: 1, direction: "risk-on" },
+          { instrumentId: id("XAU/USD"), weight: 2, direction: "risk-off" },
+          { instrumentId: id("USD/JPY"), weight: 2, direction: "risk-off" },
+          { instrumentId: id("USD/CHF"), weight: 1, direction: "risk-off" },
+        ].filter((c) => c.instrumentId !== ""),
+        lookbackDays: 60,
+        riskOffBelow: 35,
+        riskOnAbove: 65,
+      },
+    },
+  ];
+
+  for (const tool of TOOL_SEEDS) {
+    const row = await db.tool.upsert({
+      where: { key: tool.key },
+      update: {},
+      create: {
+        key: tool.key,
+        isEnabled: true,
+        sortOrder: tool.sortOrder,
+        config: tool.config as never,
+        relatedCount: 6,
+        showRelated: true,
+      },
+    });
+    await db.toolTranslation.upsert({
+      where: { toolId_locale: { toolId: row.id, locale: "en" } },
+      update: {},
+      create: {
+        toolId: row.id,
+        locale: "en",
+        title: tool.title,
+        tagline: tool.tagline,
+        intro: tool.intro,
+        body: tool.body,
+        // The source locale is not a translation OF anything, so it is the
+        // only one that is never OUTDATED. TRANSLATED is the settled state.
+        translationStatus: "TRANSLATED",
+        seoTitle: tool.title,
+        seoDescription: tool.tagline,
+      },
+    });
+  }
+  console.log(`  tools: ${TOOL_SEEDS.length} (all enabled)`);
 
   console.log("Done.");
 }

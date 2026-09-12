@@ -31,6 +31,7 @@ export * from "./videos.ts";
 export * from "./learn-analytics.ts";
 export * from "./glossary-topics.ts";
 export * from "./market.ts";
+export * from "./market-admin.ts";
 export * from "./notifications.ts";
 export * from "./search.ts";
 export * from "./media.ts";

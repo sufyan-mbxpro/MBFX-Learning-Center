@@ -60,6 +60,7 @@ describe("the group registry", () => {
       "articles",
       "website",
       "market",
+      "tools",
       "translations",
       "seo",
       "email",

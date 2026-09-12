@@ -10,6 +10,7 @@ export * from "./learn.ts";
 export * from "./glossary.ts";
 export * from "./videos.ts";
 export * from "./tools.ts";
+export * from "./market.ts";
 export * from "./field-issues.ts";
 export * from "./email.ts";
 export * from "./newsletter.ts";
