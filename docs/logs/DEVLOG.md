@@ -15248,3 +15248,77 @@ sealed SMTP password, and a mail catcher for development.
 - `EmailTemplate` and `EmailDelivery` have no reader or writer yet — F4
   brings `sendTemplatedEmail`, the `email` settings group and the auth
   wiring.
+
+## 2026-09-12 — changes-21 F3: the template registry, the renderer, and an email allowlist of its own (Modules 17/07/02, ADR-078)
+
+The half of the email platform that decides what a message says. No sending
+yet — F4 wires `sendTemplatedEmail` and auth.
+
+### Shipped
+
+- **`@repo/contracts/email.ts`** — the registry (`EMAIL_TEMPLATES`: five keys,
+  each with an audience, a `critical` flag, its variables, the ones it
+  requires, and sample values), the `{{dotted.path}}` vocabulary
+  (`findTemplateVariables` / `replaceTemplateVariables` — one pattern, so what
+  a save validates and what a render replaces cannot drift), and the three
+  Zod schemas (`emailTemplateSaveSchema`, `emailTransportSaveSchema`,
+  `emailTestSendSchema`).
+- **`@repo/email`:**
+  - `sanitize.ts` — the email allowlist. Wider than `sanitizeRichText` in
+    exactly two ways (presentational table attributes, and a `style`
+    attribute with a property allowlist), and wider in no way that executes.
+    `<style>` survives in HTML mode only.
+  - `layout.ts` — the 600px table shell, and `editorialStyle`, which maps
+    every `ed-*` class to an inline style because email clients drop class
+    CSS. Colours come from the palette, so a re-brand reaches email and no
+    hex literal enters the package (code-style #1).
+  - `render.ts` — `renderEmail`: sanitise → assemble → substitute, with every
+    value escaped and every URL-typed variable parsed first.
+
+### Decided while building
+
+1. **`EDITORIAL_CLASSES` moved to `@repo/contracts`.** Two sanitisers need it
+   now, and `@repo/email` cannot import `@repo/core` (core imports auth —
+   ADR-078 #1's cycle). Core imports it back; nothing else referenced it.
+2. **`loadActiveThemeTokens` is new in `@repo/theme`**, and `loadActiveTheme`
+   is now built on it. The loader already computed the structured tokens and
+   returned only CSS; email needs the values, because no email client
+   resolves a custom property. One copy of the fallbacks, not two.
+3. **HTML mode is not wrapped in the shell.** A hand-built document is the
+   designer's whole document; wrapping it would put two `<body>` elements in
+   one message.
+4. **`ed-embed` is deliberately unmapped.** A video figure has no meaning in
+   email, so it keeps its markup rather than gaining a style that implies
+   one — and `layout.test.ts` asserts it is the ONLY unmapped class, so a new
+   `ed-*` class cannot be added without deciding what email does with it.
+5. **The unsubscribe link takes its URL and label together.** A package may
+   not invent the word "Unsubscribe" (code-style #2).
+
+### Found
+
+- **The property test's first two assertions were wrong, not the code.** It
+  failed on `class="javascript:alert(1)"` — inert — and then on a relative
+  `src="x"`, which is ordinary. The assertion is now a scheme denylist
+  applied per URL attribute, which is the property that actually matters.
+- **Three pre-existing failures in `@repo/core`**, found by running its suite
+  and fixed in their own commit (844e7e5): `mediaSourceTypeSchema` had never
+  gained `VIDEO_TOPIC` after ADR-068, so the drift guard written to catch
+  exactly that had been red; and two CMS tests still called `/about` an
+  ordinary path, which ADR-047 reserved.
+
+### Verified
+
+- `@repo/email` **82/82** (7 files), coverage thresholds met; typecheck and
+  lint clean. The sanitiser has an 18-case XSS corpus plus two fast-check
+  properties (600 runs).
+- `@repo/contracts` **303/303** — the new `email.test.ts` pins the registry
+  against its samples, and the save schema against unknown and missing
+  variables.
+- `@repo/core` **488/488**, `@repo/theme` **68/68**, both typecheck and lint
+  clean.
+
+### Owed
+
+- F4: `sendTemplatedEmail`, the `email` settings group, the seeded default
+  templates, and the auth wiring (reset, verification, notices, limits).
+- Nothing renders an email yet in the app — there is no caller until F4.

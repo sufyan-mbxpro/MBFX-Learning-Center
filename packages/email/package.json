@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./testing": "./src/testing.ts"
+    "./testing": "./src/testing.ts",
+    "./render": "./src/render.ts"
   },
   "scripts": {
     "lint": "eslint src",
@@ -13,8 +14,11 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@repo/contracts": "workspace:*",
     "@repo/db": "workspace:*",
-    "nodemailer": "10.0.3"
+    "@repo/theme": "workspace:*",
+    "nodemailer": "10.0.3",
+    "sanitize-html": "2.17.7"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
@@ -22,8 +26,10 @@
     "@testcontainers/mariadb": "^12.1.0",
     "@types/node": "^24.13.3",
     "@types/nodemailer": "^8.0.1",
+    "@types/sanitize-html": "^2.16.1",
     "@vitest/coverage-v8": "^4.1.11",
     "eslint": "^9.39.5",
+    "fast-check": "^4.9.0",
     "testcontainers": "^12.1.0",
     "typescript": "6.0.3",
     "vitest": "^4.1.11"

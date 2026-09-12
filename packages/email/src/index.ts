@@ -25,3 +25,21 @@ export {
   type SmtpConfig,
   type SmtpSecurity,
 } from "./transport.ts";
+
+export { sanitizeEmailHtml, sanitizeEmailHtmlWith } from "./sanitize.ts";
+export {
+  editorialStyle,
+  inlineEditorialStyles,
+  renderEmailShell,
+  type EmailPalette,
+  type EmailShellInput,
+} from "./layout.ts";
+export {
+  EmailRenderError,
+  htmlToText,
+  missingVariables,
+  renderEmail,
+  type EmailShellOptions,
+  type RenderEmailInput,
+  type RenderedEmail,
+} from "./render.ts";

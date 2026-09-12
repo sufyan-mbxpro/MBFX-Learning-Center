@@ -561,7 +561,25 @@ export interface ResolvedTheme {
  * "both" theme whenever both were active. Fetching both and preferring the
  * exact match makes the precedence correct regardless of row order.
  */
-export async function loadActiveTheme(scope: "web" | "admin"): Promise<ResolvedTheme> {
+/** The active theme's tokens as VALUES rather than CSS. */
+export interface ActiveThemeTokens {
+  key: string;
+  brand: BrandColors;
+  light: SurfacePalette;
+  dark: SurfacePalette;
+  overrides: BrandOverrides;
+  layout: LayoutTokens;
+}
+
+/**
+ * For consumers that cannot use custom properties at all: email clients
+ * (ADR-078 #7), generated art, anything rendered outside a browser. Same rows
+ * and the same fallbacks as `loadActiveTheme`, which is built on this — so a
+ * re-brand reaches email without a second copy of the defaults drifting here.
+ */
+export async function loadActiveThemeTokens(
+  scope: "web" | "admin" = "web",
+): Promise<ActiveThemeTokens> {
   const rows = await db.theme.findMany({
     where: { isActive: true, scope: { in: [scope, "both"] } },
   });
@@ -587,8 +605,13 @@ export async function loadActiveTheme(scope: "web" | "admin"): Promise<ResolvedT
     fontMono: isCuratedFontKey(rawLayout.fontMono) ? rawLayout.fontMono : DEFAULT_LAYOUT.fontMono,
   };
 
+  return { key: theme?.key ?? "default", brand, light, dark, overrides, layout };
+}
+
+export async function loadActiveTheme(scope: "web" | "admin"): Promise<ResolvedTheme> {
+  const { key, brand, light, dark, overrides, layout } = await loadActiveThemeTokens(scope);
   return {
-    key: theme?.key ?? "default",
+    key,
     lightCss: tokensToCss({ brand, surface: light, layout }),
     darkCss: tokensToCss({ brand, surface: dark, layout, overrides }),
     layout,

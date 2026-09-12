@@ -6,7 +6,11 @@
 import { revalidateTag } from "next/cache";
 import sanitize from "sanitize-html";
 import { db, ContentStatus, TranslationStatus, type Difficulty, type Prisma } from "@repo/db";
-import { isReservedGlossarySlug, type GlossaryFaqItemInput } from "@repo/contracts";
+import {
+  EDITORIAL_CLASSES,
+  isReservedGlossarySlug,
+  type GlossaryFaqItemInput,
+} from "@repo/contracts";
 import { computeSourceHash, isTranslationOutdated } from "@repo/i18n";
 import { can, type Subject } from "@repo/rbac";
 import { parseVideoEmbedUrl, slugify } from "@repo/utils";
@@ -255,40 +259,6 @@ export async function publishDueContent(now: Date = new Date()): Promise<number>
 
 // ─── Sanitization (security.md #8) ───────────────────────────
 
-/**
- * The closed class vocabulary the editor may emit (changes-10, ADR-046).
- * Mirrors the `.ed-*` rules in `@repo/ui`'s globals.css — that file is the
- * definition, this is the gate. Enumerated rather than globbed as `ed-*`
- * so a class with no stylesheet behind it cannot ride along.
- */
-const EDITORIAL_CLASSES = [
-  "ed-tx-primary",
-  "ed-tx-success",
-  "ed-tx-warning",
-  "ed-tx-info",
-  "ed-tx-danger",
-  "ed-tx-muted",
-  "ed-hl-primary",
-  "ed-hl-success",
-  "ed-hl-warning",
-  "ed-hl-info",
-  "ed-hl-danger",
-  "ed-hl-muted",
-  "ed-ff-sans",
-  "ed-ff-serif",
-  "ed-ff-mono",
-  "ed-fs-sm",
-  "ed-fs-base",
-  "ed-fs-lg",
-  "ed-fs-xl",
-  "ed-fs-2xl",
-  "ed-align-start",
-  "ed-align-center",
-  "ed-align-end",
-  "ed-align-justify",
-  "ed-embed",
-];
-
 /** The one permission set a derived provider frame is given. */
 const EMBED_ALLOW = "accelerometer; encrypted-media; gyroscope; picture-in-picture";
 
@@ -371,7 +341,7 @@ export function sanitizeRichText(html: string): string {
       iframe: ["src", "title", "loading", "allow", "allowfullscreen"],
     },
     allowedClasses: {
-      "*": EDITORIAL_CLASSES,
+      "*": [...EDITORIAL_CLASSES],
       // Highlight.js/Prism-style language hint on a fenced code block. Kept
       // as a glob because the language name is open-ended and inert.
       code: [...EDITORIAL_CLASSES, "language-*"],
