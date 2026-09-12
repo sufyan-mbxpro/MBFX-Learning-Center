@@ -128,3 +128,28 @@ describe("the ad-hoc patterns are gone (changes-21 Phase A)", () => {
     expect(source(file)).toContain(component);
   });
 });
+
+// changes-21 F-06: `reset` re-renders WITHOUT re-fetching, so "Try again"
+// could not recover from a server-side failure. `retry` re-fetches first
+// (stable since Next 16.3; the installed error.md recommends it over `reset`).
+describe("error boundaries retry, never reset (changes-21 F-06)", () => {
+  const boundaries = FILES.filter((file) => /(^|\/)(global-)?error\.tsx$/.test(rel(file)));
+
+  it("finds the admin, public and global boundaries", () => {
+    expect(boundaries.map(rel).sort()).toEqual(
+      ["(admin)/error.tsx", "(public)/[locale]/error.tsx", "global-error.tsx"].sort(),
+    );
+  });
+
+  it.each(boundaries.map((file) => [rel(file), file]))(
+    "%s takes `retry` and wires it to the button",
+    (_, file) => {
+      const src = source(file);
+      expect(src).toMatch(/\{\s*retry\s*\}:\s*\{[^}]*retry:\s*\(\)\s*=>\s*void/);
+      expect(src).toContain("onClick={retry}");
+      // Code only: each boundary's comment explains why `reset` is not used.
+      const code = src.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "");
+      expect(code).not.toMatch(/\breset\b/);
+    },
+  );
+});

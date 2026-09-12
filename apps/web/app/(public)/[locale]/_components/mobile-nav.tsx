@@ -1,7 +1,9 @@
 "use client";
 
-// Mobile companion to the desktop nav (which is hidden below lg): the same
-// NavItem data, in the shape a phone can actually use.
+// Mobile companion to the desktop nav (which is hidden below xl — changes-21
+// D-1): the same NavItem data, in the shape a phone or tablet can actually use.
+// Below sm it also carries the theme toggle as an "Appearance" row, because the
+// header row cannot hold it on a 360px phone (changes-21 D-2).
 //
 // This was a dropdown menu; the mega-menu work (ADR-048) moved it to a
 // sheet with accordion sections. A dropdown cannot express what a panel
@@ -9,7 +11,7 @@
 // rows — and on a phone it opened a scrolling popover over the page rather
 // than a surface you can thumb through. The desktop panel's structure is
 // preserved: the same columns, in the same order, from the same registry.
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Menu } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Link } from "@repo/i18n/navigation";
@@ -28,6 +30,7 @@ import {
   SheetTrigger,
 } from "@repo/ui/components/sheet";
 import { panelForHref, resolveMegaMenuPanel, type MegaResolvableItem } from "../_nav/mega-menu.ts";
+import { ModeToggle } from "./mode-toggle.tsx";
 
 export interface MobileNavItem extends MegaResolvableItem {
   children: MegaResolvableItem[];
@@ -93,12 +96,13 @@ function NavRow({
 export function MobileNav({ items, menuLabel }: { items: MobileNavItem[]; menuLabel: string }) {
   const t = useTranslations("nav");
   const [open, setOpen] = useState(false);
+  const appearanceId = useId();
   const close = () => setOpen(false);
 
   if (items.length === 0) return null;
 
   return (
-    <div className="lg:hidden">
+    <div className="xl:hidden">
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetTrigger
           render={
@@ -168,6 +172,22 @@ export function MobileNav({ items, menuLabel }: { items: MobileNavItem[]; menuLa
               );
             })}
           </nav>
+
+          {/* The theme toggle's home below sm (changes-21 D-2): the header
+              row hides it there. From sm up the header has room, so this row
+              hides instead of showing the same control twice. The group is
+              named by its visible label; the button keeps its own
+              "Toggle theme" name. px-2.5 = NavRow's inset. */}
+          <div
+            role="group"
+            aria-labelledby={appearanceId}
+            className="mt-4 flex items-center justify-between gap-3 border-t border-border px-2.5 pt-4 sm:hidden"
+          >
+            <span id={appearanceId} className="text-sm font-semibold text-foreground">
+              {t("appearance")}
+            </span>
+            <ModeToggle />
+          </div>
         </SheetContent>
       </Sheet>
     </div>

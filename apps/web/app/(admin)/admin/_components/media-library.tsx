@@ -42,10 +42,16 @@ import { Input } from "@repo/ui/components/input";
 import { SearchInput } from "@repo/ui/components/search-input";
 import { ControlSizeProvider } from "@repo/ui/components/control-size";
 import { FilterBarRow } from "@repo/ui/components/filter-bar";
-import { Label } from "@repo/ui/components/label";
+import { Field, FieldError, FieldLabel } from "@repo/ui/components/field";
 import { Tabs, TabsList, TabsTrigger } from "@repo/ui/components/tabs";
-import { ALL_MEDIA_CATEGORIES, MEDIA_CATEGORIES, folderForCategory } from "@repo/contracts";
+import {
+  ALL_MEDIA_CATEGORIES,
+  MEDIA_CATEGORIES,
+  folderForCategory,
+  updateMediaMetaSchema,
+} from "@repo/contracts";
 import { deleteMediaAction, updateMediaMetaAction } from "../_actions/media-actions.ts";
+import { useFieldErrors } from "../_hooks/use-field-errors.ts";
 import {
   invalidateMediaCache,
   useMediaBrowser,
@@ -152,21 +158,26 @@ function AssetDetailDialog({
   );
   const replaceInputRef = useRef<HTMLInputElement>(null);
 
-  function save() {
-    const tags = tagsText
+  // Exactly the action's input. The folder is built from the category and
+  // the sub-path, so a folder issue is shown on the sub-path (the category is
+  // a closed list and cannot be wrong); a tag issue lands on `tags.<n>`.
+  const values = {
+    title: title || null,
+    altText: altText || null,
+    folder: [folderForCategory(category), subfolder.trim()].filter(Boolean).join("/"),
+    tags: tagsText
       .split(",")
       .map((t) => t.trim())
-      .filter(Boolean);
-    run(
-      () =>
-        updateMediaMetaAction(asset.id, {
-          title: title || null,
-          altText: altText || null,
-          folder: [folderForCategory(category), subfolder.trim()].filter(Boolean).join("/"),
-          tags,
-        }),
-      { onDone: () => onOpenChange(false) },
-    );
+      .filter(Boolean),
+  };
+  const form = useFieldErrors(updateMediaMetaSchema, values);
+  const tagPaths = ["tags", ...values.tags.map((_, index) => `tags.${index}`)];
+  const tagsInvalid = tagPaths.some((path) => form.invalid(path));
+  const tagsError = tagPaths.map((path) => form.error(path)).find(Boolean);
+
+  function save() {
+    if (!form.validate()) return;
+    run(() => updateMediaMetaAction(asset.id, values), { onDone: () => onOpenChange(false) });
   }
 
   function onReplaceFileChosen(file: File | undefined) {
@@ -193,28 +204,23 @@ function AssetDetailDialog({
           <p className="text-xs text-muted-foreground">
             {labels.usageCount}: {asset.usageCount}
           </p>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="media-title">{labels.titleLabel}</Label>
+          <Field invalid={form.invalid("title")}>
+            <FieldLabel>{labels.titleLabel}</FieldLabel>
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} disabled={!canManage} />
+            <FieldError>{form.error("title")}</FieldError>
+          </Field>
+          <Field invalid={form.invalid("altText")}>
+            <FieldLabel>{labels.altTextLabel}</FieldLabel>
             <Input
-              id="media-title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              disabled={!canManage}
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="media-alt">{labels.altTextLabel}</Label>
-            <Input
-              id="media-alt"
               value={altText}
               onChange={(e) => setAltText(e.target.value)}
               disabled={!canManage}
             />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="media-category">{labels.categoryLabel}</Label>
+            <FieldError>{form.error("altText")}</FieldError>
+          </Field>
+          <Field>
+            <FieldLabel>{labels.categoryLabel}</FieldLabel>
             <AdminCombobox
-              id="media-category"
               value={category}
               onValueChange={(value) => setCategory(value as MediaCategory)}
               options={MEDIA_CATEGORIES.map((key) => ({
@@ -223,27 +229,27 @@ function AssetDetailDialog({
               }))}
               disabled={!canManage}
             />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="media-subfolder">{labels.subfolderLabel}</Label>
+          </Field>
+          <Field invalid={form.invalid("folder")}>
+            <FieldLabel>{labels.subfolderLabel}</FieldLabel>
             <Input
-              id="media-subfolder"
               value={subfolder}
               onChange={(e) => setSubfolder(e.target.value)}
               placeholder={labels.subfolderHint}
               disabled={!canManage}
             />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="media-tags">{labels.tagsLabel}</Label>
+            <FieldError>{form.error("folder")}</FieldError>
+          </Field>
+          <Field invalid={tagsInvalid}>
+            <FieldLabel>{labels.tagsLabel}</FieldLabel>
             <Input
-              id="media-tags"
               value={tagsText}
               onChange={(e) => setTagsText(e.target.value)}
               placeholder={labels.tagsHint}
               disabled={!canManage}
             />
-          </div>
+            <FieldError>{tagsError}</FieldError>
+          </Field>
           {canManage && (
             <input
               ref={replaceInputRef}
@@ -277,7 +283,12 @@ function AssetDetailDialog({
               </Button>
               <ConfirmDialog
                 trigger={
-                  <Button variant="ghost" size="sm" className="text-destructive" disabled={pending}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive-interactive"
+                    disabled={pending}
+                  >
                     {labels.delete}
                   </Button>
                 }
@@ -564,7 +575,7 @@ export function MediaLibrary({
                         type="button"
                         variant="secondary"
                         size="icon-sm"
-                        className="text-destructive"
+                        className="text-destructive-interactive"
                         aria-label={`${labels.delete}: ${asset.title || asset.fileName}`}
                         title={labels.delete}
                       >

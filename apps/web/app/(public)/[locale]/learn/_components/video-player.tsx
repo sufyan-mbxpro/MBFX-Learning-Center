@@ -151,7 +151,7 @@ function UploadedVideo({
         <span className="flex size-16 items-center justify-center rounded-full bg-background/90 text-primary-interactive shadow-lg ring-1 ring-foreground/10 backdrop-blur-sm">
           {/* `ms-1`, not `ml-1`: a triangle's optical centre is not its
               bounding box's, and the nudge has to flip in RTL (code-style #3). */}
-          <Play aria-hidden className="ms-1 size-7 fill-current" />
+          <Play aria-hidden className="ms-1 size-6 fill-current" />
         </span>
       </span>
       <span className="sr-only">{labels.play}</span>

@@ -43,9 +43,10 @@ import {
   DialogTitle,
 } from "@repo/ui/components/dialog";
 import { Empty, EmptyDescription, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
+import { Field, FieldError, FieldGroup, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
-import { Label } from "@repo/ui/components/label";
 import { Textarea } from "@repo/ui/components/textarea";
+import { createLessonSchema, sectionInputSchema, type SectionInput } from "@repo/contracts";
 import {
   createLessonAction,
   createSectionAction,
@@ -63,7 +64,12 @@ import {
   statusTone,
 } from "../../../../_components/status-badge.tsx";
 import { AdminCombobox } from "../../../../_components/combobox.tsx";
+import { useFieldErrors } from "../../../../_hooks/use-field-errors.ts";
 import { useServerAction } from "../../../../_hooks/use-server-action.ts";
+
+// `createSectionAction` parses its title with exactly the section title's rule
+// (trim, 1–255); picking it from the contract keeps the two from drifting.
+const newSectionSchema = sectionInputSchema.shape.translation.pick({ title: true });
 
 export interface CurriculumLessonView {
   id: string;
@@ -157,69 +163,65 @@ function SectionDialog({
   const [isPublished, setIsPublished] = useState(section.isPublished);
   const { run, pending } = useServerAction();
 
+  const payload: SectionInput = {
+    sectionId: section.id,
+    isPublished,
+    translation: {
+      locale,
+      title: title.trim(),
+      description: description.trim() === "" ? null : description.trim(),
+    },
+  };
+  const form = useFieldErrors(sectionInputSchema, payload);
+
+  const close = () => {
+    onOpenChange(false);
+    form.reset();
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(next) => (next ? onOpenChange(true) : close())}>
       <DialogContent className="max-w-md" closeLabel={labels.close}>
         <DialogHeader>
           <DialogTitle>{labels.editSection}</DialogTitle>
           <DialogDescription>{labels.editSectionDescription}</DialogDescription>
         </DialogHeader>
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor={`section-title-${section.id}`}>{labels.sectionTitleLabel}</Label>
-            <Input
-              id={`section-title-${section.id}`}
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              maxLength={255}
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor={`section-desc-${section.id}`}>{labels.sectionDescriptionLabel}</Label>
+        <FieldGroup>
+          <Field invalid={form.invalid("translation.title")} required>
+            <FieldLabel>{labels.sectionTitleLabel}</FieldLabel>
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={255} />
+            <FieldError>{form.error("translation.title")}</FieldError>
+          </Field>
+          <Field invalid={form.invalid("translation.description")}>
+            <FieldLabel>{labels.sectionDescriptionLabel}</FieldLabel>
             <Textarea
-              id={`section-desc-${section.id}`}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               maxLength={1000}
               rows={3}
             />
-          </div>
-          <Label className="flex items-center gap-2 font-normal">
+            <FieldError>{form.error("translation.description")}</FieldError>
+          </Field>
+          <Field orientation="horizontal">
             <Checkbox
               checked={isPublished}
               onCheckedChange={(checked) => setIsPublished(checked === true)}
             />
-            {labels.sectionPublishedLabel}
-          </Label>
-        </div>
+            <FieldLabel className="font-normal">{labels.sectionPublishedLabel}</FieldLabel>
+          </Field>
+        </FieldGroup>
         <DialogFooter>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onOpenChange(false)}
-            disabled={pending}
-          >
+          <Button variant="outline" size="sm" onClick={close} disabled={pending}>
             {labels.cancel}
           </Button>
+          {/* Enabled while fields are wrong: pressing it names them (audit F-07). */}
           <Button
             size="sm"
-            disabled={title.trim() === ""}
             loading={pending}
-            onClick={() =>
-              run(
-                () =>
-                  saveSectionAction({
-                    sectionId: section.id,
-                    isPublished,
-                    translation: {
-                      locale,
-                      title: title.trim(),
-                      description: description.trim() === "" ? null : description.trim(),
-                    },
-                  }),
-                { onDone: () => onOpenChange(false) },
-              )
-            }
+            onClick={() => {
+              if (!form.validate()) return;
+              run(() => saveSectionAction(payload), { onDone: close });
+            }}
           >
             {labels.saveSection}
           </Button>
@@ -376,7 +378,7 @@ function LessonRow({
           variant="ghost"
           size="icon-sm"
           aria-label={labels.softDelete}
-          className="text-destructive"
+          className="text-destructive-interactive"
           disabled={pending}
           onClick={() => setConfirmOpen(true)}
         >
@@ -425,6 +427,13 @@ function SectionCard({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [newLesson, setNewLesson] = useState("");
   const [adding, setAdding] = useState(false);
+  const newLessonInput = { sectionId: section.id, title: newLesson.trim() };
+  const lessonForm = useFieldErrors(createLessonSchema, newLessonInput);
+
+  const stopAdding = () => {
+    setAdding(false);
+    lessonForm.reset();
+  };
 
   const move = (delta: number) => {
     const next = swapped(sectionIds, index, delta);
@@ -480,7 +489,7 @@ function SectionCard({
               variant="ghost"
               size="icon-sm"
               aria-label={labels.softDelete}
-              className="text-destructive"
+              className="text-destructive-interactive"
               disabled={pending}
               onClick={() => setDeleteOpen(true)}
             >
@@ -513,31 +522,36 @@ function SectionCard({
       {canCreateLesson &&
         (adding ? (
           <div className="flex flex-wrap items-end gap-2">
-            <div className="flex min-w-56 flex-1 flex-col gap-1.5">
-              <Label htmlFor={`new-lesson-${section.id}`}>{labels.newLessonTitle}</Label>
+            {/* `w-auto` undoes the Field's full width so the buttons share the row. */}
+            <Field
+              invalid={lessonForm.invalid("title")}
+              required
+              className="w-auto min-w-56 flex-1"
+            >
+              <FieldLabel>{labels.newLessonTitle}</FieldLabel>
               <Input
-                id={`new-lesson-${section.id}`}
                 value={newLesson}
                 onChange={(e) => setNewLesson(e.target.value)}
                 maxLength={255}
               />
-            </div>
+              <FieldError>{lessonForm.error("title")}</FieldError>
+            </Field>
             <Button
               size="sm"
-              disabled={newLesson.trim() === ""}
               loading={pending}
-              onClick={() =>
-                run(() => createLessonAction({ sectionId: section.id, title: newLesson.trim() }), {
+              onClick={() => {
+                if (!lessonForm.validate()) return;
+                run(() => createLessonAction(newLessonInput), {
                   onDone: () => {
                     setNewLesson("");
-                    setAdding(false);
+                    stopAdding();
                   },
-                })
-              }
+                });
+              }}
             >
               {labels.create}
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => setAdding(false)} disabled={pending}>
+            <Button variant="ghost" size="sm" onClick={stopAdding} disabled={pending}>
               {labels.cancel}
             </Button>
           </div>
@@ -590,6 +604,12 @@ export function CurriculumPanel({
   const { run, pending } = useServerAction();
   const [newSection, setNewSection] = useState("");
   const [adding, setAdding] = useState(false);
+  const sectionForm = useFieldErrors(newSectionSchema, { title: newSection });
+
+  const stopAdding = () => {
+    setAdding(false);
+    sectionForm.reset();
+  };
 
   const sectionIds = sections.map((section) => section.id);
   const sectionOptions: SectionOption[] = sections.map((section) => ({
@@ -615,31 +635,32 @@ export function CurriculumPanel({
     >
       {adding && (
         <div className="flex flex-wrap items-end gap-2 rounded-md border bg-background p-3">
-          <div className="flex min-w-56 flex-1 flex-col gap-1.5">
-            <Label htmlFor="new-section-title">{labels.sectionTitleLabel}</Label>
+          {/* `w-auto` undoes the Field's full width so the buttons share the row. */}
+          <Field invalid={sectionForm.invalid("title")} required className="w-auto min-w-56 flex-1">
+            <FieldLabel>{labels.sectionTitleLabel}</FieldLabel>
             <Input
-              id="new-section-title"
               value={newSection}
               onChange={(e) => setNewSection(e.target.value)}
               maxLength={255}
             />
-          </div>
+            <FieldError>{sectionForm.error("title")}</FieldError>
+          </Field>
           <Button
             size="sm"
-            disabled={newSection.trim() === ""}
             loading={pending}
-            onClick={() =>
+            onClick={() => {
+              if (!sectionForm.validate()) return;
               run(() => createSectionAction(courseId, newSection.trim()), {
                 onDone: () => {
                   setNewSection("");
-                  setAdding(false);
+                  stopAdding();
                 },
-              })
-            }
+              });
+            }}
           >
             {labels.create}
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => setAdding(false)} disabled={pending}>
+          <Button variant="ghost" size="sm" onClick={stopAdding} disabled={pending}>
             {labels.cancel}
           </Button>
         </div>

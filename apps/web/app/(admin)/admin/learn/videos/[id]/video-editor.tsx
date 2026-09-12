@@ -31,7 +31,7 @@ import {
   Search,
   Trash2,
 } from "lucide-react";
-import { isLearnTrack, type VideoTopicInput } from "@repo/contracts";
+import { isLearnTrack, videoTopicInputSchema, type VideoTopicInput } from "@repo/contracts";
 import { Button } from "@repo/ui/components/button";
 import { ConfirmDialog } from "@repo/ui/components/confirm-dialog";
 import {
@@ -58,6 +58,7 @@ import {
   StatusBadge,
   statusTone,
 } from "../../../_components/status-badge.tsx";
+import { useFieldErrors } from "../../../_hooks/use-field-errors.ts";
 import { useServerAction } from "../../../_hooks/use-server-action.ts";
 import { LinksPanel, type LinkDraft } from "./_panels/links-panel.tsx";
 import { VideosPanel, type VideoDraft } from "./_panels/videos-panel.tsx";
@@ -75,7 +76,7 @@ const NONE = "__none__";
 function CharCount({ value, max }: { value: string; max: number }) {
   return (
     <span
-      className={`text-xs tabular-nums ${value.length > max ? "text-destructive" : "text-muted-foreground"}`}
+      className={`text-xs tabular-nums ${value.length > max ? "text-destructive-interactive" : "text-muted-foreground"}`}
     >
       {value.length}/{max}
     </span>
@@ -140,58 +141,67 @@ export function VideoEditor({
   const setDraft = (patch: Partial<VideoTranslationDraft>) =>
     setDrafts((current) => ({ ...current, [locale]: { ...draft, ...patch } }));
 
-  // Mirrors the contract's capability rule so the Save button does not offer
-  // to submit a payload the schema will refuse: a topic needs a video OR a
-  // body, because a topic with neither is an empty page someone will find on
-  // the public site. The schema and the service are still the gate.
+  // Mirrors the contract's capability rule: a topic needs a video OR a body,
+  // because a topic with neither is an empty page someone will find on the
+  // public site. Saving validates against the schema itself (ADR-077); this
+  // only drives the up-front hint below.
   const hasBody = draft.content.trim() !== "";
   const hasCapability = videos.length > 0 || hasBody;
-  const canSave = draft.title.trim() !== "" && hasCapability;
 
   const publicPath = useMemo(
     () => `/${locale}/learn/${track}/videos/${draft.slug || ""}`,
     [locale, track, draft.slug],
   );
 
+  const buildPayload = (): VideoTopicInput => ({
+    topicId: topic.id,
+    meta: {
+      track: isLearnTrack(track) ? track : undefined,
+      categoryId,
+      coverAssetId: cover.id,
+      visibility: visibility as VideoTopicInput["meta"]["visibility"],
+    },
+    translation: {
+      locale,
+      title: draft.title.trim(),
+      slug: draft.slug.trim() === "" ? undefined : draft.slug.trim(),
+      summary: draft.summary.trim() === "" ? null : draft.summary.trim(),
+      content: hasBody ? draft.content : null,
+      seoTitle: draft.seoTitle.trim() === "" ? null : draft.seoTitle.trim(),
+      seoDescription: draft.seoDescription.trim() === "" ? null : draft.seoDescription.trim(),
+      seoFocusKeyword: draft.seoFocusKeyword.trim() === "" ? null : draft.seoFocusKeyword.trim(),
+    },
+    // The panels carry preview URLs the contract has no field for; strip
+    // them rather than letting the schema drop them silently, so what is
+    // sent is exactly what was meant.
+    videos: videos.map((video, index) => ({
+      id: video.id,
+      assetId: video.assetId ?? null,
+      externalUrl:
+        (video.externalUrl ?? "").trim() === "" ? null : (video.externalUrl ?? "").trim(),
+      posterAssetId: video.posterAssetId ?? null,
+      title: video.title,
+      sortOrder: index,
+    })),
+    links: links.map((link) => ({
+      label: link.label.trim(),
+      path: (link.path ?? "").trim() === "" ? null : (link.path ?? "").trim(),
+      url: (link.url ?? "").trim() === "" ? null : (link.url ?? "").trim(),
+    })),
+  });
+
+  // `saveVideoTopicAction`'s own schema over the exact payload (ADR-077).
+  const form = useFieldErrors(videoTopicInputSchema, buildPayload());
+
   const submitForm = async () => {
-    const payload: VideoTopicInput = {
-      topicId: topic.id,
-      meta: {
-        track: isLearnTrack(track) ? track : undefined,
-        categoryId,
-        coverAssetId: cover.id,
-        visibility: visibility as VideoTopicInput["meta"]["visibility"],
-      },
-      translation: {
-        locale,
-        title: draft.title.trim(),
-        slug: draft.slug.trim() === "" ? undefined : draft.slug.trim(),
-        summary: draft.summary.trim() === "" ? null : draft.summary.trim(),
-        content: hasBody ? draft.content : null,
-        seoTitle: draft.seoTitle.trim() === "" ? null : draft.seoTitle.trim(),
-        seoDescription: draft.seoDescription.trim() === "" ? null : draft.seoDescription.trim(),
-        seoFocusKeyword: draft.seoFocusKeyword.trim() === "" ? null : draft.seoFocusKeyword.trim(),
-      },
-      // The panels carry preview URLs the contract has no field for; strip
-      // them rather than letting the schema drop them silently, so what is
-      // sent is exactly what was meant.
-      videos: videos.map((video, index) => ({
-        id: video.id,
-        assetId: video.assetId ?? null,
-        externalUrl:
-          (video.externalUrl ?? "").trim() === "" ? null : (video.externalUrl ?? "").trim(),
-        posterAssetId: video.posterAssetId ?? null,
-        title: video.title,
-        sortOrder: index,
-      })),
-      links: links.map((link) => ({
-        label: link.label.trim(),
-        path: (link.path ?? "").trim() === "" ? null : (link.path ?? "").trim(),
-        url: (link.url ?? "").trim() === "" ? null : (link.url ?? "").trim(),
-      })),
-    };
-    await saveVideoTopicAction(payload);
+    await saveVideoTopicAction(buildPayload());
   };
+
+  // The capability rule's issue lands on `videos`, but the fix is as often a
+  // body as a video — so the body field carries the message.
+  const contentError =
+    form.error("translation.content") ??
+    (form.invalid("videos") ? labels.capabilityWarning : undefined);
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
@@ -227,11 +237,14 @@ export function VideoEditor({
             </Button>
           )}
           {canUpdate && (
+            // Enabled while fields are wrong: pressing it names them (audit F-07).
             <Button
               size="sm"
-              disabled={!canSave}
               loading={pending}
-              onClick={() => run(() => submitForm(), { successMessage: labels.saved })}
+              onClick={() => {
+                if (!form.validate()) return;
+                run(() => saveVideoTopicAction(buildPayload()), { successMessage: labels.saved });
+              }}
             >
               {labels.updateTopic}
             </Button>
@@ -283,9 +296,10 @@ export function VideoEditor({
               id="video-title"
               label={labels.titleLabel}
               adornment={<CharCount value={draft.title} max={255} />}
+              required
+              error={form.error("translation.title")}
             >
               <Input
-                id="video-title"
                 value={draft.title}
                 disabled={!canUpdate}
                 onChange={(e) => setDraft({ title: e.target.value })}
@@ -296,9 +310,9 @@ export function VideoEditor({
               id="video-slug"
               label={labels.slugLabel}
               hint={`${labels.topicUrl}: ${publicPath}`}
+              error={form.error("translation.slug")}
             >
               <Input
-                id="video-slug"
                 value={draft.slug}
                 disabled={!canUpdate}
                 onChange={(e) => setDraft({ slug: e.target.value })}
@@ -312,9 +326,9 @@ export function VideoEditor({
               label={labels.summaryLabel}
               hint={labels.summaryHint}
               adornment={<CharCount value={draft.summary} max={1000} />}
+              error={form.error("translation.summary")}
             >
               <Textarea
-                id="video-summary"
                 rows={3}
                 value={draft.summary}
                 disabled={!canUpdate}
@@ -322,9 +336,8 @@ export function VideoEditor({
               />
             </Field>
 
-            <Field label={labels.contentLabel} hint={labels.contentHint}>
+            <Field label={labels.contentLabel} hint={labels.contentHint} error={contentError}>
               <RichTextEditor
-                id="video-content"
                 value={draft.content}
                 onChange={(html) => setDraft({ content: html })}
                 labels={labels.editor}
@@ -332,9 +345,10 @@ export function VideoEditor({
               />
             </Field>
 
-            {/* Says WHY Save is disabled rather than leaving a dead button —
-                the lesson editor's `lessonCapabilityWarning` precedent. */}
-            {!hasCapability && (
+            {/* The capability rule, said up front — the lesson editor's
+                `lessonCapabilityWarning` precedent. Once a save has been
+                attempted the body field's message says it instead. */}
+            {!hasCapability && !form.invalid("videos") && (
               <p className="text-sm text-muted-foreground">{labels.capabilityWarning}</p>
             )}
           </EditorSection>
@@ -344,6 +358,10 @@ export function VideoEditor({
             onChange={setVideos}
             disabled={!canUpdate}
             labels={labels.videos}
+            issues={{
+              invalid: (path) => form.invalid(`videos.${path}`),
+              error: (path) => form.error(`videos.${path}`),
+            }}
           />
 
           <LinksPanel
@@ -351,6 +369,10 @@ export function VideoEditor({
             onChange={setLinks}
             disabled={!canUpdate}
             labels={labels.links}
+            issues={{
+              invalid: (path) => form.invalid(`links.${path}`),
+              error: (path) => form.error(`links.${path}`),
+            }}
           />
 
           <EditorSection
@@ -364,9 +386,9 @@ export function VideoEditor({
               label={labels.seoTitleLabel}
               hint={labels.seoTitleHint}
               adornment={<CharCount value={draft.seoTitle} max={70} />}
+              error={form.error("translation.seoTitle")}
             >
               <Input
-                id="video-seo-title"
                 value={draft.seoTitle}
                 disabled={!canUpdate}
                 onChange={(e) => setDraft({ seoTitle: e.target.value })}
@@ -378,9 +400,9 @@ export function VideoEditor({
               label={labels.seoDescriptionLabel}
               hint={labels.seoDescriptionHint}
               adornment={<CharCount value={draft.seoDescription} max={180} />}
+              error={form.error("translation.seoDescription")}
             >
               <Input
-                id="video-seo-description"
                 value={draft.seoDescription}
                 disabled={!canUpdate}
                 onChange={(e) => setDraft({ seoDescription: e.target.value })}
@@ -391,9 +413,9 @@ export function VideoEditor({
               id="video-seo-keyword"
               label={labels.seoKeywordLabel}
               hint={labels.seoKeywordHint}
+              error={form.error("translation.seoFocusKeyword")}
             >
               <Input
-                id="video-seo-keyword"
                 value={draft.seoFocusKeyword}
                 disabled={!canUpdate}
                 onChange={(e) => setDraft({ seoFocusKeyword: e.target.value })}
@@ -418,7 +440,9 @@ export function VideoEditor({
             scheduledFor={topic.scheduledFor}
             updatedAt={topic.updatedAt}
             canPublish={canPublish}
-            canSave={canUpdate && canSave}
+            canSave={canUpdate}
+            // Validates before a transition that saves first (ADR-077).
+            validate={form.validate}
             save={submitForm}
             transitionTo={(to, scheduledForIso) =>
               setVideoTopicStatusAction(topic.id, to, scheduledForIso)
@@ -436,9 +460,13 @@ export function VideoEditor({
                 They sit together because an editor meets both at once, and
                 each hint says which is which — changing the track relocates
                 the page and writes a redirect; changing the category does not. */}
-            <Field id="video-track" label={labels.trackLabel} hint={labels.trackHint}>
+            <Field
+              id="video-track"
+              label={labels.trackLabel}
+              hint={labels.trackHint}
+              error={form.error("meta.track")}
+            >
               <AdminCombobox
-                id="video-track"
                 value={track}
                 disabled={!canUpdate}
                 // The guard, not a cast: the dropdown hands back a plain
@@ -448,9 +476,13 @@ export function VideoEditor({
               />
             </Field>
 
-            <Field id="video-category" label={labels.categoryLabel} hint={labels.categoryHint}>
+            <Field
+              id="video-category"
+              label={labels.categoryLabel}
+              hint={labels.categoryHint}
+              error={form.error("meta.categoryId")}
+            >
               <AdminCombobox
-                id="video-category"
                 value={categoryId ?? NONE}
                 disabled={!canUpdate}
                 onValueChange={(next) => setCategoryId(!next || next === NONE ? null : next)}
@@ -461,9 +493,12 @@ export function VideoEditor({
               />
             </Field>
 
-            <Field id="video-visibility" label={labels.visibilityLabel}>
+            <Field
+              id="video-visibility"
+              label={labels.visibilityLabel}
+              error={form.error("meta.visibility")}
+            >
               <AdminCombobox
-                id="video-visibility"
                 value={visibility}
                 disabled={!canUpdate}
                 onValueChange={(next) => setVisibility(next || visibility)}
@@ -482,6 +517,7 @@ export function VideoEditor({
               category="learn"
               disabled={!canUpdate}
               onChange={(next) => setCover({ id: next?.id ?? null, url: next?.url ?? null })}
+              error={form.error("meta.coverAssetId")}
               labels={labels.upload}
             />
           </EditorSection>

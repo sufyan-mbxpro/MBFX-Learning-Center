@@ -9,4 +9,5 @@ export * from "./media.ts";
 export * from "./learn.ts";
 export * from "./glossary.ts";
 export * from "./videos.ts";
+export * from "./field-issues.ts";
 export * from "./cms/index.ts";

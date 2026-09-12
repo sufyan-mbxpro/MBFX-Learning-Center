@@ -65,7 +65,7 @@ export function NotificationBell({
       <DropdownMenuTrigger
         render={
           <Button variant="ghost" size="icon" aria-label={labels.openMenu} className="relative">
-            <Bell className="size-4.5" />
+            <Bell className="size-5" />
             {/* Hides itself at zero; the reference caps the bell at 999+. */}
             <CountBadge count={unreadCount} max={999} placement="corner" />
           </Button>

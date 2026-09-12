@@ -5,6 +5,7 @@ import { Select as SelectPrimitive } from "@base-ui/react/select";
 import { cva } from "class-variance-authority";
 
 import { cn } from "@repo/ui/lib/utils";
+import { useFieldControl } from "@repo/ui/components/field";
 import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from "lucide-react";
 
 // changes-20 / ADR-072 — the dropdown TRIGGER is the same box as an Input
@@ -67,12 +68,15 @@ function SelectTrigger({
 }: SelectPrimitive.Trigger.Props & {
   size?: SelectTriggerSize;
 }) {
+  // Inside a Field: id, aria-invalid, aria-describedby, and `required` as
+  // aria-required — the trigger is a button, which has no native one (ADR-077).
+  const wired = useFieldControl(props, { requiredAs: "aria" });
   return (
     <SelectPrimitive.Trigger
       data-slot="select-trigger"
       data-size={size}
       className={cn(selectTriggerVariants({ size }), "w-fit", className)}
-      {...props}
+      {...wired}
     >
       {children}
       {/* The reference's plain-select indicator: chevron-down at half

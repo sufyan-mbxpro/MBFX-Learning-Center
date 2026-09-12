@@ -24,7 +24,7 @@ import {
   DropdownMenuTrigger,
 } from "@repo/ui/components/dropdown-menu";
 import { Empty, EmptyDescription, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
-import { Label } from "@repo/ui/components/label";
+import { Field, FieldLabel } from "@repo/ui/components/field";
 import { duplicateLessonAction, setLessonDeletedAction } from "../../_actions/learn-actions.ts";
 import { AdminCombobox } from "../../_components/combobox.tsx";
 import { FilterBarRow } from "@repo/ui/components/filter-bar";
@@ -366,15 +366,17 @@ export function LessonsTable({
             ]}
           />
 
-          <Label className="flex items-center gap-2 text-sm font-normal">
+          {/* A toolbar filter, so it declares its own width (`w-auto`) rather
+              than taking the Field's full-width default (ADR-057 §3). */}
+          <Field orientation="horizontal" className="w-auto">
             <Checkbox
               checked={filters.outdatedOnly}
               onCheckedChange={(checked) =>
                 setFilters({ ...filters, outdatedOnly: checked === true })
               }
             />
-            {labels.outdatedOnly}
-          </Label>
+            <FieldLabel className="font-normal">{labels.outdatedOnly}</FieldLabel>
+          </Field>
         </FilterBarRow>
       }
       emptyState={

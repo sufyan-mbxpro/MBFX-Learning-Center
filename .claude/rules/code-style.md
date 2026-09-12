@@ -158,3 +158,25 @@ these.
     as its unwrapped width, so the page scrolls sideways on a phone.
     `grid-cols-1` is `minmax(0, 1fr)` and cannot outgrow its container.
     Guarded by `apps/web/app/grid-base.test.ts`.
+
+## Forms (ADR-077)
+
+24. **An admin form field is a `Field`, and it validates inline.**
+    - **Markup.** Every visibly labelled control sits in
+      `@repo/ui/components/field`'s `Field` with a `FieldLabel` and a
+      `FieldError`. Admin screens never import `Label`, render a raw
+      `<label>`, or write `htmlFor`/`aria-describedby` by hand: the Field
+      wires them. The editors' `editor-section` `Field` and the composite
+      controls take `required`/`error` props instead.
+    - **Required.** `<Field required>` draws an asterisk. Optional fields get
+      no marker, never "(optional)".
+    - **Messages.** They come from `useFieldErrors` running the server
+      action's own `@repo/contracts` schema, rendered from
+      `admin.validation.*`.
+    - **Save.** It is not disabled for validation: pressing it names the
+      invalid fields and focuses the first.
+    - **Toast.** Only for server or submission failures.
+    - **Ink.** Destructive TEXT is `text-destructive-interactive` everywhere,
+      both surfaces; raw red fails 4.5:1 on the dark ground. Icons may keep
+      `text-destructive`.
+    - **Guard.** `apps/web/app/admin-form-conventions.test.ts`.

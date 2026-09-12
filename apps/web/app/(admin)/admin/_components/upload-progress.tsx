@@ -54,7 +54,7 @@ export function UploadProgress({
       )}
       {status === "error" && (
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="min-w-0 flex-1 text-xs text-destructive">{error}</p>
+          <p className="min-w-0 flex-1 text-xs text-destructive-interactive">{error}</p>
           {onRetry && (
             <Button type="button" variant="outline" size="sm" onClick={onRetry}>
               <RotateCcw data-icon="inline-start" aria-hidden />

@@ -114,7 +114,7 @@ export function ObjectivesPanel({
                 variant="ghost"
                 size="icon-sm"
                 aria-label={labels.remove}
-                className="text-destructive"
+                className="text-destructive-interactive"
                 disabled={disabled}
                 onClick={() => setRemoveIndex(index)}
               >

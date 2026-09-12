@@ -10,6 +10,7 @@ import { useTransition } from "react";
 import { toast } from "sonner";
 import { Check } from "lucide-react";
 import { Checkbox } from "@repo/ui/components/checkbox";
+import { Field, FieldContent, FieldDescription, FieldLabel } from "@repo/ui/components/field";
 import { humanizeKey } from "@repo/utils";
 import { Input } from "@repo/ui/components/input";
 import { setRolePermissionAction, setRolePermissionsAction } from "../../_actions/user-actions.ts";
@@ -87,17 +88,18 @@ export function RolePermissions({
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-3 rounded-lg border bg-muted/30 p-4">
         <div className="flex items-center justify-between gap-3">
-          <label className="flex items-center gap-2.5 text-sm font-medium">
-            {!readOnly && (
+          {readOnly ? (
+            <span className="text-sm font-medium">{labels.grantAll}</span>
+          ) : (
+            <Field orientation="horizontal" className="w-auto">
               <Checkbox
                 checked={allGranted}
                 indeterminate={!allGranted && granted.size > 0}
                 onCheckedChange={(next) => apply(allKeys, next === true)}
-                aria-label={labels.grantAll}
               />
-            )}
-            {labels.grantAll}
-          </label>
+              <FieldLabel>{labels.grantAll}</FieldLabel>
+            </Field>
+          )}
           <span className="text-sm text-muted-foreground">
             {granted.size} {labels.enabledOf} {allKeys.length}
           </span>
@@ -124,15 +126,19 @@ export function RolePermissions({
                 </span>
               </h3>
               {!readOnly && (
-                <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                  {labels.selectAll}
+                <Field orientation="horizontal" className="w-auto">
+                  <FieldLabel className="font-normal text-muted-foreground">
+                    {labels.selectAll}
+                  </FieldLabel>
+                  {/* The aria-label names the GROUP too: every section has a
+                      "Select all", and a screen reader lists them together. */}
                   <Checkbox
                     checked={groupAll}
                     indeterminate={!groupAll && groupGranted > 0}
                     onCheckedChange={(next) => apply(groupKeys, next === true)}
                     aria-label={`${labels.selectAll}: ${group.groupName}`}
                   />
-                </label>
+                </Field>
               )}
             </header>
             <ul className="grid grid-cols-1 gap-x-6 sm:grid-cols-2">
@@ -142,24 +148,35 @@ export function RolePermissions({
                   className="flex items-center gap-2.5 border-b px-4 py-2 last:border-b-0 sm:nth-last-2:border-b-0"
                 >
                   {readOnly ? (
-                    granted.has(permission.key) ? (
-                      <Check aria-hidden className="size-4 shrink-0 text-success-interactive" />
-                    ) : (
-                      <span aria-hidden className="inline-block size-4 shrink-0" />
-                    )
+                    <>
+                      {granted.has(permission.key) ? (
+                        <Check aria-hidden className="size-4 shrink-0 text-success-interactive" />
+                      ) : (
+                        <span aria-hidden className="inline-block size-4 shrink-0" />
+                      )}
+                      <div className="flex min-w-0 flex-col py-0.5">
+                        <span className="truncate text-sm">{permission.label}</span>
+                        <span className="truncate text-xs text-muted-foreground">
+                          {humanizeKey(permission.key)}
+                        </span>
+                      </div>
+                    </>
                   ) : (
-                    <Checkbox
-                      checked={granted.has(permission.key)}
-                      onCheckedChange={(next) => apply([permission.key], next === true)}
-                      aria-label={permission.label}
-                    />
+                    <Field orientation="horizontal" className="min-w-0">
+                      <Checkbox
+                        checked={granted.has(permission.key)}
+                        onCheckedChange={(next) => apply([permission.key], next === true)}
+                      />
+                      <FieldContent className="min-w-0 py-0.5">
+                        <FieldLabel className="w-full min-w-0 font-normal">
+                          <span className="truncate">{permission.label}</span>
+                        </FieldLabel>
+                        <FieldDescription className="truncate text-xs">
+                          {humanizeKey(permission.key)}
+                        </FieldDescription>
+                      </FieldContent>
+                    </Field>
                   )}
-                  <div className="flex min-w-0 flex-col py-0.5">
-                    <span className="truncate text-sm">{permission.label}</span>
-                    <span className="truncate text-xs text-muted-foreground">
-                      {humanizeKey(permission.key)}
-                    </span>
-                  </div>
                 </li>
               ))}
             </ul>

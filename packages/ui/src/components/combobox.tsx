@@ -32,6 +32,7 @@ import { CheckIcon, ChevronsUpDownIcon, SearchIcon } from "lucide-react";
 
 import { cn } from "@repo/ui/lib/utils";
 import { useControlSize } from "@repo/ui/components/control-size";
+import { useFieldControl } from "@repo/ui/components/field";
 import {
   Select,
   SelectContent,
@@ -104,6 +105,10 @@ export interface ComboboxProps {
   "aria-label"?: string;
   "aria-labelledby"?: string;
   "aria-invalid"?: boolean;
+  "aria-describedby"?: string;
+  /** Rendered as `aria-required` on the trigger, which is a button. */
+  required?: boolean;
+  "aria-required"?: boolean;
 }
 
 // Shared by both branches so a dropdown does not change shape when its list
@@ -116,10 +121,15 @@ function Combobox({ searchable, size, ...props }: ComboboxProps) {
   // Inside a toolbar (DataTable's filter slot) the default is that toolbar's
   // 36px; an explicit `size` still wins (control-size.tsx).
   const resolvedSize = useControlSize(size);
+  // Inside a Field the trigger takes the Field's id and state (ADR-077).
+  // Either way `required` reaches the trigger as aria-required: neither
+  // branch renders a node with a native `required`.
+  const { required, ...wired } = useFieldControl(props, { requiredAs: "aria" });
+  const trigger = { ...wired, "aria-required": wired["aria-required"] ?? required };
   return isSearchable ? (
-    <SearchableCombobox {...props} size={resolvedSize} />
+    <SearchableCombobox {...trigger} size={resolvedSize} />
   ) : (
-    <PlainCombobox {...props} size={resolvedSize} />
+    <PlainCombobox {...trigger} size={resolvedSize} />
   );
 }
 

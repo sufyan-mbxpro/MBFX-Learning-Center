@@ -99,7 +99,7 @@ export function SignUpForm({
         </p>
       </div>
       {failure && (
-        <p id="signup-error" role="alert" className="text-sm text-destructive">
+        <p id="signup-error" role="alert" className="text-sm text-destructive-interactive">
           {failure === "taken" ? labels.taken : labels.failed}
         </p>
       )}

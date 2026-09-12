@@ -9,6 +9,7 @@
 import { ChevronDown, ChevronUp, Link2, Settings2, X } from "lucide-react";
 import { Button } from "@repo/ui/components/button";
 import { Empty, EmptyDescription, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
+import { Field as UiField, FieldLabel } from "@repo/ui/components/field";
 import { Switch } from "@repo/ui/components/switch";
 import { AdminCombobox } from "../../../_components/combobox.tsx";
 import { EditorSection, Field } from "../../../_components/editor/editor-section.tsx";
@@ -115,9 +116,8 @@ export function RelatedPanel({
         )}
 
         {available.length > 0 && selected.length < 12 && (
-          <Field id="related-add" label={labels.addLabel} hint={labels.hint}>
+          <Field label={labels.addLabel} hint={labels.hint}>
             <AdminCombobox
-              id="related-add"
               value=""
               placeholder={labels.addPlaceholder}
               onValueChange={(v) => {
@@ -135,13 +135,12 @@ export function RelatedPanel({
         icon={Settings2}
         accent="neutral"
       >
-        <label className="flex items-center justify-between gap-2 text-sm">
-          {labels.showRelated}
+        <UiField orientation="horizontal">
+          <FieldLabel className="font-normal">{labels.showRelated}</FieldLabel>
           <Switch checked={showRelated} onCheckedChange={(v) => onShowRelatedChange(v === true)} />
-        </label>
-        <Field id="related-count" label={labels.relatedCount}>
+        </UiField>
+        <Field label={labels.relatedCount}>
           <AdminCombobox
-            id="related-count"
             value={String(relatedCount)}
             onValueChange={(v) => onRelatedCountChange(Number(v) || 3)}
             options={[1, 2, 3, 4, 6, 8, 12].map((n) => ({

@@ -270,7 +270,7 @@ export function QuizRunner({ quiz, locale }: { quiz: QuizView; locale: string })
           </span>
         )}
         {answered && feedback?.correct === false && (
-          <span className="flex items-center gap-1.5 font-medium text-destructive">
+          <span className="flex items-center gap-1.5 font-medium text-destructive-interactive">
             <X aria-hidden className="size-4" />
             {t("quizzes.incorrect")}
           </span>

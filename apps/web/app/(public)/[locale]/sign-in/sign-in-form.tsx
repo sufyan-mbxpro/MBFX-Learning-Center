@@ -82,7 +82,7 @@ export function SignInForm({
         />
       </div>
       {failure && (
-        <p id="signin-error" role="alert" className="text-sm text-destructive">
+        <p id="signin-error" role="alert" className="text-sm text-destructive-interactive">
           {failure === "learnersOnly" ? labels.learnersOnly : labels.failed}
         </p>
       )}

@@ -9,6 +9,7 @@
 import * as React from "react";
 import { Link2, Pencil, Plus, Trash2 } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
+import { createSocialLinkSchema, updateSocialLinkSchema } from "@repo/contracts";
 import { Button } from "@repo/ui/components/button";
 import { Checkbox } from "@repo/ui/components/checkbox";
 import { ConfirmDialog } from "@repo/ui/components/confirm-dialog";
@@ -22,8 +23,8 @@ import {
   DialogTitle,
 } from "@repo/ui/components/dialog";
 import { Empty, EmptyDescription, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
+import { Field, FieldError, FieldGroup, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
-import { Label } from "@repo/ui/components/label";
 import { SOCIAL_GLYPH_NAMES, SocialGlyph } from "@repo/ui/components/social-glyph";
 import { Switch } from "@repo/ui/components/switch";
 import { humanizeKey } from "@repo/utils";
@@ -36,6 +37,7 @@ import {
 } from "../../_actions/admin-actions.ts";
 import { AdminCombobox } from "../../_components/combobox.tsx";
 import { useClientTable } from "../../_hooks/use-client-table.ts";
+import { useFieldErrors } from "../../_hooks/use-field-errors.ts";
 import { useServerAction } from "../../_hooks/use-server-action.ts";
 
 export interface SocialLinkRow {
@@ -125,49 +127,64 @@ export function SocialLinksManager({
   const [editing, setEditing] = React.useState<string | null>(null);
   const [form, setForm] = React.useState<FormState>(EMPTY_FORM);
 
+  const payload = {
+    label: form.label,
+    url: form.url,
+    icon: form.icon,
+    iconUrl: form.iconUrl,
+    handle: form.handle || undefined,
+    isActive: form.isActive,
+    openInNewTab: form.openInNewTab,
+    showInHeader: form.showInHeader,
+    showInFooter: form.showInFooter,
+  };
+  // Exactly what each action receives, checked by the schema it parses with
+  // (ADR-077): the platform key only exists — and is only required — on create.
+  const values = editing ? payload : { ...payload, platform: form.platform };
+  const errors = useFieldErrors(editing ? updateSocialLinkSchema : createSocialLinkSchema, values);
+
+  const close = () => {
+    setDialogOpen(false);
+    errors.reset();
+  };
+
   const openCreate = () => {
     setEditing(null);
     setForm(EMPTY_FORM);
+    errors.reset();
     setDialogOpen(true);
   };
 
-  const openEdit = (row: SocialLinkRow) => {
-    setEditing(row.platform);
-    setForm({
-      platform: row.platform,
-      label: row.label,
-      url: row.url,
-      icon: row.icon,
-      iconUrl: row.iconUrl,
-      handle: row.handle ?? "",
-      isActive: row.isActive,
-      openInNewTab: row.openInNewTab,
-      showInHeader: row.showInHeader,
-      showInFooter: row.showInFooter,
-    });
-    setDialogOpen(true);
-  };
+  // Stable (a setter-only closure over the hook's stable `reset`), so the
+  // column definitions below can list it honestly.
+  const resetErrors = errors.reset;
+  const openEdit = React.useCallback(
+    (row: SocialLinkRow) => {
+      setEditing(row.platform);
+      setForm({
+        platform: row.platform,
+        label: row.label,
+        url: row.url,
+        icon: row.icon,
+        iconUrl: row.iconUrl,
+        handle: row.handle ?? "",
+        isActive: row.isActive,
+        openInNewTab: row.openInNewTab,
+        showInHeader: row.showInHeader,
+        showInFooter: row.showInFooter,
+      });
+      resetErrors();
+      setDialogOpen(true);
+    },
+    [resetErrors],
+  );
 
   const submit = () => {
-    const payload = {
-      label: form.label,
-      url: form.url,
-      icon: form.icon,
-      iconUrl: form.iconUrl,
-      handle: form.handle || undefined,
-      isActive: form.isActive,
-      openInNewTab: form.openInNewTab,
-      showInHeader: form.showInHeader,
-      showInFooter: form.showInFooter,
-    };
+    if (!errors.validate()) return;
     if (editing) {
-      run(() => updateSocialLinkAction(editing, payload), {
-        onDone: () => setDialogOpen(false),
-      });
+      run(() => updateSocialLinkAction(editing, payload), { onDone: close });
     } else {
-      run(() => createSocialLinkAction({ ...payload, platform: form.platform }), {
-        onDone: () => setDialogOpen(false),
-      });
+      run(() => createSocialLinkAction(values), { onDone: close });
     }
   };
 
@@ -276,7 +293,8 @@ export function SocialLinksManager({
                   variant="ghost"
                   size="icon-sm"
                   aria-label={`${labels.delete}: ${row.original.label}`}
-                  className="text-destructive"
+                  // One destructive ink everywhere (ADR-077 / audit F-03), icons included.
+                  className="text-destructive-interactive"
                 >
                   <Trash2 aria-hidden />
                 </Button>
@@ -291,7 +309,7 @@ export function SocialLinksManager({
         ),
       },
     ],
-    [labels, pending, run],
+    [labels, pending, run, openEdit],
   );
 
   return (
@@ -317,7 +335,7 @@ export function SocialLinksManager({
         }
       />
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={(next) => (next ? setDialogOpen(true) : close())}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{editing ? labels.edit : labels.add}</DialogTitle>
@@ -325,44 +343,36 @@ export function SocialLinksManager({
               {editing ? labels.editDescription : labels.addDescription}
             </DialogDescription>
           </DialogHeader>
-          <div className="flex flex-col gap-3">
+          <FieldGroup>
             {!editing && (
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="social-platform">{labels.platformKey}</Label>
+              <Field invalid={errors.invalid("platform")} required>
+                <FieldLabel>{labels.platformKey}</FieldLabel>
                 <Input
-                  id="social-platform"
                   value={form.platform}
                   onChange={(e) =>
                     set("platform", e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-"))
                   }
                 />
-              </div>
+                <FieldError>{errors.error("platform")}</FieldError>
+              </Field>
             )}
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="social-label">{labels.title}</Label>
-              <Input
-                id="social-label"
-                value={form.label}
-                onChange={(e) => set("label", e.target.value)}
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="social-url">{labels.url}</Label>
-              <Input
-                id="social-url"
-                type="url"
-                value={form.url}
-                onChange={(e) => set("url", e.target.value)}
-              />
-            </div>
+            <Field invalid={errors.invalid("label")} required>
+              <FieldLabel>{labels.title}</FieldLabel>
+              <Input value={form.label} onChange={(e) => set("label", e.target.value)} />
+              <FieldError>{errors.error("label")}</FieldError>
+            </Field>
+            <Field invalid={errors.invalid("url")} required>
+              <FieldLabel>{labels.url}</FieldLabel>
+              <Input type="url" value={form.url} onChange={(e) => set("url", e.target.value)} />
+              <FieldError>{errors.error("url")}</FieldError>
+            </Field>
             {/* changes-08: the icon is chosen, not typed. A built-in glyph
                 covers the common platforms with no upload; an uploaded
                 asset (ADR-045) overrides it, which is what the icon
                 preview shows the moment one is set. */}
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="social-icon">{labels.iconGlyph}</Label>
+            <Field invalid={errors.invalid("icon")}>
+              <FieldLabel>{labels.iconGlyph}</FieldLabel>
               <AdminCombobox
-                id="social-icon"
                 value={form.icon}
                 onValueChange={(next) => set("icon", next || "link")}
                 // The glyph rides along as `icon`; `label` stays the plain
@@ -373,9 +383,9 @@ export function SocialLinksManager({
                   icon: <SocialGlyph name={name} />,
                 }))}
               />
-            </div>
+              <FieldError>{errors.error("icon")}</FieldError>
+            </Field>
             <ImageUploadField
-              id="social-icon-url"
               label={labels.iconUpload}
               description={labels.iconUploadHint}
               value={form.iconUrl}
@@ -384,55 +394,49 @@ export function SocialLinksManager({
               sourceType="SETTING"
               labels={labels.upload}
               previewClassName="size-12"
+              error={errors.error("iconUrl")}
               onChange={(next) => set("iconUrl", next?.url ?? null)}
             />
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="social-handle">{labels.handle}</Label>
-              <Input
-                id="social-handle"
-                value={form.handle}
-                onChange={(e) => set("handle", e.target.value)}
-              />
-            </div>
-            <div className="flex items-center justify-between gap-2">
-              <Label htmlFor="social-active">{labels.active}</Label>
+            <Field invalid={errors.invalid("handle")}>
+              <FieldLabel>{labels.handle}</FieldLabel>
+              <Input value={form.handle} onChange={(e) => set("handle", e.target.value)} />
+              <FieldError>{errors.error("handle")}</FieldError>
+            </Field>
+            <Field orientation="horizontal">
+              <FieldLabel>{labels.active}</FieldLabel>
               <Switch
-                id="social-active"
                 checked={form.isActive}
                 onCheckedChange={(next) => set("isActive", next === true)}
               />
-            </div>
-            <label className="flex items-center gap-2 text-sm">
+            </Field>
+            <Field orientation="horizontal">
               <Checkbox
                 checked={form.openInNewTab}
                 onCheckedChange={(next) => set("openInNewTab", next === true)}
               />
-              {labels.openInNewTab}
-            </label>
-            <label className="flex items-center gap-2 text-sm">
+              <FieldLabel>{labels.openInNewTab}</FieldLabel>
+            </Field>
+            <Field orientation="horizontal">
               <Checkbox
                 checked={form.showInHeader}
                 onCheckedChange={(next) => set("showInHeader", next === true)}
               />
-              {labels.showInHeader}
-            </label>
-            <label className="flex items-center gap-2 text-sm">
+              <FieldLabel>{labels.showInHeader}</FieldLabel>
+            </Field>
+            <Field orientation="horizontal">
               <Checkbox
                 checked={form.showInFooter}
                 onCheckedChange={(next) => set("showInFooter", next === true)}
               />
-              {labels.showInFooter}
-            </label>
-          </div>
+              <FieldLabel>{labels.showInFooter}</FieldLabel>
+            </Field>
+          </FieldGroup>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={pending}>
+            <Button variant="outline" onClick={close} disabled={pending}>
               {labels.cancel}
             </Button>
-            <Button
-              onClick={submit}
-              disabled={!form.label || !form.url || (!editing && !form.platform)}
-              loading={pending}
-            >
+            {/* Enabled while fields are wrong: pressing it names them (ADR-077). */}
+            <Button onClick={submit} loading={pending}>
               {labels.save}
             </Button>
           </DialogFooter>

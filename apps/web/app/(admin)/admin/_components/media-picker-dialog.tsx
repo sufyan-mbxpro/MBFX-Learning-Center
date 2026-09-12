@@ -323,7 +323,7 @@ function MediaPickerBody({
         aria-label={t("mediaSearchPlaceholder")}
       />
 
-      {sizeError && <p className="text-xs text-destructive">{sizeError}</p>}
+      {sizeError && <p className="text-xs text-destructive-interactive">{sizeError}</p>}
       {upload.status !== "idle" && (
         <UploadProgress
           status={upload.status}

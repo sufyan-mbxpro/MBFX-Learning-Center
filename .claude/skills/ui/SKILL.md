@@ -59,6 +59,18 @@ hold 4.5:1 exactly up to that tint.
     muted `<p>` or red text.
   - A loader announces once (`label`) or not at all.
   - `apps/web/app/loading-states.test.ts` fails on any of the old patterns.
+- **A `Field` wires its control** (changes-21 Phase B, ADR-077):
+  - `Field` holds the ids and the `invalid`/`required` state.
+    `FieldLabel`, `FieldDescription`, `FieldError` and every control read it
+    through `useFieldControl`.
+  - A control inside a Field never sets its own `id`. Pass `controlId` to the
+    Field instead.
+  - A new control component must call `useFieldControl`. Use
+    `requiredAs: "aria"` when its DOM node is a button, and strip
+    `aria-required` entirely on a plain button role.
+  - `FieldError` uses `-interactive` ink and has no live region. The form
+    moves focus to the first invalid control instead.
+  - Guarded by `field.test.tsx` and `apps/web/app/admin-form-conventions.test.ts`.
 - **Provisional components** (checkbox, switch, radio, textarea, tooltip,
   dropdown popups/items) are not restyled until their spec is confirmed from
   the owner's second capture.

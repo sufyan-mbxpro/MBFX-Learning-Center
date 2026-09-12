@@ -10,6 +10,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
+import { createGlossaryTopicSchema } from "@repo/contracts";
 import { Button } from "@repo/ui/components/button";
 import {
   Dialog,
@@ -19,9 +20,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@repo/ui/components/dialog";
+import { Field, FieldError, FieldGroup, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
-import { Label } from "@repo/ui/components/label";
 import { createGlossaryTopicAction } from "../../_actions/glossary-topic-actions.ts";
+import { useFieldErrors } from "../../_hooks/use-field-errors.ts";
 import { useServerAction } from "../../_hooks/use-server-action.ts";
 
 export interface NewTopicLabels {
@@ -39,12 +41,20 @@ export function NewTopicButton({ labels }: { labels: NewTopicLabels }) {
   const { run, pending } = useServerAction();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
+  // The action's own schema (ADR-077): it parses `{ name }` the same way.
+  const form = useFieldErrors(createGlossaryTopicSchema, { name });
 
-  const create = () =>
+  const setOpenState = (next: boolean) => {
+    setOpen(next);
+    if (!next) form.reset();
+  };
+
+  const create = () => {
+    if (!form.validate()) return;
     run(
       async () => {
         const id = await createGlossaryTopicAction(name.trim());
-        setOpen(false);
+        setOpenState(false);
         setName("");
         // Straight into the editor, as the term dialog does: a new topic on the
         // list is a row with a name and nothing else, and writing the rest is
@@ -53,9 +63,10 @@ export function NewTopicButton({ labels }: { labels: NewTopicLabels }) {
       },
       { skipRefresh: true },
     );
+  };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={setOpenState}>
       <Button onClick={() => setOpen(true)}>
         <Plus aria-hidden data-icon="inline-start" />
         {labels.trigger}
@@ -68,24 +79,26 @@ export function NewTopicButton({ labels }: { labels: NewTopicLabels }) {
           <DialogDescription>{labels.description}</DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="new-topic-name">{labels.nameLabel}</Label>
-          <Input
-            id="new-topic-name"
-            value={name}
-            autoFocus
-            onChange={(event) => setName(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && name.trim() !== "" && !pending) create();
-            }}
-          />
-        </div>
+        <FieldGroup>
+          <Field invalid={form.invalid("name")} required>
+            <FieldLabel>{labels.nameLabel}</FieldLabel>
+            <Input
+              value={name}
+              autoFocus
+              onChange={(event) => setName(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !pending) create();
+              }}
+            />
+            <FieldError>{form.error("name")}</FieldError>
+          </Field>
+        </FieldGroup>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)}>
+          <Button variant="outline" onClick={() => setOpenState(false)}>
             {labels.cancel}
           </Button>
-          <Button disabled={name.trim() === ""} loading={pending} onClick={create}>
+          <Button loading={pending} onClick={create}>
             {labels.create}
           </Button>
         </DialogFooter>

@@ -115,7 +115,7 @@ export function LessonFeedback({ lessonId }: { lessonId: string }) {
         </Button>
       </div>
       {state === "error" && (
-        <p aria-live="polite" className="text-sm text-destructive">
+        <p aria-live="polite" className="text-sm text-destructive-interactive">
           {t("feedback.error")}
         </p>
       )}

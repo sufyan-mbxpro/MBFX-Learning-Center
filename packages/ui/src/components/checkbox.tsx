@@ -3,6 +3,7 @@
 import { Checkbox as CheckboxPrimitive } from "@base-ui/react/checkbox";
 
 import { cn } from "@repo/ui/lib/utils";
+import { useFieldControl } from "@repo/ui/components/field";
 import { CheckIcon } from "lucide-react";
 
 // changes-20 / ADR-074 — the reference's checkbox (tokens.md §6.14): a 16px
@@ -12,6 +13,8 @@ import { CheckIcon } from "lucide-react";
 // The checked fill stays the brand --primary, so it still reads as the
 // reference's bronze box.
 function Checkbox({ className, ...props }: CheckboxPrimitive.Root.Props) {
+  // Inside a Field: id, required, aria-invalid, aria-describedby (ADR-077).
+  const wired = useFieldControl(props);
   return (
     <CheckboxPrimitive.Root
       data-slot="checkbox"
@@ -21,7 +24,7 @@ function Checkbox({ className, ...props }: CheckboxPrimitive.Root.Props) {
         "peer relative grid size-4 shrink-0 place-content-center rounded-sm border border-primary-interactive transition-colors outline-none after:absolute after:-inset-x-3 after:-inset-y-2 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 group-has-disabled/field:opacity-50 aria-invalid:border-destructive aria-invalid:ring-2 aria-invalid:ring-destructive/20 data-checked:bg-primary data-checked:text-primary-foreground",
         className,
       )}
-      {...props}
+      {...wired}
     >
       <CheckboxPrimitive.Indicator
         data-slot="checkbox-indicator"

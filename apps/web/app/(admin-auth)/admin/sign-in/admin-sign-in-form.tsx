@@ -83,7 +83,7 @@ export function AdminSignInForm({
         />
       </div>
       {failure && (
-        <p id="admin-signin-error" role="alert" className="text-sm text-destructive">
+        <p id="admin-signin-error" role="alert" className="text-sm text-destructive-interactive">
           {failure === "notStaff" ? labels.notStaff : labels.failed}
         </p>
       )}

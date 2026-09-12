@@ -69,8 +69,10 @@ export function ResourcesPanel({
   onHeroChange,
   videoUrl,
   onVideoUrlChange,
+  videoUrlError,
   externalUrl,
   onExternalUrlChange,
+  externalUrlError,
   attachments,
   onAttachmentsChange,
   hasBody,
@@ -81,8 +83,12 @@ export function ResourcesPanel({
   onHeroChange: (next: { id: string | null; url: string | null }) => void;
   videoUrl: string;
   onVideoUrlChange: (next: string) => void;
+  /** The editor's inline message for `meta.videoUrl` (ADR-077). */
+  videoUrlError?: string;
   externalUrl: string;
   onExternalUrlChange: (next: string) => void;
+  /** The editor's inline message for `meta.externalUrl` (ADR-077). */
+  externalUrlError?: string;
   attachments: AttachmentDraft[];
   onAttachmentsChange: (next: AttachmentDraft[]) => void;
   /** Body content is the fifth capability and lives in another panel; this
@@ -98,6 +104,9 @@ export function ResourcesPanel({
   // allowlist `saveLesson` enforces, so what shows here is what will save.
   const video = videoUrl.trim() === "" ? null : parseVideoUrl(videoUrl.trim());
   const videoInvalid = videoUrl.trim() !== "" && video === null;
+  // The schema's message (after a save attempt) wins; the provider check
+  // shows live, as it always has, because the schema cannot know it.
+  const videoError = videoUrlError ?? (videoInvalid ? labels.videoInvalid : undefined);
 
   const kinds = [
     ...(hasBody ? [labels.kindReading] : []),
@@ -158,29 +167,18 @@ export function ResourcesPanel({
         labels={labels.upload}
       />
 
-      <Field
-        id="lesson-video"
-        label={labels.videoUrlLabel}
-        adornment={
-          videoInvalid ? (
-            <span className="text-xs text-destructive">{labels.videoInvalid}</span>
-          ) : null
-        }
-      >
+      <Field label={labels.videoUrlLabel} error={videoError}>
         <Input
-          id="lesson-video"
           type="url"
           inputMode="url"
           value={videoUrl}
           disabled={disabled}
-          aria-invalid={videoInvalid || undefined}
           onChange={(e) => onVideoUrlChange(e.target.value)}
         />
       </Field>
 
-      <Field id="lesson-external" label={labels.externalUrlLabel} hint={labels.externalUrlHint}>
+      <Field label={labels.externalUrlLabel} hint={labels.externalUrlHint} error={externalUrlError}>
         <Input
-          id="lesson-external"
           type="url"
           inputMode="url"
           value={externalUrl}
@@ -251,7 +249,7 @@ export function ResourcesPanel({
                   variant="ghost"
                   size="icon-sm"
                   aria-label={labels.remove}
-                  className="text-destructive"
+                  className="text-destructive-interactive"
                   disabled={disabled}
                   onClick={() => setRemoveIndex(index)}
                 >

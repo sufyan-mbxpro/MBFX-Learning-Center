@@ -14,7 +14,11 @@ import { ErrorState } from "@repo/ui/components/empty";
 // <html>/<body>, imports the stylesheet itself, and has no intl or theme
 // context — literal English is that file's documented exception, and applies
 // here for the same reason.
-export default function GlobalError({ reset }: { error: Error; reset: () => void }) {
+//
+// `retry`, never `reset` (changes-21 F-06): `reset` re-renders WITHOUT
+// re-fetching, so a server-side failure fails again the same way. `retry`
+// re-fetches then re-renders; stable since Next 16.3.
+export default function GlobalError({ retry }: { error: Error; retry: () => void }) {
   return (
     <html lang="en" className="h-full antialiased" suppressHydrationWarning>
       <body className="min-h-full" suppressHydrationWarning>
@@ -25,7 +29,7 @@ export default function GlobalError({ reset }: { error: Error; reset: () => void
             title="Something went wrong"
             description="Something stopped this page from loading. Try again, or come back in a moment."
             action={
-              <Button variant="outline" onClick={reset}>
+              <Button variant="outline" onClick={retry}>
                 Try again
               </Button>
             }

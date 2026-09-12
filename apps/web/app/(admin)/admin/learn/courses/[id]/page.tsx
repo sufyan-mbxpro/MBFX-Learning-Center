@@ -172,7 +172,7 @@ export default async function CourseEditPage({ params }: PageProps<"/admin/learn
       create: t("create"),
       newLessonTitle: t("titleLabel"),
       requiredBadge: t("isRequiredLabel"),
-      optionalBadge: t("seoOptional"),
+      optionalBadge: t("optionalLessonBadge"),
       kindReading: t("lessonKindReading"),
       kindVideo: t("lessonKindVideo"),
       kindExternal: t("lessonKindExternal"),

@@ -87,3 +87,66 @@ describe("header auth slot", () => {
     );
   });
 });
+
+// changes-21 F-01 / D-1: the header row needs 1,239px with the desktop nav in
+// it, so the nav shows from xl (1280) and the hamburger serves below. The two
+// breakpoints must match, or 1024–1279 shows both or neither.
+describe("desktop nav vs hamburger (changes-21 D-1)", () => {
+  it("the desktop nav shows from xl", () => {
+    const src = read("_nav/site-nav.tsx");
+    expect(src).toMatch(/<MegaMenu[^>]*className="hidden xl:block"/);
+    expect(src).not.toMatch(/\blg:(block|flex)\b/);
+  });
+
+  it("the hamburger hides from xl — the same breakpoint", () => {
+    const src = read("_components/mobile-nav.tsx");
+    expect(src).toContain('className="xl:hidden"');
+    expect(src).not.toContain("lg:hidden");
+  });
+});
+
+// changes-21 F-02 / D-2: on a 360px phone the header row overflowed by 24px.
+// The theme toggle — not Sign in / Join us (ADR-052 entry points) — moves into
+// the sheet below sm.
+describe("theme toggle placement (changes-21 D-2)", () => {
+  it("the header hides its toggle below sm when there is a sheet to hold it", () => {
+    expect(read("_components/header.tsx")).toMatch(
+      /navItems\.length > 0 \? "hidden sm:flex" : "flex"\}>\s*<ModeToggle \/>/,
+    );
+  });
+
+  it("the sheet carries it below sm as a labelled Appearance row", () => {
+    const src = read("_components/mobile-nav.tsx");
+    expect(src).toContain('from "./mode-toggle.tsx"');
+    expect(src).toMatch(/className="[^"]*\bsm:hidden\b[^"]*"[\s\S]*?t\("appearance"\)/);
+    expect(src).toMatch(/<ModeToggle \/>/);
+  });
+
+  it("the header still renders both learner entry points", () => {
+    const src = read("_components/auth-slot.tsx");
+    expect(src).toContain('href="/sign-in"');
+    expect(src).toContain('href="/sign-up"');
+  });
+});
+
+// changes-21 F-11: one play affordance. VideoCard's disc glyph is size-6; the
+// tile and the player had drifted to size-7.
+describe("one play glyph size (changes-21 F-11)", () => {
+  const glyphs = [
+    ["_components/video-tile.tsx", read("_components/video-tile.tsx")],
+    ["learn/_components/video-player.tsx", read("learn/_components/video-player.tsx")],
+    [
+      "@repo/ui video-card.tsx",
+      readFileSync(
+        resolve(process.cwd(), "../../packages/ui/src/components/video-card.tsx"),
+        "utf8",
+      ),
+    ],
+  ] as const;
+
+  it.each(glyphs)("%s draws its Play glyph at size-6", (_, src) => {
+    const plays = src.match(/<Play\b[^>]*className="[^"]*"/g) ?? [];
+    expect(plays.length).toBeGreaterThan(0);
+    for (const play of plays) expect(play).toMatch(/\bsize-6\b/);
+  });
+});

@@ -75,7 +75,8 @@ export function ContentStatusPanel({
   scheduledFor,
   updatedAt,
   canPublish,
-  canSave,
+  canSave = true,
+  validate,
   save,
   transitionTo,
   labels,
@@ -90,8 +91,13 @@ export function ContentStatusPanel({
    * decides whether to render a button the actor cannot use. */
   canPublish: boolean;
   /** The editor's own save validity: a transition that saves first cannot run
-   * while the form is incomplete, exactly as the header button cannot. */
-  canSave: boolean;
+   * while the form is incomplete. Prefer `validate` (ADR-077) — a disabled
+   * button is silent about WHICH field is wrong (audit F-07). Defaults to true. */
+  canSave?: boolean;
+  /** The editor's inline validation (`useFieldErrors().validate`). A
+   * transition that saves first runs it and stops on false, so the editor's
+   * Fields name what is wrong. */
+  validate?: () => boolean;
   /** Save the open form. The panel calls this ITSELF before a publishing
    * transition, so the editor cannot publish what is on disk while showing
    * something else — and cannot forget to. */
@@ -160,12 +166,9 @@ export function ContentStatusPanel({
       </p>
 
       {transitions.includes("SCHEDULED") && (
-        <ScheduleField
-          id="content-schedule"
-          value={scheduleFor}
-          onChange={setScheduleFor}
-          labels={labels}
-        />
+        // Required for a SCHEDULED move only; with no date the service
+        // refuses it (`ScheduleInPastError`), and that refusal is the toast.
+        <ScheduleField value={scheduleFor} onChange={setScheduleFor} labels={labels} required />
       )}
 
       <div className="flex flex-wrap gap-1.5 border-t pt-3">
@@ -186,6 +189,7 @@ export function ContentStatusPanel({
                 loading={pending && moving === to}
                 onClick={() => {
                   if (to === "ARCHIVED") return setArchiveOpen(true);
+                  if (PUBLISHING.includes(to) && validate && !validate()) return;
                   setMoving(to);
                   move(to);
                 }}

@@ -14758,6 +14758,7 @@ different from the header.
 
   They are built by `trackPanel()` from `LEARN_TRACK_ROUTE_KEYS`. The mobile
   sheet shows the same three column headings.
+
 - **No counted-figures strip.** `StatStrip` is deleted.
   - The learn, quiz, video and glossary mastheads take no `stats`, and their
     skeletons no longer reserve the band.
@@ -14923,8 +14924,7 @@ build-status list now records one (§6, "changes-21 Phase A").
   sizes, loading buttons, skeleton primitives, a metric-card skeleton,
   `SectionLoader`, and `EmptyState`/`ErrorState` in two sizes. Its keys are
   in `en.json`, and `admin-design-system.test.ts` passes.
-- **Not verified live.** The running dev server (the owner's terminal, PID
-  12892) answers 500 on every route, `/glossary` included: its Turbopack
+- **Not verified live.** The running dev server (the owner's terminal, PID 12892) answers 500 on every route, `/glossary` included: its Turbopack
   PostCSS worker crashed ("Node.js subprocess crashed while evaluating
   loaders [postcss]").
   - The same `globals.css` compiled standalone through `@tailwindcss/postcss`
@@ -14941,3 +14941,150 @@ build-status list now records one (§6, "changes-21 Phase A").
   Phase A edits four of the same files: three learn skeletons and `en.json`.
   So the two cannot be split into clean commits without the owner's call on
   order.
+
+## 2026-09-12 — changes-21 Phase B: the UI audit closes; admin forms become wired Fields (Modules 07/09/12, ADR-077)
+
+The audit is `docs/design-system/audit-changes-21.md`. The owner answered its
+two questions:
+
+- **Q-1, answer (a).** Not-found routes keep the soft 404 plus `noindex`, and
+  `proxy.ts` gets no content-existence check.
+- **Q-3, answer (a).** Every admin form gets `Field`, `FieldLabel`,
+  `FieldError`, `aria-invalid`, `aria-describedby`, `required` and inline
+  messages. Required fields show `*`; optional fields show no "(optional)".
+  The toast is kept for global, server and submission errors, but is never
+  the only sign of a field error.
+
+### Shipped
+
+- **Forms (F-07), per ADR-077:**
+  - **`@repo/ui`:**
+    - **`Field` is context-aware.** `FieldLabel` supplies `htmlFor` and the
+      asterisk; `FieldDescription` and `FieldError` join `aria-describedby`.
+    - **Every control wires itself** through `useFieldControl`: Input,
+      Textarea, Switch, Checkbox, RadioGroup, SelectTrigger and Combobox.
+    - Input and Textarea became `"use client"`.
+    - `FieldError` uses `-interactive` ink and no live region.
+  - **`@repo/contracts`:** `validateFields` maps Zod issues to eleven codes by
+    dotted path; `admin.validation.*` holds the words.
+  - **The admin app:**
+    - **`useFieldErrors`** runs the action's own schema, shows nothing until
+      the first submit, and focuses the first invalid control within the
+      dialog or form whose Save was pressed.
+    - **Save is no longer disabled for validation.** Validation terms were
+      removed from roughly 40 Save buttons.
+    - **The composites are Field-aware**: `editor-section`'s Field
+      (`required`/`error`), `SlugField`, `ScheduleField`, `ImageUploadField`
+      (its Upload button is the control) and `RichTextEditor` (its editable
+      area is named by the label id).
+    - **The publish panel takes `validate`**, so the six editors no longer
+      throw a "fields need attention" error from `save`.
+  - **Migrated:** about 50 files, split across five background agents by
+    feature area, plus `create-role-dialog` as the worked example. The lead
+    reviewed the reports and diffs, and made the shared-component decisions
+    mid-run.
+- **F-03:** every destructive TEXT usage, in both surfaces and `@repo/ui`, is
+  `text-destructive-interactive`. So are the icon-only delete buttons (D-7).
+  The editor section's `danger` tile is `/10` with `-interactive` ink.
+- **Smaller fixes**, done by one background agent:
+  - **F-01:** the public desktop nav shows from `xl`.
+  - **F-02:** below `sm` the theme toggle lives in the mobile sheet, under a
+    new `nav.appearance` key.
+  - **F-05:** the bell is `size-5`.
+  - **F-06:** the three error boundaries take `retry` (verified against the
+    installed Next 16.3.3 docs).
+  - **F-11:** the play glyphs are `size-6`.
+- **F-04:** the rich-text frame uses the Textarea recipe, with no `dark:`
+  class.
+- **Catalog:** the admin catalog no longer contains "(optional)"
+  (`seoOptional`, `optionExplanation`, `slugOptional`). The curriculum had
+  been showing "SEO (optional)" as its optional-lesson badge; it now has its
+  own `optionalLessonBadge`.
+- **Lesson editor:** the "Course" row is a `FieldTitle`, because a label would
+  have named a link.
+
+### Decided
+
+- ADR-077.
+- The owner's two answers (D-3, D-4).
+- Audit §7, D-5 to D-8:
+  - the editor-section wrapper;
+  - the publish panel's `validate`;
+  - one destructive ink everywhere;
+  - the "(optional)" strings.
+- The react-hook-form bridge `form.tsx` was not adopted: it would have
+  rewritten every form's state.
+
+### Found by the crawl (§4–§5, all open for Phase C)
+
+The crawl covered 27 public templates and 35 admin routes at 360, 768, 1024
+and 1440, in light and dark, with axe.
+
+- **F-01/F-02 are confirmed in the browser:** no public page overflows at any
+  width.
+- **No admin form field failed axe's labelling or ARIA checks.**
+- **New findings:**
+  - **F-12, F-13, F-20, F-22:** contrast failures on tinted surfaces.
+  - **F-14:** carousel dots.
+  - **F-15:** carousel list semantics.
+  - **F-16:** an image with no alt, on a crypto course page.
+  - **F-17:** a link told apart only by colour in the dark article body.
+  - **F-18:** a guest's progress 401.
+  - **F-19:** off-scale news buttons.
+  - **F-21:** `aria-sort` on a button in `DataTable` (critical).
+  - **F-23:** editor overflow at 1024 and 360.
+  - **F-24:** unnamed progress bars.
+  - **F-25:** small targets in the article editor.
+  - **F-26:** an unfocusable scroll region.
+  - **F-27:** "Remove" inside an inverted role chip, at 2.55:1. The
+    destructive ink cannot pass on that surface.
+  - **F-28:** dev-console Cache Components diagnostics.
+
+### Verified
+
+- `@repo/web` typecheck: clean.
+- `@repo/web` tests: **1014/1014** (25 files). The new
+  `admin-form-conventions.test.ts` fails:
+  - a `Label`, a raw `<label>` or an `htmlFor` in an admin file;
+  - a form that never calls `validate()`;
+  - "(optional)" in the admin catalog;
+  - raw destructive text anywhere in the app or `@repo/ui`.
+- `@repo/ui` tests: **378/378**. The new `field.test.tsx` has 12 cases.
+- `@repo/contracts` tests: **269/269**. The new `field-issues.test.ts` has 8
+  cases.
+- ESLint, `--max-warnings=0`: clean on all 68 changed web files and 10 ui
+  files. An earlier run skipped `[id]` paths, because PowerShell's `Test-Path`
+  treats brackets as a wildcard; this run uses `-LiteralPath`.
+- Prettier, `check:catalog-completeness` and `check:phantom-deps`: OK.
+- The dev server had exited mid-session and was restarted with `pnpm dev`.
+
+**Addendum, at commit time (same day).** The pre-commit gate was re-run over
+the whole tree and found two defects the per-file runs above had missed. Both
+are fixed in this commit, so the "clean" claims hold for the code that ships,
+not for the code the entry was written against:
+
+- **`@repo/contracts` lint was red.** In `field-issues.ts`, the comment sitting
+  BETWEEN the shared `invalid_type` / `invalid_value` case labels reads as a
+  fall-through to `no-fallthrough`. The two labels share one return by design,
+  so the comment moved above the pair. No behaviour change.
+- **`@repo/ui` typecheck was red.** `field.test.tsx` read `.required` off the
+  `HTMLElement` that `getByRole` returns; the query is now cast to
+  `HTMLInputElement`.
+- **Re-verified after both fixes:** contracts lint clean · contracts
+  **269/269** · ui typecheck clean · ui **378/378** · web **1014/1014** ·
+  i18n **22/22** · `governance:check`, `check:phantom-deps`,
+  `check:permission-keys` OK · `check:catalog-completeness` OK (only the
+  inactive `ar`/`es`/`ur` warn).
+- **Also learned:** running lint and typecheck workspace-wide in parallel on
+  this machine aborts with exit 134 (OOM). Run them per package, one at a
+  time — the same rule the root `pnpm test`/`build` already follow.
+
+### Owed
+
+- The open crawl findings F-12 to F-28 and F-09, for Phase C. F-16 and F-21
+  are the two critical ones.
+- An E2E pass over a real submit (errors shown, focus moved, the fix clears
+  the message). The guard and the unit tests prove the wiring; nothing drives
+  a browser through a failed save yet.
+- **Commit.** Nothing is committed. The tree still holds the owner's
+  uncommitted ADR-076 and Phase A work alongside this phase.

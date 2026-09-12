@@ -45,14 +45,20 @@ export function SlugField({
   disabled,
   onChange,
   labels,
+  required,
+  error,
 }: {
-  id: string;
+  /** Only when something outside the field needs the input's id. */
+  id?: string;
   value: string;
   source: string;
   previewPath: (slug: string) => string;
   disabled?: boolean;
   onChange: (next: string) => void;
   labels: SlugFieldLabels;
+  /** ADR-077 — passed through to the section Field. */
+  required?: boolean;
+  error?: string;
 }) {
   // Not derived from `value !== ""`: a topic loaded for editing already HAS a
   // slug, and treating that as "untouched" would let a title edit silently
@@ -68,6 +74,8 @@ export function SlugField({
   return (
     <Field
       id={id}
+      required={required}
+      error={error}
       label={labels.label}
       hint={
         value.trim() === ""
@@ -78,7 +86,6 @@ export function SlugField({
       }
     >
       <Input
-        id={id}
         value={touched ? value : value || slugify(source)}
         disabled={disabled}
         onChange={(event) => {

@@ -35,7 +35,9 @@ import {
   Trash2,
 } from "lucide-react";
 import {
+  createGlossaryTopicSchema,
   glossaryDifficultySchema,
+  saveGlossaryTermSchema,
   type GlossaryDifficultyInput,
   type GlossaryFaqItemInput,
   type SaveGlossaryTermInput,
@@ -57,7 +59,6 @@ import {
   DialogTitle,
 } from "@repo/ui/components/dialog";
 import { Input } from "@repo/ui/components/input";
-import { Label } from "@repo/ui/components/label";
 import {
   deleteGlossaryTermAction,
   saveGlossaryTermAction,
@@ -72,6 +73,7 @@ import { SeoAnalysis } from "../../_components/editor/seo-analysis.tsx";
 import { ImageUploadField } from "../../_components/image-upload-field.tsx";
 import { RichTextEditor } from "../../_components/rich-text-editor.tsx";
 import { CONTENT_STATUS_TONE, StatusBadge, statusTone } from "../../_components/status-badge.tsx";
+import { useFieldErrors } from "../../_hooks/use-field-errors.ts";
 import { useServerAction } from "../../_hooks/use-server-action.ts";
 import type {
   GlossaryEditorLabels,
@@ -92,7 +94,7 @@ const NONE = "__none__";
 function CharCount({ value, max }: { value: string; max: number }) {
   return (
     <span
-      className={`text-xs tabular-nums ${value.length > max ? "text-destructive" : "text-muted-foreground"}`}
+      className={`text-xs tabular-nums ${value.length > max ? "text-destructive-interactive" : "text-muted-foreground"}`}
     >
       {value.length}/{max}
     </span>
@@ -170,38 +172,44 @@ export function GlossaryEditor({
   const setDraft = (patch: Partial<GlossaryTranslationDraft>) =>
     setDrafts((current) => ({ ...current, [locale]: { ...draft, ...patch } }));
 
-  // Mirrors the contract so the Save button does not offer to submit a payload
-  // the schema will refuse. The schema and the service are still the gate.
-  const canSave = draft.term.trim() !== "" && draft.simpleExplanation.trim() !== "";
-
   const publicPath = useMemo(() => `/${locale}/glossary/${draft.slug || ""}`, [locale, draft.slug]);
 
+  // Exactly what the action receives — so the inline messages come from the
+  // same schema, over the same values, that the server will parse (ADR-077).
+  const payload: SaveGlossaryTermInput = {
+    termId: term.id,
+    meta: {
+      topicId,
+      track: track as SaveGlossaryTermInput["meta"]["track"],
+      difficulty,
+      formula: formula.trim() === "" ? null : formula.trim(),
+      imageUrl: image.url,
+    },
+    translation: {
+      locale,
+      term: draft.term.trim(),
+      slug: draft.slug.trim() === "" ? undefined : draft.slug.trim(),
+      simpleExplanation: draft.simpleExplanation,
+      detailedExplanation:
+        draft.detailedExplanation.trim() === "" ? null : draft.detailedExplanation,
+      advancedExplanation:
+        draft.advancedExplanation.trim() === "" ? null : draft.advancedExplanation,
+      exampleScenario: draft.exampleScenario.trim() === "" ? null : draft.exampleScenario,
+      faq: draft.faq,
+      seoTitle: draft.seoTitle.trim() === "" ? null : draft.seoTitle.trim(),
+      seoDescription: draft.seoDescription.trim() === "" ? null : draft.seoDescription.trim(),
+    },
+  };
+  const form = useFieldErrors(saveGlossaryTermSchema, payload);
+
   const submitForm = async () => {
-    const payload: SaveGlossaryTermInput = {
-      termId: term.id,
-      meta: {
-        topicId,
-        track: track as SaveGlossaryTermInput["meta"]["track"],
-        difficulty,
-        formula: formula.trim() === "" ? null : formula.trim(),
-        imageUrl: image.url,
-      },
-      translation: {
-        locale,
-        term: draft.term.trim(),
-        slug: draft.slug.trim() === "" ? undefined : draft.slug.trim(),
-        simpleExplanation: draft.simpleExplanation,
-        detailedExplanation:
-          draft.detailedExplanation.trim() === "" ? null : draft.detailedExplanation,
-        advancedExplanation:
-          draft.advancedExplanation.trim() === "" ? null : draft.advancedExplanation,
-        exampleScenario: draft.exampleScenario.trim() === "" ? null : draft.exampleScenario,
-        faq: draft.faq,
-        seoTitle: draft.seoTitle.trim() === "" ? null : draft.seoTitle.trim(),
-        seoDescription: draft.seoDescription.trim() === "" ? null : draft.seoDescription.trim(),
-      },
-    };
     await saveGlossaryTermAction(payload);
+  };
+
+  const topicForm = useFieldErrors(createGlossaryTopicSchema, { name: newTopicName });
+  const closeNewTopic = () => {
+    setNewTopicOpen(false);
+    topicForm.reset();
   };
 
   return (
@@ -238,11 +246,14 @@ export function GlossaryEditor({
             </Button>
           )}
           {canUpdate && (
+            // Enabled while fields are wrong: pressing it names them (ADR-077).
             <Button
               size="sm"
-              disabled={!canSave}
               loading={pending}
-              onClick={() => run(() => submitForm(), { successMessage: labels.saved })}
+              onClick={() => {
+                if (!form.validate()) return;
+                run(() => submitForm(), { successMessage: labels.saved });
+              }}
             >
               {labels.updateTerm}
             </Button>
@@ -291,12 +302,12 @@ export function GlossaryEditor({
             accent="primary"
           >
             <Field
-              id="glossary-term"
               label={labels.termLabel}
+              required
+              error={form.error("translation.term")}
               adornment={<CharCount value={draft.term} max={150} />}
             >
               <Input
-                id="glossary-term"
                 value={draft.term}
                 disabled={!canUpdate}
                 onChange={(e) => setDraft({ term: e.target.value })}
@@ -304,12 +315,11 @@ export function GlossaryEditor({
             </Field>
 
             <Field
-              id="glossary-slug"
               label={labels.slugLabel}
               hint={`${labels.termUrl}: ${publicPath}`}
+              error={form.error("translation.slug")}
             >
               <Input
-                id="glossary-slug"
                 value={draft.slug}
                 disabled={!canUpdate}
                 onChange={(e) => setDraft({ slug: e.target.value })}
@@ -320,18 +330,25 @@ export function GlossaryEditor({
                 this is a one- or two-sentence definition that renders inline
                 in the A–Z list, and a source view invites markup that the
                 list would show as a wall of text. */}
-            <Field label={labels.simpleLabel} hint={labels.simpleHint}>
+            <Field
+              label={labels.simpleLabel}
+              hint={labels.simpleHint}
+              required
+              error={form.error("translation.simpleExplanation")}
+            >
               <RichTextEditor
-                id="glossary-simple"
                 value={draft.simpleExplanation}
                 onChange={(html) => setDraft({ simpleExplanation: html })}
                 labels={labels.editor}
               />
             </Field>
 
-            <Field label={labels.detailedLabel} hint={labels.detailedHint}>
+            <Field
+              label={labels.detailedLabel}
+              hint={labels.detailedHint}
+              error={form.error("translation.detailedExplanation")}
+            >
               <RichTextEditor
-                id="glossary-detailed"
                 value={draft.detailedExplanation}
                 onChange={(html) => setDraft({ detailedExplanation: html })}
                 labels={labels.editor}
@@ -339,9 +356,12 @@ export function GlossaryEditor({
               />
             </Field>
 
-            <Field label={labels.advancedLabel} hint={labels.advancedHint}>
+            <Field
+              label={labels.advancedLabel}
+              hint={labels.advancedHint}
+              error={form.error("translation.advancedExplanation")}
+            >
               <RichTextEditor
-                id="glossary-advanced"
                 value={draft.advancedExplanation}
                 onChange={(html) => setDraft({ advancedExplanation: html })}
                 labels={labels.editor}
@@ -349,9 +369,12 @@ export function GlossaryEditor({
               />
             </Field>
 
-            <Field label={labels.exampleLabel} hint={labels.exampleHint}>
+            <Field
+              label={labels.exampleLabel}
+              hint={labels.exampleHint}
+              error={form.error("translation.exampleScenario")}
+            >
               <RichTextEditor
-                id="glossary-example"
                 value={draft.exampleScenario}
                 onChange={(html) => setDraft({ exampleScenario: html })}
                 labels={labels.editor}
@@ -376,13 +399,12 @@ export function GlossaryEditor({
             accent="info"
           >
             <Field
-              id="glossary-seo-title"
               label={labels.seoTitleLabel}
               hint={labels.seoTitleHint}
+              error={form.error("translation.seoTitle")}
               adornment={<CharCount value={draft.seoTitle} max={70} />}
             >
               <Input
-                id="glossary-seo-title"
                 value={draft.seoTitle}
                 disabled={!canUpdate}
                 onChange={(e) => setDraft({ seoTitle: e.target.value })}
@@ -390,13 +412,12 @@ export function GlossaryEditor({
             </Field>
 
             <Field
-              id="glossary-seo-description"
               label={labels.seoDescriptionLabel}
               hint={labels.seoDescriptionHint}
+              error={form.error("translation.seoDescription")}
               adornment={<CharCount value={draft.seoDescription} max={180} />}
             >
               <Input
-                id="glossary-seo-description"
                 value={draft.seoDescription}
                 disabled={!canUpdate}
                 onChange={(e) => setDraft({ seoDescription: e.target.value })}
@@ -421,7 +442,10 @@ export function GlossaryEditor({
             scheduledFor={term.scheduledFor}
             updatedAt={term.updatedAt}
             canPublish={canPublish}
-            canSave={canUpdate && canSave}
+            canSave={canUpdate}
+            // Publishing saves first, so the panel validates first and stops
+            // there, with the fields named inline (ADR-077).
+            validate={form.validate}
             save={submitForm}
             transitionTo={(to, scheduledForIso) =>
               transitionGlossaryAction(term.id, to, scheduledForIso)
@@ -446,9 +470,9 @@ export function GlossaryEditor({
                 under it immediately, and the full topic editor is where the
                 description and SEO get written. */}
             <Field
-              id="glossary-topic"
               label={labels.topicLabel}
               hint={labels.topicHint}
+              error={form.error("meta.topicId")}
               adornment={
                 canCreateTopic ? (
                   <Button
@@ -464,7 +488,6 @@ export function GlossaryEditor({
               }
             >
               <AdminCombobox
-                id="glossary-topic"
                 value={topicId ?? NONE}
                 disabled={!canUpdate}
                 onValueChange={(next) => setTopicId(!next || next === NONE ? null : next)}
@@ -475,9 +498,12 @@ export function GlossaryEditor({
               />
             </Field>
 
-            <Field id="glossary-track" label={labels.trackLabel} hint={labels.trackHint}>
+            <Field
+              label={labels.trackLabel}
+              hint={labels.trackHint}
+              error={form.error("meta.track")}
+            >
               <AdminCombobox
-                id="glossary-track"
                 value={track ?? NONE}
                 disabled={!canUpdate}
                 onValueChange={(next) => setTrack(!next || next === NONE ? null : next)}
@@ -490,9 +516,8 @@ export function GlossaryEditor({
               />
             </Field>
 
-            <Field id="glossary-difficulty" label={labels.difficultyLabel}>
+            <Field label={labels.difficultyLabel} error={form.error("meta.difficulty")}>
               <AdminCombobox
-                id="glossary-difficulty"
                 value={difficulty}
                 disabled={!canUpdate}
                 onValueChange={(next) => {
@@ -508,9 +533,12 @@ export function GlossaryEditor({
 
             {/* `font-mono` here is the narrow exception ADR-044 #6 carves out:
                 a control whose VALUE is read character by character. */}
-            <Field id="glossary-formula" label={labels.formulaLabel} hint={labels.formulaHint}>
+            <Field
+              label={labels.formulaLabel}
+              hint={labels.formulaHint}
+              error={form.error("meta.formula")}
+            >
               <Input
-                id="glossary-formula"
                 value={formula}
                 disabled={!canUpdate}
                 className="font-mono"
@@ -519,12 +547,12 @@ export function GlossaryEditor({
             </Field>
 
             <ImageUploadField
-              id="glossary-image"
               label={labels.imageLabel}
               value={image.url}
               purpose="content"
               category="learn"
               disabled={!canUpdate}
+              error={form.error("meta.imageUrl")}
               onChange={(next) => setImage({ id: next?.id ?? null, url: next?.url ?? null })}
               labels={labels.upload}
             />
@@ -568,7 +596,10 @@ export function GlossaryEditor({
         onConfirm={() => run(() => deleteGlossaryTermAction(term.id, true))}
       />
 
-      <Dialog open={newTopicOpen} onOpenChange={setNewTopicOpen}>
+      <Dialog
+        open={newTopicOpen}
+        onOpenChange={(next) => (next ? setNewTopicOpen(true) : closeNewTopic())}
+      >
         <DialogContent closeLabel={labels.cancel}>
           {/* Title AND description — ADR-057 #5. */}
           <DialogHeader>
@@ -576,24 +607,24 @@ export function GlossaryEditor({
             <DialogDescription>{labels.topicCreateDescription}</DialogDescription>
           </DialogHeader>
 
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="glossary-new-topic">{labels.topicNameLabel}</Label>
-            <Input
-              id="glossary-new-topic"
-              value={newTopicName}
-              autoFocus
-              onChange={(event) => setNewTopicName(event.target.value)}
-            />
+          <div className="flex flex-col gap-4">
+            <Field label={labels.topicNameLabel} required error={topicForm.error("name")}>
+              <Input
+                value={newTopicName}
+                autoFocus
+                onChange={(event) => setNewTopicName(event.target.value)}
+              />
+            </Field>
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setNewTopicOpen(false)}>
+            <Button variant="outline" onClick={closeNewTopic}>
               {labels.cancel}
             </Button>
             <Button
-              disabled={newTopicName.trim() === ""}
               loading={pending}
-              onClick={() =>
+              onClick={() => {
+                if (!topicForm.validate()) return;
                 run(
                   async () => {
                     const name = newTopicName.trim();
@@ -605,14 +636,14 @@ export function GlossaryEditor({
                     setTopics((current) => [...current, { id, name }]);
                     setTopicId(id);
                     setNewTopicName("");
-                    setNewTopicOpen(false);
+                    closeNewTopic();
                   },
                   // The page's own data is refetched on save; refreshing here
                   // would blow away every unsaved field in the editor behind
                   // this dialog.
                   { skipRefresh: true },
-                )
-              }
+                );
+              }}
             >
               {labels.create}
             </Button>

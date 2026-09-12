@@ -6,6 +6,7 @@
 // hook.
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { createArticleSchema } from "@repo/contracts";
 import { Button } from "@repo/ui/components/button";
 import {
   Dialog,
@@ -16,10 +17,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@repo/ui/components/dialog";
-import { Label } from "@repo/ui/components/label";
+import { Field, FieldError, FieldGroup, FieldLabel } from "@repo/ui/components/field";
 import { createArticleAction } from "../_actions/article-actions.ts";
 import { AdminCombobox } from "../_components/combobox.tsx";
 import { FilterBarRow } from "@repo/ui/components/filter-bar";
+import { useFieldErrors } from "../_hooks/use-field-errors.ts";
 import { useServerAction } from "../_hooks/use-server-action.ts";
 import { useUrlFilters } from "../_hooks/use-url-filters.ts";
 
@@ -104,28 +106,46 @@ export function NewArticleDialog({
   const [newCategory, setNewCategory] = useState<string>(categories[0]?.id ?? "");
   const { run, pending } = useServerAction();
 
+  const values = { kind: newKind as (typeof KINDS)[number], categoryId: newCategory };
+  const form = useFieldErrors(createArticleSchema, values);
+
+  const changeOpen = (next: boolean) => {
+    if (!next) form.reset();
+    setOpen(next);
+  };
+
+  const submit = () => {
+    if (!form.validate()) return;
+    run(
+      async () => {
+        const id = await createArticleAction(values);
+        router.push(`/admin/articles/${id}`);
+      },
+      { skipRefresh: true },
+    );
+  };
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={changeOpen}>
       <DialogTrigger render={<Button size="sm">{labels.newArticle}</Button>} />
       <DialogContent className="max-w-sm" closeLabel={labels.close}>
         <DialogHeader>
           <DialogTitle>{labels.newArticle}</DialogTitle>
           <DialogDescription>{labels.newArticleDescription}</DialogDescription>
         </DialogHeader>
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="new-article-kind">{labels.kind}</Label>
+        <FieldGroup>
+          <Field invalid={form.invalid("kind")} required>
+            <FieldLabel>{labels.kind}</FieldLabel>
             <AdminCombobox
-              id="new-article-kind"
               value={newKind}
               onValueChange={(next) => setNewKind(next || newKind)}
               options={KINDS.map((kind) => ({ value: kind, label: labels.kinds[kind] ?? kind }))}
             />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="new-article-category">{labels.category}</Label>
+            <FieldError>{form.error("kind")}</FieldError>
+          </Field>
+          <Field invalid={form.invalid("categoryId")} required>
+            <FieldLabel>{labels.category}</FieldLabel>
             <AdminCombobox
-              id="new-article-category"
               value={newCategory}
               onValueChange={(next) => setNewCategory(next || newCategory)}
               options={categories.map((category) => ({
@@ -133,29 +153,15 @@ export function NewArticleDialog({
                 label: category.name,
               }))}
             />
-          </div>
-        </div>
+            <FieldError>{form.error("categoryId")}</FieldError>
+          </Field>
+        </FieldGroup>
         <DialogFooter>
-          <Button variant="outline" size="sm" onClick={() => setOpen(false)} disabled={pending}>
+          <Button variant="outline" size="sm" onClick={() => changeOpen(false)} disabled={pending}>
             {labels.cancel}
           </Button>
-          <Button
-            size="sm"
-            disabled={!newCategory}
-            loading={pending}
-            onClick={() =>
-              run(
-                async () => {
-                  const id = await createArticleAction({
-                    kind: newKind as (typeof KINDS)[number],
-                    categoryId: newCategory,
-                  });
-                  router.push(`/admin/articles/${id}`);
-                },
-                { skipRefresh: true },
-              )
-            }
-          >
+          {/* Enabled with no category: pressing it names the field (F-07). */}
+          <Button size="sm" loading={pending} onClick={submit}>
             {labels.create}
           </Button>
         </DialogFooter>

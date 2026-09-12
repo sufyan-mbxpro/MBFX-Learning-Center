@@ -66,7 +66,8 @@ export async function SiteHeader({ locale }: { locale: string }) {
       )}
       <header className="bg-glow-primary relative isolate border-b border-border/70 bg-background/95 shadow-sm backdrop-blur-md">
         <Container className="flex h-(--height-header) items-center gap-3 md:gap-6">
-          {/* Below lg the nav lives behind the hamburger; same rows. */}
+          {/* Below xl the nav lives behind the hamburger; same rows
+              (changes-21 D-1 — the desktop nav does not fit under 1280). */}
           <MobileNav items={navItems} menuLabel={t("openMenu")} />
 
           {/* Uploaded logo (changes-02, ADR-017) when set — light/dark
@@ -107,7 +108,15 @@ export async function SiteHeader({ locale }: { locale: string }) {
               </Button>
             )}
             <LocaleSwitcher locales={locales} />
-            <ModeToggle />
+            {/* Below sm the header row cannot hold hamburger + logo + toggle
+                + Sign in + Join us on a 360px phone, so the toggle moves into
+                the mobile sheet as its "Appearance" row (changes-21 D-2) — the
+                one control that can move without dropping an ADR-052 entry
+                point or shrinking type. With no menu there is no sheet, so it
+                stays here at every width. */}
+            <div className={navItems.length > 0 ? "hidden sm:flex" : "flex"}>
+              <ModeToggle />
+            </div>
             <AuthSlot />
             {cta?.enabled && (
               <Button

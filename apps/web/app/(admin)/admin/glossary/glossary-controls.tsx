@@ -15,7 +15,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
-import { LEARN_TRACK_KEYS } from "@repo/contracts";
+import { LEARN_TRACK_KEYS, createGlossaryTermSchema } from "@repo/contracts";
 import { Button } from "@repo/ui/components/button";
 import {
   Dialog,
@@ -25,9 +25,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@repo/ui/components/dialog";
-import { Label } from "@repo/ui/components/label";
+import { Field, FieldError, FieldGroup, FieldLabel } from "@repo/ui/components/field";
 import { createGlossaryTermAction } from "../_actions/content-actions.ts";
 import { AdminCombobox } from "../_components/combobox.tsx";
+import { useFieldErrors } from "../_hooks/use-field-errors.ts";
 import { useServerAction } from "../_hooks/use-server-action.ts";
 
 /**
@@ -65,20 +66,32 @@ export function NewTermButton({
   const [topicId, setTopicId] = useState<string>(NONE);
   const [track, setTrack] = useState<string>(NONE);
 
-  const create = () =>
+  // Both optional (a blank DRAFT term is legal) — the action's schema is still
+  // the one the form checks, so the two cannot disagree (ADR-077).
+  const values = {
+    topicId: topicId === NONE ? null : topicId,
+    track: track === NONE ? null : track,
+  };
+  const form = useFieldErrors(createGlossaryTermSchema, values);
+
+  const setOpenState = (next: boolean) => {
+    setOpen(next);
+    if (!next) form.reset();
+  };
+
+  const create = () => {
+    if (!form.validate()) return;
     run(
       async () => {
-        const id = await createGlossaryTermAction({
-          topicId: topicId === NONE ? null : topicId,
-          track: track === NONE ? null : track,
-        });
-        setOpen(false);
+        const id = await createGlossaryTermAction(values);
+        setOpenState(false);
         // Straight into the editor: a blank DRAFT term on the list is a row
         // with no name, and the next thing anyone wants is to write it.
         router.push(`/admin/glossary/${id}`);
       },
       { skipRefresh: true },
     );
+  };
 
   return (
     <>
@@ -87,7 +100,7 @@ export function NewTermButton({
         {labels.trigger}
       </Button>
 
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={setOpenState}>
         <DialogContent>
           {/* ADR-057 #5 / code-style #11: a title AND a description, always. */}
           <DialogHeader>
@@ -95,11 +108,10 @@ export function NewTermButton({
             <DialogDescription>{labels.description}</DialogDescription>
           </DialogHeader>
 
-          <div className="flex flex-col gap-3">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="new-term-topic">{labels.topicLabel}</Label>
+          <FieldGroup>
+            <Field invalid={form.invalid("topicId")}>
+              <FieldLabel>{labels.topicLabel}</FieldLabel>
               <AdminCombobox
-                id="new-term-topic"
                 value={topicId}
                 onValueChange={(next) => setTopicId(next || NONE)}
                 options={[
@@ -107,12 +119,12 @@ export function NewTermButton({
                   ...topicOptions.map((topic) => ({ value: topic.id, label: topic.name })),
                 ]}
               />
-            </div>
+              <FieldError>{form.error("topicId")}</FieldError>
+            </Field>
 
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="new-term-track">{labels.trackLabel}</Label>
+            <Field invalid={form.invalid("track")}>
+              <FieldLabel>{labels.trackLabel}</FieldLabel>
               <AdminCombobox
-                id="new-term-track"
                 value={track}
                 onValueChange={(next) => setTrack(next || NONE)}
                 options={[
@@ -124,11 +136,12 @@ export function NewTermButton({
                   })),
                 ]}
               />
-            </div>
-          </div>
+              <FieldError>{form.error("track")}</FieldError>
+            </Field>
+          </FieldGroup>
 
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setOpen(false)}>
+            <Button variant="ghost" onClick={() => setOpenState(false)}>
               {labels.cancel}
             </Button>
             <Button loading={pending} onClick={create}>

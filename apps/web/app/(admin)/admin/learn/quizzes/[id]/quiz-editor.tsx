@@ -26,12 +26,19 @@ import type {
   QuestionTypeInput,
   QuizInput,
 } from "@repo/contracts";
-import { isLearnTrack, LEARN_TRACK_KEYS } from "@repo/contracts";
+import { isLearnTrack, LEARN_TRACK_KEYS, quizInputSchema } from "@repo/contracts";
 import { Button } from "@repo/ui/components/button";
 import { Checkbox } from "@repo/ui/components/checkbox";
 import { ConfirmDialog } from "@repo/ui/components/confirm-dialog";
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+} from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
-import { Label } from "@repo/ui/components/label";
 import { Switch } from "@repo/ui/components/switch";
 import { Textarea } from "@repo/ui/components/textarea";
 import { AdminCombobox } from "../../../_components/combobox.tsx";
@@ -41,8 +48,15 @@ import {
 } from "../../../_components/editor/content-status-panel.tsx";
 import { EditorSection } from "../../../_components/editor/editor-section.tsx";
 import { saveQuizAction, setQuizStatusAction } from "../../../_actions/quiz-actions.ts";
+import { useFieldErrors } from "../../../_hooks/use-field-errors.ts";
 import { useServerAction } from "../../../_hooks/use-server-action.ts";
 import { trackLabels } from "../../_lib/learn-labels.ts";
+
+/** Field issues for one question, by path relative to it (`prompt`, `options.0`). */
+interface QuestionIssues {
+  invalid: (path: string) => boolean;
+  error: (path: string) => string | undefined;
+}
 
 export interface EditorQuestion {
   /** Absent on a question added in this session; the server assigns one. */
@@ -99,6 +113,9 @@ export function QuizEditor({
   const [state, setState] = useState(initial);
   const [removing, setRemoving] = useState<number | null>(null);
   const { run, pending } = useServerAction();
+  // `saveQuizAction`'s own schema over the exact payload it is sent (ADR-077),
+  // so every question's prompt and option is checked inline before a save.
+  const form = useFieldErrors(quizInputSchema, buildPayload());
 
   const patch = (next: Partial<QuizEditorState>) => setState((s) => ({ ...s, ...next }));
 
@@ -255,6 +272,7 @@ export function QuizEditor({
   }
 
   function save() {
+    if (!form.validate()) return;
     // `useServerAction` surfaces the failure itself; the success toast is the
     // only message this call site owns.
     run(() => saveQuizAction(buildPayload()), { successMessage: t("quizzes.saved") });
@@ -271,7 +289,9 @@ export function QuizEditor({
     await saveQuizAction(buildPayload());
   }
 
-  const canSave = state.title.trim() !== "" && state.questions.length > 0;
+  // The one publishing rule no schema holds: the contract lets a draft quiz
+  // have no questions, but a quiz with none is not publishable content.
+  const hasQuestions = state.questions.length > 0;
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-(--grid-2-1) lg:items-start">
@@ -280,38 +300,37 @@ export function QuizEditor({
           title={t("quizzes.detailsSection")}
           description={t("quizzes.detailsDescription")}
         >
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="quiz-title">{t("quizzes.titleLabel")}</Label>
+          <FieldGroup>
+            <Field invalid={form.invalid("translation.title")} required>
+              <FieldLabel>{t("quizzes.titleLabel")}</FieldLabel>
               <Input
-                id="quiz-title"
                 value={state.title}
                 maxLength={255}
                 onChange={(e) => patch({ title: e.target.value })}
               />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="quiz-description">{t("quizzes.descriptionLabel")}</Label>
+              <FieldError>{form.error("translation.title")}</FieldError>
+            </Field>
+            <Field invalid={form.invalid("translation.description")}>
+              <FieldLabel>{t("quizzes.descriptionLabel")}</FieldLabel>
               <Textarea
-                id="quiz-description"
                 rows={3}
                 value={state.description}
                 onChange={(e) => patch({ description: e.target.value })}
               />
-            </div>
-          </div>
+              <FieldError>{form.error("translation.description")}</FieldError>
+            </Field>
+          </FieldGroup>
         </EditorSection>
 
         <EditorSection
           title={t("quizzes.settingsSection")}
           description={t("quizzes.settingsDescription")}
         >
-          <div className="flex flex-col gap-4">
+          <FieldGroup>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="quiz-pass">{t("quizzes.passingScore")}</Label>
+              <Field invalid={form.invalid("meta.passingScore")}>
+                <FieldLabel>{t("quizzes.passingScore")}</FieldLabel>
                 <Input
-                  id="quiz-pass"
                   type="number"
                   min={1}
                   max={100}
@@ -320,11 +339,11 @@ export function QuizEditor({
                     patch({ passingScore: Math.min(100, Math.max(1, Number(e.target.value) || 1)) })
                   }
                 />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="quiz-attempts">{t("quizzes.maxAttempts")}</Label>
+                <FieldError>{form.error("meta.passingScore")}</FieldError>
+              </Field>
+              <Field invalid={form.invalid("meta.maxAttempts")}>
+                <FieldLabel>{t("quizzes.maxAttempts")}</FieldLabel>
                 <Input
-                  id="quiz-attempts"
                   type="number"
                   min={1}
                   max={50}
@@ -340,14 +359,14 @@ export function QuizEditor({
                     })
                   }
                 />
-                <p className="text-xs text-muted-foreground">{t("quizzes.maxAttemptsHint")}</p>
-              </div>
+                <FieldDescription>{t("quizzes.maxAttemptsHint")}</FieldDescription>
+                <FieldError>{form.error("meta.maxAttempts")}</FieldError>
+              </Field>
             </div>
 
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="quiz-answers">{t("quizzes.showAnswersAfter")}</Label>
+            <Field invalid={form.invalid("meta.showAnswersAfter")}>
+              <FieldLabel>{t("quizzes.showAnswersAfter")}</FieldLabel>
               <AdminCombobox
-                id="quiz-answers"
                 value={state.showAnswersAfter}
                 onValueChange={(value) =>
                   patch({ showAnswersAfter: value as AnswerVisibilityInput })
@@ -361,13 +380,13 @@ export function QuizEditor({
               {/* The hint exists because ADR-058 #4 makes NEVER do more than its
                 name suggests: it also suppresses the live right/wrong counter,
                 since a running score would contradict it. */}
-              <p className="text-xs text-muted-foreground">{t("quizzes.showAnswersHint")}</p>
-            </div>
+              <FieldDescription>{t("quizzes.showAnswersHint")}</FieldDescription>
+              <FieldError>{form.error("meta.showAnswersAfter")}</FieldError>
+            </Field>
 
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="quiz-track">{t("trackLabel")}</Label>
+            <Field invalid={form.invalid("meta.track")}>
+              <FieldLabel>{t("trackLabel")}</FieldLabel>
               <AdminCombobox
-                id="quiz-track"
                 value={state.track}
                 // The guard, not a cast: only a registered key may reach the
                 // payload, and moving a quiz here rewrites its public URL —
@@ -380,32 +399,32 @@ export function QuizEditor({
                   label: trackLabels(t)[key] ?? key,
                 }))}
               />
-              <p className="text-xs text-muted-foreground">{t("quizzes.trackHint")}</p>
-            </div>
+              <FieldDescription>{t("quizzes.trackHint")}</FieldDescription>
+              <FieldError>{form.error("meta.track")}</FieldError>
+            </Field>
 
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="quiz-category">{t("quizzes.category")}</Label>
+            <Field invalid={form.invalid("meta.category")}>
+              <FieldLabel>{t("quizzes.category")}</FieldLabel>
               <Input
-                id="quiz-category"
                 value={state.category}
                 maxLength={80}
                 onChange={(e) => patch({ category: e.target.value })}
               />
-              <p className="text-xs text-muted-foreground">{t("quizzes.categoryHint")}</p>
-            </div>
+              <FieldDescription>{t("quizzes.categoryHint")}</FieldDescription>
+              <FieldError>{form.error("meta.category")}</FieldError>
+            </Field>
 
-            <div className="flex items-start gap-3">
+            <Field orientation="horizontal">
               <Switch
-                id="quiz-standalone"
                 checked={state.isStandalone}
                 onCheckedChange={(checked) => patch({ isStandalone: checked })}
               />
-              <div className="flex flex-col gap-0.5">
-                <Label htmlFor="quiz-standalone">{t("quizzes.isStandalone")}</Label>
-                <p className="text-xs text-muted-foreground">{t("quizzes.isStandaloneHint")}</p>
-              </div>
-            </div>
-          </div>
+              <FieldContent>
+                <FieldLabel>{t("quizzes.isStandalone")}</FieldLabel>
+                <FieldDescription>{t("quizzes.isStandaloneHint")}</FieldDescription>
+              </FieldContent>
+            </Field>
+          </FieldGroup>
         </EditorSection>
 
         <EditorSection
@@ -430,6 +449,10 @@ export function QuizEditor({
                 onRemoveOption={(optionIndex) => removeOption(index, optionIndex)}
                 onMove={(delta) => moveQuestion(index, delta)}
                 onRemove={() => setRemoving(index)}
+                issues={{
+                  invalid: (path) => form.invalid(`questions.${index}.${path}`),
+                  error: (path) => form.error(`questions.${index}.${path}`),
+                }}
               />
             ))}
 
@@ -442,18 +465,18 @@ export function QuizEditor({
           </div>
         </EditorSection>
 
-        {/* ADR-044 #8: Save sits at the inline END of its section. */}
+        {/* ADR-044 #8: Save sits at the inline END of its section. Enabled
+            while fields are wrong: pressing it names them (audit F-07). */}
         <div className="flex justify-end">
-          <Button disabled={!canSave || !canUpdate} loading={pending} onClick={save}>
+          <Button disabled={!canUpdate} loading={pending} onClick={save}>
             {t("quizzes.save")}
           </Button>
         </div>
       </div>
 
       <div className="flex min-w-0 flex-col gap-4">
-        {/* `canSave` includes "has at least one question": a quiz with none is
-            not publishable content, and the panel disabling the transition is
-            a clearer answer than a save that fails validation server-side. */}
+        {/* The panel validates the fields before a transition that saves
+            first, and stops with them named inline (ADR-077). */}
         <ContentStatusPanel
           status={state.status}
           legalTransitions={state.legalTransitions}
@@ -461,7 +484,8 @@ export function QuizEditor({
           scheduledFor={state.scheduledFor}
           updatedAt={state.updatedAt}
           canPublish={canPublish}
-          canSave={canSave && canUpdate}
+          canSave={hasQuestions && canUpdate}
+          validate={form.validate}
           save={submitForm}
           transitionTo={(to, scheduledForIso) =>
             setQuizStatusAction(state.quizId, to, scheduledForIso)
@@ -499,6 +523,7 @@ function QuestionCard({
   onRemoveOption,
   onMove,
   onRemove,
+  issues,
 }: {
   question: EditorQuestion;
   index: number;
@@ -510,6 +535,7 @@ function QuestionCard({
   onRemoveOption: (optionIndex: number) => void;
   onMove: (delta: number) => void;
   onRemove: () => void;
+  issues: QuestionIssues;
 }) {
   const t = useTranslations("admin");
   const correct = correctIndices(question.correctAnswer);
@@ -549,21 +575,20 @@ function QuestionCard({
         </div>
       </div>
 
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor={`q-${index}-prompt`}>{t("quizzes.questionPrompt")}</Label>
+      <Field invalid={issues.invalid("prompt")} required>
+        <FieldLabel>{t("quizzes.questionPrompt")}</FieldLabel>
         <Textarea
-          id={`q-${index}-prompt`}
           rows={2}
           value={question.prompt}
           onChange={(e) => onPatch({ prompt: e.target.value })}
         />
-      </div>
+        <FieldError>{issues.error("prompt")}</FieldError>
+      </Field>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor={`q-${index}-type`}>{t("quizzes.questionType")}</Label>
+        <Field invalid={issues.invalid("type")} required>
+          <FieldLabel>{t("quizzes.questionType")}</FieldLabel>
           <AdminCombobox
-            id={`q-${index}-type`}
             value={question.type}
             onValueChange={(value) => onChangeType(value as QuestionTypeInput)}
             options={[
@@ -572,11 +597,11 @@ function QuestionCard({
               { value: "TRUE_FALSE", label: t("quizzes.typeTrueFalse") },
             ]}
           />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor={`q-${index}-points`}>{t("quizzes.points")}</Label>
+          <FieldError>{issues.error("type")}</FieldError>
+        </Field>
+        <Field invalid={issues.invalid("points")}>
+          <FieldLabel>{t("quizzes.points")}</FieldLabel>
           <Input
-            id={`q-${index}-points`}
             type="number"
             min={1}
             max={100}
@@ -585,63 +610,78 @@ function QuestionCard({
               onPatch({ points: Math.min(100, Math.max(1, Number(e.target.value) || 1)) })
             }
           />
-        </div>
+          <FieldError>{issues.error("points")}</FieldError>
+        </Field>
       </div>
 
       <div className="flex flex-col gap-2">
         {question.options.map((option, optionIndex) => (
           <div key={optionIndex} className="flex flex-col gap-1.5 rounded-md border p-3">
-            <div className="flex items-center gap-3">
-              <Checkbox
-                id={`q-${index}-o-${optionIndex}`}
-                checked={correct.includes(optionIndex)}
-                onCheckedChange={() => onToggleCorrect(optionIndex)}
-              />
-              <Label htmlFor={`q-${index}-o-${optionIndex}`} className="shrink-0">
-                {t("quizzes.markCorrect")}
-              </Label>
+            {/* The option's text is the outer Field (its message sits under the
+                whole row); the "mark correct" checkbox nests its own Field so
+                its label and id stay its own. */}
+            <Field invalid={issues.invalid(`options.${optionIndex}`)} required>
+              <div className="flex items-center gap-3">
+                <Field orientation="horizontal" className="w-auto shrink-0">
+                  <Checkbox
+                    checked={correct.includes(optionIndex)}
+                    onCheckedChange={() => onToggleCorrect(optionIndex)}
+                  />
+                  <FieldLabel>{t("quizzes.markCorrect")}</FieldLabel>
+                </Field>
+                <Input
+                  aria-label={t("quizzes.optionLabel", { number: optionIndex + 1 })}
+                  value={option}
+                  maxLength={300}
+                  disabled={fixedOptions}
+                  onChange={(e) =>
+                    onPatch({
+                      options: question.options.map((value, i) =>
+                        i === optionIndex ? e.target.value : value,
+                      ),
+                    })
+                  }
+                />
+                {!fixedOptions && question.options.length > 2 && (
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={t("quizzes.removeOption")}
+                    onClick={() => onRemoveOption(optionIndex)}
+                  >
+                    <Trash2 aria-hidden />
+                  </Button>
+                )}
+              </div>
+              <FieldError>{issues.error(`options.${optionIndex}`)}</FieldError>
+            </Field>
+            <Field invalid={issues.invalid(`explanations.${optionIndex}`)}>
               <Input
-                aria-label={t("quizzes.optionLabel", { number: optionIndex + 1 })}
-                value={option}
-                maxLength={300}
-                disabled={fixedOptions}
-                onChange={(e) =>
-                  onPatch({
-                    options: question.options.map((value, i) =>
-                      i === optionIndex ? e.target.value : value,
-                    ),
-                  })
-                }
+                aria-label={t("quizzes.optionExplanation")}
+                placeholder={t("quizzes.optionExplanation")}
+                value={question.explanations[optionIndex] ?? ""}
+                maxLength={1000}
+                onChange={(e) => {
+                  // Explanations are index-aligned with options and sparse, so a
+                  // gap has to be filled with "" rather than left undefined —
+                  // a hole would shift every later explanation onto the wrong
+                  // option once the array is serialized.
+                  const next = [...question.explanations];
+                  while (next.length < question.options.length) next.push("");
+                  next[optionIndex] = e.target.value;
+                  onPatch({ explanations: next });
+                }}
               />
-              {!fixedOptions && question.options.length > 2 && (
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={t("quizzes.removeOption")}
-                  onClick={() => onRemoveOption(optionIndex)}
-                >
-                  <Trash2 aria-hidden />
-                </Button>
-              )}
-            </div>
-            <Input
-              aria-label={t("quizzes.optionExplanation")}
-              placeholder={t("quizzes.optionExplanation")}
-              value={question.explanations[optionIndex] ?? ""}
-              maxLength={1000}
-              onChange={(e) => {
-                // Explanations are index-aligned with options and sparse, so a
-                // gap has to be filled with "" rather than left undefined —
-                // a hole would shift every later explanation onto the wrong
-                // option once the array is serialized.
-                const next = [...question.explanations];
-                while (next.length < question.options.length) next.push("");
-                next[optionIndex] = e.target.value;
-                onPatch({ explanations: next });
-              }}
-            />
+              <FieldError>{issues.error(`explanations.${optionIndex}`)}</FieldError>
+            </Field>
           </div>
         ))}
+        {/* Issues about the list as a whole (a true/false question's count). */}
+        {issues.invalid("options") && (
+          <Field invalid>
+            <FieldError>{issues.error("options")}</FieldError>
+          </Field>
+        )}
 
         {!fixedOptions && question.options.length < 12 && (
           <div>

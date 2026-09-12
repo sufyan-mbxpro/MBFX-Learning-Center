@@ -126,7 +126,7 @@ export function VideoTile({
           {/* Nudged along the inline axis so the triangle looks centred in
               the disc; `ms-` and not `ml-`, so it nudges the other way in RTL
               where the glyph is mirrored. */}
-          <Play aria-hidden className="ms-1 size-7 fill-current rtl:-scale-x-100" />
+          <Play aria-hidden className="ms-1 size-6 fill-current rtl:-scale-x-100" />
         </span>
       </span>
       {copy}
