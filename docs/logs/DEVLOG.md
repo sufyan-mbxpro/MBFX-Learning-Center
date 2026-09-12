@@ -15322,3 +15322,92 @@ yet — F4 wires `sendTemplatedEmail` and auth.
 - F4: `sendTemplatedEmail`, the `email` settings group, the seeded default
   templates, and the auth wiring (reset, verification, notices, limits).
 - Nothing renders an email yet in the app — there is no caller until F4.
+
+## 2026-09-12 — changes-21 F4: email actually sends, and auth stops logging tokens into the void (Modules 17/04/05/01, ADR-078/079)
+
+`logEmail()` is gone. Password reset and email verification now render a real
+template and reach a real transport, and every attempt is recorded.
+
+### Shipped
+
+- **`sendTemplatedEmail`** (`@repo/email/send.ts`) — the switches in order
+  (global, then the template's own), locale then default locale, render, send,
+  and a delivery row **in every outcome**. A delivery failure is RETURNED,
+  never thrown: a dead mail server must not fail the sign-up that triggered
+  it. `verifyTransport()` backs the admin's "Test connection" and records what
+  it learned.
+- **The `email` settings group** — `email.enabled`, sender identity, logo,
+  footer, postal address, and the four `newsletter.placements.*` toggles that
+  ADR-080 #5 moved out of the paused `layout` group. All `isPublic: false`.
+- **Five seeded templates**, create-only on content so an edited template
+  survives a re-seed. `scripts/check-email-templates.mjs`
+  (`pnpm check:email-templates`) fails when the code registry and the seed
+  disagree — they live in packages that cannot import each other, so the
+  check is a source scan, like `check-permission-keys.mjs`.
+- **`@repo/auth`:** the reset link is built by us and routed by
+  `user.userType`; a per-account limit (3/hour) sits in front of the send;
+  `rateLimit.customRules` covers the three endpoints per IP;
+  `revokeSessionsOnPasswordReset`; and `onPasswordReset` clears the lockout,
+  writes an audit row and sends the notice. `changeOwnPassword` and
+  `@repo/core`'s admin reset send the same notice.
+- **`advanced.backgroundTasks`** sends after the response via `after()`,
+  which also closes the enumeration timing channel (ADR-079 #4).
+
+### Corrected — ADR-078's stated reason was wrong
+
+**`@repo/core` does not import `@repo/auth`.** The claim that it did — and
+that email in core would therefore be a cycle — came from a `grep -rl` that
+matched a COMMENT, which I did not verify before writing it into ADR-078,
+architecture.md #8, the CLAUDE.md row, the skill and three commit messages.
+
+The decision survives; the reason is different and now stated accurately:
+**email sits below both senders because both layers send.** Putting it in
+`core` would force `auth → core` — an edge that does not exist — dragging
+`rbac`, `settings`, `theme`, `i18n` and `blocks` onto the session path the
+proxy and every server component touch. All five places are corrected, and
+ADR-078's "Alternatives rejected" says plainly what the earlier draft claimed.
+The ADR is new in this branch (`A` in the branch diff), so correcting it is
+not an edit to accepted history.
+
+Caught by a typecheck error, not by review: `@repo/core` had no `@repo/auth`
+dependency to import, because the edge never existed. Core now calls
+`@repo/email` directly, which is the edge the ADR declares.
+
+### Found
+
+- **The log driver had stopped printing the link.** Removing `logEmail()` took
+  the dev affordance with it — the reason that function existed was so a
+  developer with no SMTP server could follow a reset link. `logDriver` now
+  prints the plain-text alternative, where `htmlToText` spells every URL out.
+  The auth integration tests read the token from that real rendered message
+  rather than from a mock.
+- **`EmailDelivery.triggeredBy` vs `triggeredById`** — the service wrote the
+  wrong field name; nine integration tests failed identically until it was
+  fixed.
+- **The reset test was racing the send.** Outside a request scope there is no
+  `after()` to attach to, so the send runs detached; the test now waits for
+  the delivery instead of assuming it is synchronous.
+
+### Verified
+
+- `@repo/email` **93/93** (8 files) with coverage thresholds met. The new
+  `send.integration.test.ts` runs against **real MariaDB and real Mailpit**:
+  both switches, the test-send exemption, locale fallback, a missing template
+  row, an unreachable server, a missing required variable — and the assertion
+  that **the reset token never appears in the delivery row**.
+- `@repo/auth` **16/16**, including the restored verification and
+  single-use-reset round trips, plus a new `reset-url.test.ts` (6 cases)
+  pinning ADR-079 #2: staff get `/admin`, and a learner's link never contains
+  it — for an unknown or missing `userType` too.
+- `@repo/core` **488/488** · `@repo/contracts` **303/303** · `@repo/db`
+  **14/14**. Typecheck and lint clean on all six touched packages.
+- `pnpm db:seed` applied on the dev database: 48 settings, 5 email templates.
+- `check:email-templates`, `check:phantom-deps`, `check:permission-keys` and
+  `governance:check` all OK.
+
+### Owed
+
+- F5 (the admin screens), F6 (the reset/forgot UI), F7 (newsletter), F8
+  (dashboard). Nothing in the app calls `sendTemplatedEmail` yet except auth:
+  there is still no screen to configure SMTP, so delivery runs on the log
+  driver until F5 lands.

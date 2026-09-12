@@ -16,8 +16,8 @@ packages/email/src/
 └── testing.ts     # memoryDriver(), not exported from "."
 ```
 
-`auth → email` and `core → email`. `email` never imports an app, and never
-`@repo/core`.
+`auth → email` and `core → email` — email sits BELOW both senders, because
+both layers send. It never imports an app, `@repo/core`, or `@repo/auth`.
 
 ## Invariants
 

@@ -36,9 +36,11 @@ rules named below.
    `import-x/no-cycle` is lint-enforced. ADR-078 adds `auth → email` and
    `core → email`: `@repo/email` is a domain package that owns its own tables
    (the `settings`/`theme` precedent) and depends on
-   `db/contracts/settings/theme/utils`. It exists because `core` already
-   imports `auth`, and `auth` is what has to send email — email in `core`
-   would be a cycle.
+   `db/contracts/settings/theme`. It sits BELOW both senders because both
+   layers send — auth the reset and verification mail, core the
+   admin-initiated notice and the newsletter — and a package they both need
+   cannot live in either. Email in `core` would force `auth → core`, dragging
+   `rbac`, `settings`, `theme`, `i18n` and `blocks` onto the session path.
 9. Every package declares every dependency it imports (no phantom deps —
    `pnpm check:phantom-deps` enforces). Granular exports in `@repo/ui` so one
    component doesn't drag the whole tree.

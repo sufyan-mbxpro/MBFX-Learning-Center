@@ -6,6 +6,7 @@
 import { revalidateTag } from "next/cache";
 import { db, UserStatus, type PermissionEffect, type UserType } from "@repo/db";
 import { canAssignRole, type Subject } from "@repo/rbac";
+import { sendTemplatedEmail } from "@repo/email";
 import { recordAudit } from "./index.ts";
 import { recordNotification } from "./notifications.ts";
 
@@ -255,6 +256,22 @@ export async function recordPasswordReset(actor: Subject, userId: string): Promi
     entityId: userId,
   });
   await notifyIfStaff(userId, "passwordReset", "");
+  // An admin replacing someone's password is still their password changing,
+  // and they hear about it the same way (ADR-079 #6). In-app notification
+  // reaches staff only; this reaches whoever it happened to.
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: { id: true, email: true, name: true, locale: true },
+  });
+  if (user) {
+    await sendTemplatedEmail({
+      key: "auth.password_changed",
+      to: user.email,
+      locale: user.locale,
+      recipientName: user.name,
+      variables: { "changed.at": new Date().toISOString() },
+    });
+  }
   invalidateSubjectTag(userId);
 }
 

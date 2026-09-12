@@ -86,7 +86,12 @@ export function logDriver(): EmailTransportDriver {
   return {
     kind: "log",
     send(message) {
-      console.log(`[email → ${message.to}] ${message.subject}`);
+      // The plain-text alternative, not just the subject: this driver exists
+      // so a developer with no SMTP server can still follow a reset or
+      // verification link, and `htmlToText` spells every URL out. It is also
+      // what the auth integration tests read the token from — the real
+      // rendered message, rather than a mock of one.
+      console.log(`[email → ${message.to}] ${message.subject}\n${message.text}`);
       return Promise.resolve({ messageId: `log-${randomId()}` });
     },
     verify() {

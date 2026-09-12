@@ -15,6 +15,7 @@
     "@repo/blocks": "workspace:*",
     "@repo/contracts": "workspace:*",
     "@repo/db": "workspace:*",
+    "@repo/email": "workspace:*",
     "@repo/i18n": "workspace:*",
     "@repo/rbac": "workspace:*",
     "@repo/settings": "workspace:*",

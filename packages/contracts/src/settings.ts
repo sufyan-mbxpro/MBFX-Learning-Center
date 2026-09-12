@@ -224,6 +224,25 @@ export const SETTINGS_SCHEMAS = {
   "media.maxBytes.audio": z.int().min(1),
   "media.maxBytes.document": z.int().min(1),
 
+  // Email (Module 17, ADR-078). Sender identity and the shell around every
+  // message. The SMTP credentials are deliberately NOT here: they live in
+  // EmailTransport, super_admin-only, with the password sealed.
+  "email.enabled": z.boolean(),
+  "email.fromName": z.string().min(1).max(120),
+  "email.fromEmail": z.email(),
+  "email.replyTo": z.email().or(z.literal("")),
+  "email.logo": z.string().max(500),
+  "email.footerText": z.string().max(500),
+  // CAN-SPAM and its equivalents want a postal address on bulk mail.
+  "email.postalAddress": z.string().max(300),
+  // Where the newsletter signup appears (ADR-080 #5). These live here rather
+  // than in `layout`, the group ADR-038 paused in admin — which is how
+  // footer.newsletterEnabled ended up uneditable.
+  "newsletter.placements.footer": z.boolean(),
+  "newsletter.placements.home": z.boolean(),
+  "newsletter.placements.news": z.boolean(),
+  "newsletter.placements.analysis": z.boolean(),
+
   "cms.dataBudget": dataBudgetSchema,
 } as const satisfies Record<string, z.ZodType>;
 
@@ -282,6 +301,18 @@ export const SETTING_GROUPS: Record<SettingKey, string> = {
   "media.maxBytes.video": "media",
   "media.maxBytes.audio": "media",
   "media.maxBytes.document": "media",
+
+  "email.enabled": "email",
+  "email.fromName": "email",
+  "email.fromEmail": "email",
+  "email.replyTo": "email",
+  "email.logo": "email",
+  "email.footerText": "email",
+  "email.postalAddress": "email",
+  "newsletter.placements.footer": "email",
+  "newsletter.placements.home": "email",
+  "newsletter.placements.news": "email",
+  "newsletter.placements.analysis": "email",
 
   "cms.dataBudget": "cms",
 };

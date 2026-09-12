@@ -576,6 +576,100 @@ const SETTINGS = [
     "Copyright notice",
     true,
   ],
+
+  // ─── Email (Module 17, ADR-078) ────────────────────────────
+  //
+  // Sender identity and the shell. None of it is public: an email address a
+  // site sends FROM is a spam magnet, and none of these render on a page.
+  // The SMTP credentials are not settings at all — they live in
+  // EmailTransport, super_admin-only, with the password sealed.
+  ["email", "email.enabled", true, "BOOLEAN", "Send email", false],
+  ["email", "email.fromName", "MBX Learning Center", "STRING", "From name", false],
+  ["email", "email.fromEmail", "no-reply@mbxpro.com", "STRING", "From address", false],
+  ["email", "email.replyTo", "", "STRING", "Reply-to address", false],
+  ["email", "email.logo", "", "IMAGE", "Email logo", false],
+  [
+    "email",
+    "email.footerText",
+    "You are receiving this because you have an account with MBX Learning Center.",
+    "TEXT",
+    "Email footer text",
+    false,
+  ],
+  ["email", "email.postalAddress", "", "TEXT", "Postal address (bulk mail)", false],
+
+  // Newsletter placement (ADR-080 #5). The `newsletter` FLAG decides whether
+  // signup exists at all; these decide where it shows. They live in the
+  // `email` group because `layout` is paused in admin (ADR-038), which is how
+  // footer.newsletterEnabled became uneditable.
+  ["email", "newsletter.placements.footer", true, "BOOLEAN", "Newsletter in the footer", false],
+  ["email", "newsletter.placements.home", true, "BOOLEAN", "Newsletter on the homepage", false],
+  ["email", "newsletter.placements.news", true, "BOOLEAN", "Newsletter on /news", false],
+  ["email", "newsletter.placements.analysis", true, "BOOLEAN", "Newsletter on /analysis", false],
+] as const;
+
+// ─────────────────────────────────────────────────────────────
+// 4b. EMAIL TEMPLATES (Module 17, ADR-078)
+//
+// The starting content for each key the code registry declares. Plain prose
+// and one link each: the shell (@repo/email's layout) supplies the frame, and
+// every `ed-*` class becomes an inline style at render time, so a template
+// never carries a colour of its own.
+// ─────────────────────────────────────────────────────────────
+
+const EMAIL_TEMPLATES = [
+  {
+    key: "auth.password_reset",
+    subject: "Reset your password",
+    preheader: "The link expires in {{expires.minutes}} minutes.",
+    bodyHtml:
+      "<p>Hello {{recipient.name}},</p>" +
+      "<p>Someone asked to reset the password for your {{site.name}} account. " +
+      "If that was you, use the link below. It expires in {{expires.minutes}} minutes.</p>" +
+      '<p><a href="{{reset.url}}">Reset your password</a></p>' +
+      "<p>If it was not you, nothing has changed and you can ignore this message.</p>",
+  },
+  {
+    key: "auth.verify_email",
+    subject: "Confirm your email address",
+    preheader: "One click and your {{site.name}} account is confirmed.",
+    bodyHtml:
+      "<p>Welcome to {{site.name}}, {{recipient.name}}.</p>" +
+      "<p>Confirm this address so we know we can reach you:</p>" +
+      '<p><a href="{{verify.url}}">Confirm my email</a></p>' +
+      "<p>You can keep using your account either way — confirming just keeps you " +
+      "reachable if you ever need to recover it.</p>",
+  },
+  {
+    key: "auth.password_changed",
+    subject: "Your password was changed",
+    preheader: "A confirmation, in case it was not you.",
+    bodyHtml:
+      "<p>Hello {{recipient.name}},</p>" +
+      "<p>The password on your {{site.name}} account was changed on {{changed.at}}, " +
+      "and every signed-in session was signed out.</p>" +
+      "<p>If that was not you, reset your password immediately and contact us.</p>",
+  },
+  {
+    key: "newsletter.confirm",
+    subject: "Confirm your newsletter subscription",
+    preheader: "One click to start receiving {{site.name}} updates.",
+    bodyHtml:
+      "<p>Thanks for signing up to the {{site.name}} newsletter.</p>" +
+      "<p>Confirm the subscription to start receiving it:</p>" +
+      '<p><a href="{{confirm.url}}">Confirm my subscription</a></p>' +
+      "<p>If you did not sign up, ignore this message — nothing happens without " +
+      "that confirmation.</p>",
+  },
+  {
+    key: "newsletter.welcome",
+    subject: "You are subscribed",
+    preheader: "Here is what to expect from the {{site.name}} newsletter.",
+    bodyHtml:
+      "<p>You are on the list. Expect market notes, new lessons and the " +
+      "occasional deep dive from {{site.name}}.</p>" +
+      '<p>You can <a href="{{unsubscribe.url}}">unsubscribe</a> at any time.</p>',
+  },
 ] as const;
 
 // ─────────────────────────────────────────────────────────────
@@ -792,6 +886,37 @@ export async function seed(db: PrismaClient) {
     });
   }
   console.log(`  feature flags: ${FEATURE_FLAGS.length}`);
+
+  // ─── Email templates (Module 17, ADR-078 #5) ───────────────
+  //
+  // Code owns the SET of keys (EMAIL_TEMPLATES in @repo/contracts); this owns
+  // the starting CONTENT. `scripts/check-email-templates.mjs` fails when the
+  // two disagree — this file cannot import the registry, because @repo/db
+  // sits upstream of @repo/contracts.
+  //
+  // Both upserts are create-only on content: an edited template is never
+  // overwritten by a later seed run, exactly like a settings value.
+  for (const template of EMAIL_TEMPLATES) {
+    await db.emailTemplate.upsert({
+      where: { key: template.key },
+      update: {},
+      create: { key: template.key },
+    });
+    await db.emailTemplateTranslation.upsert({
+      where: { templateKey_locale: { templateKey: template.key, locale: "en" } },
+      update: {},
+      create: {
+        templateKey: template.key,
+        locale: "en",
+        subject: template.subject,
+        preheader: template.preheader,
+        mode: "RICH",
+        bodyHtml: template.bodyHtml,
+        translationStatus: "TRANSLATED",
+      },
+    });
+  }
+  console.log(`  email templates: ${EMAIL_TEMPLATES.length}`);
 
   // Social links
   for (const link of SOCIAL_LINKS) {

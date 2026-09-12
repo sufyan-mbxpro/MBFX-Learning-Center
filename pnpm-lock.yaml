@@ -168,6 +168,9 @@ importers:
       '@repo/db':
         specifier: workspace:*
         version: link:../db
+      '@repo/email':
+        specifier: workspace:*
+        version: link:../email
       better-auth:
         specifier: 1.7.2
         version: 1.7.2(@prisma/client@7.10.0(prisma@7.10.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@6.0.3))(typescript@6.0.3))(mysql2@3.15.3)(next@16.3.3(@babel/core@7.29.7(supports-color@7.2.0))(@playwright/test@1.62.1)(@types/node@24.13.3)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(prisma@7.10.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@6.0.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@4.1.11)
@@ -294,6 +297,9 @@ importers:
       '@repo/db':
         specifier: workspace:*
         version: link:../db
+      '@repo/email':
+        specifier: workspace:*
+        version: link:../email
       '@repo/i18n':
         specifier: workspace:*
         version: link:../i18n
@@ -404,6 +410,9 @@ importers:
       '@repo/db':
         specifier: workspace:*
         version: link:../db
+      '@repo/settings':
+        specifier: workspace:*
+        version: link:../settings
       '@repo/theme':
         specifier: workspace:*
         version: link:../theme

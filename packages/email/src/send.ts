@@ -1,0 +1,254 @@
+// One message, end to end (ADR-078 #9, #10, #11).
+//
+// The order of the checks is the contract: global switch, then the template's
+// own, then render, then transport — and EVERY outcome writes a delivery row,
+// because "nothing arrived" is a question someone will ask later and the log
+// is the only place that answers it.
+//
+// A delivery failure is RETURNED, never thrown. Sign-up must not fail because
+// a mail server did.
+import { EMAIL_TEMPLATES, type EmailBodyMode, type EmailTemplateKey } from "@repo/contracts";
+import { db } from "@repo/db";
+import { loadSetting } from "@repo/settings";
+import { CURATED_FONTS, loadActiveThemeTokens } from "@repo/theme";
+import type { EmailPalette } from "./layout.ts";
+import { renderEmail } from "./render.ts";
+import { TRANSPORT_ID, loadTransportDriver } from "./transport.ts";
+
+/** The locale every template is guaranteed to have (ADR-043 #3). */
+export const DEFAULT_EMAIL_LOCALE = "en";
+
+export type DeliveryStatus = "SENT" | "FAILED" | "SUPPRESSED";
+
+export interface SendTemplatedEmailInput {
+  key: EmailTemplateKey;
+  to: string;
+  locale?: string | undefined;
+  /** Used for {{recipient.name}}; the address is filled in automatically. */
+  recipientName?: string | undefined;
+  variables?: Readonly<Record<string, string>> | undefined;
+  /** The staff member who pressed the button, for the log. */
+  triggeredById?: string | undefined;
+  /** A test send ignores `isActive` — never the global switch. */
+  isTest?: boolean | undefined;
+  /** Both halves, because a package may not invent the word (code-style #2). */
+  unsubscribe?: { url: string; label: string } | undefined;
+}
+
+export interface DeliveryResult {
+  status: DeliveryStatus;
+  reason?: string;
+  deliveryId: string;
+}
+
+const SYSTEM_FONT_STACK =
+  "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif";
+
+/** An email client cannot fetch a web font, so the brand face is a hint. */
+function fontFamilyFor(fontSansKey: string): string {
+  const label = CURATED_FONTS.find((font) => font.key === fontSansKey)?.label;
+  return label && fontSansKey !== "system" ? `'${label}', ${SYSTEM_FONT_STACK}` : SYSTEM_FONT_STACK;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+async function record(input: {
+  key: string;
+  to: string;
+  locale: string;
+  subject: string;
+  status: DeliveryStatus;
+  reason?: string | undefined;
+  providerMessageId?: string | undefined;
+  isTest: boolean;
+  triggeredById?: string | undefined;
+}): Promise<DeliveryResult> {
+  const row = await db.emailDelivery.create({
+    data: {
+      templateKey: input.key,
+      to: input.to,
+      locale: input.locale,
+      // Never the body, never the variables (ADR-078 #10).
+      subject: input.subject.slice(0, 200),
+      status: input.status,
+      reason: input.reason?.slice(0, 500) ?? null,
+      providerMessageId: input.providerMessageId ?? null,
+      isTest: input.isTest,
+      triggeredBy: input.triggeredById ?? null,
+    },
+    select: { id: true },
+  });
+  return {
+    status: input.status,
+    ...(input.reason === undefined ? {} : { reason: input.reason }),
+    deliveryId: row.id,
+  };
+}
+
+export async function sendTemplatedEmail(input: SendTemplatedEmailInput): Promise<DeliveryResult> {
+  const locale = input.locale ?? DEFAULT_EMAIL_LOCALE;
+  const isTest = input.isTest ?? false;
+  const base = { key: input.key, to: input.to, locale, isTest, triggeredById: input.triggeredById };
+
+  // 1. The global switch. A test send does not get past this one either.
+  if ((await loadSetting("email.enabled")) === false) {
+    return record({ ...base, subject: "", status: "SUPPRESSED", reason: "email.enabled is off" });
+  }
+
+  const template = await db.emailTemplate.findUnique({
+    where: { key: input.key },
+    include: { translations: true },
+  });
+  if (!template) {
+    return record({
+      ...base,
+      subject: "",
+      status: "FAILED",
+      reason: `No template row for ${input.key} — run the seed.`,
+    });
+  }
+
+  // 2. The template's own switch. A test IS allowed past this one: you have
+  //    to be able to check a template before turning it on.
+  if (!template.isActive && !isTest) {
+    return record({ ...base, subject: "", status: "SUPPRESSED", reason: "template is inactive" });
+  }
+
+  // 3. Locale, then the default locale (ADR-078 #12).
+  const content =
+    template.translations.find((row) => row.locale === locale) ??
+    template.translations.find((row) => row.locale === DEFAULT_EMAIL_LOCALE);
+  if (!content) {
+    return record({
+      ...base,
+      subject: "",
+      status: "FAILED",
+      reason: `Template ${input.key} has no ${DEFAULT_EMAIL_LOCALE} content.`,
+    });
+  }
+
+  const [tokens, siteName, siteUrl, fromName, fromEmail, replyTo, logo, footerText, postalAddress] =
+    await Promise.all([
+      loadActiveThemeTokens("web"),
+      loadSetting("site.name"),
+      Promise.resolve(process.env.NEXT_PUBLIC_SITE_URL ?? ""),
+      loadSetting("email.fromName"),
+      loadSetting("email.fromEmail"),
+      loadSetting("email.replyTo"),
+      loadSetting("email.logo"),
+      loadSetting("email.footerText"),
+      loadSetting("email.postalAddress"),
+    ]);
+
+  const palette: EmailPalette = {
+    brand: tokens.brand,
+    // Light surfaces always: an email is read on the client's ground, and
+    // a dark-mode email is a different design problem.
+    surface: tokens.light,
+    fontFamily: fontFamilyFor(tokens.layout.fontSans),
+  };
+
+  const resolvedSiteName = siteName ?? "";
+  const variables: Record<string, string> = {
+    "site.name": resolvedSiteName,
+    "site.url": siteUrl,
+    "logo.url": logo || siteUrl,
+    year: String(new Date().getFullYear()),
+    "recipient.email": input.to,
+    "recipient.name": input.recipientName ?? "",
+    ...input.variables,
+  };
+
+  let rendered;
+  try {
+    rendered = renderEmail({
+      key: input.key,
+      mode: content.mode as EmailBodyMode,
+      subject: content.subject,
+      preheader: content.preheader ?? undefined,
+      bodyHtml: content.bodyHtml,
+      variables,
+      palette,
+      shell: {
+        siteName: resolvedSiteName,
+        logoUrl: logo || undefined,
+        footerText: footerText || undefined,
+        postalAddress: postalAddress || undefined,
+        unsubscribe: input.unsubscribe,
+      },
+    });
+  } catch (error) {
+    return record({
+      ...base,
+      subject: content.subject,
+      status: "FAILED",
+      reason: errorMessage(error),
+    });
+  }
+
+  // 4. Send. The sender identity is the template's override, then the
+  //    site-wide setting.
+  try {
+    const driver = await loadTransportDriver();
+    const { messageId } = await driver.send({
+      to: input.to,
+      from: {
+        name: template.fromName ?? fromName ?? resolvedSiteName,
+        address: template.fromEmail ?? fromEmail ?? "",
+      },
+      replyTo: template.replyTo ?? replyTo ?? undefined,
+      subject: rendered.subject,
+      html: rendered.html,
+      text: rendered.text,
+      headers: input.unsubscribe
+        ? {
+            // RFC 8058: a mail client's own one-click button (ADR-080 #4).
+            "List-Unsubscribe": `<${input.unsubscribe.url}>`,
+            "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+          }
+        : undefined,
+    });
+    return record({
+      ...base,
+      subject: rendered.subject,
+      status: "SENT",
+      providerMessageId: messageId,
+    });
+  } catch (error) {
+    // Not rethrown: a mail server being down must not fail the sign-up,
+    // reset or subscription that triggered this.
+    return record({
+      ...base,
+      subject: rendered.subject,
+      status: "FAILED",
+      reason: errorMessage(error),
+    });
+  }
+}
+
+/** For the admin's "Test connection" button. Records what it learned. */
+export async function verifyTransport(): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const driver = await loadTransportDriver();
+    await driver.verify();
+    await db.emailTransport.updateMany({
+      where: { id: TRANSPORT_ID },
+      data: { lastVerifiedAt: new Date(), lastError: null },
+    });
+    return { ok: true };
+  } catch (error) {
+    const message = errorMessage(error);
+    await db.emailTransport.updateMany({
+      where: { id: TRANSPORT_ID },
+      data: { lastError: message.slice(0, 500) },
+    });
+    return { ok: false, error: message };
+  }
+}
+
+/** Which templates exist, for a caller that wants to check before sending. */
+export function emailTemplateKeys(): EmailTemplateKey[] {
+  return Object.keys(EMAIL_TEMPLATES) as EmailTemplateKey[];
+}

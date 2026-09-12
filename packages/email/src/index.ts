@@ -43,3 +43,13 @@ export {
   type RenderEmailInput,
   type RenderedEmail,
 } from "./render.ts";
+
+export {
+  DEFAULT_EMAIL_LOCALE,
+  emailTemplateKeys,
+  sendTemplatedEmail,
+  verifyTransport,
+  type DeliveryResult,
+  type DeliveryStatus,
+  type SendTemplatedEmailInput,
+} from "./send.ts";

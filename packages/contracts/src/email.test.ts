@@ -43,18 +43,19 @@ describe("the registry", () => {
   it.each(EMAIL_TEMPLATE_KEYS)("%s has a sample value for every variable it allows", (key) => {
     // The preview and the test send run on these: a gap here is an admin
     // seeing literal braces the first time they open the editor.
+    const samples: Record<string, string> = EMAIL_TEMPLATES[key].sample;
     for (const name of emailTemplateVariables(key)) {
-      expect(
-        EMAIL_TEMPLATES[key].sample[name],
-        `${key} is missing a sample for ${name}`,
-      ).toBeTypeOf("string");
+      expect(samples[name], `${key} is missing a sample for ${name}`).toBeTypeOf("string");
     }
   });
 
   it.each(EMAIL_TEMPLATE_KEYS)("%s samples a real http(s) URL for every URL variable", (key) => {
     for (const name of emailTemplateVariables(key)) {
       if (!isUrlEmailVariable(name)) continue;
-      expect(() => new URL(EMAIL_TEMPLATES[key].sample[name] ?? "")).not.toThrow();
+      // A regex, not `new URL`: @repo/contracts is pure and carries no node
+      // or DOM lib types, which is exactly the discipline keeping it portable.
+      const samples: Record<string, string> = EMAIL_TEMPLATES[key].sample;
+      expect(samples[name] ?? "").toMatch(/^https?:\/\//);
     }
   });
 

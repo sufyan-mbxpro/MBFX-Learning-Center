@@ -35,7 +35,10 @@ beforeAll(async () => {
   });
 
   process.env.DATABASE_URL = url;
+  process.env.NEXT_PUBLIC_SITE_URL = "https://mbx.test";
   ({ authInstance } = await import("./index.ts"));
+  const { db } = await import("@repo/db");
+  await seedAuthEmailTemplates(db);
 }, 120_000);
 
 afterAll(async () => {
@@ -77,19 +80,66 @@ type WithAdditionalFields<T> = T & {
 };
 
 /**
- * Extracts the URL our logEmail() dev stand-in printed, and its token.
- * Better Auth doesn't use one URL shape for every flow: email verification
- * puts the token in a `?token=` query param, but password reset embeds it
- * as a path segment (`/reset-password/:token`) — found from the actual
- * logged URL, not assumed from the verification flow's shape.
+ * Extracts the token from the message @repo/email's LOG driver printed
+ * (ADR-078 #2 — what runs until SMTP is configured). This reads the REAL
+ * rendered email: the template, the renderer and the transport all ran, and
+ * `htmlToText` spells every link out, which is the same affordance a
+ * developer uses locally.
+ *
+ * Better Auth does not use one URL shape for every flow: verification puts
+ * the token in a `?token=` query param, while our reset link builds its own
+ * (ADR-079 #2). Both are found from the printed URL, not assumed.
  */
-function extractTokenFromLoggedUrl(logSpy: ReturnType<typeof vi.spyOn>): string {
-  const call = logSpy.mock.calls.find((c: unknown[]) => String(c[0]).includes("url=http"));
-  if (!call) throw new Error("no email URL was logged");
-  const url = new URL(String(call[0]).split("url=")[1]!.trim());
+async function extractTokenFromLoggedUrl(logSpy: ReturnType<typeof vi.spyOn>): Promise<string> {
+  // Sending happens AFTER the response (ADR-078 #11). Outside a request scope
+  // there is no `after()` to attach to, so the promise runs detached and the
+  // log lands a tick or two later — wait for it rather than racing it.
+  let printed: string | undefined;
+  for (let attempt = 0; attempt < 40 && !printed; attempt += 1) {
+    printed = logSpy.mock.calls
+      .map((call: unknown[]) => call.map(String).join(" "))
+      .find((line) => line.includes("http"));
+    if (!printed) await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  if (!printed) throw new Error("no email was logged");
+  const match = printed.match(/https?:\/\/\S+/);
+  if (!match) throw new Error(`logged email had no URL: ${printed}`);
+  const url = new URL(match[0].replace(/[)\].,]+$/, ""));
   const token = url.searchParams.get("token") ?? url.pathname.split("/").pop();
   if (!token) throw new Error(`logged URL had no token: ${url}`);
   return token;
+}
+
+/**
+ * The two templates these flows send. @repo/email refuses to send a template
+ * with no row (it cannot invent content), and this database is migrated but
+ * never seeded.
+ */
+async function seedAuthEmailTemplates(db: {
+  emailTemplate: { upsert: (args: unknown) => Promise<unknown> };
+}) {
+  for (const [key, subject, bodyHtml] of [
+    [
+      "auth.password_reset",
+      "Reset your password",
+      '<p>Reset it here: <a href="{{reset.url}}">reset</a></p>',
+    ],
+    [
+      "auth.verify_email",
+      "Confirm your email address",
+      '<p>Confirm here: <a href="{{verify.url}}">confirm</a></p>',
+    ],
+    ["auth.password_changed", "Your password was changed", "<p>Changed {{changed.at}}.</p>"],
+  ] as const) {
+    await db.emailTemplate.upsert({
+      where: { key },
+      update: {},
+      create: {
+        key,
+        translations: { create: { locale: "en", subject, mode: "RICH", bodyHtml } },
+      },
+    });
+  }
 }
 
 describe("sign-up → verification token round-trip → status flips ACTIVE", () => {
@@ -104,7 +154,7 @@ describe("sign-up → verification token round-trip → status flips ACTIVE", ()
       "PENDING_VERIFICATION",
     );
 
-    const token = extractTokenFromLoggedUrl(logSpy);
+    const token = await extractTokenFromLoggedUrl(logSpy);
     logSpy.mockRestore();
 
     await authInstance.api.verifyEmail({ query: { token } });
@@ -177,7 +227,7 @@ describe("password reset: single-use, 30-minute expiry (plan.md)", () => {
 
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     await authInstance.api.requestPasswordReset({ body: { email } });
-    const token = extractTokenFromLoggedUrl(logSpy);
+    const token = await extractTokenFromLoggedUrl(logSpy);
     logSpy.mockRestore();
 
     await authInstance.api.resetPassword({

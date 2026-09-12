@@ -10,8 +10,12 @@ import { createAuthMiddleware } from "better-auth/api";
 import { admin } from "better-auth/plugins/admin";
 import { twoFactor } from "better-auth/plugins/two-factor";
 import { bearer } from "better-auth/plugins/bearer";
+import { after } from "next/server";
 import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from "@repo/contracts";
 import { db } from "@repo/db";
+import { sendTemplatedEmail } from "@repo/email";
+import { rateLimit } from "./rate-limit.ts";
+import { resetPasswordPath } from "./reset-url.ts";
 import { redisSecondaryStorage } from "./redis-secondary-storage.ts";
 
 // Public-write throttling (changes-11 PR 5.2/5.5). Re-exported here so a
@@ -46,14 +50,56 @@ function computeLockoutSeconds(failedLoginCount: number): number {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Email delivery — no provider is configured yet (not assigned to a module
-// in plan.md). Logs the token/URL Better Auth actually generates so the
-// verification/reset flow is real and testable locally; swap the body of
-// this function for a real provider whenever one lands.
+// Email (ADR-078, ADR-079). Delivery, templates and the log belong to
+// @repo/email; what stays here are the two rules that are about auth:
+//
+//   1. **The reset link is routed by the USER's type, never by the screen
+//      that asked** (ADR-079 #2). A learner who types their address into the
+//      staff screen still gets a public link, and the public surface goes on
+//      advertising no administrator entry point (ADR-052).
+//   2. **A per-account limit sits in front of the send.** Better Auth's own
+//      limiter is per IP, and a mail-bomb aimed at one address can come from
+//      many (security.md #13).
 // ─────────────────────────────────────────────────────────────
 
-function logEmail(kind: string, to: string, url: string) {
-  console.log(`[auth email — ${kind}] to=${to} url=${url}`);
+const RESET_TOKEN_MINUTES = 30;
+const RESET_SENDS_PER_HOUR = 3;
+
+function siteOrigin(): string {
+  return process.env.NEXT_PUBLIC_SITE_URL ?? process.env.BETTER_AUTH_URL ?? "";
+}
+
+function adminOrigin(): string {
+  return process.env.NEXT_PUBLIC_ADMIN_URL ?? siteOrigin();
+}
+
+interface MailUser {
+  id: string;
+  email: string;
+  name?: string | null;
+  locale?: string | null;
+  userType?: string | null;
+}
+
+/** The origins resolved at call time, so a test can set the env and see it. */
+export function resetPasswordUrl(user: Pick<MailUser, "userType" | "locale">, token: string) {
+  return resetPasswordPath(user, token, { site: siteOrigin(), admin: adminOrigin() });
+}
+
+/**
+ * "Your password was changed" — sent for all three ways it can happen: a
+ * self-service reset, an admin-initiated one (@repo/core), and a signed-in
+ * change. A password moving without its owner hearing about it is the signal
+ * worth having (ADR-079 #6).
+ */
+export async function sendPasswordChangedNotice(user: MailUser): Promise<void> {
+  await sendTemplatedEmail({
+    key: "auth.password_changed",
+    to: user.email,
+    locale: user.locale ?? undefined,
+    recipientName: user.name ?? undefined,
+    variables: { "changed.at": new Date().toISOString() },
+  });
 }
 
 const adapter = prismaAdapter(db, { provider: "mysql" });
@@ -94,22 +140,70 @@ const authOptions: BetterAuthOptions = {
     // and enforce the same minimum without importing this package.
     minPasswordLength: MIN_PASSWORD_LENGTH,
     maxPasswordLength: MAX_PASSWORD_LENGTH,
-    resetPasswordTokenExpiresIn: 30 * 60, // 30 min, per plan.md
+    resetPasswordTokenExpiresIn: RESET_TOKEN_MINUTES * 60, // per plan.md
+    // A reset signs every session out: whoever knew the old password stops
+    // being signed in (ADR-079 #6).
+    revokeSessionsOnPasswordReset: true,
     password: {
       // Argon2id via @node-rs/argon2 overrides Better Auth's scrypt default.
       hash: (password) => hash(password, { algorithm: ARGON2ID }),
       verify: ({ hash: storedHash, password }) =>
         verify(storedHash, password, { algorithm: ARGON2ID }),
     },
-    sendResetPassword: async ({ user, url }) => {
-      logEmail("password-reset", user.email, url);
+    // `token`, not `url`: Better Auth's own URL points at its callback, and
+    // the link has to land on OUR screen — which one depends on the user
+    // (ADR-079 #2).
+    sendResetPassword: async ({ user, token }) => {
+      const mailUser = user as unknown as MailUser;
+      const limit = await rateLimit(`email:reset:${user.id}`, RESET_SENDS_PER_HOUR, 60 * 60);
+      // Over the limit, nothing is sent AND the response is unchanged: the
+      // caller cannot tell a throttled address from an unknown one.
+      if (!limit.ok) return;
+      await sendTemplatedEmail({
+        key: "auth.password_reset",
+        to: user.email,
+        locale: mailUser.locale ?? undefined,
+        recipientName: user.name,
+        variables: {
+          "reset.url": resetPasswordUrl(mailUser, token),
+          "expires.minutes": String(RESET_TOKEN_MINUTES),
+        },
+      });
+    },
+    // A completed reset clears the lockout — a reset is how a locked-out user
+    // recovers, so leaving it in place would be a trap — audits itself, and
+    // tells the owner (ADR-079 #6).
+    onPasswordReset: async ({ user }) => {
+      await db.user.update({
+        where: { id: user.id },
+        data: { failedLoginCount: 0, lockedUntil: null },
+      });
+      await db.auditLog.create({
+        data: {
+          userId: user.id,
+          action: "auth.passwordReset.self",
+          entityType: "User",
+          entityId: user.id,
+        },
+      });
+      await sendPasswordChangedNotice(user as unknown as MailUser);
     },
   },
 
   emailVerification: {
     sendOnSignUp: true,
+    // The URL is Better Auth's own callback, which flips `emailVerified` and
+    // then redirects to the `callbackURL` the sign-up screen supplied. Nothing
+    // about it is surface-specific, so it is used as given.
     sendVerificationEmail: async ({ user, url }) => {
-      logEmail("verify-email", user.email, url);
+      const mailUser = user as unknown as MailUser;
+      await sendTemplatedEmail({
+        key: "auth.verify_email",
+        to: user.email,
+        locale: mailUser.locale ?? undefined,
+        recipientName: user.name,
+        variables: { "verify.url": url },
+      });
     },
     afterEmailVerification: async (user) => {
       await db.user.update({ where: { id: user.id }, data: { status: "ACTIVE" } });
@@ -130,6 +224,32 @@ const authOptions: BetterAuthOptions = {
   rateLimit: {
     enabled: true,
     storage: "secondary-storage",
+    // Per IP. The per-ACCOUNT half lives in sendResetPassword, because these
+    // two stop different attacks (security.md #13, ADR-079 #5).
+    customRules: {
+      "/request-password-reset": { window: 600, max: 3 },
+      "/send-verification-email": { window: 600, max: 3 },
+      "/reset-password": { window: 600, max: 10 },
+    },
+  },
+
+  advanced: {
+    // Sending happens AFTER the response (ADR-078 #11). It also closes the
+    // timing side channel in anti-enumeration: a known address and an unknown
+    // one now take the same time to answer, because neither waits for a
+    // mail server (ADR-079 #4).
+    backgroundTasks: {
+      handler: (promise) => {
+        try {
+          after(() => promise);
+        } catch {
+          // No request scope — an integration test, or a script. Let it run
+          // and swallow the rejection rather than crash the process on an
+          // unhandled one; the delivery row records what happened either way.
+          void promise.catch(() => {});
+        }
+      },
+    },
   },
 
   user: {
@@ -253,7 +373,7 @@ export async function changeOwnPassword(input: {
   currentPassword: string;
   newPassword: string;
 }): Promise<void> {
-  await authInstance.api.changePassword({
+  const result = await authInstance.api.changePassword({
     headers: await headers(),
     body: {
       currentPassword: input.currentPassword,
@@ -261,6 +381,9 @@ export async function changeOwnPassword(input: {
       revokeOtherSessions: true,
     },
   });
+  // The same notice a reset sends (ADR-079 #6). `changePassword` throws on a
+  // wrong current password, so reaching this line means it happened.
+  if (result.user) await sendPasswordChangedNotice(result.user as unknown as MailUser);
 }
 
 export async function auth(): Promise<Session | null> {

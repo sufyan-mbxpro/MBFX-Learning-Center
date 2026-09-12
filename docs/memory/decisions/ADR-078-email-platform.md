@@ -31,17 +31,29 @@ and a per-template on/off switch.
 
 Two facts shaped the answer before any design did:
 
-- **`@repo/core` already imports `@repo/auth`** (`packages/core/src/users.ts`),
-  and auth is what has to send. Email in core would be a package cycle.
+- **Two different layers have to send.** `@repo/auth` sends the reset and
+  verification mail; `@repo/core` sends the admin-initiated reset notice and,
+  later, the newsletter. `core` sits well above `auth` — it pulls in `rbac`,
+  `settings`, `theme`, `i18n`, `blocks` and `sanitize-html` — and `auth` is on
+  the session path every request touches. Neither can own email without the
+  other importing it.
 - **Secrets are env-only** (security.md #10), but the owner asked for
   admin-editable SMTP so a provider can be changed without a redeploy.
 
 ## Decision
 
-1. **Email is its own package, `@repo/email`.** It owns its own tables, the
-   way `@repo/settings` and `@repo/theme` already own theirs. The graph gains
-   `auth → email` and `core → email`; `email` depends on
-   `db / contracts / settings / theme / utils` and never on an app.
+1. **Email is its own package, `@repo/email`, BELOW both senders.** It owns
+   its own tables, the way `@repo/settings` and `@repo/theme` already own
+   theirs. The graph gains `auth → email` and `core → email`; `email` depends
+   on `db / contracts / settings / theme` and never on an app, on `core`, or
+   on `auth`.
+
+   A package two layers both need cannot live in either of them. Putting
+   email in `core` would mean `auth → core`, dragging `rbac`, `settings`,
+   `theme`, `i18n`, `blocks` and `sanitize-html` onto the session path that
+   the proxy and every server component already touch. Putting it in `auth`
+   would make the newsletter import the authentication package.
+
 2. **The transport is a seam, not a provider.**
    `EmailTransportDriver { send(); verify() }` has two implementations:
    `smtpDriver` (nodemailer) and `logDriver`, which keeps today's console line
@@ -129,8 +141,12 @@ Two facts shaped the answer before any design did:
 
 ## Alternatives rejected
 
-- **Email inside `@repo/core`.** A cycle: core already imports auth, and auth
-  must send.
+- **Email inside `@repo/core`.** It would force `auth → core`: an edge that
+  does not exist today, inverting the layering and pulling core's whole
+  dependency graph onto the session path. (An earlier draft of this ADR
+  claimed core already imported auth, making the edge a cycle. It does not —
+  the only mention is a comment. The conclusion survives the correction; the
+  reason is layering and weight, not a cycle.)
 - **Env-only SMTP credentials.** The safer default, and the owner declined it
   (D1): changing provider would need a redeploy. The exception is narrowed to
   one field, one reader and one role instead.
