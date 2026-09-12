@@ -16699,3 +16699,81 @@ snapshot's exclusions, and the key's absence from the view.
 `typecheck` and `lint` clean on `@repo/secrets`, `@repo/contracts`,
 `@repo/core`, `@repo/db`, `@repo/email` and `web`.
 `check:phantom-deps` — OK. `check:permission-keys` — OK.
+
+## 2026-09-12 — changes-25 T4: the market admin, and the collision CLAUDE.md predicted
+
+**Module:** 13 (market), 09 (admin shell) · **PR:** T4 · **ADR:** 087
+
+`/admin/market` (instruments: DataTable, toolbar kind + status filters, search,
+keyboard reorder, activate/deactivate, delete) and `/admin/market/provider`
+(driver, base URL, write-only API key, intervals, enabled, a connection test
+and the last-sync panel). ADR-044 / ADR-057 / ADR-077 conventions throughout;
+`admin-dialog-conventions` and `admin-form-conventions` pick both up without
+being edited.
+
+**Two keys, not one.** Instruments are `market.instruments.manage`; the
+provider is `market.providers.manage`. No new keys — both have been seeded
+since Module 01 (ADR-086 #7).
+
+### What the dev-server pass found, and what it cost
+
+Four bugs, none of which any test, typecheck or lint caught. Three were mine.
+
+1. **`admin.market` collided with the sidebar's own label key** — the exact
+   `admin.glossary` collision ADR-069 hit, which CLAUDE.md records with the
+   words "nothing static catches that collision". `admin-shell.tsx` renders
+   `t(entry.labelKey)` and next-intl throws `INSUFFICIENT_PATH` when the path
+   holds an object, so **the entire admin shell went down**, not just the new
+   screen. Fixed the documented way: `admin.market` is the nav label STRING and
+   the screen's keys live under `admin.marketData`, as
+   `admin.glossary`/`admin.glossaryEditor` already do.
+
+   **Now something static DOES catch it.** `apps/web/app/admin-nav-labels.test.ts`
+   is new: every `labelKey` in `admin-shell.tsx` must resolve to a string in
+   `en.json`, and the two known collisions are pinned by name. Verified the way
+   a guard should be — by reintroducing the bug and watching it fail, then
+   restoring. It also asserts each nav GROUP has a distinct label key, which
+   caught bug 2.
+
+2. **A duplicate React key in the sidebar.** I added a second group with
+   `labelKey: "navContent"` when a Content group already existed, so React
+   reported two children with the same key. Market now sits in the existing
+   group, which is where it belonged anyway.
+
+3. **Every field HINT rendered in destructive red.** I had put them in
+   `FieldError`, which paints destructive ink by design (ADR-077) — so the
+   provider form opened looking permanently invalid. They are
+   `FieldDescription` now, and the error slot holds only errors.
+
+4. **"Never synced" was destructive-toned on a fresh install.** The provider
+   ships MANUAL and disabled (ADR-087 #11), so a correct first run showed
+   twenty-eight red badges. It is neutral now: a fault has a screen of its own
+   — `lastSyncError` on the provider page, which is also the screen that can
+   fix it.
+
+Two lint rules also refused code I had written and were right both times:
+`Date.now()` in a server component render is impure (the staleness derivation
+moved into `listInstruments`, where it belongs), and syncing nine pieces of
+dialog state in an effect is a cascading render (the dialog is mounted only
+while open, so it seeds from props once).
+
+The dev server had to be restarted before any of this was visible: it was
+holding a Prisma client generated before T3's migration, so `db.marketInstrument`
+was `undefined`.
+
+### Tests run
+
+`market-actions.test.ts` — 17 pass, NEW. The assertion shape matters: it is not
+enough that a denied call rejects, it must reject WITHOUT reaching `@repo/core`,
+because the service trusts the subject it is handed.
+`admin-nav-labels.test.ts` — 25 pass, NEW.
+`admin-dialog-conventions` + `admin-form-conventions` + `admin-page-conventions`
+— 825 pass, unchanged, and they cover the new screens automatically.
+`pnpm --filter web typecheck` and `lint` clean.
+
+Both screens opened in a browser and confirmed: the table, its filters, the
+freshness column, the two alerts, the write-only key field showing "No key
+saved", and the last-sync panel. The one console error on `/admin/market`
+("Next.js encountered uncached data during prerendering") appears identically
+on the pre-existing `/admin/newsletter`, so it is ambient dev-mode noise rather
+than anything this PR introduced.

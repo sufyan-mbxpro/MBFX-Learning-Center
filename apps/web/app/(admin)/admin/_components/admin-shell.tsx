@@ -44,6 +44,7 @@ interface NavEntryDef {
     | "articles"
     | "websiteMedia"
     | "website"
+    | "market"
     | "settings"
     | "features"
     | "navigation"
@@ -180,6 +181,15 @@ const ADMIN_NAV_GROUPS: {
         labelKey: "articles",
         icon: "articles",
         permission: ["analysis.view", "news.manage"],
+      },
+      // Market data (Module 13, ADR-087). Its own destination rather than a
+      // settings card: instruments are content an editor curates, and the
+      // provider behind them is a credential, which a card grid buries.
+      {
+        href: "/admin/market",
+        labelKey: "market",
+        icon: "market",
+        permission: "market.view",
       },
       // Website builder (Module 16) — paused, ADR-037. Kept in the array
       // (rather than deleted) so re-enabling is a one-line flip of

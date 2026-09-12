@@ -193,6 +193,15 @@ export async function testMarketProvider(symbol: string): Promise<ProviderTestRe
 export interface AdminInstrumentRow extends InstrumentView {
   /** The newest stored bar, or null — the screen's freshness column. */
   lastBarDate: Date | null;
+  /**
+   * Whole days since that bar, or null when the instrument has never synced.
+   *
+   * Derived HERE rather than in the page, because `Date.now()` in a React
+   * render is an impure call the lint rules refuse (react-hooks/purity) — and
+   * they are right to: a value that changes between two renders of the same
+   * props is exactly what a render must not produce.
+   */
+  staleDays: number | null;
   barCount: number;
 }
 
@@ -229,6 +238,7 @@ export async function listInstruments(filter?: {
     },
   });
 
+  const now = Date.now();
   return rows.map((row) => ({
     id: row.id,
     kind: row.kind,
@@ -242,6 +252,9 @@ export async function listInstruments(filter?: {
     isActive: row.isActive,
     sortOrder: row.sortOrder,
     lastBarDate: row.bars[0]?.date ?? null,
+    staleDays: row.bars[0]
+      ? Math.floor((now - row.bars[0].date.getTime()) / 86_400_000)
+      : null,
     barCount: row._count.bars,
   }));
 }
