@@ -163,7 +163,10 @@
         "more": "More learning"
       }
     },
-    "signUp": "Join us"
+    "signUp": "Join us",
+    "verifyEmail": "Verify email",
+    "verifyRetry": "Try again",
+    "verifySent": "Check your inbox"
   },
   "footer": {
     "newsletterHeading": "Stay in the loop",
@@ -1657,6 +1660,27 @@
       "loadMore": "Load more",
       "logEmpty": "No deliveries yet",
       "logEmptyBody": "Every email this site sends will be recorded here, with the reason when one does not arrive."
+    },
+    "passwordReset": {
+      "forgotLink": "Forgot your password?",
+      "forgotTitle": "Reset your password",
+      "forgotDescription": "Enter your staff email and we'll send you a link to set a new one.",
+      "forgotSubmit": "Send reset link",
+      "forgotSent": "If a staff account exists for that email, a reset link is on its way. It expires in 30 minutes.",
+      "sendAgain": "Use a different email",
+      "backToSignIn": "Back to sign in",
+      "resetTitle": "Choose a new password",
+      "resetDescription": "Signing in again afterwards will end every other session.",
+      "newPassword": "New password",
+      "confirmPassword": "Confirm new password",
+      "passwordHint": "At least {count} characters.",
+      "resetSubmit": "Save new password",
+      "mismatch": "Those two passwords don't match.",
+      "invalidToken": "This reset link has expired or has already been used.",
+      "missingToken": "This link is missing its reset code. Request a new one.",
+      "requestAnother": "Request a new link",
+      "failed": "We couldn't set your password. Try again.",
+      "resetDone": "Your password has been changed. Sign in with it."
     }
   },
   "glossary": {
@@ -1832,7 +1856,26 @@
     "haveAccount": "Already have an account?",
     "signInLink": "Sign in",
     "showPassword": "Show password",
-    "hidePassword": "Hide password"
+    "hidePassword": "Hide password",
+    "forgotLink": "Forgot your password?",
+    "forgotTitle": "Reset your password",
+    "forgotDescription": "Enter your email and we'll send you a link to set a new one.",
+    "forgotSubmit": "Send reset link",
+    "forgotSent": "If an account exists for that email, a reset link is on its way. It expires in 30 minutes.",
+    "forgotSendAgain": "Use a different email",
+    "backToSignIn": "Back to sign in",
+    "resetTitle": "Choose a new password",
+    "resetDescription": "Pick something you haven't used here before.",
+    "resetNewPassword": "New password",
+    "resetConfirmPassword": "Confirm new password",
+    "resetSubmit": "Save new password",
+    "resetMismatch": "Those two passwords don't match.",
+    "resetInvalidToken": "This reset link has expired or has already been used.",
+    "resetMissingToken": "This link is missing its reset code. Request a new one.",
+    "resetRequestAnother": "Request a new link",
+    "resetFailed": "We couldn't set your password. Try again.",
+    "resetDone": "Your password has been changed. Sign in with it.",
+    "verifiedDone": "Your email is confirmed. You're all set."
   },
   "cms": {
     "blocks": {

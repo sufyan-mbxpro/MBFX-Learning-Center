@@ -8,10 +8,29 @@ const intl = createMiddleware(routing);
 /**
  * The staff credential screen (ADR-052). It lives UNDER /admin — never on
  * the public site — so the public surface carries no administrator entry
- * point at all, and it is the single /admin path the STAFF gate below lets
- * through unauthenticated.
+ * point at all, and it is where the STAFF gate below sends people.
  */
 const ADMIN_SIGN_IN_PATH = "/admin/sign-in";
+
+/**
+ * The /admin paths reachable WITHOUT a session (ADR-079 #3).
+ *
+ * All three are the same case: a person who cannot sign in. Gating sign-in
+ * would redirect it to itself; gating recovery would redirect someone to the
+ * screen they came here because they cannot get past. It is an allowlist
+ * rather than three `!==` comparisons so that adding a fourth is a deliberate
+ * edit to one named set.
+ *
+ * Membership is EXACT, never a prefix: `/admin/reset-password-debug` is gated
+ * like everything else. And this is still only a gate — the `(admin)` layout's
+ * server-side STAFF re-check is the boundary (security.md #3), and none of
+ * these three routes renders from that group at all.
+ */
+const ADMIN_PUBLIC_PATHS = new Set([
+  ADMIN_SIGN_IN_PATH,
+  "/admin/forgot-password",
+  "/admin/reset-password",
+]);
 
 /**
  * The ONE /admin path that may be framed (ADR-078 #8).
@@ -117,12 +136,13 @@ export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (pathname.startsWith("/admin")) {
-    // The staff credential screen is the one /admin path that must be
-    // reachable without a session — gating it would redirect it to itself
-    // (ADR-052). It renders from the (admin-auth) route group, outside the
-    // (admin) layout that carries the server-side STAFF re-check, and still
-    // gets the admin surface's headers and per-request nonce below.
-    if (pathname !== ADMIN_SIGN_IN_PATH) {
+    // The credential and recovery screens must be reachable without a session
+    // — gating sign-in would redirect it to itself (ADR-052), and gating
+    // recovery would strand exactly the person it exists for (ADR-079 #3).
+    // All three render from the (admin-auth) route group, outside the (admin)
+    // layout that carries the server-side STAFF re-check, and still get the
+    // admin surface's headers and per-request nonce below.
+    if (!ADMIN_PUBLIC_PATHS.has(pathname)) {
       const gated = await staffGate(request, pathname);
       if (gated) return gated;
     }

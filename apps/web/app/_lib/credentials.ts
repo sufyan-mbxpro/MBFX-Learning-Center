@@ -50,6 +50,13 @@ export async function signUpWithPassword(input: {
   name: string;
   email: string;
   password: string;
+  /**
+   * Where Better Auth's verification callback sends the browser after it
+   * flips `emailVerified` — a localized `/sign-in?verified=1` (ADR-079 #7).
+   * Without it the callback lands on the library's default and the learner is
+   * left on a blank confirmation with nothing to do next.
+   */
+  callbackURL?: string;
 }): Promise<SignUpResult> {
   const response = await fetch("/api/auth/sign-up/email", {
     method: "POST",
@@ -120,4 +127,75 @@ export function resolveRedirect(fallback: string, isAllowed: (path: string) => b
 /** True for `/admin` and anything under it — the staff portal's own paths. */
 export function isAdminPath(path: string): boolean {
   return path === "/admin" || path.startsWith("/admin/");
+}
+
+// ─── Password recovery and verification (ADR-079) ────────────
+//
+// All three POST to Better Auth's own handlers for the reason at the top of
+// this file: the per-IP `rateLimit.customRules` for these exact paths, the
+// lockout hooks and `onPasswordReset` all live there (ADR-079 #5, #6). A
+// server action wrapping the same logic would silently lose every one.
+
+/**
+ * Ask for a reset link. Resolves the SAME way whether or not the address
+ * exists — Better Auth answers identically and even simulates the lookup, and
+ * the screens say "if this email exists…" rather than confirming anything
+ * (ADR-079 #4).
+ *
+ * There is no `redirectTo`: `sendResetPassword` builds the link itself from
+ * `user.userType`, because the recipient's identity decides which surface the
+ * link belongs to — never the screen that asked (ADR-079 #2).
+ */
+export async function requestPasswordReset(email: string): Promise<void> {
+  await fetch("/api/auth/request-password-reset", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  }).catch(() => undefined);
+}
+
+export type ResetPasswordResult =
+  { status: "ok" } | { status: "invalidToken" } | { status: "tooShort" } | { status: "failed" };
+
+/**
+ * Set the new password.
+ *
+ * The three outcomes are distinguished because they need different screens: an
+ * expired link needs a way to request another, a short password needs the
+ * field corrected, and anything else is the generic failure. The codes are
+ * measured against the running handler, not read off a constant — the same
+ * discipline `signUpWithPassword` records above.
+ */
+export async function resetPassword(
+  token: string,
+  newPassword: string,
+): Promise<ResetPasswordResult> {
+  const response = await fetch("/api/auth/reset-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, newPassword }),
+  });
+  if (response.ok) return { status: "ok" };
+
+  const body = (await response.json().catch(() => null)) as { code?: string } | null;
+  if (body?.code === "INVALID_TOKEN") return { status: "invalidToken" };
+  if (body?.code === "PASSWORD_TOO_SHORT") return { status: "tooShort" };
+  return { status: "failed" };
+}
+
+/**
+ * Re-send the verification email (ADR-079 #7). Verification never blocks
+ * sign-in, so this is a nudge the learner can act on, not a gate they are
+ * stuck behind.
+ *
+ * `callbackURL` is where Better Auth's own verification callback sends the
+ * browser once it has flipped `emailVerified` — a localized `/sign-in?verified=1`.
+ */
+export async function resendVerification(email: string, callbackURL: string): Promise<boolean> {
+  const response = await fetch("/api/auth/send-verification-email", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, callbackURL }),
+  }).catch(() => null);
+  return response?.ok ?? false;
 }

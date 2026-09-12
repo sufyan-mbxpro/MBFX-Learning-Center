@@ -87,7 +87,7 @@ the database. Floors: 80% for the package, 90% for `render`, `sanitize` and
       verification, notices, limits, session revocation, lockout clear)
 - [x] F5 admin: settings split by permission, template editor, isolated
       preview, test send, delivery log
-- [ ] F6 reset/forgot screens on both surfaces, proxy allowlist,
+- [x] F6 reset/forgot screens on both surfaces, proxy allowlist,
       verification nudge
 - [ ] F7 newsletter: model, double opt-in, public action, admin list, export
 - [ ] F9 gate + DEVLOG

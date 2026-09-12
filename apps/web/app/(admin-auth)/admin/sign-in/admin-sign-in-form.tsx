@@ -5,6 +5,7 @@ import { Button } from "@repo/ui/components/button";
 import { Input } from "@repo/ui/components/input";
 import { Label } from "@repo/ui/components/label";
 import { PasswordInput } from "@repo/ui/components/password-input";
+import { useSearchParam } from "../../../_lib/use-search-param.ts";
 import {
   isAdminPath,
   resolveRedirect,
@@ -25,12 +26,17 @@ export function AdminSignInForm({
     submit: string;
     failed: string;
     notStaff: string;
+    resetDone: string;
   };
 }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [failure, setFailure] = useState<Failure | null>(null);
   const [pending, startTransition] = useTransition();
+
+  // `?reset=1` — where the staff reset screen sends someone once every session
+  // has been revoked and the lockout cleared (ADR-079 #6).
+  const reset = useSearchParam("reset") === "1";
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -65,6 +71,14 @@ export function AdminSignInForm({
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-4">
+      {reset && (
+        <p
+          role="status"
+          className="rounded-md border border-success/30 bg-success/5 px-3 py-2 text-sm text-success-interactive"
+        >
+          {labels.resetDone}
+        </p>
+      )}
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="admin-signin-email">{labels.email}</Label>
         <Input

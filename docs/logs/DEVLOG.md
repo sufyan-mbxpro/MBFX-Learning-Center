@@ -15526,3 +15526,104 @@ super_admin can move where mail leaves from.
 - `@repo/core`'s full suite still OOMs on this machine; it was run in batches
   (`index`, `media`, `market`, `sanitize-tiptap`, `term-of-the-day`,
   `content.integration`, `settings-audit.integration`, plus the new file).
+
+## 2026-09-12 — changes-21 F6: password recovery has screens, and the staff link stops pointing at /admin/admin (Modules 04/12/09, ADR-079)
+
+Better Auth has minted reset tokens since Module 04 and F4 gave them a real
+email. This gives them somewhere to land.
+
+### Shipped
+
+- **`_lib/credentials.ts`** gains `requestPasswordReset`, `resetPassword` and
+  `resendVerification`, all posting to Better Auth's own handlers — where the
+  per-IP `rateLimit.customRules`, the lockout hooks and `onPasswordReset` live.
+  `signUpWithPassword` gains `callbackURL`.
+- **Public:** `/[locale]/forgot-password` and `/[locale]/reset-password`, both
+  `noindex, nofollow`. A "Forgot your password?" link and `?reset=1` /
+  `?verified=1` notices on `/[locale]/sign-in`.
+- **Staff:** `/admin/forgot-password` and `/admin/reset-password` in the
+  `(admin-auth)` shell, plus the same link and notice on `/admin/sign-in`.
+- **`proxy.ts`:** `ADMIN_SIGN_IN_PATH` becomes `ADMIN_PUBLIC_PATHS`, a set of
+  three. Membership is exact, never a prefix.
+- **The verification nudge** (ADR-079 #7): an unverified learner gets a "Verify
+  email" button in the header, which resends and flips to "Check your inbox".
+- `RESERVED_PATHS` gains `forgot-password` and `reset-password`, in the same PR
+  as the routes (the ADR-047 rule).
+
+### Fixed — the staff reset link was `/admin/admin/reset-password`
+
+`NEXT_PUBLIC_ADMIN_URL` is documented in `.env.example` as
+`http://localhost:3000/admin` — it already ends in `/admin` — and
+`resetPasswordPath` appended another. Every staff reset email since F4 carried
+a dead link.
+
+`reset-url.test.ts` passed the whole time, because its fixture used a bare
+origin (`https://admin.mbx.example`) while the real value does not. The fixture
+was the bug's hiding place, so the regression test now drives all three real
+shapes through `adminPortalBase`: the documented value, the same with a
+trailing slash, and the bare-origin fallback when the variable is unset.
+
+The other candidate fix — dropping the append — would have been worse: with the
+variable unset it sends staff to the LEARNER screen, and the public surface
+names no portal (ADR-052). Normalising to exactly one `/admin` handles both.
+
+### Decided here
+
+- **`useSyncExternalStore`, not `useEffect` + `setState`, to read a query
+  param.** `?reset=1`, `?verified=1` and `?token=` all arrive on the URL of a
+  STATIC shell, so `useSearchParams()` is out (architecture.md #6 — it forces a
+  Suspense boundary and opts the route out of prerendering). The effect version
+  trips `react-hooks/set-state-in-effect`, correctly: it renders once with the
+  wrong value and again with the right one. `app/_lib/use-search-param.ts` gives
+  React an honest server snapshot instead.
+- **The reset screens are NOT anti-enumerating, and the request screens are.**
+  Someone holding a token has already proved something, so naming an expired
+  link costs nothing and withholding it strands them. The request screens say
+  the same sentence whatever the server knows — `requestPasswordReset` cannot
+  even report a network failure, because a visible error on a real address and
+  silence on an unknown one is the same leak in a different coat.
+- **A full page load after a reset, not `router.push`.** The reset revoked every
+  session, so the client router's cached RSC payloads belong to a session that
+  no longer exists. The lint rule's suggestion is wrong here and the disable
+  says why.
+- **The nudge renders beside the name chip, not in an account menu.** ADR-079 #7
+  asked for a menu; there is no account menu until Module 12 builds one, and a
+  nudge deferred to a later module is a verification email nobody ever acts on.
+- **Two small shells extracted** — `AuthScreen` (public) and `AdminAuthScreen`
+  (staff). Four and three screens respectively would otherwise each carry their
+  own copy. Converting the existing sign-in/sign-up pair is mechanical and
+  deliberately left out of a PR about recovery.
+
+### Verified
+
+- `@repo/auth` **20/20** (`reset-url.test.ts` 10, including the four new
+  normalisation cases); `apps/web` **1487/1487** across 28 files, with 14 new
+  `credentials.test.ts` cases and 9 new `proxy.test.ts` cases.
+- **Dev server, full journey.** Staff: request → the emitted link is now
+  `http://localhost:3000/admin/reset-password?token=…` (one `/admin`) → the
+  screen renders anonymously → mismatched passwords are caught with both fields
+  marked invalid → saving redirects to `/admin/sign-in?reset=1` with the notice
+  → signing in with the new password works → **reusing the consumed token shows
+  "expired" with "Request a new link"**.
+- **Anti-enumeration, both channels.** `/request-password-reset` answers
+  identically for `admin@mbxpro.com` and an unknown address, the public screen
+  shows one message for both, and the database has **zero delivery rows** for
+  the unknown address. The completed reset sent `auth.password_changed`
+  (ADR-079 #6).
+- **The nudge**, on a throwaway learner: "Verify email" appears in the header,
+  the click resends (two `auth.verify_email` sends in the log — sign-up's and
+  the resend's) and it flips to "Check your inbox". The probe account and its
+  delivery rows were removed afterwards; the seed admin's password was reset to
+  the value `.env` already documents, so the dev database is unchanged.
+- Typecheck and lint clean on every file this PR touches. No console errors on
+  any of the four new screens.
+
+### Owed
+
+- F7 (newsletter), F8 (dashboard), F9 (gate + docs).
+- E2E and axe for the four new screens, to Module 14.
+- OAuth still has no UI — the last remaining half of the Module 04 CLAUDE.md
+  row, which F9 updates.
+- `check:reserved-paths` currently FAILS on `markets` and `tools`, two route
+  directories that belong to a different, uncommitted changeset in this working
+  tree. Not this PR's to reserve — the check is doing its job.

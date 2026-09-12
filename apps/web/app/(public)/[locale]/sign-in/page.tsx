@@ -73,8 +73,21 @@ export default async function SignInPage({ params }: PageProps<"/[locale]/sign-i
               submit: t("submit"),
               failed: t("failed"),
               learnersOnly: t("learnersOnly"),
+              resetDone: t("resetDone"),
+              verifiedDone: t("verifiedDone"),
             }}
           />
+          {/* Recovery is linked from the learner surface only — the staff
+              screen carries its own (ADR-052: the public site names no
+              administrator entry point). */}
+          <p className="-mt-2 text-center text-sm">
+            <Link
+              href="/forgot-password"
+              className="font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+            >
+              {t("forgotLink")}
+            </Link>
+          </p>
           <p className="text-center text-sm text-muted-foreground">
             {t("noAccount")}{" "}
             <Link

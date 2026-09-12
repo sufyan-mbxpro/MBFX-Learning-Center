@@ -12,6 +12,7 @@ type Failure = "taken" | "failed";
 export function SignUpForm({
   labels,
   homeHref,
+  verifiedHref,
   minPasswordLength,
 }: {
   labels: {
@@ -27,6 +28,8 @@ export function SignUpForm({
   };
   /** Localized "/" for this render's locale — where a new learner lands. */
   homeHref: string;
+  /** Localized `/sign-in?verified=1` — where the verification link returns them. */
+  verifiedHref: string;
   /** Mirrors @repo/auth's emailAndPassword.minPasswordLength. */
   minPasswordLength: number;
 }) {
@@ -40,7 +43,7 @@ export function SignUpForm({
     event.preventDefault();
     setFailure(null);
     startTransition(async () => {
-      const result = await signUpWithPassword({ name, email, password });
+      const result = await signUpWithPassword({ name, email, password, callbackURL: verifiedHref });
       if (result.status !== "ok") {
         setFailure(result.status === "taken" ? "taken" : "failed");
         return;

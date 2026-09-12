@@ -27,6 +27,11 @@ export const RESERVED_PATHS = [
   // Public self-registration (ADR-052). Reserved for the same reason
   // sign-in is: a CMS page at this path would shadow the real route.
   "sign-up",
+  // Password recovery (ADR-079, changes-21 F6). Reserved in the SAME PR that
+  // lands the routes, per the ADR-047 precedent — a CMS page at either path
+  // would shadow the screen a reset link points at.
+  "forgot-password",
+  "reset-password",
   "admin",
   "api",
   "uploads",

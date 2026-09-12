@@ -5,7 +5,7 @@
 import { Search } from "lucide-react";
 import { buildNavigation, getBrandAssets } from "@repo/core";
 import { getActiveLocales } from "@repo/i18n";
-import { Link } from "@repo/i18n/navigation";
+import { getPathname, Link } from "@repo/i18n/navigation";
 import { getSetting } from "@repo/settings";
 import { BrandLogo } from "@repo/ui/components/brand-logo";
 import { Button } from "@repo/ui/components/button";
@@ -117,7 +117,10 @@ export async function SiteHeader({ locale }: { locale: string }) {
             <div className={navItems.length > 0 ? "hidden sm:flex" : "flex"}>
               <ModeToggle />
             </div>
-            <AuthSlot />
+            {/* The localized destination Better Auth's verification callback
+                returns to, resolved on the server: the slot is a client
+                component and cannot call getPathname itself. */}
+            <AuthSlot verifiedHref={`${getPathname({ href: "/sign-in", locale })}?verified=1`} />
             {cta?.enabled && (
               <Button
                 shape="pill"
