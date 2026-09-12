@@ -16856,3 +16856,92 @@ types; PAIR-wise dedup; the dropped unregistered key.
 + `admin-nav-labels` — 878 pass.
 `pnpm --filter @repo/core typecheck` / `lint` clean;
 `pnpm --filter web typecheck` / `lint` clean.
+
+## 2026-09-12 — changes-25 T6: the public tools area, and five working tools
+
+**Module:** 12 (public site), 13 (market) · **PR:** T6 · **ADR:** 086, 088
+
+`/tools` replaces ADR-081 #1's `ComingSoon` placeholder; `/tools/[tool]`
+renders the six-band flow for all eight, with working islands for the five
+that need no market data. The area gets the ONE `SectionNav` (ADR-076 §1),
+the public `tools` namespace, and its own source guard.
+
+### Calls worth recording
+
+**One island per page, never eight.** `tool-widget.tsx` is a SERVER component
+whose switch runs on the server, so a reader on `/tools/gain-loss` downloads
+the gain/loss island and nothing else. That is the mitigation ADR-086's risk #4
+names, and `tools-area.test.ts` fails if a `"use client"` ever appears at the
+top of that file.
+
+**The band order lives in `tool-shell.tsx`.** The page supplies slots; the
+shell orders them. Eight pages that each compose their own bands become eight
+layouts within a year — the same reason the learn sections come from a registry.
+
+**`useSyncExternalStore`, not an effect, for the viewer's clock and zone.**
+Both are facts about the browser that a server render cannot know. The
+effect-plus-setState version is a cascading render the lint rules refuse, and
+they are right: this is subscribing to an external source, which is the case
+the hook exists for. `use-client-clock.ts` also gives an explicit server
+snapshot, so the server markup and the hydrated markup agree by construction.
+The minute is TRUNCATED in `getSnapshot` because that function must return the
+same value until something actually changed.
+
+**Every rate-derived surface renders `RateFootnote`.** One component rather
+than a line per island, precisely so "we forgot the as-of on the converter"
+cannot happen. A stale snapshot says so in words, and `tools-area.test.ts`
+fails on the words "real-time", "realtime", "live rates" or "live data"
+anywhere in the `tools` namespace (ADR-088 #7) — a copy rule nothing enforced
+before.
+
+**Both halves of an answer, separately.** Position size prints the amount at
+risk (which needs no market data and is exact) even when it cannot print the
+size (which needs a rate). Pip value prints the quote-currency figure always
+and the account-currency one only when the leg resolves — a dash, never a zero
+and never a NaN.
+
+**The catalog went into all four locales**, not just `en`: `next build`
+prerenders every SEEDED locale, so a key missing from an inactive one is a hard
+`MISSING_MESSAGE` at build time while the completeness check only warns. That
+is code-style.md #2's note, followed rather than rediscovered.
+
+### What the existing guards caught
+
+Four, all real, and none of them mine to have noticed unaided:
+
+1. **`password-fields.test.ts`** — the provider's API key field was a bare
+   masked input rather than `PasswordInput`. A credential you cannot reveal is
+   one you cannot check before saving.
+2. **`loading-states.test.ts`** — all four new admin screens inherited the
+   generic spinner, and the tool editor would have inherited a table skeleton
+   it does not look like. Four `loading.tsx` files, each on the archetype that
+   matches: table, form, detail (the tools list is a card grid), editor.
+3. **`explore-destinations.test.ts`** — `tools` still claimed `status: "soon"`
+   while its route had stopped rendering `ComingSoon`. The guard reads the
+   route file for exactly this, so the carousel could not keep advertising a
+   page that no longer says "coming soon". `tools` is `live` now and leaves
+   `COMING_SOON_SECTIONS`, which brings T9's first item forward.
+4. **My own test, twice.** A source guard that reads COMMENTS fails on its own
+   explanation: the sentence recording that the `noindex` line went away read
+   as the line still being there. `tools-area.test.ts` strips comments now, and
+   the band-order assertion reads the return block rather than the prop list
+   above it.
+
+The sitemap gains the index plus every ENABLED tool — a disabled one 404s, and
+listing a 404 is a crawl hint pointing at an error page.
+
+### Browser pass
+
+`/tools` renders the eight cards under a pinned eight-tab section bar.
+`/tools/market-hours` detects the viewer's real zone (Asia/Karachi), draws the
+four session bands across a 24-hour axis with a now-marker, correctly reports
+the market shut on a Saturday, and its related strip auto-tops-up with
+published articles — the curated-then-filled rule working with an empty
+curated list.
+
+### Tests run
+
+`tools-area.test.ts` — 23 pass, NEW.
+`pnpm --filter web exec vitest run` — 36 files, 1763 pass.
+`typecheck` and `lint` clean. `check:catalog-completeness` exits 0 with no
+`tools.*` gap in any locale.

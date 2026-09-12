@@ -47,7 +47,8 @@ import { AmbientMotif } from "@repo/ui/components/ambient-motif";
  * three bullets are `public.<key>Title` / `public.<key>Point1..3` and no copy
  * lives in this file (code-style.md #2).
  */
-export const COMING_SOON_SECTIONS = ["tools", "markets"] as const;
+// `tools` left this list in changes-25 T6, when the section shipped.
+export const COMING_SOON_SECTIONS = ["markets"] as const;
 
 export type ComingSoonSection = (typeof COMING_SOON_SECTIONS)[number];
 

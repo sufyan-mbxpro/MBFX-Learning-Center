@@ -22,6 +22,7 @@ import {
   FieldLabel,
 } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
+import { PasswordInput } from "@repo/ui/components/password-input";
 import { Switch } from "@repo/ui/components/switch";
 import { humanizeKey } from "@repo/utils";
 import { saveMarketProviderAction, testMarketProviderAction } from "../../_actions/market-actions.ts";
@@ -37,6 +38,8 @@ export interface ProviderFormLabels {
   apiKeyField: string;
   apiKeySaved: string;
   apiKeyEmpty: string;
+  showKey: string;
+  hideKey: string;
   refreshField: string;
   refreshHint: string;
   staleField: string;
@@ -172,8 +175,10 @@ export function ProviderForm({
 
           <Field invalid={form.invalid("apiKey")}>
             <FieldLabel>{labels.apiKeyField}</FieldLabel>
-            <Input
-              type="password"
+            {/* PasswordInput, never a bare masked input: it owns the input
+                type because it is what swaps it, and a credential you cannot
+                reveal is one you cannot check before saving. */}
+            <PasswordInput
               autoComplete="off"
               value={apiKey}
               onChange={(event) => setApiKey(event.target.value)}
@@ -183,6 +188,8 @@ export function ProviderForm({
               // A credential read character by character keeps font-mono
               // (code-style.md #6's narrow exception).
               className="font-mono"
+              showLabel={labels.showKey}
+              hideLabel={labels.hideKey}
             />
             <FieldError>{form.error("apiKey")}</FieldError>
           </Field>

@@ -9,6 +9,7 @@ import {
   loadGlossaryTopicSitemapEntries,
   loadQuizSitemapEntries,
   loadVideoSitemapEntries,
+  getEnabledTools,
 } from "@repo/core";
 import {
   ABOUT_PATHS,
@@ -18,6 +19,7 @@ import {
   learnTrackVideosPath,
   LEARN_TRACK_KEYS,
   ROUTE_PATHS,
+  toolPath,
   publicPagePath,
 } from "@repo/contracts";
 import { routing } from "@repo/i18n/routing";
@@ -36,6 +38,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     quizEntries,
     topicEntries,
     videoEntries,
+    enabledTools,
   ] = await Promise.all([
     loadGlossarySitemapEntries(),
     loadArticleSitemapEntries(),
@@ -44,6 +47,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     loadQuizSitemapEntries(),
     loadGlossaryTopicSitemapEntries(),
     loadVideoSitemapEntries(),
+    getEnabledTools(),
   ]);
 
   // Coded routes — the home page, the About section (ADR-047) and the
@@ -71,6 +75,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       learnTrackGlossaryPath(track),
     ]),
     `${ROUTE_PATHS.glossary}/topics`,
+    // The tools index plus every ENABLED tool (ADR-086 #5): a disabled tool
+    // 404s, and listing a 404 in a sitemap is a crawl hint pointing at an
+    // error page.
+    ROUTE_PATHS.tools,
+    ...enabledTools.map((tool) => toolPath(tool.key)),
   ];
   const staticPages: MetadataRoute.Sitemap = routing.locales.flatMap((locale) => {
     const prefix = locale === routing.defaultLocale ? "" : `/${locale}`;

@@ -143,6 +143,19 @@ export const TOOL_ROUTE_KEYS: Record<ToolKey, RouteKey> = Object.fromEntries(
 /** Registry order — the seeded `sortOrder` and the section bar's order. */
 export const TOOL_KEYS_IN_ORDER: readonly ToolKey[] = TOOL_KEYS;
 
+/**
+ * The feature flag gating a tool, or `null`.
+ *
+ * An accessor rather than a property read, because `TOOLS` is `as const` and
+ * the literal type of an entry WITHOUT a flag simply has no `flag` key — so
+ * `TOOLS[key].flag` is a type error on the union rather than `undefined`.
+ * Narrowing it here keeps every call site from casting.
+ */
+export function toolFlag(key: ToolKey): string | null {
+  const spec: ToolSpec = TOOLS[key];
+  return spec.flag ?? null;
+}
+
 /** `/tools/<key>` — the registry key IS the segment (ADR-086 #3). */
 export function toolPath(key: ToolKey): string {
   return ROUTE_PATHS[TOOLS[key].routeKey];

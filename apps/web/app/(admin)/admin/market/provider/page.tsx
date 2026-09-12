@@ -30,6 +30,8 @@ export default async function MarketProviderPage() {
     apiKeyField: t("marketData.apiKeyField"),
     apiKeySaved: t("marketData.apiKeySaved"),
     apiKeyEmpty: t("marketData.apiKeyEmpty"),
+    showKey: t("marketData.showKey"),
+    hideKey: t("marketData.hideKey"),
     refreshField: t("marketData.refreshField"),
     refreshHint: t("marketData.refreshHint"),
     staleField: t("marketData.staleField"),

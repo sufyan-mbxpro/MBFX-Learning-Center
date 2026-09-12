@@ -1890,7 +1890,9 @@
       "secretKeyMissingTitle": "MARKET_SECRET_KEY is not set",
       "secretKeyMissingBody": "Without it a saved API key cannot be read back, so saving one here would look like it worked and never fetch anything. Set the environment variable first.",
       "manualTitle": "No data is being fetched",
-      "manualBody": "The Manual provider serves whatever price history is already stored. Tools that need rates say so rather than failing."
+      "manualBody": "The Manual provider serves whatever price history is already stored. Tools that need rates say so rather than failing.",
+      "showKey": "Show the key",
+      "hideKey": "Hide the key"
     },
     "tools": "Tools",
     "toolsAdmin": {
@@ -3207,5 +3209,146 @@
     "missingTokenTitle": "Incomplete link",
     "missingTokenBody": "This page needs the link from your email. Please open it from the message itself.",
     "backHome": "Back to the homepage"
+  },
+  "tools": {
+    "eyebrow": "Tools",
+    "faqTitle": "Common questions",
+    "faqLead": "What people ask about this tool.",
+    "nav": {
+      "sectionLabel": "Trading tools"
+    },
+    "index": {
+      "title": "Trading tools",
+      "lead": "Calculators and market views that do the arithmetic, so you can think about the decision.",
+      "open": "Open",
+      "needs": {
+        "none": "Works offline — no market data needed",
+        "rates": "Uses the latest exchange rates",
+        "history": "Uses stored daily price history"
+      }
+    },
+    "common": {
+      "enterValues": "Fill in the fields to see a result.",
+      "loading": "Working out your local time…",
+      "search": "Search…",
+      "noMatches": "Nothing matches",
+      "asOf": "Rates as of {date}.",
+      "staleAsOf": "Rates as of {date} — out of date, and shown for reference only.",
+      "noRates": "No exchange rates are stored yet, so currency conversions are unavailable.",
+      "noRateForPair": "No rate is stored for this currency pair.",
+      "comingWithData": "This tool needs stored market data, which is not available on this site yet."
+    },
+    "gainLoss": {
+      "startBalance": "Starting balance",
+      "direction": "Is this a gain or a loss?",
+      "gain": "Gain",
+      "loss": "Loss",
+      "knownLegend": "Which figure do you know?",
+      "known": {
+        "amount": "The amount gained or lost",
+        "percent": "The percentage",
+        "endingBalance": "The ending balance"
+      },
+      "result": {
+        "amount": "Amount",
+        "percent": "Percentage",
+        "endingBalance": "Ending balance",
+        "breakeven": "Gain needed to get back to even",
+        "breakevenNote": "Measured against the smaller balance you are left with."
+      }
+    },
+    "positionSize": {
+      "accountCurrency": "Account currency",
+      "balance": "Account balance",
+      "risk": "Risk per trade (%)",
+      "riskHint": "The share of the account you are willing to lose on this one trade.",
+      "stopLoss": "Stop loss (pips)",
+      "pair": "Currency pair",
+      "pipSize": "One pip is {size} on this pair.",
+      "result": {
+        "atRisk": "Amount at risk",
+        "units": "Position size (units)",
+        "lots": "In lots",
+        "lotsValue": "{standard} standard · {mini} mini · {micro} micro",
+        "pipValue": "Value of one pip per standard lot",
+        "pipValueNote": "Converted into your account currency.",
+        "needsRate": "The position size needs an exchange rate for your account currency, and none is stored yet. The amount at risk above is still correct."
+      }
+    },
+    "pipValue": {
+      "pair": "Currency pair",
+      "price": "Price",
+      "priceHint": "Leave empty to use the last stored price.",
+      "units": "Position size (units)",
+      "accountCurrency": "Account currency",
+      "pipSize": "One pip is {size} on this pair.",
+      "result": {
+        "inQuote": "One pip in {currency}",
+        "inAccount": "One pip in {currency}"
+      }
+    },
+    "pivot": {
+      "symbol": "Symbol",
+      "interval": "Interval",
+      "intervals": {
+        "1D": "Daily",
+        "1W": "Weekly",
+        "1M": "Monthly",
+        "1Y": "Yearly"
+      },
+      "open": "Open",
+      "high": "High",
+      "low": "Low",
+      "close": "Close",
+      "autofilled": "Filled from the period {from} to {to}.",
+      "manualOnly": "No stored prices for this period — enter the figures yourself.",
+      "needsOhlc": "Enter an open, high, low and close to see the levels.",
+      "tableHint": "All five methods, side by side. They disagree on purpose.",
+      "tableCaption": "Pivot levels by method",
+      "level": "Level",
+      "levels": {
+        "r4": "R4",
+        "r3": "R3",
+        "r2": "R2",
+        "r1": "R1",
+        "pp": "Pivot",
+        "s1": "S1",
+        "s2": "S2",
+        "s3": "S3",
+        "s4": "S4"
+      },
+      "methods": {
+        "floor": "Floor",
+        "woodie": "Woodie",
+        "camarilla": "Camarilla",
+        "demark": "DeMark",
+        "fibonacci": "Fibonacci"
+      }
+    },
+    "marketHours": {
+      "timezone": "Your timezone",
+      "hour12": "12-hour clock",
+      "marketOpen": "Market open",
+      "marketClosed": "Market closed",
+      "volume": {
+        "closed": "Closed",
+        "low": "Quiet",
+        "medium": "Busy",
+        "high": "Busiest"
+      },
+      "timelineTitle": "The day, in your timezone",
+      "timelineNote": "Session times follow daylight saving automatically. The market is shut from the New York close on Friday to the Sydney open on Sunday."
+    },
+    "related": {
+      "eyebrow": "Keep reading",
+      "title": "More about this",
+      "types": {
+        "lesson": "Lesson",
+        "article": "Article",
+        "glossary": "Glossary",
+        "video": "Video",
+        "course": "Course"
+      }
+    }
   }
 }

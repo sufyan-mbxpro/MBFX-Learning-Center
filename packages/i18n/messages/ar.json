@@ -134,7 +134,21 @@
     "backToTop": "العودة إلى الأعلى",
     "home": "الرئيسية",
     "breadcrumb": "مسار التنقل",
-    "signUp": "إنشاء حساب"
+    "signUp": "إنشاء حساب",
+    "appearance": "المظهر",
+    "mega": {
+      "about": {
+        "company": "الشركة",
+        "howWeWork": "كيف نعمل",
+        "help": "المساعدة"
+      },
+      "viewAll": "عرض الكل",
+      "learn": {
+        "study": "الدراسة",
+        "practise": "التدريب والمراجعة",
+        "more": "مزيد من التعلّم"
+      }
+    }
   },
   "footer": {
     "newsletterHeading": "ابق على اطلاع",
@@ -150,7 +164,13 @@
     "newsletterLabel": "البريد الإلكتروني",
     "newsletterSubmit": "اشترك",
     "followUs": "تابعنا",
-    "riskDisclaimerLabel": "إخلاء مسؤولية المخاطر"
+    "riskDisclaimerLabel": "إخلاء مسؤولية المخاطر",
+    "newsletterConsent": "نرسل أولًا رابط تأكيد. يمكنك إلغاء الاشتراك في أي وقت — ولا نرسل رسائل مزعجة أبدًا.",
+    "newsletterSent": "اقتربنا — تحقق من بريدك وافتح رابط التأكيد.",
+    "newsletterInvalid": "لا يبدو هذا عنوان بريد إلكتروني صحيحًا.",
+    "newsletterLimited": "محاولات كثيرة. يرجى المحاولة بعد دقائق.",
+    "newsletterFailed": "حدث خطأ ما. يرجى المحاولة مرة أخرى.",
+    "newsletterPending": "جارٍ الاشتراك…"
   },
   "glossary": {
     "title": "المصطلحات",
@@ -518,5 +538,167 @@
     "globalTabEmpty": "الترويسة والتذييل والأجزاء العامة الأخرى ستُضاف في مرحلة لاحقة.",
     "designsTabEmpty": "تصاميم كل نوع محتوى (الأخبار، الدورات، ...) ستُضاف في مرحلة لاحقة.",
     "hasUnpublishedChangesShort": "تغييرات غير منشورة"
+  },
+  "newsletter": {
+    "confirmTitle": "أكّد اشتراكك",
+    "confirmBody": "خطوة واحدة أخرى: اضغط الزر أدناه لتبدأ في استلام النشرة.",
+    "confirmAction": "تأكيد الاشتراك",
+    "confirmPending": "جارٍ التأكيد…",
+    "confirmedTitle": "تم اشتراكك",
+    "confirmedBody": "شكرًا — أنت الآن في القائمة. كل رسالة نرسلها تحتوي على رابط لإلغاء الاشتراك.",
+    "confirmInvalidTitle": "انتهت صلاحية هذا الرابط",
+    "confirmInvalidBody": "روابط التأكيد تدوم 48 ساعة وتعمل مرة واحدة فقط. اشترك مرة أخرى للحصول على رابط جديد.",
+    "unsubscribeTitle": "إلغاء الاشتراك",
+    "unsubscribeBody": "اضغط الزر أدناه للتوقف عن استلام النشرة.",
+    "unsubscribeAction": "إلغاء الاشتراك",
+    "unsubscribePending": "جارٍ إلغاء الاشتراك…",
+    "unsubscribedTitle": "تم إلغاء اشتراكك",
+    "unsubscribedBody": "لن نرسل إليك النشرة مرة أخرى. يمكنك الاشتراك من جديد في أي وقت.",
+    "unsubscribeInvalidTitle": "لم نتمكن من العثور على هذا الاشتراك",
+    "unsubscribeInvalidBody": "قد يكون الرابط غير مكتمل. إذا استمر وصول الرسائل إليك، تواصل معنا وسنزيل عنوانك.",
+    "missingTokenTitle": "رابط غير مكتمل",
+    "missingTokenBody": "تحتاج هذه الصفحة إلى الرابط الموجود في بريدك. افتحه من الرسالة نفسها.",
+    "backHome": "العودة إلى الصفحة الرئيسية"
+  },
+  "tools": {
+    "eyebrow": "Tools",
+    "faqTitle": "Common questions",
+    "faqLead": "What people ask about this tool.",
+    "nav": {
+      "sectionLabel": "Trading tools"
+    },
+    "index": {
+      "title": "Trading tools",
+      "lead": "Calculators and market views that do the arithmetic, so you can think about the decision.",
+      "open": "Open",
+      "needs": {
+        "none": "Works offline — no market data needed",
+        "rates": "Uses the latest exchange rates",
+        "history": "Uses stored daily price history"
+      }
+    },
+    "common": {
+      "enterValues": "Fill in the fields to see a result.",
+      "loading": "Working out your local time…",
+      "search": "Search…",
+      "noMatches": "Nothing matches",
+      "asOf": "Rates as of {date}.",
+      "staleAsOf": "Rates as of {date} — out of date, and shown for reference only.",
+      "noRates": "No exchange rates are stored yet, so currency conversions are unavailable.",
+      "noRateForPair": "No rate is stored for this currency pair.",
+      "comingWithData": "This tool needs stored market data, which is not available on this site yet."
+    },
+    "gainLoss": {
+      "startBalance": "Starting balance",
+      "direction": "Is this a gain or a loss?",
+      "gain": "Gain",
+      "loss": "Loss",
+      "knownLegend": "Which figure do you know?",
+      "known": {
+        "amount": "The amount gained or lost",
+        "percent": "The percentage",
+        "endingBalance": "The ending balance"
+      },
+      "result": {
+        "amount": "Amount",
+        "percent": "Percentage",
+        "endingBalance": "Ending balance",
+        "breakeven": "Gain needed to get back to even",
+        "breakevenNote": "Measured against the smaller balance you are left with."
+      }
+    },
+    "positionSize": {
+      "accountCurrency": "Account currency",
+      "balance": "Account balance",
+      "risk": "Risk per trade (%)",
+      "riskHint": "The share of the account you are willing to lose on this one trade.",
+      "stopLoss": "Stop loss (pips)",
+      "pair": "Currency pair",
+      "pipSize": "One pip is {size} on this pair.",
+      "result": {
+        "atRisk": "Amount at risk",
+        "units": "Position size (units)",
+        "lots": "In lots",
+        "lotsValue": "{standard} standard · {mini} mini · {micro} micro",
+        "pipValue": "Value of one pip per standard lot",
+        "pipValueNote": "Converted into your account currency.",
+        "needsRate": "The position size needs an exchange rate for your account currency, and none is stored yet. The amount at risk above is still correct."
+      }
+    },
+    "pipValue": {
+      "pair": "Currency pair",
+      "price": "Price",
+      "priceHint": "Leave empty to use the last stored price.",
+      "units": "Position size (units)",
+      "accountCurrency": "Account currency",
+      "pipSize": "One pip is {size} on this pair.",
+      "result": {
+        "inQuote": "One pip in {currency}",
+        "inAccount": "One pip in {currency}"
+      }
+    },
+    "pivot": {
+      "symbol": "Symbol",
+      "interval": "Interval",
+      "intervals": {
+        "1D": "Daily",
+        "1W": "Weekly",
+        "1M": "Monthly",
+        "1Y": "Yearly"
+      },
+      "open": "Open",
+      "high": "High",
+      "low": "Low",
+      "close": "Close",
+      "autofilled": "Filled from the period {from} to {to}.",
+      "manualOnly": "No stored prices for this period — enter the figures yourself.",
+      "needsOhlc": "Enter an open, high, low and close to see the levels.",
+      "tableHint": "All five methods, side by side. They disagree on purpose.",
+      "tableCaption": "Pivot levels by method",
+      "level": "Level",
+      "levels": {
+        "r4": "R4",
+        "r3": "R3",
+        "r2": "R2",
+        "r1": "R1",
+        "pp": "Pivot",
+        "s1": "S1",
+        "s2": "S2",
+        "s3": "S3",
+        "s4": "S4"
+      },
+      "methods": {
+        "floor": "Floor",
+        "woodie": "Woodie",
+        "camarilla": "Camarilla",
+        "demark": "DeMark",
+        "fibonacci": "Fibonacci"
+      }
+    },
+    "marketHours": {
+      "timezone": "Your timezone",
+      "hour12": "12-hour clock",
+      "marketOpen": "Market open",
+      "marketClosed": "Market closed",
+      "volume": {
+        "closed": "Closed",
+        "low": "Quiet",
+        "medium": "Busy",
+        "high": "Busiest"
+      },
+      "timelineTitle": "The day, in your timezone",
+      "timelineNote": "Session times follow daylight saving automatically. The market is shut from the New York close on Friday to the Sydney open on Sunday."
+    },
+    "related": {
+      "eyebrow": "Keep reading",
+      "title": "More about this",
+      "types": {
+        "lesson": "Lesson",
+        "article": "Article",
+        "glossary": "Glossary",
+        "video": "Video",
+        "course": "Course"
+      }
+    }
   }
 }

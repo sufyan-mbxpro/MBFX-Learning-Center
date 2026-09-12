@@ -82,7 +82,9 @@ export const EXPLORE_DESTINATIONS = [
     icon: Calculator,
     feature: "calculators",
     tone: "info",
-    status: "soon",
+    // Live as of changes-25 T6: /tools renders eight tools, not ComingSoon.
+    // The guard below reads the route file, so this cannot drift back.
+    status: "live",
   },
   {
     key: "calendar",

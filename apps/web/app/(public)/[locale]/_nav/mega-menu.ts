@@ -20,6 +20,14 @@
 // dropped: `resolveMegaMenuPanel` appends it to the last column, so adding a
 // page to the seed can never make it invisible in the header.
 import {
+  ArrowLeftRight,
+  Calculator,
+  Clock,
+  Coins,
+  Gauge,
+  GitFork,
+  Grid3x3,
+  Percent,
   BadgeCheck,
   BookA,
   Building2,
@@ -77,6 +85,17 @@ export const MEGA_MENU_ICONS: Partial<Record<RouteKey, LucideIcon>> = {
   "about-transparency": Scale,
   "about-security": ShieldCheck,
   "about-support": Headset,
+  // The eight tools (ADR-086). One glyph per tool rather than one for the
+  // section: the section bar under /tools lists all eight side by side, and a
+  // row of identical icons is a row of no icons.
+  "tool-position-size": Calculator,
+  "tool-pip-value": Coins,
+  "tool-gain-loss": Percent,
+  "tool-pivot-points": GitFork,
+  "tool-market-hours": Clock,
+  "tool-currency-converter": ArrowLeftRight,
+  "tool-correlation": Grid3x3,
+  "tool-risk-sentiment": Gauge,
 };
 
 /**

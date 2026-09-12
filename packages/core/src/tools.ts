@@ -543,3 +543,219 @@ export async function listRelatedCandidates(
     ...courses.map(titled("course")),
   ];
 }
+
+// ─── The related strip (ADR-086 #4) ──────────────────────────
+
+export interface ToolRelatedItem {
+  targetType: string;
+  title: string;
+  href: string;
+  summary: string | null;
+}
+
+/**
+ * Curated first, topped up automatically — `resolveRecommendations`'s pattern
+ * (ADR-055), with one difference: the list is MIXED-TYPE, so the top-up draws
+ * from the newest published content rather than from one table.
+ *
+ * **The strip never renders empty** when the tool asks for one. A curated list
+ * of two and a count of six yields six; a curated list of none yields six; and
+ * only a site with no published content at all yields nothing.
+ */
+export async function getToolRelated(
+  locale: string,
+  key: string,
+  count: number,
+): Promise<ToolRelatedItem[]> {
+  "use cache";
+  cacheTag("content");
+  cacheLife({ revalidate: 3600 });
+
+  if (!isToolKey(key) || count <= 0) return [];
+
+  const tool = await db.tool.findUnique({ where: { key }, select: { id: true } });
+  const curated = tool
+    ? await loadMixedRelationTargets({
+        sourceType: TOOL,
+        sourceId: tool.id,
+        relationType: RELATED,
+      })
+    : [];
+
+  const resolved = await resolveMixedTargets(locale, curated);
+
+  if (resolved.length >= count) return resolved.slice(0, count);
+
+  // The top-up. Newest published lessons and articles, minus whatever is
+  // already curated — enough to reach the count, never more.
+  const taken = new Set(resolved.map((item) => `${item.targetType}:${item.href}`));
+  const needed = count - resolved.length;
+
+  const [lessons, articles] = await Promise.all([
+    db.lesson.findMany({
+      where: { deletedAt: null, status: "PUBLISHED" },
+      orderBy: { publishedAt: "desc" },
+      take: needed * 2,
+      select: {
+        id: true,
+        section: {
+          select: {
+            course: {
+              select: { track: true, translations: { where: { locale }, select: { slug: true } } },
+            },
+          },
+        },
+        translations: { where: { locale }, select: { title: true, slug: true, summary: true } },
+      },
+    }),
+    db.article.findMany({
+      where: { deletedAt: null, status: "PUBLISHED" },
+      orderBy: { publishedAt: "desc" },
+      take: needed * 2,
+      select: {
+        id: true,
+        kind: true,
+        translations: { where: { locale }, select: { title: true, slug: true, excerpt: true } },
+      },
+    }),
+  ]);
+
+  const topUp: ToolRelatedItem[] = [];
+  for (const article of articles) {
+    const tr = article.translations[0];
+    if (!tr?.slug) continue;
+    const href = `/${article.kind === "ANALYSIS" ? "analysis" : "news"}/${tr.slug}`;
+    if (taken.has(`article:${href}`)) continue;
+    topUp.push({ targetType: "article", title: tr.title, href, summary: tr.excerpt });
+  }
+  for (const lesson of lessons) {
+    const tr = lesson.translations[0];
+    const course = lesson.section?.course;
+    const courseSlug = course?.translations[0]?.slug;
+    if (!tr?.slug || !courseSlug || !course?.track) continue;
+    const href = `/learn/${course.track}/${courseSlug}/${tr.slug}`;
+    if (taken.has(`lesson:${href}`)) continue;
+    topUp.push({ targetType: "lesson", title: tr.title, href, summary: tr.summary });
+  }
+
+  return [...resolved, ...topUp].slice(0, count);
+}
+
+/** Resolve curated (type, id) pairs to titles and hrefs, keeping their order. */
+async function resolveMixedTargets(
+  locale: string,
+  targets: readonly MixedRelation[],
+): Promise<ToolRelatedItem[]> {
+  if (targets.length === 0) return [];
+  const byType = (type: string) =>
+    targets.filter((t) => t.targetType === type).map((t) => t.targetId);
+
+  const [lessons, articles, glossary, videos, courses] = await Promise.all([
+    db.lesson.findMany({
+      where: { id: { in: byType("lesson") }, deletedAt: null },
+      select: {
+        id: true,
+        section: {
+          select: {
+            course: {
+              select: { track: true, translations: { where: { locale }, select: { slug: true } } },
+            },
+          },
+        },
+        translations: { where: { locale }, select: { title: true, slug: true, summary: true } },
+      },
+    }),
+    db.article.findMany({
+      where: { id: { in: byType("article") }, deletedAt: null },
+      select: {
+        id: true,
+        kind: true,
+        translations: { where: { locale }, select: { title: true, slug: true, excerpt: true } },
+      },
+    }),
+    db.glossaryTerm.findMany({
+      where: { id: { in: byType("glossary") }, deletedAt: null },
+      select: {
+        id: true,
+        translations: { where: { locale }, select: { term: true, slug: true, definition: true } },
+      },
+    }),
+    db.videoTopic.findMany({
+      where: { id: { in: byType("video") }, deletedAt: null },
+      select: {
+        id: true,
+        track: true,
+        translations: { where: { locale }, select: { title: true, slug: true, summary: true } },
+      },
+    }),
+    db.course.findMany({
+      where: { id: { in: byType("course") }, deletedAt: null },
+      select: {
+        id: true,
+        track: true,
+        translations: { where: { locale }, select: { title: true, slug: true, summary: true } },
+      },
+    }),
+  ]);
+
+  const map = new Map<string, ToolRelatedItem>();
+  for (const row of lessons) {
+    const tr = row.translations[0];
+    const course = row.section?.course;
+    const courseSlug = course?.translations[0]?.slug;
+    if (!tr?.slug || !courseSlug || !course?.track) continue;
+    map.set(`lesson:${row.id}`, {
+      targetType: "lesson",
+      title: tr.title,
+      href: `/learn/${course.track}/${courseSlug}/${tr.slug}`,
+      summary: tr.summary,
+    });
+  }
+  for (const row of articles) {
+    const tr = row.translations[0];
+    if (!tr?.slug) continue;
+    map.set(`article:${row.id}`, {
+      targetType: "article",
+      title: tr.title,
+      href: `/${row.kind === "ANALYSIS" ? "analysis" : "news"}/${tr.slug}`,
+      summary: tr.excerpt,
+    });
+  }
+  for (const row of glossary) {
+    const tr = row.translations[0];
+    if (!tr?.slug) continue;
+    map.set(`glossary:${row.id}`, {
+      targetType: "glossary",
+      title: tr.term,
+      href: `/glossary/${tr.slug}`,
+      summary: tr.definition,
+    });
+  }
+  for (const row of videos) {
+    const tr = row.translations[0];
+    if (!tr?.slug) continue;
+    map.set(`video:${row.id}`, {
+      targetType: "video",
+      title: tr.title,
+      href: `/learn/${row.track}/videos/${tr.slug}`,
+      summary: tr.summary,
+    });
+  }
+  for (const row of courses) {
+    const tr = row.translations[0];
+    if (!tr?.slug) continue;
+    map.set(`course:${row.id}`, {
+      targetType: "course",
+      title: tr.title,
+      href: `/learn/${row.track}/${tr.slug}`,
+      summary: tr.summary,
+    });
+  }
+
+  // Order restored from the CURATED list, not from the queries: five
+  // `findMany`s come back in five arbitrary orders, and the editor's order is
+  // the only one that means anything.
+  return targets
+    .map((target) => map.get(`${target.targetType}:${target.targetId}`))
+    .filter((item): item is ToolRelatedItem => item !== undefined);
+}
