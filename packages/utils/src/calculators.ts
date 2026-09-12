@@ -344,3 +344,53 @@ export function accountPipValue({
   const leg = crossRate(quote, accountCurrency, rates);
   return { quoteCurrency: inQuote, accountCurrency: leg === null ? null : inQuote * leg };
 }
+
+export interface MarkupQuoteInput {
+  amount: number;
+  /** The mid-market rate: units of `to` per 1 unit of `from`. */
+  midRate: number;
+  /** The markup as a percentage, 0 for a mid-market quote. */
+  markupPercent: number;
+}
+
+export interface MarkupQuote {
+  /** The rate actually applied, after the markup. */
+  effectiveRate: number;
+  /** What the reader would receive at that rate. */
+  converted: number;
+  /** What they would have received at the mid-market rate. */
+  atMid: number;
+  /** The difference — what the markup costs, in the TO currency. */
+  cost: number;
+}
+
+/**
+ * What a marked-up rate really gives you (changes-25 T7).
+ *
+ * The markup makes the rate you GET worse, so it comes OFF the mid rate. A
+ * naive `mid * (1 + markup)` reads as "the bank gives you more", which is the
+ * wrong sign and would present a cost as a bonus.
+ *
+ * **The mid-market figure is returned alongside, never replaced.** The whole
+ * point of the control is the comparison, and a tool that silently swapped one
+ * number for the other would hide exactly what it exists to show.
+ *
+ * Lives here rather than in the island so that the one piece of money
+ * arithmetic on the public side sits under the 90% pure-logic floor.
+ */
+export function quoteWithMarkup({
+  amount,
+  midRate,
+  markupPercent,
+}: MarkupQuoteInput): MarkupQuote {
+  if (amount < 0) throw new RangeError("amount must not be negative");
+  if (midRate <= 0) throw new RangeError("midRate must be positive");
+  if (markupPercent < 0 || markupPercent >= 100) {
+    throw new RangeError("markupPercent must be in [0, 100)");
+  }
+
+  const effectiveRate = midRate * (1 - markupPercent / 100);
+  const atMid = amount * midRate;
+  const converted = amount * effectiveRate;
+  return { effectiveRate, converted, atMid, cost: atMid - converted };
+}

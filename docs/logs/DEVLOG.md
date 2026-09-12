@@ -16945,3 +16945,68 @@ curated list.
 `pnpm --filter web exec vitest run` — 36 files, 1763 pass.
 `typecheck` and `lint` clean. `check:catalog-completeness` exits 0 with no
 `tools.*` gap in any locale.
+
+## 2026-09-12 — changes-25 T7: the rate-backed tools
+
+**Module:** 12 (public site), 13 (market) · **PR:** T7 · **ADR:** 087
+
+The currency converter ships; pivot points gains autofill; position size and
+pip value get their account-currency legs. One `getRateSnapshot()` per page,
+cached and tagged `market` (ADR-087 #7) — the island does the arithmetic, and
+there is no endpoint per keystroke.
+
+### The markup arithmetic moved to `@repo/utils`
+
+`quoteWithMarkup` is a pure function under the 90% floor rather than six lines
+inside an island. It is the one piece of MONEY maths on the public side, and
+the thing worth a test rather than a comment is the SIGN: a markup makes the
+rate you get worse, so it comes OFF the mid rate. `mid * (1 + markup)` reads as
+"the bank gives you more" and would present a cost as a bonus.
+
+It returns the mid-market figure ALONGSIDE the marked-up one, never instead of
+it. The comparison is the whole point of the control, and a tool that swapped
+one number for the other would hide exactly what it exists to show. Seven
+tests plus a property (the cost rises with the markup and never exceeds the
+whole amount).
+
+### A pair's price comes off the snapshot
+
+`priceFor` assembles it from the snapshot's USD-based rates: EUR/GBP is
+(GBP per USD) ÷ (EUR per USD). `crossRate` returns `null` when either leg is
+missing, which every widget already renders as a labelled empty state.
+
+`getOhlc` is read on the SERVER for the pivot calculator's autofill — once per
+cached page, for each interval the tool offers — rather than in the island.
+
+### What the checks caught
+
+**ADR-072 §10.** `sm:grid-cols-[1fr_auto_1fr]` for the from/swap/to row is an
+arbitrary value and fails lint. It is a named token now —
+`--grid-field-swap-field` in `@repo/ui` `globals.css`, next to the other grid
+templates — which is what §10 asks for: a new layout value is added there once,
+not inlined.
+
+**A widget-local type that ADDED a field.** `PivotOhlc` carried a `symbol`
+`getOhlc` does not return, and the type checker said so at the one call site
+that wires them together. The shape is structurally identical now, on purpose.
+
+### Verified in the browser, end to end
+
+With 40 days of demo bars loaded, `/tools/currency-converter` converts $100 to
+91.98 EUR at 0.919819 — which is exactly `1 / (1.085 × 1.002)`, the seeded
+close — and prints "Rates as of Sep 12, 2026". Before the bars existed it said
+"No rate is stored for this currency pair", which is the honest empty state
+ADR-087 #11 asks for rather than a zero or a NaN.
+
+### Tests run
+
+`@repo/utils calculators.test.ts` — 52 pass (7 new for `quoteWithMarkup`).
+Coverage across the three maths files: statements 97.24%, branches 93.15%,
+functions 100% — above the 90% floor.
+`pnpm --filter web exec vitest run` — 36 files, 1764 pass.
+`typecheck` and `lint` clean on `web`, `@repo/ui` and `@repo/utils`.
+
+**Not this work's, and pre-existing:** `packages/ui`'s
+`assessment-card.test.tsx` fails 3 of its assertions. Confirmed by stashing
+this PR's only `@repo/ui` change (one CSS custom property) and watching it fail
+identically — it belongs to whatever last touched that component.

@@ -277,6 +277,10 @@
     --grid-menu-main: minmax(0, 14rem) 1fr;
     --grid-label-value: max-content 1fr;
     --grid-fill-auto: 1fr auto;
+    /* Two equal fields with a control between them — the converter's
+       from / swap / to row (changes-25 T7). The middle track is `auto` so the
+       button keeps its own width while both fields stay equal. */
+    --grid-field-swap-field: minmax(0, 1fr) auto minmax(0, 1fr);
     --grid-auto-auto: auto auto;
 
     /* A floating panel never wider than the viewport minus a 1rem gutter a

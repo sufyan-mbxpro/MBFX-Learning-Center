@@ -676,6 +676,29 @@
         "video": "Video",
         "course": "Course"
       }
+    },
+    "converter": {
+      "amount": "Amount",
+      "from": "From",
+      "to": "To",
+      "swap": "Swap the two currencies",
+      "rateType": "What kind of rate?",
+      "rateTypeHint": "Typical markups, not quotes, and not attributed to any named provider. They show the shape of the cost, which is usually larger than people expect.",
+      "rateTypes": {
+        "market": "Mid-market",
+        "bank": "Bank transfer",
+        "atm": "ATM withdrawal",
+        "card": "Card payment",
+        "kiosk": "Airport kiosk"
+      },
+      "result": {
+        "converted": "Converted to {to}",
+        "rate": "Rate used",
+        "midNote": "The midpoint between what buyers offer and sellers ask. It is not a rate you can get.",
+        "markupNote": "The mid-market rate, less a typical {percent}% markup.",
+        "cost": "What the markup costs you",
+        "costNote": "At the mid-market rate you would have had {atMid} {to}."
+      }
     }
   }
 }

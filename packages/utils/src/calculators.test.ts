@@ -12,6 +12,7 @@ import {
   pipValue,
   pivotPoints,
   positionSize,
+  quoteWithMarkup,
 } from "./calculators.ts";
 
 describe("pipSize", () => {
@@ -374,5 +375,67 @@ describe("accountPipValue", () => {
     const base = { pair: "EUR/USD", price: 1.1, accountCurrency: "USD", rates: {} };
     expect(() => accountPipValue({ ...base, units: 0 })).toThrow(RangeError);
     expect(() => accountPipValue({ ...base, units: 1, price: 0 })).toThrow(RangeError);
+  });
+});
+
+describe("quoteWithMarkup", () => {
+  it("returns the mid-market figures untouched at 0%", () => {
+    const q = quoteWithMarkup({ amount: 100, midRate: 0.92, markupPercent: 0 });
+    expect(q.effectiveRate).toBeCloseTo(0.92, 12);
+    expect(q.converted).toBeCloseTo(92, 12);
+    expect(q.atMid).toBeCloseTo(92, 12);
+    expect(q.cost).toBeCloseTo(0, 12);
+  });
+
+  it("takes the markup OFF the rate, not on to it", () => {
+    // The sign that matters. `mid * (1 + markup)` would read as "the bank
+    // gives you more", presenting a cost as a bonus.
+    const q = quoteWithMarkup({ amount: 100, midRate: 0.92, markupPercent: 3 });
+    expect(q.effectiveRate).toBeLessThan(0.92);
+    expect(q.effectiveRate).toBeCloseTo(0.8924, 10);
+    expect(q.converted).toBeCloseTo(89.24, 10);
+  });
+
+  it("keeps the mid-market figure ALONGSIDE the marked-up one", () => {
+    // The comparison is the whole point of the control; a tool that replaced
+    // one number with the other would hide what it exists to show.
+    const q = quoteWithMarkup({ amount: 100, midRate: 0.92, markupPercent: 7 });
+    expect(q.atMid).toBeCloseTo(92, 10);
+    expect(q.converted).toBeLessThan(q.atMid);
+  });
+
+  it("reports the cost as the difference between the two", () => {
+    const q = quoteWithMarkup({ amount: 250, midRate: 1.27, markupPercent: 4 });
+    expect(q.cost).toBeCloseTo(q.atMid - q.converted, 10);
+    expect(q.cost).toBeCloseTo(250 * 1.27 * 0.04, 8);
+  });
+
+  it("converts nothing, and costs nothing, for an amount of zero", () => {
+    const q = quoteWithMarkup({ amount: 0, midRate: 1.27, markupPercent: 4 });
+    expect(q.converted).toBe(0);
+    expect(q.cost).toBe(0);
+  });
+
+  it("refuses a negative amount, a non-positive rate and an out-of-range markup", () => {
+    expect(() => quoteWithMarkup({ amount: -1, midRate: 1, markupPercent: 0 })).toThrow(RangeError);
+    expect(() => quoteWithMarkup({ amount: 1, midRate: 0, markupPercent: 0 })).toThrow(RangeError);
+    expect(() => quoteWithMarkup({ amount: 1, midRate: 1, markupPercent: 100 })).toThrow(RangeError);
+    expect(() => quoteWithMarkup({ amount: 1, midRate: 1, markupPercent: -1 })).toThrow(RangeError);
+  });
+
+  it("costs more as the markup grows, and never more than the whole amount", () => {
+    fc.assert(
+      fc.property(
+        fc.double({ min: 0, max: 1e6, noNaN: true }),
+        fc.double({ min: 0.0001, max: 1000, noNaN: true }),
+        fc.double({ min: 0, max: 99, noNaN: true }),
+        (amount, midRate, markupPercent) => {
+          const q = quoteWithMarkup({ amount, midRate, markupPercent });
+          expect(q.cost).toBeGreaterThanOrEqual(-1e-9);
+          expect(q.cost).toBeLessThanOrEqual(q.atMid + 1e-9);
+          expect(q.converted).toBeLessThanOrEqual(q.atMid + 1e-9);
+        },
+      ),
+    );
   });
 });

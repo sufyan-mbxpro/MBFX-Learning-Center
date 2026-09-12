@@ -22,9 +22,15 @@ import { Input } from "@repo/ui/components/input";
 import { WidgetLayout } from "../_components/widget-layout.tsx";
 import { ToolCombobox } from "../_components/tool-combobox.tsx";
 
+/**
+ * One folded period, exactly as `getOhlc` returns it (ADR-087 #4).
+ *
+ * Structurally identical on purpose: a widget-local shape that ADDED a field
+ * the service does not return is a type error at the one call site, which is
+ * how this was caught.
+ */
 export interface PivotOhlc {
   interval: string;
-  symbol: string;
   from: string;
   to: string;
   open: number;
