@@ -17010,3 +17010,77 @@ functions 100% — above the 90% floor.
 `assessment-card.test.tsx` fails 3 of its assertions. Confirmed by stashing
 this PR's only `@repo/ui` change (one CSS custom property) and watching it fail
 identically — it belongs to whatever last touched that component.
+
+## 2026-09-12 — changes-25 T8: correlation and the risk meter
+
+**Module:** 13 (market), 12 (public site) · **PR:** T8 · **ADR:** 088
+
+`packages/core/src/market-analytics.ts` plus the two islands and the
+methodology panel. Both read `MarketDailyBar.close` and nothing else; there is
+no derived table and no stored score.
+
+### Four decisions
+
+**Every correlation window is computed from ONE read.** A `?window=` search
+param would make the page dynamic and take `/tools/correlation` out of ISR for
+a control that changes nothing a crawler sees. `getCorrelationMatrices` reads
+the longest window's bars once and runs seven passes of pure arithmetic over
+what came back — cheaper than one extra request, and the switch is instant.
+The integration test pins the trap: handing every window the whole history
+would make a 5d window quietly read 120 days of it, and all seven would agree.
+
+**The risk history is recomputed, not stored.** The score is a function of bars
+AND of the current basket, so a stored series would be a record of whatever the
+basket used to be — and would not move when an admin edited the weights, which
+is the one time a reader most needs it to.
+
+**A silent component is named by SYMBOL.** "We could not read XAU/USD" is a
+sentence a reader can act on; a cuid is not. Same for correlation's excluded
+row: an instrument that vanishes from a grid is a question nobody can answer.
+
+**The sparkline is hand-drawn SVG.** Sixty points on one path is not worth
+40kB of a charting library, and ADR-086's risk #4 puts a blocking Lighthouse
+budget on these routes. Its y-axis is fixed at 0–100 rather than fitted,
+because a fitted axis makes a flat week look like a rollercoaster.
+
+### A test of mine that asserted the wrong thing
+
+`expect(history.every(p => p.score > 0))` conflated a COMPUTED zero with a
+zero-FILL. A score of exactly 0 is a legitimate reading — the latest move was
+the lowest in its own history, which is maximally risk-off. What actually
+matters is that a point which could not be computed is ABSENT, so the
+assertion is now that the series is shorter than the sixty requested and that
+every point it does carry has a real date from a real bar; a zero-filled point
+would have to invent one.
+
+An earlier version of the same test also picked the wrong series length: with
+70 closes against a 60-day lookback every point still computes. 62 is where the
+oldest points genuinely run out of lookback.
+
+### Copy
+
+"**Rates** as of" is right for a converter and wrong for a correlation grid or
+a sentiment score — neither is a rate. Those two use `common.dataAsOf`
+("Worked out from data up to …"). And nothing in the new copy says "real-time"
+or "live"; `tools-area.test.ts` checks all four words across the whole
+namespace.
+
+### Browser pass, with demo bars loaded
+
+`/tools/risk-sentiment` reads **64 · Neutral**, with "3 of 7 markets in the
+basket reported. No recent history for SPX/USD, NDX/USD, WTI/USD, USD/CHF." —
+ADR-088 #5 working end to end: the four without bars are excluded, counted and
+named rather than dragging the score toward zero. Below it: a 37-point
+sparkline, three per-component gauges with their direction, and the
+methodology panel.
+
+`/tools/correlation` renders the 4×4 grid of instruments that have history and
+names the eight that do not. Every cell prints its coefficient as well as
+tinting — colour is never the only channel.
+
+### Tests run
+
+`market-analytics.integration.test.ts` — 17 pass, NEW (Testcontainers).
+`pnpm --filter web exec vitest run` — 36 files, 1768 pass.
+`typecheck` and `lint` clean on `@repo/core` and `web`.
+`check:catalog-completeness` exits 0.

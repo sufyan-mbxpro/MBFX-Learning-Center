@@ -586,7 +586,8 @@
       "staleAsOf": "Rates as of {date} — out of date, and shown for reference only.",
       "noRates": "No exchange rates are stored yet, so currency conversions are unavailable.",
       "noRateForPair": "No rate is stored for this currency pair.",
-      "comingWithData": "This tool needs stored market data, which is not available on this site yet."
+      "comingWithData": "This tool needs stored market data, which is not available on this site yet.",
+      "dataAsOf": "Worked out from data up to {date}."
     },
     "gainLoss": {
       "startBalance": "Starting balance",
@@ -721,6 +722,57 @@
         "markupNote": "The mid-market rate, less a typical {percent}% markup.",
         "cost": "What the markup costs you",
         "costNote": "At the mid-market rate you would have had {atMid} {to}."
+      }
+    },
+    "methodology": {
+      "title": "How this is worked out"
+    },
+    "correlation": {
+      "window": "Window",
+      "windows": {
+        "5d": "5 days",
+        "10d": "10 days",
+        "30d": "30 days",
+        "60d": "60 days",
+        "90d": "90 days",
+        "180d": "180 days",
+        "250d": "250 days"
+      },
+      "pair": "Pair",
+      "caption": "Correlation between pairs over the last {window}",
+      "empty": "There is not enough stored price history yet to work out correlations. They appear once the platform has a few weeks of daily closes.",
+      "excluded": "Not shown, for want of enough history: {symbols}.",
+      "method": {
+        "statistic": "Each cell is a correlation coefficient between −1 and +1. At +1 the two pairs moved in lockstep; at −1 exactly opposite; near 0 their moves were unrelated.",
+        "returns": "We correlate daily returns, not prices. Two pairs both drifting upward look correlated at the price level even when their day-to-day moves have nothing to do with each other.",
+        "minimum": "A cell with less history than the window shows a dash rather than a number. A coefficient worked out from a handful of days is not a small measurement, it is a wrong one.",
+        "cadence": "The figures are updated once a day, from the last completed daily close. The page says when that was.",
+        "notAdvice": "They describe a window that has already closed. They are not a forecast, and not a recommendation to trade one pair instead of another."
+      }
+    },
+    "risk": {
+      "bands": {
+        "risk-off": "Risk-off",
+        "neutral": "Neutral",
+        "risk-on": "Risk-on"
+      },
+      "directions": {
+        "risk-on": "Rises on risk",
+        "risk-off": "Rises off risk"
+      },
+      "reporting": "{reported} of {total} markets in the basket reported.",
+      "excluded": "No recent history for {symbols}.",
+      "empty": "None of the {total} markets in the basket has enough stored history yet, so there is no score to show. One appears once the platform has a few weeks of daily closes.",
+      "historyTitle": "The last {days} readings",
+      "historyNote": "One point per day the score could be worked out.",
+      "componentsTitle": "What went into it",
+      "method": {
+        "score": "A single score from 0 to 100. Above the upper threshold is risk-on, below the lower one is risk-off, and in between is neutral.",
+        "rank": "Each market is scored by where its latest move sits within its own recent range — its percentile rank. A market that usually moves half a percent and has just moved two ranks near the top of its own history, whatever the absolute number.",
+        "direction": "Markets that rise when risk is being taken on score as they rank. Markets that rise when risk is coming off have their rank flipped before it is counted. The weighted average of what is left is the score.",
+        "excluded": "A market with too little history is left out and counted, never filled in with a zero. A zero would be a claim that the market was flat; leaving it out is the truth, which is that we do not know.",
+        "cadence": "The score is worked out once a day, from the last completed daily close. The page says when that was.",
+        "notAdvice": "It describes what has already happened. It is not a forecast, and it is not a recommendation to do anything."
       }
     }
   }

@@ -32,6 +32,7 @@ export * from "./learn-analytics.ts";
 export * from "./glossary-topics.ts";
 export * from "./market.ts";
 export * from "./market-admin.ts";
+export * from "./market-analytics.ts";
 export * from "./tools.ts";
 export * from "./notifications.ts";
 export * from "./search.ts";

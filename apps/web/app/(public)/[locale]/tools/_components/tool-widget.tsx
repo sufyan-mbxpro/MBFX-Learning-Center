@@ -10,6 +10,9 @@ import { PositionSizeWidget } from "../_widgets/position-size.tsx";
 import { CurrencyConverterWidget } from "../_widgets/currency-converter.tsx";
 import type { PivotOhlc } from "../_widgets/pivot-points.tsx";
 import type { RateSnapshotView } from "./rate-footnote.tsx";
+import { CorrelationPanel } from "../_widgets/correlation-panel.tsx";
+import type { CorrelationData } from "../_widgets/correlation.tsx";
+import { RiskSentimentWidget, type RiskSentimentData } from "../_widgets/risk-sentiment.tsx";
 
 export interface WidgetInstrument {
   id: string;
@@ -25,14 +28,18 @@ export interface WidgetInstrument {
 // else — which is the mitigation ADR-086's risk #4 names for eight
 // interactive widgets arriving on public routes.
 //
-// Correlation and the risk meter land in T8; until then they render an honest
-// "not available yet" rather than a broken form.
+// Every tool is wired as of T8. The default branch stays as the honest
+// fallback for a registry key whose island has not been written yet — which is
+// a state the type system allows and a deploy could reach.
 export async function ToolWidget({
   toolKey,
   config,
   instruments,
   snapshot,
   autofill,
+  correlation,
+  risk,
+  asOfLabel,
 }: {
   toolKey: ToolKey;
   config: Record<string, unknown>;
@@ -41,6 +48,11 @@ export async function ToolWidget({
   snapshot: RateSnapshotView | null;
   /** The last complete period per interval — pivot's autofill, empty for the rest. */
   autofill: Record<string, PivotOhlc | null>;
+  /** Every offered window's matrix, from one read (T8). */
+  correlation: { matrices: Record<string, CorrelationData>; windows: string[]; defaultWindow: string } | null;
+  risk: RiskSentimentData | null;
+  /** "Rates as of …", resolved on the server so the islands share one format. */
+  asOfLabel: string | null;
 }) {
   const t = await getTranslations("tools");
 
@@ -141,9 +153,32 @@ export async function ToolWidget({
         />
       );
 
+    case "correlation":
+      return correlation ? (
+        <CorrelationPanel
+          matrices={correlation.matrices}
+          windows={correlation.windows}
+          defaultWindow={correlation.defaultWindow}
+          asOfLabel={asOfLabel}
+        />
+      ) : (
+        <Alert variant="info">
+          <AlertDescription>{t("common.comingWithData")}</AlertDescription>
+        </Alert>
+      );
+
+    case "risk-sentiment":
+      return risk ? (
+        <RiskSentimentWidget data={risk} asOfLabel={asOfLabel} />
+      ) : (
+        <Alert variant="info">
+          <AlertDescription>{t("common.comingWithData")}</AlertDescription>
+        </Alert>
+      );
+
     default:
-      // Correlation and the risk meter, until T8. Said plainly rather than
-      // rendered as a form that cannot answer.
+      // A registry key whose island has not been written yet. Said plainly
+      // rather than rendered as a form that cannot answer.
       return (
         <Alert variant="info">
           <AlertDescription>{t("common.comingWithData")}</AlertDescription>

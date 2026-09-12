@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { setRequestLocale } from "next-intl/server";
+import { getTranslations, setRequestLocale } from "next-intl/server";
 import {
   TOOLS,
   TOOL_KEYS,
@@ -11,8 +11,10 @@ import {
   type ToolKey,
 } from "@repo/contracts";
 import {
+  getCorrelationMatrices,
   getOhlc,
   getRateSnapshot,
+  getRiskSentiment,
   getToolPage,
   getToolRelated,
   listActiveInstruments,
@@ -70,6 +72,7 @@ export default async function ToolPage({ params }: PageProps<"/[locale]/tools/[t
   const flagVisible = flag ? await isFeatureVisible(flag, null) : true;
   if (!flagVisible) notFound();
 
+  const t = await getTranslations({ locale, namespace: "tools" });
   const page = await getToolPage(locale, key);
   if (!page) notFound();
 
@@ -108,6 +111,54 @@ export default async function ToolPage({ params }: PageProps<"/[locale]/tools/[t
     }
   }
 
+  // The two history-backed tools, each read once on the server so the island
+  // holds no fetching of its own (ADR-056 #1's rule extended: a cached page
+  // reads, an island renders).
+  const correlationConfig = config as { windows?: string[]; defaultWindow?: string; instrumentIds?: string[] };
+  const correlation =
+    key === "correlation"
+      ? await (async () => {
+          const windows = correlationConfig.windows ?? ["30d"];
+          const matrices = await getCorrelationMatrices(
+            windows,
+            correlationConfig.instrumentIds ?? [],
+          );
+          return {
+            matrices,
+            windows,
+            defaultWindow: correlationConfig.defaultWindow ?? windows[0] ?? "30d",
+          };
+        })()
+      : null;
+
+  const riskConfig = config as {
+    components?: { instrumentId: string; weight: number; direction: "risk-on" | "risk-off" }[];
+    lookbackDays?: number;
+    riskOffBelow?: number;
+    riskOnAbove?: number;
+  };
+  const risk =
+    key === "risk-sentiment"
+      ? await getRiskSentiment(riskConfig.components ?? [], {
+          lookbackDays: riskConfig.lookbackDays ?? 60,
+          riskOffBelow: riskConfig.riskOffBelow ?? 35,
+          riskOnAbove: riskConfig.riskOnAbove ?? 65,
+        })
+      : null;
+
+  // One "as of" string, formatted on the server so every island on the page
+  // says it the same way.
+  const asOfSource = correlation?.matrices[correlation.defaultWindow]?.asOf ?? risk?.asOf ?? null;
+  const asOfLabel = asOfSource
+    // `dataAsOf`, not `asOf`: neither a correlation grid nor a sentiment
+    // score is a RATE, and saying so would be a small lie in a caption.
+    ? t("common.dataAsOf", {
+        date: new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(
+          new Date(asOfSource),
+        ),
+      })
+    : null;
+
   return (
     <ToolShell
       title={page.title}
@@ -127,6 +178,9 @@ export default async function ToolPage({ params }: PageProps<"/[locale]/tools/[t
           }))}
           snapshot={snapshot}
           autofill={autofill}
+          correlation={correlation}
+          risk={risk}
+          asOfLabel={asOfLabel}
         />
       }
       related={<RelatedStrip items={related} />}
