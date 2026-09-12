@@ -15175,3 +15175,76 @@ F1 are done.
 - F2 next: the schema, the `@repo/email` skeleton, the sealed transport and
   Mailpit in `docker-compose.yml`.
 - E2E for the reset screens belongs to Module 14, with the rest of auth.
+
+## 2026-09-12 — changes-21 F2: the email schema, `@repo/email`, and the one sealed secret (Modules 17/01, ADR-078)
+
+The plan's F2: four tables, the package skeleton, the transport seam, the
+sealed SMTP password, and a mail catcher for development.
+
+### Shipped
+
+- **Schema** (`20260912055701_email_platform_adr078`, additive):
+  `EmailTransport` (singleton, `id = "default"`), `EmailTemplate`,
+  `EmailTemplateTranslation` (the `GlossaryTermTranslation` shape —
+  `translationStatus` + `sourceHash`) and `EmailDelivery`, plus four enums.
+  The delivery table has no body and no variables column, by design
+  (ADR-078 #10).
+- **`@repo/email`**, a domain package owning those tables:
+  - **`secret.ts`** — `sealSecret`/`openSecret`, AES-256-GCM under
+    `EMAIL_SECRET_KEY`, `v1:<iv>:<tag>:<ciphertext>`. A fresh IV per seal; no
+    padding or derivation fallback for a short key; one error message for
+    every failure, because distinguishing "wrong key" from "tampered row"
+    tells an attacker which half they got right.
+  - **`transport.ts`** — `EmailTransportDriver` with `smtpDriver`
+    (nodemailer) and `logDriver` (Module 04's `logEmail`, kept as the
+    unconfigured default). `loadTransportDriver()` is the ONE reader of
+    `passwordCipher`.
+  - **`testing.ts`** — `memoryDriver()`, deliberately not exported from `.`.
+- **Mailpit** in `docker-compose.yml` (SMTP 1025, UI 8025), and
+  `EMAIL_SECRET_KEY` in `.env.example` with the command that generates one.
+
+### Decided while building
+
+1. **`smtpTransportOptions` is exported as a pure function** so the security-
+   relevant half of the driver is unit-testable. `secure` is TLS-on-connect;
+   STARTTLS is `requireTLS`, which makes the upgrade mandatory — without it
+   nodemailer continues in the clear when a server declines, and that failure
+   is invisible at runtime.
+2. **A half-filled SMTP row falls back to the log driver** rather than
+   throwing. A form saved without a host must not take sign-up down.
+3. **nodemailer is pinned at 10.0.3, not 10.0.8.** `minimumReleaseAge` (24h,
+   security.md #15) refused 10.0.8 — published 18 hours earlier. 10.0.3 is
+   the newest release past the cutoff. Worth noting for the next bump: the
+   project published **eight** versions in four days.
+
+### Found
+
+- **An empty value could not be unsealed.** The structural guard rejected an
+  empty ciphertext segment by truthiness, so `sealSecret("")` round-tripped
+  to an error. Only the STRUCTURE is checked now; the test that caught it is
+  in the same commit.
+- **Two bad test fixtures of my own**, both caught by the suite: a 34-byte
+  `OTHER_KEY` that hit the key-length error instead of the tampered-seal
+  error, and the empty-value case above.
+
+### Verified
+
+- `@repo/email`: typecheck clean, lint clean, **29/29** across four files,
+  coverage thresholds met (80% package floor, 90% on `secret.ts`).
+  - `transport.integration.test.ts` sends through a **real Mailpit
+    container** and asserts the message arrived — testing.md reserves mocks
+    for the network edge we do not own, and this transport is ours.
+  - `transport-db.integration.test.ts` drives `loadTransportDriver` against a
+    **real MariaDB**: every fallback, and the proof that the seal is actually
+    opened (swap the key, loading fails rather than sending garbage).
+- `@repo/db`: **14/14** after the migration. `check:phantom-deps` OK.
+  Prettier clean (`.env.example` and `schema.prisma` have no parser, as
+  always).
+
+### Owed
+
+- F3 next: the template registry in `@repo/contracts`, the renderer and the
+  email sanitiser.
+- `EmailTemplate` and `EmailDelivery` have no reader or writer yet — F4
+  brings `sendTemplatedEmail`, the `email` settings group and the auth
+  wiring.

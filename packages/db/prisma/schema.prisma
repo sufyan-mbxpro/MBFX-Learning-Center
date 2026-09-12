@@ -1987,3 +1987,108 @@ model ContentReference {
   @@index([refType, refId])
   @@map("content_references")
 }
+
+// ─── Email platform (Module 17, ADR-078) ──────────────────────────────────
+
+enum EmailDriver {
+  SMTP
+  LOG // unconfigured / dev: the send is logged, never transmitted
+}
+
+enum SmtpSecurity {
+  NONE
+  STARTTLS
+  TLS
+}
+
+enum EmailBodyMode {
+  RICH // the body is composed into the shared layout
+  HTML // a full document, exactly as the designer wrote it
+}
+
+enum EmailDeliveryStatus {
+  SENT
+  FAILED
+  SUPPRESSED // a switch was off; nothing reached a transport
+}
+
+/// Singleton, id = "default". ADR-078 #3: `passwordCipher` is the ONE
+/// sanctioned database secret — AES-256-GCM under EMAIL_SECRET_KEY (env),
+/// write-only in the UI, and selected by loadTransportDriver() alone.
+/// ADR-078 #4: editing this row is super_admin-only, because the HOST is an
+/// escalation path — repointing delivery captures the next reset link.
+model EmailTransport {
+  id             String       @id @default("default")
+  driver         EmailDriver  @default(LOG)
+  host           String?      @db.VarChar(255)
+  port           Int?
+  security       SmtpSecurity @default(STARTTLS)
+  username       String?      @db.VarChar(255)
+  passwordCipher String?      @db.Text
+  lastVerifiedAt DateTime?
+  lastError      String?      @db.Text
+  updatedBy      String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@map("email_transport")
+}
+
+/// The row is the CONTENT of a template whose KEY is declared in code
+/// (EMAIL_TEMPLATES, @repo/contracts). An admin cannot mint a key, because
+/// code decides when an email is sent — ADR-078 #5, the ADR-042 split.
+model EmailTemplate {
+  key       String   @id @db.VarChar(60)
+  isActive  Boolean  @default(true)
+  fromName  String?  @db.VarChar(120)
+  fromEmail String?  @db.VarChar(255)
+  replyTo   String?  @db.VarChar(255)
+  updatedBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  translations EmailTemplateTranslation[]
+
+  @@map("email_templates")
+}
+
+model EmailTemplateTranslation {
+  id                String            @id @default(cuid())
+  templateKey       String            @db.VarChar(60)
+  locale            String            @db.VarChar(10)
+  subject           String            @db.VarChar(200)
+  preheader         String?           @db.VarChar(200)
+  mode              EmailBodyMode     @default(RICH)
+  bodyHtml          String            @db.MediumText
+  translationStatus TranslationStatus @default(DRAFT)
+  sourceHash        String?           @db.VarChar(64)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  template EmailTemplate @relation(fields: [templateKey], references: [key], onDelete: Cascade)
+
+  @@unique([templateKey, locale])
+  @@map("email_template_translations")
+}
+
+/// ADR-078 #10 — the attempt, never the message. No body and no variables:
+/// a reset link sitting in a table an admin can read is a second
+/// interception path. Purged after 90 days by /api/cron/housekeeping.
+model EmailDelivery {
+  id                String              @id @default(cuid())
+  templateKey       String              @db.VarChar(60)
+  to                String              @db.VarChar(255)
+  locale            String              @db.VarChar(10)
+  subject           String              @db.VarChar(200)
+  status            EmailDeliveryStatus
+  reason            String?             @db.VarChar(500)
+  providerMessageId String?             @db.VarChar(255)
+  isTest            Boolean             @default(false)
+  triggeredBy       String?
+  createdAt         DateTime            @default(now())
+
+  @@index([createdAt])
+  @@index([templateKey, createdAt])
+  @@index([status, createdAt])
+  @@map("email_deliveries")
+}
