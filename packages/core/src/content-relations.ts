@@ -79,3 +79,78 @@ export async function loadRelationTargets(params: {
   });
   return rows.map((r) => r.targetId);
 }
+
+/**
+ * A tool's related strip (ADR-086 #4). Unlike a course's, it is MIXED-TYPE:
+ * lessons, articles, glossary terms, videos and courses in one ordered list.
+ */
+export const TOOL = "tool";
+
+/** One related item, carrying the type that says which table to read. */
+export interface MixedRelation {
+  targetType: string;
+  targetId: string;
+}
+
+/**
+ * Full replacement of a MIXED-TYPE relation set, ordered by array position.
+ *
+ * `replaceRelations` above is per-`targetType`, which is right for a course's
+ * recommendations and wrong here: a tool's list interleaves types, and running
+ * the per-type helper once per type would restart `sortOrder` at zero for each
+ * one — so a list of [lesson, article, lesson] would come back as
+ * [lesson, lesson, article]. `ContentRelation` already stores `targetType` per
+ * ROW, so the only thing that had to change is that the order is taken across
+ * the whole list rather than within a slice of it.
+ */
+export async function replaceMixedRelations(
+  tx: Prisma.TransactionClient,
+  params: {
+    sourceType: string;
+    sourceId: string;
+    relationType: string;
+    targets: readonly MixedRelation[];
+  },
+): Promise<void> {
+  const { sourceType, sourceId, relationType } = params;
+
+  // Deduplicated on the PAIR, not on the id: a lesson and an article may share
+  // an id across tables, and collapsing them would silently drop one.
+  const seen = new Set<string>();
+  const targets = params.targets.filter((target) => {
+    if (target.targetType === sourceType && target.targetId === sourceId) return false;
+    const key = `${target.targetType}:${target.targetId}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  await tx.contentRelation.deleteMany({ where: { sourceType, sourceId, relationType } });
+  if (targets.length === 0) return;
+
+  await tx.contentRelation.createMany({
+    data: targets.map((target, index) => ({
+      sourceType,
+      sourceId,
+      targetType: target.targetType,
+      targetId: target.targetId,
+      relationType,
+      // Across the whole list — the point of this helper.
+      sortOrder: index,
+    })),
+  });
+}
+
+/** The ordered mixed set — what the editor loads back and the strip renders. */
+export async function loadMixedRelationTargets(params: {
+  sourceType: string;
+  sourceId: string;
+  relationType: string;
+}): Promise<MixedRelation[]> {
+  const rows = await db.contentRelation.findMany({
+    where: params,
+    orderBy: { sortOrder: "asc" },
+    select: { targetType: true, targetId: true },
+  });
+  return rows.map((row) => ({ targetType: row.targetType, targetId: row.targetId }));
+}

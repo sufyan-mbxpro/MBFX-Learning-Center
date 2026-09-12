@@ -8,6 +8,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Calculator,
   CandlestickChart,
   Tags,
   ChartLine,
@@ -55,6 +56,7 @@ const ICONS: Record<string, LucideIcon> = {
   websiteMedia: Image,
   website: Globe,
   market: CandlestickChart,
+  tools: Calculator,
   settings: Settings,
   features: Flag,
   navigation: ListTree,

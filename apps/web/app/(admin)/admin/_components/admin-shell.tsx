@@ -45,6 +45,7 @@ interface NavEntryDef {
     | "websiteMedia"
     | "website"
     | "market"
+    | "tools"
     | "settings"
     | "features"
     | "navigation"
@@ -181,6 +182,15 @@ const ADMIN_NAV_GROUPS: {
         labelKey: "articles",
         icon: "articles",
         permission: ["analysis.view", "news.manage"],
+      },
+      // Trading tools (Module 13, ADR-086). Its OWN permission group, the
+      // fourteenth, because this screen governs nothing market.* does: the
+      // words on a tool page and whether the site offers it at all.
+      {
+        href: "/admin/tools",
+        labelKey: "tools",
+        icon: "tools",
+        permission: "tools.view",
       },
       // Market data (Module 13, ADR-087). Its own destination rather than a
       // settings card: instruments are content an editor curates, and the

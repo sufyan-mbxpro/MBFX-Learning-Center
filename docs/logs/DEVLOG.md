@@ -16777,3 +16777,82 @@ saved", and the last-sync panel. The one console error on `/admin/market`
 ("Next.js encountered uncached data during prerendering") appears identically
 on the pre-existing `/admin/newsletter`, so it is ambient dev-mode noise rather
 than anything this PR introduced.
+
+## 2026-09-12 — changes-25 T5: the tools service and its admin
+
+**Module:** 13 (market), 11 (content), 09 (admin shell) · **PR:** T5 · **ADR:** 086
+
+`packages/core/src/tools.ts` (`listTools`, `loadTool`, `saveTool`,
+`setToolEnabled`, `reorderTools`, `getEnabledTools`, `getToolPage`,
+`listRelatedCandidates`), the two mixed-relation helpers, `/admin/tools` and
+`/admin/tools/[key]` with its eight config panels.
+
+### Three decisions the code had to make
+
+**`replaceMixedRelations` exists because order runs ACROSS types.** Running the
+existing per-type helper once per type restarts `sortOrder` at zero for each,
+so a curated list of [lesson, article, lesson] would come back as
+[lesson, lesson, article]. `ContentRelation` already stores `targetType` per
+ROW, so the only change is taking the index across the whole list. It also
+deduplicates on the PAIR rather than on the id: a lesson and an article may
+genuinely share an id across tables, and collapsing on id alone would silently
+drop one.
+
+**The source hash covers `faq` — question AND answer.** ADR-069's rule, applied
+in advance this time rather than after the bug: the glossary's hash covered two
+of its four prose fields, so an example-only edit shipped while translations
+claimed to be current. Three integration tests pin it — a body edit, an
+answer-only edit and a question-only edit each flip a sibling OUTDATED, and a
+`sortOrder` change flips nothing.
+
+**A row whose key the registry does not know is DROPPED from every read.** It
+has no route, no config schema and no island, so listing it would hand an
+editor a link into a 404 from inside the admin. The SET is code; a row is only
+ever what a tool SAYS.
+
+**There is no `ContentStatusPanel` on the editor** (ADR-086 #8). A tool is on or
+off. The rail carries one switch, on its own key: `tools.publish`, not
+`tools.update`, so an editor can write every word on a tool page and still not
+decide what the site offers.
+
+### What the checks caught
+
+**The type checker enforced architecture.md #2.** The editor's loader first read
+the related-picker candidates straight from Prisma; `@repo/db` is not resolvable
+from `apps/web`, and it said so before a reviewer had to. That read is now
+`listRelatedCandidates()` in `@repo/core`.
+
+**`admin-form-conventions.test.ts` caught two ADR-077 violations**: raw `<label>`
+elements in the config panel and the enable switch (now `Field` +
+`FieldLabel`, the pattern `taxonomy-panel.tsx` already uses), and three
+`text-destructive` icons that should be `text-destructive-interactive` like
+every other call site in the repo. It also flagged the words inside a comment,
+which is the guard being blunt rather than wrong — the comment is reworded.
+
+**`admin-nav-labels.test.ts`, added in T4, did its job.** `admin.tools` is the
+sidebar's label key, so the screen's keys went to `admin.toolsAdmin` from the
+start instead of taking the shell down a second time.
+
+### Browser pass
+
+`/admin/tools` lists the eight with their needs badge and live switch;
+`/admin/tools/risk-sentiment` renders every section, the seven-row basket
+editor with per-row instrument, weight and direction, and the rail.
+
+One flaw fixed there: the Settings rail said "Live" twice — a badge row and the
+switch's own label — where a switch already shows its state.
+
+The save was exercised end to end: changing `riskOffBelow` from 35 to 30 in the
+browser wrote `config.riskOffBelow = 30`, computed a `sourceHash`, and left a
+`tool.update` audit row.
+
+### Tests run
+
+`tools.integration.test.ts` — 20 pass, NEW (Testcontainers). One transaction; a
+mismatched config writes NOTHING; sanitising on save, FAQ answers included; the
+empty-array-not-undefined rule; the three source-hash cases; mixed order across
+types; PAIR-wise dedup; the dropped unregistered key.
+`admin-form-conventions` + `admin-dialog-conventions` + `admin-page-conventions`
++ `admin-nav-labels` — 878 pass.
+`pnpm --filter @repo/core typecheck` / `lint` clean;
+`pnpm --filter web typecheck` / `lint` clean.
