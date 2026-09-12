@@ -482,7 +482,9 @@ const SETTINGS = [
       { key: "learning_paths", enabled: false, order: 8, variant: "elevated", limit: 3 },
       { key: "forex_rates", enabled: false, order: 9, variant: "marquee" },
       { key: "economic_events", enabled: false, order: 10, limit: 5 },
-      { key: "popular_tools", enabled: false, order: 11, variant: "default", limit: 4 },
+      // Live as of changes-25 T9. NOTE: this needs `pnpm db:reset` to appear in
+      // an existing database — the homepage rows are create-only.
+      { key: "popular_tools", enabled: true, order: 11, variant: "default", limit: 4 },
       { key: "featured_lessons", enabled: false, order: 12, variant: "default", limit: 3 },
       { key: "market_sentiment", enabled: false, order: 13 },
       { key: "trading_sessions", enabled: false, order: 14 },
@@ -986,13 +988,6 @@ export async function seed(db: PrismaClient) {
       sortOrder: 3,
     },
     {
-      routeKey: "tools",
-      label: "Tools",
-      icon: "calculator",
-      requiresFeature: "calculators",
-      sortOrder: 4,
-    },
-    {
       routeKey: "markets",
       label: "Markets",
       icon: "trending-up",
@@ -1172,6 +1167,94 @@ export async function seed(db: PrismaClient) {
     ],
   }));
 
+  // The eight tools (ADR-086 §9 / changes-25 T9). A TREE rather than a flat
+  // row, so the header gets a mega panel in the same shape as About and the
+  // two schools — three headed columns and a "view all" footer, which
+  // `mega-menu.ts` composes from these route keys.
+  //
+  // Built from TOOL_KEYS rather than typed out, so a ninth tool arrives in the
+  // header from the same edit that registers it. The `title` is the one-line
+  // description the panel renders under each label.
+  // The eight tools (ADR-086 §9 / changes-25 T9). A TREE rather than a flat
+  // row, so the header gets a mega panel in the same shape as About and the
+  // two schools — three headed columns and a "view all" footer, which
+  // `mega-menu.ts` composes from these route keys.
+  //
+  // **Spelled out rather than imported from `TOOLS`.** `@repo/db` does not
+  // depend on `@repo/contracts`, and does not acquire the dependency for a
+  // list of eight labels — the HOME_PAGE_LAYOUT note at the top of this file
+  // is the same call. `contracts/tools.test.ts` is what keeps the two honest:
+  // it fails on a `tool-*` route key with no registered tool, or the reverse.
+  //
+  // The `title` is the one-line description the mega panel renders under
+  // each label.
+  const TOOLS_NAV = {
+    routeKey: "tools",
+    label: "Tools",
+    icon: "calculator",
+    sortOrder: 4,
+    requiresFeature: "calculators",
+    children: [
+      {
+        routeKey: "tool-position-size",
+        label: "Position size",
+        title: "How big a trade your risk allows",
+        icon: "calculator",
+        sortOrder: 1,
+      },
+      {
+        routeKey: "tool-pip-value",
+        label: "Pip value",
+        title: "What one pip is worth to you",
+        icon: "coins",
+        sortOrder: 2,
+      },
+      {
+        routeKey: "tool-gain-loss",
+        label: "Gain & loss",
+        title: "And what it takes to get back to even",
+        icon: "percent",
+        sortOrder: 3,
+      },
+      {
+        routeKey: "tool-pivot-points",
+        label: "Pivot points",
+        title: "Five methods, one table",
+        icon: "git-fork",
+        sortOrder: 4,
+      },
+      {
+        routeKey: "tool-market-hours",
+        label: "Market hours",
+        title: "Which sessions are open right now",
+        icon: "clock",
+        sortOrder: 5,
+      },
+      {
+        routeKey: "tool-currency-converter",
+        label: "Currency converter",
+        title: "And what a markup really costs",
+        icon: "arrow-left-right",
+        requiresFeature: "currency_converter",
+        sortOrder: 6,
+      },
+      {
+        routeKey: "tool-correlation",
+        label: "Correlation",
+        title: "Which pairs move together",
+        icon: "grid-3x3",
+        sortOrder: 7,
+      },
+      {
+        routeKey: "tool-risk-sentiment",
+        label: "Risk on / risk off",
+        title: "Where the market has been leaning",
+        icon: "gauge",
+        sortOrder: 8,
+      },
+    ],
+  };
+
   /**
    * A root row and its children, matched the way every row above is: the
    * parent on [menuId, routeKey, parentId: null], the children on the same
@@ -1251,7 +1334,7 @@ export async function seed(db: PrismaClient) {
     }
   }
 
-  for (const tree of [...TRACK_NAV, ABOUT_NAV]) await upsertNavTree(tree);
+  for (const tree of [...TRACK_NAV, ABOUT_NAV, TOOLS_NAV]) await upsertNavTree(tree);
 
   // Footer menus — referenced by the footer.menuColumns setting (A6).
   //

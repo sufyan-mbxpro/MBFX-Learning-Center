@@ -17084,3 +17084,63 @@ tinting — colour is never the only channel.
 `pnpm --filter web exec vitest run` — 36 files, 1768 pass.
 `typecheck` and `lint` clean on `@repo/core` and `web`.
 `check:catalog-completeness` exits 0.
+
+## 2026-09-12 — changes-25 T9: the header, the sitemap and the homepage
+
+**Module:** 08 (navigation), 12 (public site), 01 (db) · **PR:** T9 · **ADR:** 086
+
+`tools` becomes a menu TREE with eight children, gets a mega panel in the
+About/track shape (ADR-076 §2), lights up the homepage's `popular_tools` band,
+and joins the sitemap (which landed with T6, alongside the `explore-destinations`
+flip an existing guard demanded early).
+
+### Two calls
+
+**The seeded tool rows are spelled out, not imported.** `@repo/db` does not
+depend on `@repo/contracts` and does not acquire the dependency for a list of
+eight labels — the `HOME_PAGE_LAYOUT` note at the top of `seed.ts` is the same
+call, made for the same reason. `contracts/tools.test.ts` and the new nav guard
+are what keep the two honest.
+
+**`tools` LEAVES the flat `NAV` rows when it becomes a tree.** `upsertNavTree`
+matches a root on `[menuId, routeKey, parentId: null]`, so a leftover flat row
+is adopted as the tree's root — which is in fact what happened in the running
+database, correctly, and is why a reset was not needed for the header. Leaving
+the flat row in the SOURCE would have been a second declaration of the same
+root, so the guard asserts it is gone.
+
+**The panel groups by what a reader is trying to DO**, not by what each tool
+reads: Position & risk / Market timing / Rates & relationships. Someone opening
+this menu knows they want to size a trade; they do not know, and should not
+need to know, that two of these need a rate.
+
+### The drift guard
+
+`tools-area.test.ts` grows a header section in `learn.test.ts`'s shape. Three
+registries have to name the same eight destinations — `TOOL_KEYS`, the mega
+panel's columns, and the seeded tree — and adding a ninth means editing all
+three. It fails on whichever half is forgotten, names the tool in the message,
+and also catches a tool listed TWICE and a tool with no header icon
+(`MEGA_MENU_ICONS` is `Partial`, so a missing entry is otherwise silent).
+Verified by deleting one panel entry and watching it fail, then restoring.
+
+### Database
+
+`pnpm db:seed` is enough for the header: `upsertNavTree` upserts, and it
+adopted the existing flat `tools` row and gave it its eight children.
+**`popular_tools` still needs `pnpm db:reset`** to appear in an existing
+database — the homepage rows are create-only, which is the note changes-09
+already carries for its own stubs. Not run here: a reset destroys the dev
+data, and Prisma asks for explicit consent before one.
+
+### Browser pass
+
+The header's Tools entry is a mega-menu button now, and the panel renders all
+eight across its three columns with icons and one-line descriptions.
+
+### Tests run
+
+`pnpm --filter web exec vitest run` — 36 files, 1774 pass (the tools guard is
+28 of them). `@repo/db` — 4 files, 32 pass. `typecheck` and `lint` clean on
+`web` and `@repo/db`. `check:catalog-completeness` exits 0;
+`check:permission-keys` and `check:phantom-deps` OK.

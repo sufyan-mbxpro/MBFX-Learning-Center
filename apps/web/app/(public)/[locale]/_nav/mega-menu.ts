@@ -160,6 +160,31 @@ export const MEGA_MENU_PANELS = {
     ],
     viewAll: "about",
   },
+
+  // The eight tools (ADR-086 §9), in About's shape (ADR-076 §2): three headed
+  // columns grouped by what a reader is trying to DO, not by what each tool
+  // reads. Someone opening this menu knows they want to size a trade; they do
+  // not know, and should not need to know, that two of these need a rate.
+  tools: {
+    columns: [
+      {
+        key: "position",
+        titleKey: "mega.tools.position",
+        routeKeys: ["tool-position-size", "tool-pip-value", "tool-gain-loss"],
+      },
+      {
+        key: "timing",
+        titleKey: "mega.tools.timing",
+        routeKeys: ["tool-market-hours", "tool-pivot-points"],
+      },
+      {
+        key: "rates",
+        titleKey: "mega.tools.rates",
+        routeKeys: ["tool-currency-converter", "tool-correlation", "tool-risk-sentiment"],
+      },
+    ],
+    viewAll: "tools",
+  },
 } as const satisfies Partial<Record<RouteKey, MegaPanelSpec>>;
 
 export type MegaMenuRouteKey = keyof typeof MEGA_MENU_PANELS;

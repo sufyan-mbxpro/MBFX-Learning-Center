@@ -147,6 +147,11 @@
         "study": "الدراسة",
         "practise": "التدريب والمراجعة",
         "more": "مزيد من التعلّم"
+      },
+      "tools": {
+        "position": "Position & risk",
+        "timing": "Market timing",
+        "rates": "Rates & relationships"
       }
     }
   },
@@ -774,6 +779,11 @@
         "cadence": "The score is worked out once a day, from the last completed daily close. The page says when that was.",
         "notAdvice": "It describes what has already happened. It is not a forecast, and it is not a recommendation to do anything."
       }
+    },
+    "home": {
+      "title": "Do the arithmetic first",
+      "lead": "Size a trade, value a pip, or see which pairs are really moving together.",
+      "viewAll": "All trading tools"
     }
   }
 }

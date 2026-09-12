@@ -21,6 +21,7 @@ import { LatestAnalysis } from "./latest-analysis.tsx";
 import { LatestNews } from "./latest-news.tsx";
 import { LearningPaths } from "./learning-paths.tsx";
 import { Newsletter } from "./newsletter.tsx";
+import { PopularTools } from "./popular-tools.tsx";
 import { RiskDisclaimer } from "./risk-disclaimer.tsx";
 import { VideoShowcase } from "./video-showcase.tsx";
 
@@ -40,6 +41,7 @@ export const SECTION_COMPONENTS: Partial<
   featured_lessons: FeaturedLessons,
   hero: Hero,
   explore_platform: Explore,
+  popular_tools: PopularTools,
   feature_highlights: FeatureHighlights,
   latest_news: LatestNews,
   latest_analysis: LatestAnalysis,

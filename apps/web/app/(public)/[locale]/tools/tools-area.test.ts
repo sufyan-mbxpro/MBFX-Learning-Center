@@ -195,3 +195,64 @@ describe("paths", () => {
     }
   });
 });
+
+// ─── The header (changes-25 T9) ──────────────────────────────
+//
+// `learn.test.ts`'s sibling, and for the same reason: three registries have to
+// name the same eight destinations — `TOOL_KEYS`, the mega panel's columns,
+// and the seeded menu tree — and adding a ninth tool means editing all three.
+// A guard that fails on whichever half is forgotten is the only thing that
+// makes that survivable.
+
+const megaMenu = readFileSync(
+  fileURLToPath(new URL("../_nav/mega-menu.ts", import.meta.url)),
+  "utf8",
+);
+const seed = readFileSync(
+  fileURLToPath(new URL("../../../../../../packages/db/prisma/seed.ts", import.meta.url)),
+  "utf8",
+);
+
+describe("the tools mega panel", () => {
+  it("names EVERY registered tool across its three columns", () => {
+    const panel = megaMenu.slice(megaMenu.indexOf("  tools: {"), megaMenu.indexOf('viewAll: "tools"'));
+    for (const key of TOOL_KEYS) {
+      expect(panel, `the tools panel never lists "${key}"`).toContain(`"tool-${key}"`);
+    }
+  });
+
+  it("names no tool twice", () => {
+    const panel = megaMenu.slice(megaMenu.indexOf("  tools: {"), megaMenu.indexOf('viewAll: "tools"'));
+    for (const key of TOOL_KEYS) {
+      const count = panel.split(`"tool-${key}"`).length - 1;
+      expect(count, `"${key}" appears ${count} times in the tools panel`).toBe(1);
+    }
+  });
+
+  it("gives every tool a header icon", () => {
+    // `MEGA_MENU_ICONS` is `Partial<Record<RouteKey, LucideIcon>>`, so a
+    // missing entry is silent — the row just renders without a glyph, next to
+    // seven that have one.
+    for (const key of TOOL_KEYS) {
+      expect(megaMenu, `no mega-menu icon for "${key}"`).toContain(`"tool-${key}": `);
+    }
+  });
+});
+
+describe("the seeded menu tree", () => {
+  it("seeds a child row for every registered tool", () => {
+    const tree = seed.slice(seed.indexOf("const TOOLS_NAV = {"), seed.indexOf("  /**\n   * A root row"));
+    expect(tree.length).toBeGreaterThan(100);
+    for (const key of TOOL_KEYS) {
+      expect(tree, `the seeded tools menu has no row for "${key}"`).toContain(`"tool-${key}"`);
+    }
+  });
+
+  it("keeps `tools` out of the FLAT rows now that it is a tree", () => {
+    // `upsertNavTree` matches a root on [menuId, routeKey, parentId: null], so
+    // a leftover flat row would be adopted as the tree's root and the header
+    // would show one entry with children it did not expect.
+    const flat = seed.slice(seed.indexOf("const NAV = ["), seed.indexOf("];", seed.indexOf("const NAV = [")));
+    expect(flat).not.toContain('routeKey: "tools"');
+  });
+});
