@@ -12,6 +12,7 @@ import { changeOwnPasswordSchema, updateOwnProfileSchema } from "@repo/contracts
 import { Button } from "@repo/ui/components/button";
 import { Field, FieldError, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
+import { PasswordInput } from "@repo/ui/components/password-input";
 import { changeOwnPasswordAction, updateOwnProfileAction } from "../_actions/profile-actions.ts";
 import { useFieldErrors } from "../_hooks/use-field-errors.ts";
 
@@ -106,6 +107,8 @@ export function ChangePasswordForm({
     currentPassword: string;
     newPassword: string;
     confirmPassword: string;
+    showPassword: string;
+    hidePassword: string;
     change: string;
     changed: string;
     mismatch: string;
@@ -149,8 +152,9 @@ export function ChangePasswordForm({
     <div className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2 xl:grid-cols-3">
       <Field invalid={form.invalid("currentPassword")} required>
         <FieldLabel>{labels.currentPassword}</FieldLabel>
-        <Input
-          type="password"
+        <PasswordInput
+          showLabel={labels.showPassword}
+          hideLabel={labels.hidePassword}
           autoComplete="current-password"
           value={current}
           onChange={(e) => setCurrent(e.target.value)}
@@ -159,8 +163,9 @@ export function ChangePasswordForm({
       </Field>
       <Field invalid={form.invalid("newPassword")} required>
         <FieldLabel>{labels.newPassword}</FieldLabel>
-        <Input
-          type="password"
+        <PasswordInput
+          showLabel={labels.showPassword}
+          hideLabel={labels.hidePassword}
           autoComplete="new-password"
           value={next}
           onChange={(e) => setNext(e.target.value)}
@@ -169,8 +174,9 @@ export function ChangePasswordForm({
       </Field>
       <Field invalid={form.invalid("confirmPassword")} required>
         <FieldLabel>{labels.confirmPassword}</FieldLabel>
-        <Input
-          type="password"
+        <PasswordInput
+          showLabel={labels.showPassword}
+          hideLabel={labels.hidePassword}
           autoComplete="new-password"
           value={confirm}
           onChange={(e) => setConfirm(e.target.value)}

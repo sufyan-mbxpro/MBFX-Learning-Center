@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { Button } from "@repo/ui/components/button";
 import { Input } from "@repo/ui/components/input";
 import { Label } from "@repo/ui/components/label";
+import { PasswordInput } from "@repo/ui/components/password-input";
 import {
   isAdminPath,
   resolveRedirect,
@@ -16,7 +17,15 @@ type Failure = "credentials" | "notStaff";
 export function AdminSignInForm({
   labels,
 }: {
-  labels: { email: string; password: string; submit: string; failed: string; notStaff: string };
+  labels: {
+    email: string;
+    password: string;
+    showPassword: string;
+    hidePassword: string;
+    submit: string;
+    failed: string;
+    notStaff: string;
+  };
 }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -71,9 +80,10 @@ export function AdminSignInForm({
       </div>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="admin-signin-password">{labels.password}</Label>
-        <Input
+        <PasswordInput
           id="admin-signin-password"
-          type="password"
+          showLabel={labels.showPassword}
+          hideLabel={labels.hidePassword}
           autoComplete="current-password"
           required
           value={password}

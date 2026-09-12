@@ -68,6 +68,8 @@ export default async function SignInPage({ params }: PageProps<"/[locale]/sign-i
             labels={{
               email: t("email"),
               password: t("password"),
+              showPassword: t("showPassword"),
+              hidePassword: t("hidePassword"),
               submit: t("submit"),
               failed: t("failed"),
               learnersOnly: t("learnersOnly"),

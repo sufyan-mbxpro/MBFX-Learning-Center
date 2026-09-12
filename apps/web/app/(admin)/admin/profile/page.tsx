@@ -75,6 +75,8 @@ export default async function ProfilePage() {
                 currentPassword: t("currentPassword"),
                 newPassword: t("newPassword"),
                 confirmPassword: t("confirmPassword"),
+                showPassword: t("showPassword"),
+                hidePassword: t("hidePassword"),
                 change: t("changePassword"),
                 changed: t("passwordChanged"),
                 mismatch: t("passwordMismatch"),

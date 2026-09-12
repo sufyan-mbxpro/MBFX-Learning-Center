@@ -1093,6 +1093,8 @@
       "failed": "Sign-in failed. Check your email and password.",
       "notStaff": "That account does not have access to the admin portal."
     },
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
     "navLearning": "Learning",
     "learnCourses": "Courses",
     "learnLessons": "Lessons",
@@ -1708,7 +1710,9 @@
     "signUpFailed": "We couldn't create your account. Check your details and try again.",
     "emailTaken": "An account with this email already exists.",
     "haveAccount": "Already have an account?",
-    "signInLink": "Sign in"
+    "signInLink": "Sign in",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password"
   },
   "cms": {
     "blocks": {

@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { Button } from "@repo/ui/components/button";
 import { Input } from "@repo/ui/components/input";
 import { Label } from "@repo/ui/components/label";
+import { PasswordInput } from "@repo/ui/components/password-input";
 import { signUpWithPassword } from "../../../_lib/credentials.ts";
 
 type Failure = "taken" | "failed";
@@ -17,6 +18,8 @@ export function SignUpForm({
     name: string;
     email: string;
     password: string;
+    showPassword: string;
+    hidePassword: string;
     passwordHint: string;
     submit: string;
     failed: string;
@@ -83,9 +86,10 @@ export function SignUpForm({
       </div>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="signup-password">{labels.password}</Label>
-        <Input
+        <PasswordInput
           id="signup-password"
-          type="password"
+          showLabel={labels.showPassword}
+          hideLabel={labels.hidePassword}
           autoComplete="new-password"
           required
           minLength={minPasswordLength}

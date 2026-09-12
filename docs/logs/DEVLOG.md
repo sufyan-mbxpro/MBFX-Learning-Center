@@ -15088,3 +15088,90 @@ not for the code the entry was written against:
   a browser through a failed save yet.
 - **Commit.** Nothing is committed. The tree still holds the owner's
   uncommitted ADR-076 and Phase A work alongside this phase.
+
+## 2026-09-12 — changes-21 F0+F1: the email ADRs land, and every password field becomes one component (Modules 17/07/04/09/12, ADR-078/079/080)
+
+The changes-21 feature brief (`docs/changes/changes-21-featuer-improvments.md`)
+asks for seven things; `docs/changes/changes-21-feature-plan.md` turns them into
+PRs **F0–F9**, lettered so they never collide with the A/B/C UI phases. F0 and
+F1 are done.
+
+### F0 — the ADRs, before the code (plan.md Part F #10)
+
+- **ADR-078 (email platform).** `@repo/email` is a domain package owning its
+  own tables — `core` already imports `auth`, and auth is what sends, so email
+  in core would be a cycle. The transport is a driver seam (`smtpDriver` /
+  `logDriver`). **The SMTP password is security.md #10's single exception:**
+  AES-256-GCM under `EMAIL_SECRET_KEY`, write-only, one reader, and
+  `EmailTransportView` has no password property. Templates are a code registry
+  with data content; `{{dotted.path}}` variables carry no logic; the delivery
+  log holds no body and no variables; there is no queue.
+- **ADR-079 (password recovery).** The reset link is routed by
+  `user.userType`, never by the screen that asked, so ADR-052's line holds and
+  a learner is never handed an `/admin` URL. Plus the proxy allowlist, two
+  rate limits, session revocation, a cleared lockout and a
+  "password changed" notice. Verification is sent and never blocks sign-in.
+- **ADR-080 (newsletter).** Double opt-in, hashed tokens, GET never mutates
+  (mail scanners prefetch links), RFC 8058 one-click unsubscribe, flag =
+  feature and setting = placement, and consent that outlives the account
+  (`onDelete: SetNull`).
+- Owner decisions recorded in the plan: SMTP admin-editable and encrypted;
+  verification sent but not blocking; newsletter signup without campaigns.
+  Then, against the draft defaults: **the transport is super_admin-only**
+  (the host is the escalation path — repointing delivery captures the next
+  reset link, around `canAssignRole`'s strict `<`), a 90-day delivery log,
+  and subscriptions that link at confirm time.
+- security.md #10 and #13, architecture.md #8, a new Module 17 skill and the
+  CLAUDE.md row record all of it.
+
+### F1 — `PasswordInput`
+
+- **`@repo/ui/components/password-input`.** The toggle flips the SAME input's
+  `type`, so focus and caret survive; the button is real and focusable
+  (revealing a password is functionality, and functionality is keyboard
+  reachable); `aria-label` says what the next press does while `aria-pressed`
+  says what the field is now. Sizes mirror `SearchInput`'s table so the button
+  and the field's end padding cannot drift. Edge's native `::-ms-reveal` is
+  hidden — it would reveal the value without updating `aria-pressed`.
+- **Six fields, four files:** both sign-in forms, sign-up, and the three in
+  the profile password form. The admin's generated-password dialog keeps its
+  deliberately visible field (code-style #6).
+- **Catalog:** `auth.showPassword` / `auth.hidePassword` in all four locales
+  (public, ADR-043 #1); `admin.showPassword` / `admin.hidePassword` in `en`
+  only, used by both admin surfaces.
+- `/admin/design-system` shows all three sizes, reusing those admin strings
+  rather than minting showcase words.
+
+### Found while building
+
+- **An explicit `id` inside a `Field` breaks the label association**, exactly
+  as ADR-077 warns: `FieldLabel`'s `htmlFor` keeps pointing at the Field's own
+  id. My first test asserted the opposite and failed — the component was
+  right. It now pins both real shapes instead: inside a Field the id comes
+  from `controlId`, and the three hand-labelled sign-in forms (which predate
+  Field) pass their own id from the call site.
+- **The pre-commit gate on the Phase B tree found two more defects**, fixed
+  in that commit and recorded in its addendum: a `no-fallthrough` lint error
+  in `field-issues.ts` and a typecheck error in `field.test.tsx`.
+- **Running lint and typecheck workspace-wide in parallel aborts with exit
+  134 (OOM) on this machine.** Per package, one at a time — the same rule the
+  root `pnpm test`/`build` already follow.
+
+### Verified
+
+- `@repo/ui`: typecheck clean, lint clean, **387/387** (the new
+  `password-input.test.tsx` has 9 cases).
+- `@repo/web`: typecheck clean, lint clean, **1337/1337**. The new
+  `password-fields.test.ts` fails on a raw `type="password"` anywhere under
+  `app/`, and on any of the four known forms losing its `PasswordInput`
+  import — a deleted field is as much a regression as a raw one.
+- `check:catalog-completeness` OK (only the inactive `ar`/`es`/`ur` warn, and
+  the new keys are not among their gaps); `governance:check`,
+  `check:phantom-deps`, `check:permission-keys` OK; Prettier clean.
+- Not verified live: no dev-server pass yet on the six screens.
+
+### Owed
+
+- F2 next: the schema, the `@repo/email` skeleton, the sealed transport and
+  Mailpit in `docker-compose.yml`.
+- E2E for the reset screens belongs to Module 14, with the rest of auth.

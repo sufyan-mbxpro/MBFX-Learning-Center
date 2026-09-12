@@ -40,6 +40,8 @@ export default async function AdminSignInPage() {
             labels={{
               email: t("signIn.email"),
               password: t("signIn.password"),
+              showPassword: t("showPassword"),
+              hidePassword: t("hidePassword"),
               submit: t("signIn.submit"),
               failed: t("signIn.failed"),
               notStaff: t("signIn.notStaff"),

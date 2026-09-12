@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { Button } from "@repo/ui/components/button";
 import { Input } from "@repo/ui/components/input";
 import { Label } from "@repo/ui/components/label";
+import { PasswordInput } from "@repo/ui/components/password-input";
 import {
   isAdminPath,
   resolveRedirect,
@@ -17,7 +18,15 @@ export function SignInForm({
   labels,
   homeHref,
 }: {
-  labels: { email: string; password: string; submit: string; failed: string; learnersOnly: string };
+  labels: {
+    email: string;
+    password: string;
+    showPassword: string;
+    hidePassword: string;
+    submit: string;
+    failed: string;
+    learnersOnly: string;
+  };
   /** Localized "/" for this render's locale — where a learner lands by default. */
   homeHref: string;
 }) {
@@ -70,9 +79,10 @@ export function SignInForm({
       </div>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="signin-password">{labels.password}</Label>
-        <Input
+        <PasswordInput
           id="signin-password"
-          type="password"
+          showLabel={labels.showPassword}
+          hideLabel={labels.hidePassword}
           autoComplete="current-password"
           required
           value={password}

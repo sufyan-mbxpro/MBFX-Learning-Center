@@ -90,6 +90,7 @@ import {
 } from "@repo/ui/components/empty";
 import { FilterBar, FilterBarItem, FilterBarRow } from "@repo/ui/components/filter-bar";
 import { Input } from "@repo/ui/components/input";
+import { PasswordInput } from "@repo/ui/components/password-input";
 import { Kbd, KbdGroup } from "@repo/ui/components/kbd";
 import { Label } from "@repo/ui/components/label";
 import { MetricCard } from "@repo/ui/components/metric-card";
@@ -550,6 +551,9 @@ export function DesignSystem() {
   const t = useTranslations("admin.designSystem");
   const s = useTranslations("admin.designSystem.sample");
   const state = useTranslations("admin.designSystem.states");
+  // The reveal toggle's labels are the same two admin strings every password
+  // field uses — the showcase must not mint its own words for them.
+  const common = useTranslations("admin");
   const [compare, setCompare] = React.useState(false);
   const [rtl, setRtl] = React.useState(false);
   const [pair, setPair] = React.useState("eurusd");
@@ -725,6 +729,31 @@ export function DesignSystem() {
                 size="xs"
                 aria-label={s("search")}
                 placeholder={s("search")}
+                wrapperClassName="w-56"
+              />
+            </Row>
+            <Row label={humanizeKey("passwordField")}>
+              <PasswordInput
+                aria-label={s("fieldLabel")}
+                defaultValue={s("fieldPlaceholder")}
+                showLabel={common("showPassword")}
+                hideLabel={common("hidePassword")}
+                wrapperClassName="w-72"
+              />
+              <PasswordInput
+                size="sm"
+                aria-label={s("fieldLabel")}
+                defaultValue={s("fieldPlaceholder")}
+                showLabel={common("showPassword")}
+                hideLabel={common("hidePassword")}
+                wrapperClassName="w-64"
+              />
+              <PasswordInput
+                size="xs"
+                aria-label={s("fieldLabel")}
+                defaultValue={s("fieldPlaceholder")}
+                showLabel={common("showPassword")}
+                hideLabel={common("hidePassword")}
                 wrapperClassName="w-56"
               />
             </Row>
