@@ -42,3 +42,20 @@ export type * from "./generated/client/models.ts";
 // (Module 16's cms/* is the first) that factors transaction steps into a
 // separate exported function instead of one inline callback.
 export type { Prisma } from "./generated/client/client.ts";
+
+// The starting CONTENT of every email template (Module 17, ADR-078 #5) — read
+// by `prisma/seed.ts` on a fresh database and by @repo/core's
+// `resetEmailTemplate()` when an admin reverts one.
+export {
+  EMAIL_TEMPLATE_DEFAULTS,
+  emailTemplateDefault,
+  type EmailTemplateDefault,
+} from "./email-template-defaults.ts";
+
+// Which permissions nothing below `super_admin` may hold (security.md #4,
+// ADR-078 #4). Read by `prisma/seed.ts` when it builds the `admin` role.
+export {
+  SUPER_ADMIN_ONLY_PERMISSIONS,
+  isSuperAdminOnlyPermission,
+  type SuperAdminOnlyPermission,
+} from "./role-exclusions.ts";

@@ -242,3 +242,50 @@ export type EmailTestSendInput = z.infer<typeof emailTestSendSchema>;
 export function replaceTemplateVariables(text: string, resolve: (name: string) => string): string {
   return text.replace(VARIABLE_PATTERN, (_match, name: string) => resolve(name));
 }
+
+export const EMAIL_DELIVERY_STATUSES = ["SENT", "FAILED", "SUPPRESSED"] as const;
+export type EmailDeliveryStatus = (typeof EMAIL_DELIVERY_STATUSES)[number];
+
+export const emailTemplateActiveSchema = z.object({
+  key: z.string().refine(isEmailTemplateKey),
+  isActive: z.boolean(),
+});
+
+export const emailTemplateResetSchema = z.object({
+  key: z.string().refine(isEmailTemplateKey),
+  locale: localeSchema,
+});
+
+/**
+ * The delivery log's filters. `limit` clamps here rather than in the service,
+ * the ADR-067 shape: there is no way to ask this for the whole table, and the
+ * rows are PII the retention sweep is already counting down on.
+ */
+export const emailDeliveryFilterSchema = z.object({
+  status: z.enum(EMAIL_DELIVERY_STATUSES).optional(),
+  templateKey: z.string().refine(isEmailTemplateKey).optional(),
+  /** Matches the recipient address. */
+  q: z.string().trim().max(255).optional(),
+  isTest: z.boolean().optional(),
+  cursor: z.string().max(256).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+
+export type EmailDeliveryFilter = z.infer<typeof emailDeliveryFilterSchema>;
+
+/**
+ * What the isolated preview route accepts (ADR-078 #8). A DRAFT body, so the
+ * editor can render what is on screen rather than what was last saved — which
+ * is also why this is a POST with no side effect, and why it is parsed with the
+ * same variable rules the save uses.
+ */
+export const emailPreviewSchema = z.object({
+  key: z.string().refine(isEmailTemplateKey),
+  locale: localeSchema,
+  subject: z.string().max(200).optional(),
+  preheader: z.string().max(200).optional(),
+  mode: z.enum(EMAIL_BODY_MODES).optional(),
+  bodyHtml: z.string().max(200_000).optional(),
+});
+
+export type EmailPreviewInput = z.infer<typeof emailPreviewSchema>;

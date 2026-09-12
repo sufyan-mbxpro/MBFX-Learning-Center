@@ -2,8 +2,10 @@
 //
 // A domain package that owns its own tables, the way @repo/settings and
 // @repo/theme own theirs. It exists as a package rather than living in
-// @repo/core because core already imports @repo/auth, and auth is what has to
-// send email: the other direction would be a cycle (ADR-078 #1).
+// @repo/core because BOTH layers send — auth the reset and verification mail,
+// core the admin notice and the newsletter — and a package they both need
+// cannot live in either. Email in core would force auth → core, dragging rbac,
+// settings, theme, i18n and blocks onto the session path (ADR-078 #1).
 export {
   EMAIL_SECRET_KEY_ENV,
   EmailSecretInvalidError,
@@ -47,9 +49,11 @@ export {
 export {
   DEFAULT_EMAIL_LOCALE,
   emailTemplateKeys,
+  loadEmailRenderContext,
   sendTemplatedEmail,
   verifyTransport,
   type DeliveryResult,
   type DeliveryStatus,
+  type EmailRenderContext,
   type SendTemplatedEmailInput,
 } from "./send.ts";

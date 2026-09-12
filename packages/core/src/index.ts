@@ -34,6 +34,7 @@ export * from "./notifications.ts";
 export * from "./search.ts";
 export * from "./media.ts";
 export * from "./brand-assets.ts";
+export * from "./email-admin.ts";
 export * from "./cms/index.ts";
 
 export interface RecordAuditInput {

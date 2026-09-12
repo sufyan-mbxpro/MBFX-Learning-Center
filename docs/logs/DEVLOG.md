@@ -15411,3 +15411,118 @@ dependency to import, because the edge never existed. Core now calls
   (dashboard). Nothing in the app calls `sendTemplatedEmail` yet except auth:
   there is still no screen to configure SMTP, so delivery runs on the log
   driver until F5 lands.
+
+## 2026-09-12 — changes-21 F5: the email admin, split at the line where the host becomes an escalation (Modules 17/09/05/03, ADR-078)
+
+Four screens, two permission levels. An admin writes the templates; only a
+super_admin can move where mail leaves from.
+
+### Shipped
+
+- **`@repo/core/email-admin.ts`** — the admin's only door to the email tables.
+  `loadEmailTransportView` / `saveEmailTransport` / `testEmailTransport`,
+  `listEmailTemplates` / `loadEmailTemplate` / `saveEmailTemplate` /
+  `setEmailTemplateActive` / `resetEmailTemplate`, `renderEmailPreview`,
+  `sendTestEmail`, `listEmailDeliveries` / `countEmailDeliveries`.
+- **Five permissions** in a new `email` group. `email.settings.manage` is
+  **super_admin-only**; templates, tests and the log stay with `admin`;
+  `support` gains `email.log.view`, which is the only settings key that role
+  holds — so the sidebar entry and the settings hub now accept it, or the key
+  would have had no route to reach.
+- **`/admin/settings/email`** — a static route that wins over `[group]`, like
+  `social/`. **Sending** and **Newsletter placement** are ordinary settings
+  forms; **Delivery** renders the transport form only with
+  `email.settings.manage` and is **absent, not disabled**, without it. In its
+  place a read-only summary: knowing where mail leaves from is what makes a
+  missing reset email diagnosable; being able to move it is the escalation.
+- **`/admin/settings/email/templates`** and **`/…/[key]`** — the list (audience,
+  critical badge, per-locale state, an active `Switch` that confirms and names
+  what breaks when the template is critical) and the editor (Rich/HTML mode,
+  variables panel with sample values, sender overrides, locale tabs for a
+  translated audience only, live preview at 600px / 375px, test send, reset).
+- **`/admin/settings/email/log`** — keyset-paged, filters in the toolbar as URL
+  state, counts by status. No body column, because there is none to show.
+- **`POST /admin/api/email/preview`** under its own
+  `sandbox; default-src 'none'` CSP, framed in `sandbox=""`. `proxy.ts` gains
+  `ADMIN_FRAMABLE_PATHS` — one entry; every other `/admin` path stays `DENY`.
+
+### Decided here
+
+- **The preview is a form POST at a named frame, not `fetch` + a blob URL.** A
+  blob URL would put the author's markup back on the ADMIN origin, which is the
+  one thing the isolated route exists to prevent. `srcDoc` is out for the
+  reason ADR-078 #8 already gives.
+- **`EMAIL_TEMPLATE_DEFAULTS` moved from `seed.ts` to `packages/db/src/`.**
+  "Reset to default" needs the same five bodies the seed writes, and a second
+  copy of them is exactly the drift `check:email-templates` exists to catch.
+  The check now scans that file; the key list is unchanged.
+- **The `admin` exclusion list became `SUPER_ADMIN_ONLY_PERMISSIONS`**
+  (`packages/db/src/role-exclusions.ts`), a named constant with a reason per
+  entry. It was a filter expression three levels inside a role literal, which
+  is a poor home for the sharpest privilege rule in the repo.
+- **Resetting a NON-default locale deletes the row** rather than writing the
+  English words under it. A copy of the source filed as `es` is an untranslated
+  template that REPORTS as translated — the one outcome the locale badges exist
+  to prevent.
+- **A test send gets the template's OWN variables, not the whole sample.** The
+  sample also carries `recipient.email` and `site.name`; letting those through
+  would mail a real address greeting `alex@example.com` from whatever the
+  fixture calls the site. The globals come from live settings.
+- **One Save, in the header action row** — the shape the topic editor already
+  uses. The three sections are one form, and a Save under "Content" would look
+  like it left the sender overrides behind.
+
+### Found
+
+- **`EmailTemplate.updatedBy`, not `updatedById`.** Three services wrote the
+  wrong column name. Typecheck passed — the `data` object is built as a
+  variable, so excess-property checking never ran — and ten integration tests
+  failed identically the first time they touched a real database.
+- **A literal NUL byte** reached `email-admin.ts` through the hash separator,
+  which made the file read as binary to `grep`. The separator is
+  `JSON.stringify([...])` now, which cannot collide either.
+- **`media` was rendering as a lowercase identifier** in the settings sub-nav
+  (ADR-044 #5), because no `settingsGroups.media` label existed and
+  `groupLabel` fell back to the raw key. It has a label now, and the fallback
+  is `humanizeKey()` — the next group added without one will not repeat it.
+- **Two comments still carried ADR-078's corrected-away reason** ("core imports
+  auth, that would be a cycle") in `@repo/email`'s header and
+  `@repo/contracts/content.ts`. The 2026-09-12 correction pass missed both.
+
+### Verified
+
+- `@repo/core` **email-admin.integration.test.ts 18/18** against real MariaDB:
+  the transport view carries no password at runtime **and** at the type level
+  (`expectTypeOf(...).not.toHaveProperty`), an empty password keeps the stored
+  cipher, `clearPassword` removes it, the audit row holds the host and
+  `passwordChanged` but never the value, a new host drops the verification, the
+  body is sanitised on save, a preheader-only edit flips siblings OUTDATED,
+  reset restores the seeded words, the log pages by cursor without repeats, and
+  the delivery row's key set has no body or variables.
+- `@repo/db` **role-exclusions.test.ts 10/10** — the list is exactly the four
+  keys the ADRs name, and no role's permissions array lists any of them.
+- `apps/web` **1428/1428** (27 files), including the new
+  `email-admin-conventions.test.ts` (22): every action gates on its first
+  statement with the right key, the screen splits by permission, the preview
+  route carries its own sandbox CSP. `proxy.test.ts` gained the behavioural
+  half — the preview path is `SAMEORIGIN`, every sibling stays `DENY`.
+- `@repo/email` **93/93**, `@repo/contracts` **303/303**, `@repo/db` **24/24**.
+  Typecheck and lint clean on every touched package.
+- `pnpm db:seed` applied: **75 permissions** (up 5), 5 templates. Confirmed in
+  the database: `email.settings.manage` is held by `super_admin` alone;
+  `email.log.view` by `admin`, `read_only`, `super_admin` and `support`.
+- `check:email-templates`, `check:permission-keys`, `check:phantom-deps`,
+  `check:catalog-completeness`, `check-reserved-paths` and `governance:check`
+  all OK.
+- **Dev server, signed in as super_admin:** all four screens render; the
+  preview frame shows the real branded email with live globals over sample
+  values; a test send on `newsletter.welcome` wrote a delivery row that the log
+  shows as Sent, with its Test badge.
+
+### Owed
+
+- F6 (reset/forgot UI), F7 (newsletter), F8 (dashboard), F9 (gate + docs).
+- E2E and axe for the four new screens, to Module 14.
+- `@repo/core`'s full suite still OOMs on this machine; it was run in batches
+  (`index`, `media`, `market`, `sanitize-tiptap`, `term-of-the-day`,
+  `content.integration`, `settings-audit.integration`, plus the new file).

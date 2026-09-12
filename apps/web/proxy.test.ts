@@ -102,6 +102,41 @@ describe("proxy — /admin STAFF gate (security.md #3: the two-lock proxy gate)"
     expect(csp).toMatch(/script-src 'self' 'nonce-[^']+' 'strict-dynamic'/);
   });
 
+  // changes-21 F5 / ADR-078 #8 — the email preview is framed by the template
+  // editor, and a frame the surrounding policy says DENY to renders nothing.
+  // The exception widens what may be EMBEDDED, never what the embedded document
+  // can reach: the route answers with its own `sandbox; default-src 'none'` CSP,
+  // so the framed page has an opaque origin and no script.
+  it("the email preview is the one /admin path that may be framed", async () => {
+    const response = await proxy(
+      requestFor("/admin/api/email/preview", "better-auth.session_token=a-real-session-token"),
+    );
+    expect(response.headers.get("X-Frame-Options")).toBe("SAMEORIGIN");
+    expect(response.headers.get("Content-Security-Policy-Report-Only")).toContain(
+      "frame-ancestors 'self'",
+    );
+  });
+
+  it("every other /admin path — its own siblings included — stays DENY", async () => {
+    for (const path of [
+      "/admin",
+      "/admin/settings/email",
+      "/admin/settings/email/templates/auth.password_reset",
+      // Exact, not a prefix: a route that merely starts with the preview path
+      // must not inherit the exception.
+      "/admin/api/email/preview-all",
+      "/admin/api/email",
+    ]) {
+      const response = await proxy(
+        requestFor(path, "better-auth.session_token=a-real-session-token"),
+      );
+      expect(response.headers.get("X-Frame-Options"), path).toBe("DENY");
+      expect(response.headers.get("Content-Security-Policy-Report-Only"), path).toContain(
+        "frame-ancestors 'none'",
+      );
+    }
+  });
+
   it("a path that merely STARTS with the sign-in path is still gated — the exemption is exact, not a prefix", async () => {
     const response = await proxy(requestFor("/admin/sign-in-secrets"));
     expect(response.status).toBe(307);

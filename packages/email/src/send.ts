@@ -87,6 +87,55 @@ async function record(input: {
   };
 }
 
+/**
+ * Everything a render needs that is not the template row: the palette, the
+ * shell's surrounding copy, and the global variables.
+ *
+ * Extracted so the admin's PREVIEW renders through the same code a real send
+ * does (F5). A preview built from its own palette and its own globals is a
+ * preview of something else — and the one thing an admin uses it to check is
+ * what will actually arrive.
+ */
+export interface EmailRenderContext {
+  palette: EmailPalette;
+  shell: { siteName: string; logoUrl?: string; footerText?: string; postalAddress?: string };
+  /** The globals, minus `recipient.*`, which only a send knows. */
+  globals: Record<string, string>;
+}
+
+export async function loadEmailRenderContext(): Promise<EmailRenderContext> {
+  const [tokens, siteName, fromless, logo, footerText, postalAddress] = await Promise.all([
+    loadActiveThemeTokens("web"),
+    loadSetting("site.name"),
+    Promise.resolve(process.env.NEXT_PUBLIC_SITE_URL ?? ""),
+    loadSetting("email.logo"),
+    loadSetting("email.footerText"),
+    loadSetting("email.postalAddress"),
+  ]);
+  const resolvedSiteName = siteName ?? "";
+  return {
+    palette: {
+      brand: tokens.brand,
+      // Light surfaces always: an email is read on the client's ground, and
+      // a dark-mode email is a different design problem.
+      surface: tokens.light,
+      fontFamily: fontFamilyFor(tokens.layout.fontSans),
+    },
+    shell: {
+      siteName: resolvedSiteName,
+      ...(logo ? { logoUrl: logo } : {}),
+      ...(footerText ? { footerText } : {}),
+      ...(postalAddress ? { postalAddress } : {}),
+    },
+    globals: {
+      "site.name": resolvedSiteName,
+      "site.url": fromless,
+      "logo.url": logo || fromless,
+      year: String(new Date().getFullYear()),
+    },
+  };
+}
+
 export async function sendTemplatedEmail(input: SendTemplatedEmailInput): Promise<DeliveryResult> {
   const locale = input.locale ?? DEFAULT_EMAIL_LOCALE;
   const isTest = input.isTest ?? false;
@@ -129,33 +178,16 @@ export async function sendTemplatedEmail(input: SendTemplatedEmailInput): Promis
     });
   }
 
-  const [tokens, siteName, siteUrl, fromName, fromEmail, replyTo, logo, footerText, postalAddress] =
-    await Promise.all([
-      loadActiveThemeTokens("web"),
-      loadSetting("site.name"),
-      Promise.resolve(process.env.NEXT_PUBLIC_SITE_URL ?? ""),
-      loadSetting("email.fromName"),
-      loadSetting("email.fromEmail"),
-      loadSetting("email.replyTo"),
-      loadSetting("email.logo"),
-      loadSetting("email.footerText"),
-      loadSetting("email.postalAddress"),
-    ]);
+  const [context, fromName, fromEmail, replyTo] = await Promise.all([
+    loadEmailRenderContext(),
+    loadSetting("email.fromName"),
+    loadSetting("email.fromEmail"),
+    loadSetting("email.replyTo"),
+  ]);
 
-  const palette: EmailPalette = {
-    brand: tokens.brand,
-    // Light surfaces always: an email is read on the client's ground, and
-    // a dark-mode email is a different design problem.
-    surface: tokens.light,
-    fontFamily: fontFamilyFor(tokens.layout.fontSans),
-  };
-
-  const resolvedSiteName = siteName ?? "";
+  const resolvedSiteName = context.shell.siteName;
   const variables: Record<string, string> = {
-    "site.name": resolvedSiteName,
-    "site.url": siteUrl,
-    "logo.url": logo || siteUrl,
-    year: String(new Date().getFullYear()),
+    ...context.globals,
     "recipient.email": input.to,
     "recipient.name": input.recipientName ?? "",
     ...input.variables,
@@ -170,14 +202,8 @@ export async function sendTemplatedEmail(input: SendTemplatedEmailInput): Promis
       preheader: content.preheader ?? undefined,
       bodyHtml: content.bodyHtml,
       variables,
-      palette,
-      shell: {
-        siteName: resolvedSiteName,
-        logoUrl: logo || undefined,
-        footerText: footerText || undefined,
-        postalAddress: postalAddress || undefined,
-        unsubscribe: input.unsubscribe,
-      },
+      palette: context.palette,
+      shell: { ...context.shell, unsubscribe: input.unsubscribe },
     });
   } catch (error) {
     return record({

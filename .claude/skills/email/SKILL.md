@@ -14,10 +14,17 @@ packages/email/src/
 ├── sanitize.ts    # the email allowlist (save AND render)
 ├── send.ts        # sendTemplatedEmail(): switches → render → send → log
 └── testing.ts     # memoryDriver(), not exported from "."
+
+packages/db/src/email-template-defaults.ts   # the starting CONTENT (seed + reset)
+packages/core/src/email-admin.ts             # the ADMIN's door: transport, templates, log
+apps/web/app/(admin)/admin/settings/email/   # the four screens
+apps/web/app/(admin)/admin/api/email/preview # the isolated preview route
 ```
 
 `auth → email` and `core → email` — email sits BELOW both senders, because
 both layers send. It never imports an app, `@repo/core`, or `@repo/auth`.
+The ADMIN read/write services live in `@repo/core` like every other admin
+service; `@repo/email` stays the sending layer.
 
 ## Invariants
 
@@ -38,7 +45,17 @@ both layers send. It never imports an app, `@repo/core`, or `@repo/auth`.
 6. **A test send ignores `isActive`, never `email.enabled`.**
 7. **Public-audience templates are translated; staff-audience ones are
    English** (ADR-043).
-8. **Anonymous public mutation** (newsletter signup) needs the full stack:
+8. **The preview is a route, never a string.** The rendered HTML is served by
+   `POST /admin/api/email/preview` under its own
+   `sandbox; default-src 'none'` CSP and framed in `sandbox=""`. The editor
+   reaches it with a real form POST at a named frame: `fetch` + a blob URL
+   would put the author's markup back on the ADMIN origin, and `srcDoc` would
+   inherit the admin nonce CSP. It is the ONE entry in `proxy.ts`'s
+   `ADMIN_FRAMABLE_PATHS`; every other /admin path stays `DENY`.
+9. **Default CONTENT lives in `@repo/db`'s `EMAIL_TEMPLATE_DEFAULTS`**, not in
+   `seed.ts`, because "Reset to default" writes the same five bodies the seed
+   does. `check:email-templates` scans that file against the registry.
+10. **Anonymous public mutation** (newsletter signup) needs the full stack:
    flag + schema + honeypot + per-IP limit + per-email limit. Nothing else in
    the repo may write without a subject.
 
@@ -46,7 +63,9 @@ both layers send. It never imports an app, `@repo/core`, or `@repo/auth`.
 
 1. `EMAIL_TEMPLATES` entry: key, audience, `critical`, variables, required,
    sample values.
-2. A seed row with `en` content (create-only — an edited template is never
+2. An `EMAIL_TEMPLATE_DEFAULTS` entry with `en` content
+   (`packages/db/src/email-template-defaults.ts`), which the seed writes and
+   "Reset to default" restores (create-only — an edited template is never
    overwritten).
 3. The call site: `sendTemplatedEmail({ key, to, locale, variables })`.
 4. A test asserting the send and its suppression paths.
@@ -62,11 +81,11 @@ the database. Floors: 80% for the package, 90% for `render`, `sanitize` and
 
 ## DoD
 
-- [ ] F2 schema + package skeleton + Mailpit in `docker-compose.yml`
-- [ ] F3 registry, renderer, sanitiser
-- [ ] F4 send service, `email` settings group, auth wired (reset,
+- [x] F2 schema + package skeleton + Mailpit in `docker-compose.yml`
+- [x] F3 registry, renderer, sanitiser
+- [x] F4 send service, `email` settings group, auth wired (reset,
       verification, notices, limits, session revocation, lockout clear)
-- [ ] F5 admin: settings split by permission, template editor, isolated
+- [x] F5 admin: settings split by permission, template editor, isolated
       preview, test send, delivery log
 - [ ] F6 reset/forgot screens on both surfaces, proxy allowlist,
       verification nudge

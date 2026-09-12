@@ -197,8 +197,8 @@ export type PublicArticleSearchInput = z.infer<typeof publicArticleSearchSchema>
  * It lives here rather than in `@repo/core` because two sanitisers need it
  * now: core's `sanitizeRichText`, and `@repo/email`'s layout, which maps each
  * class to an inline style because email clients drop class CSS. Email cannot
- * import core — core imports auth, and that would be the cycle ADR-078 #1
- * exists to avoid.
+ * import core: it sits BELOW both its senders (ADR-078 #1), so the vocabulary
+ * has to live upstream of both.
  */
 export const EDITORIAL_CLASSES = [
   "ed-tx-primary",

@@ -193,11 +193,14 @@ const ADMIN_NAV_GROUPS: {
       // duplicating them here just re-lists the same destinations twice.
       // The settings hub also fronts social links (social.manage) — anyone
       // holding either key gets the entry; each sub-page re-checks its own.
+      // `email.log.view` is here for the same reason: `support` holds it and
+      // nothing else under settings (ADR-078 #4), so without it the one key
+      // that role was granted would have no route to reach.
       {
         href: "/admin/settings",
         labelKey: "settings",
         icon: "settings",
-        permission: ["settings.view", "social.manage"],
+        permission: ["settings.view", "social.manage", "email.log.view"],
       },
     ],
   },

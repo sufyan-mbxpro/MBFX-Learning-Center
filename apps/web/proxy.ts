@@ -13,6 +13,21 @@ const intl = createMiddleware(routing);
  */
 const ADMIN_SIGN_IN_PATH = "/admin/sign-in";
 
+/**
+ * The ONE /admin path that may be framed (ADR-078 #8).
+ *
+ * The email template editor renders its preview in a `sandbox=""` iframe, and a
+ * frame the surrounding policy says `DENY` to renders nothing. The route sets
+ * its own `Content-Security-Policy: sandbox; default-src 'none'` on the
+ * response, so what is framed has an opaque origin, no script and no
+ * same-origin access to the admin surface — the exception widens what may be
+ * embedded, not what it can reach.
+ *
+ * Every other /admin path keeps `X-Frame-Options: DENY` and
+ * `frame-ancestors 'none'`. Adding a second entry here needs its own reason.
+ */
+const ADMIN_FRAMABLE_PATHS = new Set(["/admin/api/email/preview"]);
+
 // ─── Security headers (Module 14, security.md #14) ───────────
 //
 // Per-path policy: stricter on /admin than public (ADR-006 — same origin,
@@ -65,14 +80,17 @@ function applySecurityHeaders(
   response: NextResponse,
   surface: "admin" | "public",
   nonce: string | null,
+  /** ADR-078 #8 — the email preview, and nothing else on /admin. */
+  framable = false,
 ) {
   response.headers.set("X-Content-Type-Options", "nosniff");
   response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   response.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
-  response.headers.set("X-Frame-Options", surface === "admin" ? "DENY" : "SAMEORIGIN");
+  const sameOrigin = surface === "public" || framable;
+  response.headers.set("X-Frame-Options", sameOrigin ? "SAMEORIGIN" : "DENY");
   response.headers.set(
     "Content-Security-Policy-Report-Only",
-    `${baseCsp(nonce)}; frame-ancestors ${surface === "admin" ? "'none'" : "'self'"}`,
+    `${baseCsp(nonce)}; frame-ancestors ${sameOrigin ? "'self'" : "'none'"}`,
   );
   return response;
 }
@@ -115,7 +133,7 @@ export async function proxy(request: NextRequest) {
     const requestHeaders = new Headers(request.headers);
     requestHeaders.set("x-nonce", nonce);
     const response = NextResponse.next({ request: { headers: requestHeaders } });
-    return applySecurityHeaders(response, "admin", nonce);
+    return applySecurityHeaders(response, "admin", nonce, ADMIN_FRAMABLE_PATHS.has(pathname));
   }
 
   return applySecurityHeaders(intl(request), "public", null);

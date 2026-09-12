@@ -10,6 +10,8 @@ import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { hash } from "@node-rs/argon2";
 import type { PrismaClient } from "../src/generated/client/client.ts";
+import { EMAIL_TEMPLATE_DEFAULTS } from "../src/email-template-defaults.ts";
+import { isSuperAdminOnlyPermission } from "../src/role-exclusions.ts";
 import defaultThemeTokens from "./default-theme-tokens.json" with { type: "json" };
 import homePageLayout from "./home-page-layout.json" with { type: "json" };
 
@@ -102,6 +104,18 @@ const PERMISSIONS = [
   ["settings", "social.manage", "Manage social links"],
   ["settings", "integrations.manage", "Manage integrations"],
 
+  // Email (Module 17, ADR-078). Five keys, split deliberately:
+  // `email.settings.manage` guards the TRANSPORT and is super_admin-only
+  // (ADR-078 #4 — an editable SMTP host is a mail-interception path around
+  // `canAssignRole`'s strict `<`), while editing templates, sending a test and
+  // reading the delivery log stay with `admin`. That is why the email settings
+  // screen splits by permission rather than hiding whole.
+  ["email", "email.settings.manage", "Configure email delivery"],
+  ["email", "email.templates.view", "View email templates"],
+  ["email", "email.templates.update", "Edit email templates"],
+  ["email", "email.templates.test", "Send test emails"],
+  ["email", "email.log.view", "View email delivery log"],
+
   // Website builder (Module 16 — ADR-021 pages, ADR-027 parts). A part
   // publish is site-wide, hence its own key. The redirects screen reuses
   // the seeded `redirects.manage`; the media library reuses `media.*`
@@ -149,10 +163,12 @@ const ROLES: Array<{
     key: "admin",
     name: "Admin",
     level: 90,
-    description: "Full access except editing roles and permissions.",
-    permissions: PERMISSIONS.map(([, key]) => key).filter(
-      (k) => !["roles.manage", "permissions.assign", "users.impersonate"].includes(k),
-    ),
+    description: "Full access except editing roles, permissions, and email delivery.",
+    // The exclusion list is a named constant with a reason per entry
+    // (`../src/role-exclusions.ts`), because it is the sharpest privilege rule
+    // in the repo and `role-exclusions.test.ts` asserts that nothing below
+    // `super_admin` is granted any of it.
+    permissions: PERMISSIONS.map(([, key]) => key).filter((k) => !isSuperAdminOnlyPermission(k)),
   },
   {
     key: "content_manager",
@@ -285,7 +301,10 @@ const ROLES: Array<{
     name: "Support",
     level: 20,
     description: "Reads user records and resets passwords.",
-    permissions: ["users.view", "users.password.reset", "employees.view"],
+    // `email.log.view` is the answer to "I never got my reset email" — the one
+    // question support is asked that only the delivery log can settle. It reads
+    // the attempt, never the message (ADR-078 #10).
+    permissions: ["users.view", "users.password.reset", "employees.view", "email.log.view"],
   },
   {
     key: "read_only",
@@ -611,66 +630,11 @@ const SETTINGS = [
 // ─────────────────────────────────────────────────────────────
 // 4b. EMAIL TEMPLATES (Module 17, ADR-078)
 //
-// The starting content for each key the code registry declares. Plain prose
-// and one link each: the shell (@repo/email's layout) supplies the frame, and
-// every `ed-*` class becomes an inline style at render time, so a template
-// never carries a colour of its own.
+// The starting CONTENT lives in `../src/email-template-defaults.ts`, not
+// here: the admin's "Reset to default" button needs the same five bodies,
+// and a second copy of them is exactly the drift check:email-templates
+// exists to prevent.
 // ─────────────────────────────────────────────────────────────
-
-const EMAIL_TEMPLATES = [
-  {
-    key: "auth.password_reset",
-    subject: "Reset your password",
-    preheader: "The link expires in {{expires.minutes}} minutes.",
-    bodyHtml:
-      "<p>Hello {{recipient.name}},</p>" +
-      "<p>Someone asked to reset the password for your {{site.name}} account. " +
-      "If that was you, use the link below. It expires in {{expires.minutes}} minutes.</p>" +
-      '<p><a href="{{reset.url}}">Reset your password</a></p>' +
-      "<p>If it was not you, nothing has changed and you can ignore this message.</p>",
-  },
-  {
-    key: "auth.verify_email",
-    subject: "Confirm your email address",
-    preheader: "One click and your {{site.name}} account is confirmed.",
-    bodyHtml:
-      "<p>Welcome to {{site.name}}, {{recipient.name}}.</p>" +
-      "<p>Confirm this address so we know we can reach you:</p>" +
-      '<p><a href="{{verify.url}}">Confirm my email</a></p>' +
-      "<p>You can keep using your account either way — confirming just keeps you " +
-      "reachable if you ever need to recover it.</p>",
-  },
-  {
-    key: "auth.password_changed",
-    subject: "Your password was changed",
-    preheader: "A confirmation, in case it was not you.",
-    bodyHtml:
-      "<p>Hello {{recipient.name}},</p>" +
-      "<p>The password on your {{site.name}} account was changed on {{changed.at}}, " +
-      "and every signed-in session was signed out.</p>" +
-      "<p>If that was not you, reset your password immediately and contact us.</p>",
-  },
-  {
-    key: "newsletter.confirm",
-    subject: "Confirm your newsletter subscription",
-    preheader: "One click to start receiving {{site.name}} updates.",
-    bodyHtml:
-      "<p>Thanks for signing up to the {{site.name}} newsletter.</p>" +
-      "<p>Confirm the subscription to start receiving it:</p>" +
-      '<p><a href="{{confirm.url}}">Confirm my subscription</a></p>' +
-      "<p>If you did not sign up, ignore this message — nothing happens without " +
-      "that confirmation.</p>",
-  },
-  {
-    key: "newsletter.welcome",
-    subject: "You are subscribed",
-    preheader: "Here is what to expect from the {{site.name}} newsletter.",
-    bodyHtml:
-      "<p>You are on the list. Expect market notes, new lessons and the " +
-      "occasional deep dive from {{site.name}}.</p>" +
-      '<p>You can <a href="{{unsubscribe.url}}">unsubscribe</a> at any time.</p>',
-  },
-] as const;
 
 // ─────────────────────────────────────────────────────────────
 // 5. FEATURE FLAGS
@@ -889,14 +853,16 @@ export async function seed(db: PrismaClient) {
 
   // ─── Email templates (Module 17, ADR-078 #5) ───────────────
   //
-  // Code owns the SET of keys (EMAIL_TEMPLATES in @repo/contracts); this owns
-  // the starting CONTENT. `scripts/check-email-templates.mjs` fails when the
-  // two disagree — this file cannot import the registry, because @repo/db
-  // sits upstream of @repo/contracts.
+  // Code owns the SET of keys (EMAIL_TEMPLATES in @repo/contracts);
+  // `../src/email-template-defaults.ts` owns the starting CONTENT, because the
+  // admin's "Reset to default" reads the same array.
+  // `scripts/check-email-templates.mjs` fails when the two disagree — neither
+  // file can import the registry, because @repo/db sits upstream of
+  // @repo/contracts.
   //
   // Both upserts are create-only on content: an edited template is never
   // overwritten by a later seed run, exactly like a settings value.
-  for (const template of EMAIL_TEMPLATES) {
+  for (const template of EMAIL_TEMPLATE_DEFAULTS) {
     await db.emailTemplate.upsert({
       where: { key: template.key },
       update: {},
@@ -916,7 +882,7 @@ export async function seed(db: PrismaClient) {
       },
     });
   }
-  console.log(`  email templates: ${EMAIL_TEMPLATES.length}`);
+  console.log(`  email templates: ${EMAIL_TEMPLATE_DEFAULTS.length}`);
 
   // Social links
   for (const link of SOCIAL_LINKS) {

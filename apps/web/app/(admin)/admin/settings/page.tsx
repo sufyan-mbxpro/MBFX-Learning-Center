@@ -17,6 +17,8 @@ export default async function SettingsHubPage() {
     "features.manage",
     "navigation.manage",
     "theme.update",
+    // `support` holds only this one key under settings (ADR-078 #4).
+    "email.log.view",
   ]);
   const t = await getTranslations("admin");
   const { navEntries, groups } = await loadSettingsIndex(subject, t);
