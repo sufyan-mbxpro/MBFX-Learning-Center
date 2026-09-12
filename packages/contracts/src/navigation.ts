@@ -28,6 +28,20 @@ export const ROUTE_PATHS = {
   "learn-crypto-glossary": "/learn/crypto/glossary",
   glossary: "/glossary",
   tools: "/tools",
+  // The eight trading tools (ADR-086 §3). Spelled out literally for the same
+  // reason the learn tracks above are: `RouteKey` has to stay a union of
+  // string literals, and a key computed from TOOL_KEYS would widen it to
+  // `string` and take the menu row's compile-time check with it.
+  // `TOOL_ROUTE_KEYS` in `tools.ts` binds these back to the registry, and
+  // `tools.test.ts` fails if the two disagree in either direction.
+  "tool-position-size": "/tools/position-size",
+  "tool-pip-value": "/tools/pip-value",
+  "tool-gain-loss": "/tools/gain-loss",
+  "tool-pivot-points": "/tools/pivot-points",
+  "tool-market-hours": "/tools/market-hours",
+  "tool-currency-converter": "/tools/currency-converter",
+  "tool-correlation": "/tools/correlation",
+  "tool-risk-sentiment": "/tools/risk-sentiment",
   markets: "/markets",
   analysis: "/analysis",
   "economic-calendar": "/economic-calendar",

@@ -16289,3 +16289,54 @@ default palette, not a code change.
   `useActionState` overload errors) and `app/(admin)/admin/newsletter/
   subscribers-table.tsx` (`asChild` is not a `Button` prop). Left to the
   changes-21 surface that owns them.
+
+## 2026-09-12 — changes-25 T0–T1: the tools registry, and three ADRs before it
+
+**Module:** 13 (market layer), 12 (public site) · **PRs:** T0, T1
+
+### T0 — the ADRs are 086/087/088, not 084/085/086
+
+The plan asked for ADR-084, ADR-085 and ADR-086. Both 084 (the assessment is
+part of the course) and 085 (the dashboard covers every content type) already
+exist, so the three new ones are **ADR-086** (the tools platform), **ADR-087**
+(the market data platform) and **ADR-088** (what our market numbers mean).
+Every later PR in this track cites those numbers.
+
+security.md #10 now carries two exceptions instead of one, and says why the
+second is gated more loosely: ADR-078's SMTP host captures the next
+password-reset link, where ADR-087's quote key buys read-only prices. The
+narrower harm gets the narrower gate, and writing that down is what stops
+"sealed secret" from spreading by resemblance. architecture.md #8 gains
+`core → secrets` and `email → secrets`; #12's frozen tag list gains `market`,
+deliberately not `content` — market data churns on a daily sweep and content
+on editorial action, so sharing a tag would have every article publish drop
+the rate cache.
+
+`.claude/skills/market/SKILL.md` is rewritten: Module 13 is the market
+platform now, not a seam with nothing behind it.
+
+### T1 — one registry, and a derived binding rather than a second copy
+
+`packages/contracts/src/tools.ts` holds `TOOL_KEYS`, `TOOLS`,
+`TOOL_CONFIG_SCHEMAS` and the admin input schemas; `ROUTE_PATHS` gains eight
+literal `tool-*` entries, spelled out for the reason the learn tracks are — a
+computed key widens `RouteKey` to `string` and takes the menu row's
+compile-time check with it.
+
+**One deviation from the plan, deliberate.** The plan put `TOOL_ROUTE_KEYS` in
+`navigation.ts` as a hand-written second copy of the binding.
+`ToolSpec.routeKey` already states it, so `TOOL_ROUTE_KEYS` is DERIVED from
+`TOOLS` in `tools.ts` instead. The literals that must stay literal are the
+`ROUTE_PATHS` entries themselves, which is what keeps `RouteKey` a union;
+nothing here widens it, and there is now one place to be wrong rather than two.
+
+`riskSentimentConfigSchema` refuses weights summing to zero and bands that
+cross — at the contract, not at render (ADR-088 #6). `pivotPointsConfigSchema`
+offers 1D/1W/1M/1Y and nothing intraday, because the store is daily bars.
+
+### Tests run
+
+`pnpm --filter @repo/contracts exec vitest run` — 19 files, 326 pass
+(`tools.test.ts` is 21 of them). `typecheck` and `lint` clean.
+`node scripts/check-reserved-paths.mjs` — OK; `tools` was already reserved and
+covers the children. `pnpm governance:check` — OK.
