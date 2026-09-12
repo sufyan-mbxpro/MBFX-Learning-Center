@@ -138,6 +138,9 @@ export const mediaSourceTypeSchema = z.enum([
   "COURSE",
   "BRAND",
   "SETTING",
+  // ADR-068 §7 — a video topic holds media placements. Added by the drift
+  // guard in @repo/core (media.test.ts), which had been red since ADR-068.
+  "VIDEO_TOPIC",
 ]);
 export type MediaSourceType = z.infer<typeof mediaSourceTypeSchema>;
 

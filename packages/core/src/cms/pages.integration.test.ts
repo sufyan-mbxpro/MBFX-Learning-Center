@@ -40,7 +40,7 @@ afterAll(async () => {
 
 describe("createPage", () => {
   it("creates a page with a root path, a translation, and a mutable draft version", async () => {
-    const id = await pages.createPage(actor, { title: "About", slug: "about" });
+    const id = await pages.createPage(actor, { title: "Pricing", slug: "pricing" });
     const page = await ctx.db.page.findUniqueOrThrow({
       where: { id },
       include: { translations: true, versions: true },
@@ -48,7 +48,7 @@ describe("createPage", () => {
     expect(page.kind).toBe("STATIC");
     expect(page.status).toBe("DRAFT");
     expect(page.translations).toHaveLength(1);
-    expect(page.translations[0]).toMatchObject({ slug: "about", path: "/about" });
+    expect(page.translations[0]).toMatchObject({ slug: "pricing", path: "/pricing" });
     expect(page.versions).toHaveLength(1);
     expect(page.versions[0]).toMatchObject({ number: 0, revision: 0 });
     expect(page.draftVersionId).toBe(page.versions[0]?.id);
