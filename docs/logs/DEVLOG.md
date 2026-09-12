@@ -16340,3 +16340,69 @@ offers 1D/1W/1M/1Y and nothing intraday, because the store is daily bars.
 (`tools.test.ts` is 21 of them). `typecheck` and `lint` clean.
 `node scripts/check-reserved-paths.mjs` — OK; `tools` was already reserved and
 covers the children. `pnpm governance:check` — OK.
+
+## 2026-09-12 — changes-25 T2: the maths, and three things the properties caught
+
+**Module:** 13 (market layer) · **PR:** T2
+
+`packages/utils/src/calculators.ts` gains `gainLoss`, `pivotPoints` (the five
+methods), `crossRate`, `convertAmount` and `accountPipValue`. Two new files:
+`market-hours.ts` (session clock) and `statistics.ts` (ADR-088's numbers). All
+pure, no I/O, no rate fetching — the file header's existing contract.
+
+### Design calls worth recording
+
+**`gainLoss` takes a tagged union, not three optional numbers.** The reference
+widget is "tell us one of these and we will tell you the other two"; three
+optionals make "all of them" and "none of them" representable, and both are
+states nobody would have written a branch for.
+
+**Pivot levels are `null`, not omitted and not zero.** DeMark has one level a
+side and Camarilla has four; one table renders a row per level without
+branching on method, and a null renders as a dash where a zero would render as
+a price of zero.
+
+**`crossRate` returns `null` rather than throwing or `NaN`.** A converter whose
+provider is down has to render a labelled empty state, and a `NaN` reaching a
+`toFixed` is exactly the bug that return type prevents. `accountPipValue`
+follows it: the quote-currency figure needs no rate and is always there, and
+only the account leg can be null.
+
+**DST is derived per instant, never stored.** `zoneOffsetMinutes` reads the
+offset out of `Intl.DateTimeFormat` at the instant being asked about, so the
+tests can pin London at +0 in January and +1 in July, and Sydney the other way
+round because the southern hemisphere's DST runs opposite.
+
+### What the property tests found
+
+1. **A real bug.** `riskSentimentScore` returned `100.00000000000001` — a
+   weighted mean of values each at most 100 can float past it, and a gauge
+   drawing the score as a width would overflow its own track. Clamped, for
+   `pearson`'s existing reason.
+2. **A wrong expectation of mine, which is ADR-088 #1 in miniature.** I
+   asserted that a rising series and a linearly FALLING one correlate
+   negatively. They do not: both have monotonically shrinking log returns, so
+   they correlate at nearly +1 while their prices diverge. The maths was right
+   and the test was wrong. Both cases are now pinned — a return-mirrored series
+   at −1, and the linear faller above 0 — because that pair IS the argument for
+   correlating returns instead of prices.
+3. **A domain the property should not have claimed.** `fc.double` reaches
+   denormals (1e-101), where a variance underflows to zero and
+   `sqrt(varA * varB)` stops being computable. The generators now quantise to
+   six decimals — finer than any price or return this repo stores — and the
+   test says why. That is a fact about IEEE 754, not about correlation.
+
+A third expectation was wrong too: "shut all day Saturday" is UTC-centric.
+Sydney is UTC+11 in January, so 23:00 UTC on Saturday is already Sunday morning
+there and the week has restarted. The gap is bounded by two LOCAL edges and
+neither is a UTC midnight, which is the entire reason `isMarketOpen` exists.
+
+### Tests run
+
+`pnpm --filter @repo/utils exec vitest run` — 12 files, 259 pass
+(`statistics.test.ts` 34, `calculators.test.ts` 45, `market-hours.test.ts` 29).
+Coverage on the three files: statements 97.17%, branches 92.98%, functions
+100%, lines 99.16% — above testing.md #1's 90% pure-logic floor.
+`typecheck` and `lint` clean. `fast-check ^4.9.0` added to `@repo/utils`
+devDependencies; it was already pinned for `@repo/theme` and `@repo/email`, so
+no new version enters the lockfile.
