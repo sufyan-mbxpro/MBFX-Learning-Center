@@ -46,14 +46,28 @@ Non-negotiable. A PR violating any numbered rule here does not merge.
     `NEXT_PUBLIC_*`, never committed. `.env.example` carries names only.
     `SEED_ADMIN_PASSWORD` is dev-only; omit in production and force reset.
 
-    **One exception, ADR-078: the SMTP password.** It is stored in
+    **Two exceptions, and only two.**
+
+    **ADR-078: the SMTP password.** Stored in
     `EmailTransport.passwordCipher`, AES-256-GCM-sealed under
     `EMAIL_SECRET_KEY` — which is itself env-only. It is write-only in the
     UI, `loadTransportDriver()` is its only reader, and `EmailTransportView`
     has no password property. Editing the transport is **super_admin-only**,
     because the _host_ is an escalation path: repointing delivery captures
-    the next password-reset link. Nothing else may follow this path without
-    its own ADR.
+    the next password-reset link.
+
+    **ADR-087: the market data provider key.** Stored in
+    `MarketProvider.apiKeyCipher`, sealed the same way under
+    `MARKET_SECRET_KEY`, write-only, with `loadProviderDriver()` its only
+    reader and no key property on `MarketProviderView`. It is gated on
+    **`market.providers.manage`, not super_admin** — a read-only quote key
+    captures nothing and nothing is delivered TO a user through this host,
+    so the narrower harm gets the narrower gate. Both packages seal through
+    `@repo/secrets`; neither owns a copy of the primitive.
+
+    Nothing else may follow this path without its own ADR, which must state
+    why the secret cannot live in env, name its single reader, and justify
+    its gate by blast radius (ADR-087 #5).
 
 11. Sessions are database-backed (revocable). httpOnly cookies on web; tokens
     never in localStorage. Argon2id for password hashing.

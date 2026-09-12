@@ -71,6 +71,15 @@ names numbers. If a bump changes behavior, it gets an ADR.
 | Tiptap                                           | **3.31.0 — exact** (`@tiptap/react`, `@tiptap/pm`, `@tiptap/starter-kit`, `@tiptap/extension-image`, `@tiptap/extension-table`, `@tiptap/extensions`) | MIT core only (ADR-009, landed changes-02 in apps/web — admin-only dependency, architecture.md #5). 3.31.1/.2 were <24h old at install — held back by `minimumReleaseAge`. Placeholder lives in `@tiptap/extensions` in v3; StarterKit bundles Link + Underline. `extension-table` added changes-10 (ADR-046), configured `resizable: false`. Colour/family/size/alignment are NOT stock extensions — they emit inline styles the sanitizer strips, so they are hand-written class marks in `editor-extensions.ts`. |
 | recharts                                         | **3.10.1 — exact**                                                                                                                                    | Admin dashboard charts (Module 09). React 19-compatible peer range. Installed only in `apps/web` — admin-only dependency per architecture.md #5, never imported under `app/(public)`.                                                                                                                                                                                                                                                                                                                               |
 
+## Market data (Module 13, changes-25)
+
+**No new runtime dependency.** ADR-087's platform is built from what is
+already pinned: `ioredis` (a real dependency of `@repo/auth` since Module 04)
+backs the rate cache, Prisma holds the daily bars, and the AES-256-GCM seal in
+the new `@repo/secrets` is `node:crypto`. There is no charting library — the
+risk meter's sparkline is hand-drawn SVG, and ADR-086's Lighthouse budget is
+the reason.
+
 ## Standing follow-ups
 
 - **TS 7.1 + typescript-eslint** → lift ADR-010's pin (owner: whoever runs
