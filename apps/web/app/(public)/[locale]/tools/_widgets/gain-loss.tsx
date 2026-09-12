@@ -13,7 +13,6 @@ import { useTranslations } from "next-intl";
 import { gainLoss, type GainLossDirection, type GainLossKnown } from "@repo/utils";
 import { Field, FieldError, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
-import { Label } from "@repo/ui/components/label";
 import { RadioGroup, RadioGroupItem } from "@repo/ui/components/radio-group";
 import { ResultRow, WidgetLayout } from "../_components/widget-layout.tsx";
 
@@ -74,10 +73,20 @@ export function GainLossWidget({ config }: { config: GainLossConfig }) {
               className="flex flex-wrap gap-4"
             >
               {(["gain", "loss"] as const).map((option) => (
-                <div key={option} className="flex items-center gap-2">
-                  <RadioGroupItem value={option} id={`gl-dir-${option}`} />
-                  <Label htmlFor={`gl-dir-${option}`}>{t(`gainLoss.${option}`)}</Label>
-                </div>
+                // The radio WRAPPED in its label, not pointed at by an
+                // `htmlFor`: Base UI renders it as a button with
+                // `role="radio"`, and a label's `for` does not name a button.
+                // axe caught this as `aria-toggle-field-name`. A button IS a
+                // labelable element, so wrapping is what gives it its name.
+                <label key={option} className="flex items-center gap-2 text-sm">
+                  {/* aria-label on the ITEM, not a wrapping label: Base UI
+                      renders a span with role="radio" plus a hidden input, so
+                      a label's labeled control is the INPUT and the span is
+                      left unnamed. The visible text and the name are the same
+                      string, so they cannot drift. */}
+                  <RadioGroupItem value={option} aria-label={t(`gainLoss.${option}`)} />
+                  {t(`gainLoss.${option}`)}
+                </label>
               ))}
             </RadioGroup>
           </fieldset>
@@ -90,10 +99,13 @@ export function GainLossWidget({ config }: { config: GainLossConfig }) {
               className="flex flex-col gap-2"
             >
               {(["amount", "percent", "endingBalance"] as const).map((option) => (
-                <div key={option} className="flex items-center gap-2">
-                  <RadioGroupItem value={option} id={`gl-known-${option}`} />
-                  <Label htmlFor={`gl-known-${option}`}>{t(`gainLoss.known.${option}`)}</Label>
-                </div>
+                <label key={option} className="flex items-center gap-2 text-sm">
+                  <RadioGroupItem
+                    value={option}
+                    aria-label={t(`gainLoss.known.${option}`)}
+                  />
+                  {t(`gainLoss.known.${option}`)}
+                </label>
               ))}
             </RadioGroup>
           </fieldset>

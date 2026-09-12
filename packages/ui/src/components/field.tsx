@@ -60,6 +60,7 @@ interface FieldControlAria {
   "aria-invalid"?: React.AriaAttributes["aria-invalid"];
   "aria-describedby"?: string;
   "aria-required"?: React.AriaAttributes["aria-required"];
+  "aria-labelledby"?: string;
 }
 
 /**
@@ -69,10 +70,23 @@ interface FieldControlAria {
  *
  * `requiredAs: "aria"` is for a control whose DOM node has no native
  * `required` (a dropdown trigger is a button): it becomes `aria-required`.
+ *
+ * **`labelledBy: true` is for a control that FORWARDS the `id` somewhere
+ * else.** Base UI's Switch, Checkbox and Radio render a `role="…"` element
+ * plus a visually-hidden native input, and they put the `id` they are given on
+ * the INPUT — so `FieldLabel`'s `htmlFor` lands on an `aria-hidden` node and
+ * the thing a screen reader actually reaches has no name at all. axe reports
+ * it as `aria-toggle-field-name`, and it is invisible in a rendered page and
+ * in a source review alike; changes-25's first axe run is what found it.
+ * Pointing `aria-labelledby` at the label's own id names the control directly,
+ * whatever the library does with `id`.
  */
 function useFieldControl<P extends FieldControlAria>(
   props: P,
-  { requiredAs = "native" }: { requiredAs?: "native" | "aria" } = {},
+  {
+    requiredAs = "native",
+    labelledBy = false,
+  }: { requiredAs?: "native" | "aria"; labelledBy?: boolean } = {},
 ): P {
   const field = useContext(FieldContext);
   if (!field) return props;
@@ -84,6 +98,12 @@ function useFieldControl<P extends FieldControlAria>(
     "aria-invalid": props["aria-invalid"] ?? (field.invalid || undefined),
     "aria-describedby":
       [field.describedBy, props["aria-describedby"]].filter(Boolean).join(" ") || undefined,
+    ...(labelledBy
+      ? // Not forced: a call site that passed its own `aria-label` or
+        // `aria-labelledby` meant it, and overriding would be the same bug
+        // one level up.
+        { "aria-labelledby": props["aria-labelledby"] ?? field.labelId }
+      : {}),
   };
   // The casts only restore P: every key written above is one P already has.
   return requiredAs === "aria"

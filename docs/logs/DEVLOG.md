@@ -17144,3 +17144,90 @@ eight across its three columns with icons and one-line descriptions.
 28 of them). `@repo/db` — 4 files, 32 pass. `typecheck` and `lint` clean on
 `web` and `@repo/db`. `check:catalog-completeness` exits 0;
 `check:permission-keys` and `check:phantom-deps` OK.
+
+## 2026-09-12 — changes-25 T10: the gate, and an accessibility bug in `@repo/ui`
+
+**Module:** 14 (hardening), 07 (ui), 13 (market) · **PR:** T10
+
+`e2e/public/tools.spec.ts` (23 tests: axe on the index and all eight pages, one
+deep journey, the 404, the RTL overflow check, and the never-"real-time" copy
+rule), `e2e/public/tools-budget.spec.ts`, `e2e/admin/tools.spec.ts`, and
+`@axe-core/playwright` — the tool testing.md has named since Module 00 and
+which had never been installed.
+
+### The first axe run found a real bug, and it was NOT in this PR's code
+
+**`aria-toggle-field-name` on every Switch, Checkbox and Radio in the app.**
+
+Base UI renders these as a `<span role="switch">` (or `radio`/`checkbox`) plus
+a visually-hidden native input, and it puts the `id` it is handed on the
+**input**. `useFieldControl` passes the Field's `controlId` down, so
+`FieldLabel`'s `htmlFor` landed on an `aria-hidden` node and the element a
+screen reader actually reaches had no accessible name at all.
+
+It is invisible in a rendered page and in a source review alike: the label
+reads correctly, the control works, Playwright's own a11y snapshot even prints
+`switch "12-hour clock"`. Only axe's name computation disagreed.
+
+Fixed in `@repo/ui`: `useFieldControl` gains a `labelledBy` option that points
+`aria-labelledby` at the label's own id, and `Switch` and `Checkbox` pass it.
+It does not override a call site that set its own `aria-label` — that would be
+the same bug one level up. `RadioGroup` already named the GROUP; individual
+radio items are named at the call site, because a wrapping `<label>`'s labeled
+control is the hidden input, not the span.
+
+**This affects every Switch and Checkbox in the admin too**, and the fix is
+theirs as much as the tools'.
+
+### What was deleted rather than shipped green
+
+An assertion that `/tools/gain-loss` pulls in no other island. Turbopack's dev
+chunk names are hashed and carry no source filename, so it passed even when
+`tool-widget.tsx` was turned into a client component by hand — verified
+deliberately. **A green check that cannot fail is worse than no check**, so it
+is gone, and the comment says why. The same fact IS guarded, in
+`tools-area.test.ts`, where the file's own `"use client"` can be seen — and
+that guard was verified by breaking it.
+
+### The budget is a weight ratio, not Lighthouse
+
+The plan asked for a Lighthouse budget. This repo has never had a Lighthouse
+harness and standing one up is its own infrastructure — so what shipped
+measures the thing ADR-086's risk #4 actually names: the JavaScript a tool page
+transfers, relative to the homepage, which carries the same header, footer and
+theme runtime. Relative rather than absolute because `next dev` ships
+unminified bundles and an absolute kB figure would say nothing about
+production. **LCP, CLS and a real Lighthouse run remain owed to Module 14.**
+
+### One more E2E lesson
+
+The journey test's first version filled the balance field mid-hydration; React
+took over and overwrote it, and the page then showed arithmetic that was
+correct over the wrong inputs — 200.00 where 400.00 was expected, with no
+error anywhere. It now asserts the seeded default first (proving the island has
+mounted) and asserts each value stuck after filling.
+
+### Tests run
+
+`e2e/public` — 41 pass, 1 fail. The failure is `about-section.spec.ts`'s
+mega-menu hover test, and it is **NOT this work's**: confirmed by stashing
+every nav, seed and `@repo/ui` change in this PR and watching it fail
+identically.
+`e2e/admin` — 12 skipped, the documented `fixme` state every admin spec is in
+until `auth.setup.ts` is resolved.
+`apps/web` unit — 36 files, 1774 pass. `@repo/contracts` 326, `@repo/utils`
+266, `@repo/secrets` 21, `@repo/core` and `@repo/db` green.
+`typecheck` and `lint` clean across `web`, `@repo/ui`, `@repo/core`,
+`@repo/db`, `@repo/contracts`, `@repo/utils`, `@repo/secrets`, `@repo/email`.
+`governance:check`, `check:catalog-completeness`, `check:permission-keys`,
+`check:phantom-deps` all OK.
+
+**Also not this work's, and pre-existing:** `@repo/ui`'s
+`assessment-card.test.tsx` fails 3 assertions, unchanged by this PR's
+`field.tsx` / `switch.tsx` / `checkbox.tsx` edits (confirmed by stashing them).
+
+### Still owed to Module 14
+
+A real Lighthouse run on `/tools/**`; the admin E2E, blocked with every other
+admin spec; and `popular_tools` needs `pnpm db:reset` to appear in an existing
+database.

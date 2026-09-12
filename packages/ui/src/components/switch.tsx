@@ -14,8 +14,11 @@ import { useFieldControl } from "@repo/ui/components/field";
 // The previous `size` prop had no call sites and the reference has one size,
 // so it is gone rather than kept as an untested second geometry.
 function Switch({ className, ...props }: SwitchPrimitive.Root.Props) {
-  // Inside a Field: id, required, aria-invalid, aria-describedby (ADR-077).
-  const wired = useFieldControl(props);
+  // Inside a Field: id, required, aria-invalid, aria-describedby (ADR-077),
+  // and `aria-labelledby` — Base UI puts the `id` it is given on its hidden
+  // native input, so without it the role="switch" element has no accessible
+  // name (axe: aria-toggle-field-name).
+  const wired = useFieldControl(props, { labelledBy: true });
   return (
     <SwitchPrimitive.Root
       data-slot="switch"

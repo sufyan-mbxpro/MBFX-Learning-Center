@@ -14,7 +14,9 @@ import { CheckIcon } from "lucide-react";
 // reference's bronze box.
 function Checkbox({ className, ...props }: CheckboxPrimitive.Root.Props) {
   // Inside a Field: id, required, aria-invalid, aria-describedby (ADR-077).
-  const wired = useFieldControl(props);
+  // `labelledBy`: Base UI routes `id` to the hidden input, so the
+  // role="checkbox" element needs the label pointed at it directly.
+  const wired = useFieldControl(props, { labelledBy: true });
   return (
     <CheckboxPrimitive.Root
       data-slot="checkbox"

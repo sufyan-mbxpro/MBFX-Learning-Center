@@ -22,6 +22,14 @@ const queries = {
     });
   },
 
+  /** One tool row and its English translation (changes-25 T10). */
+  async tool(args: { key: string }) {
+    return db.tool.findFirstOrThrow({
+      where: { key: args.key },
+      include: { translations: { where: { locale: "en" } } },
+    });
+  },
+
   /** How many audit rows an action wrote for one entity. */
   async auditCount(args: { entityId: string; action: string }) {
     return db.auditLog.count({ where: { entityId: args.entityId, action: args.action } });
