@@ -61,11 +61,14 @@ function DestinationCard({
   const { icon: Icon, tone, status } = destination;
   const live = status === "live";
 
-  // `group` goes on the LINK, never on a `soon` tile: `.media-zoom`,
-  // `.hover-arrow` and the icon flip all key off `.group:hover`, so leaving it
-  // off is what makes a non-clickable card visually inert. A card that reacts
-  // to the pointer and then does nothing is the promise IconCard's own
-  // `interactive` default exists to avoid making.
+  // EVERY card is a link now (changes-22). It used to be that a `soon` tile
+  // was inert — no link, no `group`, so `.media-zoom`, `.hover-arrow` and the
+  // icon flip all stayed still — because the destination had no route and the
+  // card would have pointed at a 404. Both `soon` destinations now have a page
+  // that says what the section will do and where to go meanwhile, so the card
+  // has somewhere honest to send a reader. `live` no longer decides whether
+  // the card reacts; it decides what the card PROMISES, which is the "Coming
+  // soon" badge in place of the "Explore" arrow.
   const card = (
     <article
       className={cn(
@@ -75,8 +78,7 @@ function DestinationCard({
         // its own position/overflow/isolation — the classes here would be
         // redundant, but they also document what the surface needs if the
         // sheen is ever dropped.
-        "card-hover relative isolate flex h-full flex-col overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/10",
-        live && "hover-lift sheen hover:ring-primary/25",
+        "card-hover hover-lift sheen relative isolate flex h-full flex-col overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/10 hover:ring-primary/25",
       )}
     >
       {/* Top rule sweeping from the inline start — `start-0` + `w-0` →
@@ -86,15 +88,13 @@ function DestinationCard({
           later in `@layer utilities` than Tailwind's generated classes, it
           beats any transition utility written in the class attribute — a
           hover transform on the card itself would jump rather than glide. */}
-      {live && (
-        <span
-          aria-hidden
-          className={cn(
-            "pointer-events-none absolute top-0 start-0 z-20 h-1 w-0 transition-(--transition-size) duration-(--duration-slow) ease-(--ease-out-quint) group-hover:w-full",
-            DESTINATION_BAR_CLASS[tone],
-          )}
-        />
-      )}
+      <span
+        aria-hidden
+        className={cn(
+          "pointer-events-none absolute top-0 start-0 z-20 h-1 w-0 transition-(--transition-size) duration-(--duration-slow) ease-(--ease-out-quint) group-hover:w-full",
+          DESTINATION_BAR_CLASS[tone],
+        )}
+      />
 
       <HomeMedia src={HOME_MEDIA[destination.key]} icon={Icon} tone={tone} className="w-full" />
 
@@ -111,7 +111,7 @@ function DestinationCard({
             className={cn(
               "flex size-12 items-center justify-center rounded-xl shadow-sm ring-4 ring-card transition-colors duration-(--duration-base) ease-(--ease-out-quint)",
               DESTINATION_ICON_CLASS[tone],
-              live && DESTINATION_ICON_HOVER_CLASS[tone],
+              DESTINATION_ICON_HOVER_CLASS[tone],
             )}
           >
             <Icon aria-hidden className="size-6" />
@@ -137,8 +137,6 @@ function DestinationCard({
       </div>
     </article>
   );
-
-  if (!live) return card;
 
   return (
     <Link href={destinationHref(destination)} className="group block h-full">

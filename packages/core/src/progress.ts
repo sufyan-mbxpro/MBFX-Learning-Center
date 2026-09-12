@@ -26,6 +26,7 @@
 import type { CourseProgressView, EnrollmentSummary, LessonProgressView } from "@repo/contracts";
 import { LessonProgressStatus, db, type Prisma } from "@repo/db";
 import { publicCourseWhere, publicLessonWhere } from "./public-courses.ts";
+import { isQuizReachable } from "./quiz-links.ts";
 
 // ─── Errors ──────────────────────────────────────────────────
 
@@ -83,10 +84,12 @@ async function requireLesson(lessonId: string): Promise<LessonLocation> {
   return location;
 }
 
-async function requirePublicCourse(courseId: string): Promise<{ lessonCount: number }> {
+async function requirePublicCourse(
+  courseId: string,
+): Promise<{ lessonCount: number; finalQuizId: string | null }> {
   const course = await db.course.findFirst({
     where: { id: courseId, ...publicCourseWhere() },
-    select: { lessonCount: true },
+    select: { lessonCount: true, finalQuizId: true },
   });
   if (!course) throw new CourseNotAccessibleError();
   return course;
@@ -180,30 +183,44 @@ async function withEnrollmentLock<T>(
  * Phase 6 calls it when an attempt passes — a quiz result changes course
  * completion without touching a single `LessonProgress` row.
  */
+/** Every lesson of this course a member of the public can reach. */
+function publishedLessonWhere(courseId: string) {
+  return {
+    ...publicLessonWhere(),
+    section: { isPublished: true, courseId },
+  };
+}
+
+/**
+ * Which lessons can BLOCK completion.
+ *
+ * Required ones, minus the ADR-058 consequence: a `QUIZ_PASS` lesson whose
+ * quiz has been deleted (`Lesson.quizId` is `SetNull`) is unsatisfiable —
+ * there is nothing left to pass. Counting it would leave the course impossible
+ * to finish because of an editor's delete, so it stops blocking. It still
+ * counts toward `lessonsCompleted` if the learner completed it before the quiz
+ * went.
+ *
+ * **Exported, and shared with `getCourseProgress`** (ADR-084 #2). The final
+ * assessment card unlocks on `requiredOutstanding === 0`, which has to mean
+ * exactly what completion means here — two copies of "which lessons count"
+ * would let the card unlock on a course that would not complete, or refuse to
+ * unlock on one that had.
+ */
+export function blockingLessonWhere() {
+  return {
+    isRequired: true,
+    NOT: { completionRule: "QUIZ_PASS" as const, quizId: null },
+  };
+}
+
 export async function recomputeCourseCompletion(
   tx: Prisma.TransactionClient,
   userId: string,
   courseId: string,
 ): Promise<void> {
-  const publishedLesson = {
-    ...publicLessonWhere(),
-    section: { isPublished: true, courseId },
-  };
-
-  /**
-   * Which lessons can BLOCK completion.
-   *
-   * Required ones, minus the ADR-058 consequence: a `QUIZ_PASS` lesson whose
-   * quiz has been deleted (`Lesson.quizId` is `SetNull`) is unsatisfiable —
-   * there is nothing left to pass. Counting it would leave the course
-   * impossible to finish because of an editor's delete, so it stops blocking.
-   * It still counts toward `lessonsCompleted` if the learner completed it
-   * before the quiz went.
-   */
-  const blockingLesson = {
-    isRequired: true,
-    NOT: { completionRule: "QUIZ_PASS" as const, quizId: null },
-  };
+  const publishedLesson = publishedLessonWhere(courseId);
+  const blockingLesson = blockingLessonWhere();
 
   const [lessonsCompleted, requiredTotal, requiredOutstanding, enrollment, course] =
     await Promise.all([
@@ -240,8 +257,18 @@ export async function recomputeCourseCompletion(
   // attempt". Read here rather than mirrored into a LessonProgress row because
   // a final quiz has no lesson to hang one on — which is exactly why ADR-058 #6
   // treats it as the exception to "passing writes a row".
+  //
+  // **ADR-084 #8 adds the middle clause: a final quiz nobody can REACH stops
+  // blocking.** Un-publishing one, soft-deleting it, or emptying it of
+  // questions used to leave every enrolled learner's course permanently
+  // incompletable — the requirement survived, the way to satisfy it did not,
+  // and nothing on any screen said so. It is the same reasoning as the
+  // `QUIZ_PASS`-with-no-quiz carve-out in `blockingLessonWhere()`, and it
+  // keeps one rule: what the course page shows as the assessment is exactly
+  // what completion requires.
   const finalQuizPassed =
     course?.finalQuizId == null ||
+    !(await isQuizReachable(tx, course.finalQuizId)) ||
     (await tx.quizAttempt.findFirst({
       where: { userId, quizId: course.finalQuizId, passed: true },
       select: { id: true },
@@ -285,7 +312,7 @@ export async function getCourseProgress(
 ): Promise<CourseProgressView> {
   const course = await requirePublicCourse(courseId);
 
-  const [enrollment, rows] = await Promise.all([
+  const [enrollment, rows, requiredOutstanding, finalQuiz] = await Promise.all([
     db.courseEnrollment.findUnique({
       where: { userId_courseId: { userId, courseId } },
       select: { lessonsCompleted: true, completedAt: true, lastLessonId: true },
@@ -301,6 +328,18 @@ export async function getCourseProgress(
       },
       select: { lessonId: true, status: true, completedAt: true },
     }),
+    // What the final assessment card unlocks on (ADR-084 #2) — counted with
+    // the SAME predicate `recomputeCourseCompletion` blocks on, and expressed
+    // as "no completed row for this learner" rather than (total − completed),
+    // for the reason stated there.
+    db.lesson.count({
+      where: {
+        ...publishedLessonWhere(courseId),
+        ...blockingLessonWhere(),
+        progress: { none: { userId, status: LessonProgressStatus.COMPLETED } },
+      },
+    }),
+    finalQuizSummary(userId, course.finalQuizId),
   ]);
 
   const lessons: LessonProgressView[] = rows.map((row) => ({
@@ -318,7 +357,43 @@ export async function getCourseProgress(
     isCompleted: enrollment?.completedAt !== null && enrollment?.completedAt !== undefined,
     completedAt: enrollment?.completedAt?.toISOString() ?? null,
     lastLessonId: enrollment?.lastLessonId ?? null,
+    requiredOutstanding,
+    finalQuiz,
     lessons,
+  };
+}
+
+/**
+ * This learner's standing on the course's final assessment, or `null` when
+ * there is nothing to stand on.
+ *
+ * `null` for a course with no final quiz AND for one whose final quiz is not
+ * publicly reachable — the same two cases that make `CourseView.finalQuiz`
+ * null and that stop the quiz blocking completion (ADR-084 #8). One answer,
+ * three consumers: the card, the lock, the rule.
+ *
+ * "Passed" is ANY passing attempt, not the best-scoring one, matching
+ * `getQuizProgressForUser` — a learner who passed on attempt two and scored
+ * lower on attempt three has passed.
+ */
+async function finalQuizSummary(
+  userId: string,
+  finalQuizId: string | null,
+): Promise<CourseProgressView["finalQuiz"]> {
+  if (!finalQuizId) return null;
+  // Not inside a transaction here, so the plain client is the right reader —
+  // `isQuizReachable` takes a `TransactionClient`, and `db` satisfies it.
+  if (!(await isQuizReachable(db, finalQuizId))) return null;
+
+  const attempts = await db.quizAttempt.findMany({
+    where: { userId, quizId: finalQuizId, completedAt: { not: null } },
+    select: { percentage: true, passed: true },
+  });
+
+  return {
+    passed: attempts.some((attempt) => attempt.passed),
+    bestPercentage: attempts.reduce((best, attempt) => Math.max(best, attempt.percentage), 0),
+    attempts: attempts.length,
   };
 }
 

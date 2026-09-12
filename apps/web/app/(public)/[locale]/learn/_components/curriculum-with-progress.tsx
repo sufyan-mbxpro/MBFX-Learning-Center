@@ -14,7 +14,11 @@
 //      resolves and stays true for a guest
 //   3. not started
 import { useTranslations } from "next-intl";
-import { CurriculumList, type CurriculumSection } from "@repo/ui/components/curriculum-list";
+import {
+  CurriculumList,
+  type CurriculumSection,
+  type CurriculumVariant,
+} from "@repo/ui/components/curriculum-list";
 import type { LessonState } from "@repo/ui/components/lesson-state-icon";
 import { curriculumLabels } from "../_lib/learn-labels.ts";
 import { useProgress } from "./progress-provider.tsx";
@@ -26,7 +30,7 @@ export function CurriculumWithProgress({
   className,
 }: {
   sections: CurriculumSection[];
-  variant?: "full" | "compact";
+  variant?: CurriculumVariant;
   defaultOpenSectionIds?: string[];
   className?: string;
 }) {

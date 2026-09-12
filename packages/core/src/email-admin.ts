@@ -134,7 +134,9 @@ export async function saveEmailTransport(
     username: input.username || null,
     updatedBy: actor.id,
     // A new host or username invalidates what the last verify proved.
-    ...(before && before.host === (input.host || null) && before.username === (input.username || null)
+    ...(before &&
+    before.host === (input.host || null) &&
+    before.username === (input.username || null)
       ? {}
       : { lastVerifiedAt: null, lastError: null }),
     ...(cipher === undefined ? {} : { passwordCipher: cipher }),
@@ -728,7 +730,6 @@ export async function countEmailDeliveries(since?: Date): Promise<EmailDeliveryC
     ...(since ? { where: { createdAt: { gte: since } } } : {}),
     _count: { _all: true },
   });
-  const at = (status: string) =>
-    grouped.find((row) => row.status === status)?._count._all ?? 0;
+  const at = (status: string) => grouped.find((row) => row.status === status)?._count._all ?? 0;
   return { sent: at("SENT"), failed: at("FAILED"), suppressed: at("SUPPRESSED") };
 }

@@ -89,16 +89,23 @@ export default async function LearnIndexPage({ params }: PageProps<"/[locale]/le
         <VideoShowcase locale={locale} variant="grid" showCta={false} />
       </div>
 
-      <CtaBand title={t("index.ctaTitle")} description={t("index.ctaDescription")}>
-        <Button
-          size="lg"
-          shape="pill"
-          variant="secondary"
-          render={<Link href={ROUTE_PATHS.glossary} />}
-        >
-          {t("index.ctaAction")}
-        </Button>
-      </CtaBand>
+      {/* The band closes the page, so it needs the section rhythm around it:
+          rendered bare it sat flush against the footer, with the page's last
+          card and the footer's first row sharing an edge (changes-22). Every
+          other CtaBand on the site is already inside a Section — these two
+          learn pages were the exceptions. */}
+      <Section spacing="md">
+        <CtaBand title={t("index.ctaTitle")} description={t("index.ctaDescription")}>
+          <Button
+            size="lg"
+            shape="pill"
+            variant="secondary"
+            render={<Link href={ROUTE_PATHS.glossary} />}
+          >
+            {t("index.ctaAction")}
+          </Button>
+        </CtaBand>
+      </Section>
     </>
   );
 }

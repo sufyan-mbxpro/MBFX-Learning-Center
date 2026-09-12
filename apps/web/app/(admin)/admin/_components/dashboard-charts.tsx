@@ -7,9 +7,6 @@ import {
   Area,
   AreaChart,
   CartesianGrid,
-  Cell,
-  Pie,
-  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -19,14 +16,6 @@ import { Empty, EmptyDescription, EmptyTitle } from "@repo/ui/components/empty";
 import type { DashboardSeriesPoint } from "@repo/core";
 
 const SERIES_COLORS = ["var(--color-primary)", "var(--color-info)"] as const;
-const STATUS_COLORS = [
-  "var(--color-primary)",
-  "var(--color-success)",
-  "var(--color-info)",
-  "var(--color-warning)",
-  "var(--color-destructive)",
-  "var(--color-accent)",
-] as const;
 
 function ChartTooltip({
   active,
@@ -59,16 +48,30 @@ export function DashboardGrowthChart({
   data,
   usersLabel,
   articlesLabel,
+  showUsers = true,
+  showArticles = true,
   emptyTitle,
   emptyDescription,
 }: {
   data: DashboardSeriesPoint[];
   usersLabel: string;
   articlesLabel: string;
+  /**
+   * Per-series visibility (changes-21 F8 §2.2 #9). A viewer may hold
+   * `users.view` and not `analysis.view`, or the reverse, so the chart draws
+   * only the lines they are entitled to. Omitting the line is the honest
+   * option: the loader never read that series, so plotting it flat at zero
+   * would tell the reader there were no signups rather than that the number
+   * is not theirs to see.
+   */
+  showUsers?: boolean;
+  showArticles?: boolean;
   emptyTitle: string;
   emptyDescription: string;
 }) {
-  const hasData = data.some((point) => point.users > 0 || point.articles > 0);
+  const hasData = data.some(
+    (point) => (showUsers && point.users > 0) || (showArticles && point.articles > 0),
+  );
   if (!hasData) {
     return (
       <Empty className="h-72 border-none">
@@ -107,87 +110,27 @@ export function DashboardGrowthChart({
           width={28}
         />
         <Tooltip content={<ChartTooltip />} />
-        <Area
-          type="monotone"
-          dataKey="users"
-          name={usersLabel}
-          stroke={SERIES_COLORS[0]}
-          fill="url(#dashboard-users-fill)"
-          strokeWidth={2}
-        />
-        <Area
-          type="monotone"
-          dataKey="articles"
-          name={articlesLabel}
-          stroke={SERIES_COLORS[1]}
-          fill="url(#dashboard-articles-fill)"
-          strokeWidth={2}
-        />
+        {showUsers && (
+          <Area
+            type="monotone"
+            dataKey="users"
+            name={usersLabel}
+            stroke={SERIES_COLORS[0]}
+            fill="url(#dashboard-users-fill)"
+            strokeWidth={2}
+          />
+        )}
+        {showArticles && (
+          <Area
+            type="monotone"
+            dataKey="articles"
+            name={articlesLabel}
+            stroke={SERIES_COLORS[1]}
+            fill="url(#dashboard-articles-fill)"
+            strokeWidth={2}
+          />
+        )}
       </AreaChart>
     </ResponsiveContainer>
-  );
-}
-
-export function DashboardStatusChart({
-  data,
-  emptyTitle,
-  emptyDescription,
-}: {
-  data: { status: string; count: number; label: string }[];
-  emptyTitle: string;
-  emptyDescription: string;
-}) {
-  if (data.length === 0) {
-    return (
-      <Empty className="h-64 border-none">
-        <EmptyTitle>{emptyTitle}</EmptyTitle>
-        <EmptyDescription>{emptyDescription}</EmptyDescription>
-      </Empty>
-    );
-  }
-
-  return (
-    <ResponsiveContainer width="100%" height={256}>
-      <PieChart>
-        <Tooltip content={<ChartTooltip />} />
-        <Pie
-          data={data}
-          dataKey="count"
-          nameKey="label"
-          innerRadius={56}
-          outerRadius={88}
-          paddingAngle={2}
-          strokeWidth={0}
-        >
-          {data.map((entry, i) => (
-            <Cell key={entry.status} fill={STATUS_COLORS[i % STATUS_COLORS.length]} />
-          ))}
-        </Pie>
-      </PieChart>
-    </ResponsiveContainer>
-  );
-}
-
-export function DashboardStatusLegend({
-  data,
-}: {
-  data: { status: string; count: number; label: string }[];
-}) {
-  return (
-    <ul className="flex flex-col gap-2">
-      {data.map((entry, i) => (
-        <li key={entry.status} className="flex items-center justify-between gap-3 text-sm">
-          <span className="flex items-center gap-2 text-muted-foreground">
-            <span
-              className="size-2.5 shrink-0 rounded-full"
-              style={{ backgroundColor: STATUS_COLORS[i % STATUS_COLORS.length] }}
-              aria-hidden
-            />
-            {entry.label}
-          </span>
-          <span className="font-medium tabular-nums">{entry.count}</span>
-        </li>
-      ))}
-    </ul>
   );
 }

@@ -149,7 +149,6 @@
     "newsletterPlaceholder": "you@example.com",
     "newsletterLabel": "ای میل ایڈریس",
     "newsletterSubmit": "سبسکرائب کریں",
-    "newsletterUnavailable": "نیوز لیٹر سبسکرپشن جلد آ رہا ہے۔",
     "followUs": "ہمیں فالو کریں",
     "riskDisclaimerLabel": "خطرے سے متعلق انتباہ"
   },
@@ -183,7 +182,6 @@
     "categories": "زمرے",
     "latestPosts": "تازہ ترین مضامین",
     "popularTags": "مقبول ٹیگز",
-    "archives": "آرکائیو",
     "subscribeTitle": "تازہ ترین اپ ڈیٹ کے لیے سبسکرائب کریں",
     "subscribeBody": "نئے تجزیے اور مارکیٹ کی تعلیم، براہِ راست آپ کے ان باکس میں۔",
     "shareLabel": "شیئر کریں",

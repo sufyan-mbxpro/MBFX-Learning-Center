@@ -15,9 +15,11 @@ import { getSetting, isFeatureVisible } from "@repo/settings";
 import { AmbientMotif } from "@repo/ui/components/ambient-motif";
 import { Badge } from "@repo/ui/components/badge";
 import { Container } from "@repo/ui/components/container";
+import { FaqPanel } from "@repo/ui/components/faq-panel";
 import { PageHero } from "@repo/ui/components/page-hero";
 import { Reveal } from "@repo/ui/components/reveal";
 import { Section } from "@repo/ui/components/section";
+import { Waypoints } from "lucide-react";
 import { GlossaryBackdrop } from "../_components/glossary-art.tsx";
 import { GlossaryFooterSearch } from "../_components/glossary-footer-search.tsx";
 
@@ -115,6 +117,15 @@ export default async function GlossaryTermPage({ params }: PageProps<"/[locale]/
   return (
     <>
       <PageHero
+        // Shorter than the default masthead (changes-22). `PageHero` is built
+        // for a SECTION front — About's five pages, /news, /learn — where a
+        // tall band is the first thing on the site and has a job to do. A
+        // glossary term is a leaf: the reader arrived to read two paragraphs,
+        // and at `section-lg` the band pushed the definition itself below the
+        // fold on a laptop. `spacing="sm"` matches `/glossary/topics`, which
+        // is the shape the owner pointed at — and the brand fill stays, since
+        // what was wrong was the height, not the colour.
+        spacing="sm"
         backdrop={<GlossaryBackdrop slot="termBanner" priority />}
         motif={<AmbientMotif variant="learn" intensity={0.7} />}
         breadcrumb={
@@ -208,45 +219,64 @@ export default async function GlossaryTermPage({ params }: PageProps<"/[locale]/
                       </p>
                     </section>
                   )}
-
-                  {view.faq.length > 0 && (
-                    <section className="flex flex-col gap-3">
-                      <h2 className="text-2xl font-semibold tracking-tight">{t("faqHeading")}</h2>
-                      <dl className="flex flex-col gap-4">
-                        {view.faq.map((item) => (
-                          <div key={item.question} className="flex flex-col gap-1.5">
-                            <dt className="font-medium">{item.question}</dt>
-                            {/* Text, not HTML: the FAQ answer is a plain
-                                textarea in the editor and is stored unparsed. */}
-                            <dd className="whitespace-pre-wrap text-muted-foreground">
-                              {item.answer}
-                            </dd>
-                          </div>
-                        ))}
-                      </dl>
-                    </section>
-                  )}
                 </div>
+              </Reveal>
+
+              {/* The FAQ leaves the prose stack. Inside it, it was a fifth h2
+                  over a dl on the same background as the four explanations
+                  above — nothing told the reader that the page had stopped
+                  explaining the term and started answering questions about
+                  it. `FaqPanel` is the surface /news already had;
+                  `format="text"` because the editor's answer field is a plain
+                  textarea and the value is stored unparsed. */}
+              <Reveal variant="up" delay={120}>
+                <FaqPanel
+                  title={t("faqHeading")}
+                  lead={t("faqLead")}
+                  items={view.faq}
+                  format="text"
+                />
               </Reveal>
             </>
           )}
 
           {related.length > 0 && (
-            <section className="flex flex-col gap-3 border-t pt-6">
-              <h2 className="text-lg font-semibold">{t("relatedTerms")}</h2>
+            /* Its own card, not a rule over a row of chips. A `border-t` is
+               how a page separates two parts of the SAME thing;
+               these are exits to other terms, so they take the card surface
+               the glossary gives a destination everywhere else — and a card
+               against the FAQ's tinted panel keeps the two blocks telling
+               apart at a glance, which one shared surface would not. */
+            <Reveal
+              variant="up"
+              className="flex flex-col gap-4 rounded-2xl border bg-card p-6 shadow-sm"
+            >
+              <div className="flex items-start gap-3">
+                {/* bg-primary/10, never --primary-subtle — see faq-panel.tsx. */}
+                <span
+                  aria-hidden
+                  className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary-interactive"
+                >
+                  <Waypoints className="size-4.5" />
+                </span>
+                <div className="flex min-w-0 flex-col gap-0.5">
+                  <h2 className="text-xl font-semibold tracking-tight">{t("relatedTerms")}</h2>
+                  <p className="text-sm text-muted-foreground">{t("relatedLead")}</p>
+                </div>
+              </div>
               <ul className="flex flex-wrap gap-2">
                 {related.map((entry) => (
                   <li key={entry.termId}>
                     <Link
                       href={`${ROUTE_PATHS.glossary}/${entry.slug}`}
-                      className="inline-flex items-center rounded-md border px-3 py-1.5 text-sm transition-colors duration-(--duration-fast) hover:border-primary/30 hover:bg-primary/10 hover:text-primary-interactive"
+                      className="inline-flex items-center rounded-full border bg-background px-3.5 py-1.5 text-sm font-medium transition duration-(--duration-fast) hover:-translate-y-0.5 hover:border-primary/30 hover:bg-primary/10 hover:text-primary-interactive hover:shadow-sm"
                     >
                       {entry.term}
                     </Link>
                   </li>
                 ))}
               </ul>
-            </section>
+            </Reveal>
           )}
         </Container>
       </Section>

@@ -146,8 +146,14 @@ export function CourseShelf({ tracks, labels }: { tracks: ShelfTrack[]; labels: 
       {/* The toolbar, and the anchor the masthead's "Browse courses" scrolls
           to — landing on the controls rather than mid-grid means the reader
           arrives able to narrow, not just to scroll. `scroll-mt` clears the
-          sticky site header. */}
-      <Section id="courses" spacing="sm" className="scroll-mt-24">
+          sticky site header.
+
+          `section-flush-end`: the toolbar is chrome FOR the bands below it,
+          not a section beside them, and paying its own bottom rhythm on top of
+          the first band's top rhythm left the filters stranded in ~128px of
+          empty page (changes-22). The band's own padding is now the whole
+          gap. */}
+      <Section id="courses" spacing="sm" className="section-flush-end scroll-mt-24">
         <Container className="flex flex-col gap-4">
           <div className="flex flex-col gap-3 rounded-2xl border bg-card/60 p-4 shadow-sm backdrop-blur-sm sm:flex-row sm:items-center sm:gap-4">
             <div className="relative flex-1">
@@ -407,7 +413,10 @@ function ContinueBand({ tracks, labels }: { tracks: ShelfTrack[]; labels: ShelfL
   if (started.length === 0) return null;
 
   return (
-    <Section spacing="md">
+    // Flush at the bottom for the same reason the toolbar is (changes-22):
+    // the toolbar immediately below already opens with `section-sm`, and two
+    // paddings between a rail and the controls that filter it is one too many.
+    <Section spacing="md" className="section-flush-end">
       <Container className="flex flex-col gap-6">
         <SectionHeading
           title={t("progress.yourCoursesTitle")}

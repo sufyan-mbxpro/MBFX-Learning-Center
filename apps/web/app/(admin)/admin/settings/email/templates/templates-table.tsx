@@ -151,9 +151,7 @@ function ActiveSwitch({
         cancelLabel={labels.cancel}
         // Turning a template ON is not destructive; turning one off is.
         destructive={!next}
-        onConfirm={() =>
-          run(() => setEmailTemplateActiveAction({ key: row.key, isActive: next }))
-        }
+        onConfirm={() => run(() => setEmailTemplateActiveAction({ key: row.key, isActive: next }))}
       />
     </>
   );
@@ -266,7 +264,9 @@ export function EmailTemplatesTable({
         header: labels.updatedCol,
         meta: { label: labels.updatedCol },
         cell: ({ row }) => (
-          <span className="text-muted-foreground">{row.original.updatedAtLabel ?? labels.never}</span>
+          <span className="text-muted-foreground">
+            {row.original.updatedAtLabel ?? labels.never}
+          </span>
         ),
       },
       {

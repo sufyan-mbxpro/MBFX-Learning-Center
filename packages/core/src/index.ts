@@ -25,6 +25,7 @@ export * from "./lessons.ts";
 export * from "./public-courses.ts";
 export * from "./progress.ts";
 export * from "./lesson-feedback.ts";
+export * from "./quiz-links.ts";
 export * from "./quizzes.ts";
 export * from "./videos.ts";
 export * from "./learn-analytics.ts";
@@ -35,6 +36,7 @@ export * from "./search.ts";
 export * from "./media.ts";
 export * from "./brand-assets.ts";
 export * from "./email-admin.ts";
+export * from "./newsletter.ts";
 export * from "./cms/index.ts";
 
 export interface RecordAuditInput {

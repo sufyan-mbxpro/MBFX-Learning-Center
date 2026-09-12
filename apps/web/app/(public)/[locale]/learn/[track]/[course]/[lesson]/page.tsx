@@ -143,10 +143,16 @@ export default async function LessonPage({
       // the one piece of "progress" the server can state without a session:
       // this reader is, definitionally, on this page.
       state: lesson.id === view.id ? ("in-progress" as const) : undefined,
+      // A separate flag from the state above, because the island can turn
+      // OTHER lessons in-progress once it knows the learner's history, and
+      // exactly one row is the page they are on (ADR-082 #2).
+      isCurrent: lesson.id === view.id,
       isExternal: lesson.hasExternal,
       isOptional: !lesson.isRequired,
     })),
   }));
+
+  const lessonCount = sections.reduce((total, section) => total + section.lessons.length, 0);
 
   const openSectionIds = sections
     .filter((section) => section.lessons.some((lesson) => lesson.id === view.id))
@@ -166,9 +172,27 @@ export default async function LessonPage({
           {/* Sidebar from md; a Sheet below it (§9.3). Both render the SAME
             CurriculumWithProgress — see lesson-contents-sheet.tsx. */}
           <aside className="hidden md:sticky md:top-24 md:flex md:flex-col md:gap-3">
-            <p className="text-sm font-semibold">{t("lesson.contents")}</p>
-            <div className="max-h-(--height-scroll-panel) overflow-y-auto">
-              <CurriculumWithProgress sections={sections} defaultOpenSectionIds={openSectionIds} />
+            {/* The rail is a panel, not a heading with a list under it: a
+                titled header band, a rule, then the sections (changes-24).
+                Before this the title, the section names and the lesson names
+                were three weights of the same thing in one column, with no
+                edge anywhere to say where the contents began. */}
+            <div className="overflow-hidden rounded-xl border bg-card">
+              <div className="flex items-baseline justify-between gap-2 border-b bg-muted/40 px-3 py-2.5">
+                <p className="text-2xs font-semibold tracking-caps text-muted-foreground uppercase">
+                  {t("lesson.contents")}
+                </p>
+                <span className="text-2xs text-muted-foreground tabular-nums">
+                  {t("card.lessons", { count: lessonCount })}
+                </span>
+              </div>
+              <div className="max-h-(--height-scroll-panel) overflow-y-auto">
+                <CurriculumWithProgress
+                  sections={sections}
+                  variant="rail"
+                  defaultOpenSectionIds={openSectionIds}
+                />
+              </div>
             </div>
 
             <ProgressSignInCard />

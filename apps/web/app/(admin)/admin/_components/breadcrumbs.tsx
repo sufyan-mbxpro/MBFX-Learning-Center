@@ -23,6 +23,7 @@ const SEGMENT_KEYS: Record<string, string> = {
   users: "users",
   roles: "roles",
   employees: "employees",
+  newsletter: "newsletter",
   glossary: "glossary",
   settings: "settings",
   features: "features",

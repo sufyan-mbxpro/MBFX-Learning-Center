@@ -477,12 +477,21 @@ export function QuizEditor({
       <div className="flex min-w-0 flex-col gap-4">
         {/* The panel validates the fields before a transition that saves
             first, and stops with them named inline (ADR-077). */}
+        {/* From `initial`, NOT from `state` — the difference is the whole bug
+            (changes-22). `useServerAction` calls `router.refresh()` after a
+            transition, which re-renders this screen's server component and
+            hands this editor a fresh `initial`; `useState(initial)` keeps the
+            first snapshot forever, so a quiz moved to In review went on
+            showing "Draft" and the Draft-era buttons until a hard reload. The
+            other four editors on this panel read these five facts straight
+            from their props and were already correct. None of them is
+            editable here, so none of them belongs in editor state. */}
         <ContentStatusPanel
-          status={state.status}
-          legalTransitions={state.legalTransitions}
-          publishedAt={state.publishedAt}
-          scheduledFor={state.scheduledFor}
-          updatedAt={state.updatedAt}
+          status={initial.status}
+          legalTransitions={initial.legalTransitions}
+          publishedAt={initial.publishedAt}
+          scheduledFor={initial.scheduledFor}
+          updatedAt={initial.updatedAt}
           canPublish={canPublish}
           canSave={hasQuestions && canUpdate}
           validate={form.validate}

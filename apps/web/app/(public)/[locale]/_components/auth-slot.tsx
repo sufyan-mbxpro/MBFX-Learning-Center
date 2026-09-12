@@ -37,13 +37,13 @@ export function AuthSlot({ verifiedHref }: { verifiedHref: string }) {
             user?: { name?: string; email?: string; userType?: string; emailVerified?: boolean };
           } | null,
         ) => {
-        if (cancelled) return;
-        // A STAFF session renders as anonymous here. Staff sign in at
-        // /admin/sign-in and belong to the admin surface (ADR-052): putting
-        // "System Administrator" in the public header both advertises the
-        // portal the public site deliberately hides and hands a visitor an
-        // identity chip with nowhere to go. Display-only — the session is
-        // untouched, and /admin still recognizes it.
+          if (cancelled) return;
+          // A STAFF session renders as anonymous here. Staff sign in at
+          // /admin/sign-in and belong to the admin surface (ADR-052): putting
+          // "System Administrator" in the public header both advertises the
+          // portal the public site deliberately hides and hands a visitor an
+          // identity chip with nowhere to go. Display-only — the session is
+          // untouched, and /admin still recognizes it.
           setState(
             session?.user && session.user.userType !== "STAFF"
               ? {

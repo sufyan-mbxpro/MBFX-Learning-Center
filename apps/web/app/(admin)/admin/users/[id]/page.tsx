@@ -4,6 +4,7 @@ import { loadAssignableRoles, loadRoleMatrix, loadUserDetail } from "@repo/core"
 import { can, requirePermission } from "@repo/rbac";
 import { Badge } from "@repo/ui/components/badge";
 import { AdminPage, AdminSection } from "../../_components/admin-page.tsx";
+import { permissionGroupLabel } from "../../_components/permission-groups.ts";
 import { StatusBadge, USER_STATUS_TONE, statusTone } from "../../_components/status-badge.tsx";
 import {
   OverrideControls,
@@ -28,7 +29,17 @@ export default async function UserDetailPage({ params }: PageProps<"/admin/users
   ]);
   if (!user) notFound();
 
-  const allPermissionKeys = matrix.groups.flatMap((g) => g.permissions.map((p) => p.key));
+  // Card order, and each option labelled by its group and its human name
+  // (ADR-083). The group prefix is what makes the combobox's search input
+  // useful here: "courses" narrows to all ten course/lesson keys, which is how
+  // someone granting an override actually thinks about it.
+  const permissionOptions = matrix.groups.flatMap((group) => {
+    const groupLabel = permissionGroupLabel(t, group.groupName);
+    return group.permissions.map((permission) => ({
+      value: permission.key,
+      label: `${groupLabel} · ${permission.label}`,
+    }));
+  });
   const canUpdate = can(subject, "users.update");
   const canAssign = can(subject, "permissions.assign");
   const canResetPassword = can(subject, "users.password.reset");
@@ -140,7 +151,7 @@ export default async function UserDetailPage({ params }: PageProps<"/admin/users
             <OverrideControls
               userId={user.id}
               overrides={user.overrides}
-              permissionKeys={allPermissionKeys}
+              permissionOptions={permissionOptions}
               labels={{
                 addOverride: t("addOverride"),
                 reason: t("reason"),

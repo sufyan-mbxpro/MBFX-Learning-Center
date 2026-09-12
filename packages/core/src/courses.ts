@@ -9,12 +9,13 @@
 // goes through `transitionContentStatus`, which requires `courses.publish` on
 // top of whatever the action already required.
 import { revalidateTag } from "next/cache";
-import { ContentStatus, TranslationStatus, db, type Difficulty, type Prisma } from "@repo/db";
+import { type ContentStatus, TranslationStatus, db, type Difficulty, type Prisma } from "@repo/db";
 import type { Subject } from "@repo/rbac";
 import { isLearnTrack, isReservedCourseSlug } from "@repo/contracts";
 import type { CourseInput, CourseMetaInput, CreateCourseInput } from "@repo/contracts";
 import { syncReferences } from "./cms/references.ts";
 import { COURSE, RECOMMENDED, loadRelationTargets, replaceRelations } from "./content-relations.ts";
+import { publicLessonWhere } from "./public-courses.ts";
 import {
   CONTENT_TRANSITIONS,
   coursePath,
@@ -456,9 +457,28 @@ export async function reorderCourses(actor: Subject, ids: string[]): Promise<voi
 
 /**
  * Recomputes the denormalised published-lesson count (ADR-056 #2's sibling
- * concern on the content side). Called by the lesson services inside their
- * own transaction, which is what keeps it from drifting — it is deliberately
- * NOT a periodic repair job.
+ * concern on the content side). Called by the lesson and section services
+ * inside their own transaction, which is what keeps it from drifting — it is
+ * deliberately NOT a periodic repair job.
+ *
+ * **It counts what a reader can REACH, not what is merely published**
+ * (changes-22). It used to count `status: PUBLISHED` and nothing else, while
+ * the curriculum query filters on `publicLessonWhere()` AND
+ * `section.isPublished` — and `CourseSection.isPublished` defaults to false.
+ * So a course whose two lessons were published inside a section nobody had
+ * published read "2 lessons" in the header above a curriculum that said there
+ * were none. The same mismatch was quietly worse in `progress.ts`, whose
+ * numerator already used the reachable set against this denominator: a course
+ * with one unreachable lesson could never be completed, and the comment there
+ * asserting the two count the same thing was describing an intention rather
+ * than the code.
+ *
+ * The one thing this cannot track is time. A SCHEDULED lesson that falls due
+ * with no write behind it is reachable before this column knows — the count
+ * catches up on the next write to any lesson in the course. That window is
+ * bounded by the same `cacheLife` every learn reader already runs under
+ * (ADR-071: the query decides visibility, the sweep is bookkeeping), so it is
+ * a staleness of minutes in a number, never a wrong page.
  */
 export async function recomputeLessonCount(
   tx: Prisma.TransactionClient,
@@ -466,9 +486,8 @@ export async function recomputeLessonCount(
 ): Promise<void> {
   const lessonCount = await tx.lesson.count({
     where: {
-      deletedAt: null,
-      status: ContentStatus.PUBLISHED,
-      section: { courseId },
+      ...publicLessonWhere(),
+      section: { isPublished: true, courseId },
     },
   });
   await tx.course.update({ where: { id: courseId }, data: { lessonCount } });

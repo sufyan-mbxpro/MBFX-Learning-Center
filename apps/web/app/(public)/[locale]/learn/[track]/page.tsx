@@ -104,16 +104,20 @@ export default async function LearnTrackPage({ params }: PageProps<"/[locale]/le
         <CourseShelf tracks={tracks} labels={shelfLabels(t)} />
       )}
 
-      <CtaBand title={t("index.ctaTitle")} description={t("index.ctaDescription")}>
-        <Button
-          size="lg"
-          shape="pill"
-          variant="secondary"
-          render={<Link href={learnTrackGlossaryPath(track)} />}
-        >
-          {t("index.ctaAction")}
-        </Button>
-      </CtaBand>
+      {/* Inside a Section for the same reason the umbrella index is: bare, the
+          band shared an edge with the footer (changes-22). */}
+      <Section spacing="md">
+        <CtaBand title={t("index.ctaTitle")} description={t("index.ctaDescription")}>
+          <Button
+            size="lg"
+            shape="pill"
+            variant="secondary"
+            render={<Link href={learnTrackGlossaryPath(track)} />}
+          >
+            {t("index.ctaAction")}
+          </Button>
+        </CtaBand>
+      </Section>
     </>
   );
 }

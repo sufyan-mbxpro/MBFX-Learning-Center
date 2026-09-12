@@ -158,6 +158,7 @@ export default async function CourseEditPage({ params }: PageProps<"/admin/learn
       moveToSection: t("moveToSection"),
       reorderHint: t("reorderHint"),
       lessonsSuffix: t("lessonsSuffix"),
+      sectionHidden: t("sectionHidden"),
       minutesLabel: t("minutesLabel"),
       untitled: t("untitled"),
       edit: t("edit"),

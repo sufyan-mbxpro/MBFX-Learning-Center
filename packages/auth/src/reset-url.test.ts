@@ -52,7 +52,10 @@ describe("resetPasswordPath", () => {
       ["https://mbx.example/admin/", "the same with a trailing slash"],
       ["https://mbx.example", "the bare-origin fallback when the variable is unset"],
     ])("%s (%s) yields exactly one /admin segment", (admin) => {
-      const url = resetPasswordPath({ userType: "STAFF" }, "abc", { site: "https://mbx.example", admin });
+      const url = resetPasswordPath({ userType: "STAFF" }, "abc", {
+        site: "https://mbx.example",
+        admin,
+      });
       expect(url).toBe("https://mbx.example/admin/reset-password?token=abc");
       expect(url).not.toContain("/admin/admin");
     });

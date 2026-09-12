@@ -86,6 +86,21 @@ describe("picker chrome (ADR-067 §5)", () => {
     expect(source).toMatch(/browser\.recent\.length > 0 &&/);
   });
 
+  // Regression (changes-22): with a dozen recently-used assets the dialog
+  // itself scrolled sideways and the Upload button sat off the right edge of
+  // the modal. The strip is a row of 80px tiles that never wraps, so its
+  // min-content ran to ~1,140px inside a 5xl dialog — and its containers,
+  // being flex and grid items with `min-width: auto`, grew to fit it instead
+  // of letting the strip's own `overflow-x-auto` carry the overflow.
+  it("lets the recently-used strip scroll instead of widening the dialog", () => {
+    expect(source).toMatch(/<section className="flex min-w-0 flex-col gap-1.5">/);
+    expect(source).toContain('<div className="flex min-w-0 flex-col gap-3">');
+    // The wrapper the dialog's own grid lays out.
+    expect(source).toContain('<div className="min-w-0">');
+    // …and the strip still scrolls, which is the half that makes min-w-0 safe.
+    expect(source).toMatch(/<ul className="flex gap-2 overflow-x-auto pb-1">/);
+  });
+
   it("renders a DialogTitle AND a DialogDescription (code-style.md #11)", () => {
     expect(source).toContain("<DialogTitle>");
     expect(source).toContain("<DialogDescription>");

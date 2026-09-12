@@ -21,7 +21,7 @@ import {
   setOverrideAction,
   setUserStatusAction,
 } from "../../_actions/user-actions.ts";
-import { AdminCombobox } from "../../_components/combobox.tsx";
+import { AdminCombobox, type ComboboxOption } from "../../_components/combobox.tsx";
 import { useFieldErrors } from "../../_hooks/use-field-errors.ts";
 import { useServerAction } from "../../_hooks/use-server-action.ts";
 
@@ -223,12 +223,20 @@ export function RoleControls({
 export function OverrideControls({
   userId,
   overrides,
-  permissionKeys,
+  permissionOptions,
   labels,
 }: {
   userId: string;
   overrides: { permissionKey: string; effect: string; reason: string | null }[];
-  permissionKeys: string[];
+  /**
+   * Every permission, in the role editor's card order (ADR-083), each one
+   * labelled. It used to be a flat `string[]` of raw keys rendered as their
+   * own labels — an ADR-044 #5 violation, and unreadable besides: 75 dotted
+   * identifiers in one alphabetical list, with `analysis.*` and `courses.*`
+   * interleaved. The label carries the group so the search input can find a
+   * key by the screen it governs.
+   */
+  permissionOptions: ComboboxOption[];
   labels: {
     addOverride: string;
     reason: string;
@@ -295,7 +303,7 @@ export function OverrideControls({
             placeholder="—"
             value={permission}
             onValueChange={setPermission}
-            options={permissionKeys.map((key) => ({ value: key, label: key }))}
+            options={permissionOptions}
           />
           <FieldError>{form.error("permissionKey")}</FieldError>
         </Field>

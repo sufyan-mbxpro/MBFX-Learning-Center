@@ -13,7 +13,18 @@ export interface DashboardStatCardProps {
   value: number;
   /** Omit for counts with no meaningful trend (e.g. point-in-time totals). */
   previousValue?: number;
+  /** Reads AFTER the percentage ("vs previous period"), so it renders only with one. */
   trendLabel?: string;
+  /**
+   * A statement in its own right ("12 published this period"), rendered
+   * whether or not a percentage can be computed.
+   *
+   * The distinction is load-bearing: a previous period of 0 makes the
+   * percentage undefined (ADR-085's content cards on a young platform are
+   * all 0 → N), and dropping the whole meta line with it deleted the one
+   * number that block exists to state.
+   */
+  note?: string;
   accent?: "primary" | "success" | "info" | "warning";
 }
 
@@ -32,6 +43,7 @@ export function DashboardStatCard({
   value,
   previousValue,
   trendLabel,
+  note,
   accent = "primary",
 }: DashboardStatCardProps) {
   const trend =
@@ -68,7 +80,10 @@ export function DashboardStatCard({
               {trend}%
             </span>
             <span>{trendLabel}</span>
+            {note && <span>{note}</span>}
           </>
+        ) : note ? (
+          <span>{note}</span>
         ) : undefined
       }
     />

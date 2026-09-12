@@ -111,6 +111,7 @@ export interface CurriculumLabels {
   moveToSection: string;
   reorderHint: string;
   lessonsSuffix: string;
+  sectionHidden: string;
   minutesLabel: string;
   untitled: string;
   edit: string;
@@ -455,6 +456,17 @@ function SectionCard({
             <Badge variant={section.isPublished ? "outline" : "secondary"} className="text-xs">
               {section.lessons.length} {labels.lessonsSuffix}
             </Badge>
+            {/* Said out loud, not implied by a badge variant (changes-22).
+                A section that is not published hides every lesson under it
+                from the public curriculum however published those lessons
+                are, and the only sign of it used to be `secondary` instead
+                of `outline` on the badge beside it — which nobody read as
+                "none of this is live". */}
+            {!section.isPublished && (
+              <Badge variant="warning" className="text-xs">
+                {labels.sectionHidden}
+              </Badge>
+            )}
           </div>
           {section.description && (
             <p className="text-xs text-muted-foreground">{section.description}</p>

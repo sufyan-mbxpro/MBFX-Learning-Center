@@ -18,7 +18,6 @@
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
-    "@repo/rbac": "workspace:*",
     "@repo/typescript-config": "workspace:*",
     "@testcontainers/mariadb": "^12.1.0",
     "@types/node": "^24.13.3",

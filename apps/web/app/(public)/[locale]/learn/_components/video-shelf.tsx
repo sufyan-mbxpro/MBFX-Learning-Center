@@ -40,19 +40,37 @@ export function VideoShelf({
   basePath,
   /** The category slug this view is scoped to, or null on the index. */
   activeCategory = null,
+  tone = "default",
+  anchorId = "videos",
+  header,
 }: {
   topics: VideoTopicCardView[];
   categories: VideoCategoryView[];
   /** `/learn/<track>/videos` — chips and cards are both built from it. */
   basePath: string;
   activeCategory?: string | null;
+  /** The shelf paints its own band. A caller that wants a tinted one says so
+   * here rather than wrapping this in a second Section: nesting them left the
+   * inner `bg-background` painting over the outer tint, so the heading sat on
+   * the tint and the cards it introduced sat on white (changes-22). */
+  tone?: React.ComponentProps<typeof Section>["tone"];
+  /** `null` where a second shelf on the same page would duplicate `#videos`. */
+  anchorId?: string | null;
+  /** Rendered above the chips, inside the shelf's own Container and band. */
+  header?: React.ReactNode;
 }) {
   const t = useTranslations("learn");
   const labels = videoCardLabels(t);
 
   return (
-    <Section id="videos" spacing="md" className="scroll-mt-24">
+    <Section
+      {...(anchorId ? { id: anchorId } : {})}
+      spacing="md"
+      tone={tone}
+      className="scroll-mt-24"
+    >
       <Container className="flex flex-col gap-6">
+        {header}
         {/* One category is not a filter, it is a label — a chip row that can
             only ever produce the set already on screen is a dead control.
             Same rule `QuizShelf` applies to its own chips. */}

@@ -6,6 +6,15 @@
 // one package legally depending on settings + rbac both (architecture.md
 // #8); a settings devDependency on core created a turbo task-graph cycle
 // once core#build started depending on settings#build (Module 08).
+//
+// The permission-boundary test moved there too, in changes-21 F9, and for a
+// sharper version of the same reason: the devDependency on @repo/rbac that it
+// needed CLOSED a package cycle once ADR-078 added `auth → email → settings`
+// (`rbac → auth → email → settings → rbac`), and turbo refuses a cyclic task
+// graph — so root `pnpm lint` and `pnpm build` stopped working at graph
+// construction, not at any one package. Every edge is individually legal;
+// the cycle is not. This package now depends on @repo/rbac neither at runtime
+// nor in dev.
 import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
@@ -13,7 +22,6 @@ import { MariaDbContainer, type StartedMariaDbContainer } from "@testcontainers/
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { db as DbClient } from "@repo/db";
 import type * as SettingsModule from "./index.ts";
-import type * as RbacModule from "@repo/rbac";
 
 const dbPackageRoot = fileURLToPath(new URL("../../db", import.meta.url));
 const prismaCli = createRequire(import.meta.url).resolve("prisma/build/index.js");
@@ -21,7 +29,6 @@ const prismaCli = createRequire(import.meta.url).resolve("prisma/build/index.js"
 let container: StartedMariaDbContainer;
 let db: typeof DbClient;
 let settings: typeof SettingsModule;
-let rbac: typeof RbacModule;
 
 beforeAll(async () => {
   container = await new MariaDbContainer("mariadb:11.4")
@@ -41,7 +48,6 @@ beforeAll(async () => {
   process.env.DATABASE_URL = url;
   db = (await import("@repo/db")).db;
   settings = await import("./index.ts");
-  rbac = await import("@repo/rbac");
 }, 120_000);
 
 afterEach(() => {
@@ -246,22 +252,6 @@ describe("updateSetting — write → read-after-invalidate consistency", () => 
     ).rejects.toThrow();
 
     await expect(fresh.loadSetting("header.sticky")).resolves.toBe(before);
-  });
-});
-
-describe("guarded write — permission boundary", () => {
-  it("a learner subject is denied settings.update — the boundary a Server Action must enforce before ever calling updateSetting", async () => {
-    const user = await db.user.create({
-      data: {
-        id: crypto.randomUUID(),
-        email: `learner-${Date.now()}@example.com`,
-        name: "Learner",
-        status: "ACTIVE",
-        userType: "LEARNER",
-      },
-    });
-    const subject = await rbac.loadSubject(user.id);
-    expect(rbac.can(subject, "settings.update")).toBe(false);
   });
 });
 

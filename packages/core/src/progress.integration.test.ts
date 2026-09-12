@@ -331,6 +331,170 @@ describe("course completion", () => {
   });
 });
 
+// ─── The final assessment (ADR-084 #2, #8) ───────────────────
+
+/**
+ * A publishable quiz with one question, and one passing attempt on demand.
+ *
+ * Built through Prisma for the reason `learn.integration.test.ts`'s twin is:
+ * the states under test are the ones an editor leaves behind, and `saveQuiz`
+ * exists to prevent most of them.
+ */
+async function makeQuiz(options?: { published?: boolean; questions?: number }): Promise<string> {
+  seq += 1;
+  const quiz = await db.quiz.create({
+    data: {
+      track: "forex",
+      passingScore: 70,
+      status: options?.published === false ? ContentStatus.DRAFT : ContentStatus.PUBLISHED,
+      publishedAt: options?.published === false ? null : new Date(),
+      translations: { create: { locale: "en", title: `Quiz ${seq}`, slug: `p-quiz-${seq}` } },
+    },
+  });
+  for (let index = 0; index < (options?.questions ?? 1); index += 1) {
+    await db.quizQuestion.create({
+      data: {
+        quizId: quiz.id,
+        sortOrder: index,
+        correctAnswer: 0,
+        translations: { create: { locale: "en", prompt: `Q${index}`, options: ["a", "b"] } },
+      },
+    });
+  }
+  return quiz.id;
+}
+
+async function recordAttempt(
+  userId: string,
+  quizId: string,
+  percentage: number,
+  passed: boolean,
+  attemptNumber: number,
+): Promise<void> {
+  await db.quizAttempt.create({
+    data: {
+      quizId,
+      userId,
+      attemptNumber,
+      score: percentage,
+      percentage,
+      passed,
+      answers: {},
+      grades: {},
+      completedAt: new Date(),
+    },
+  });
+}
+
+describe("requiredOutstanding — what the assessment card unlocks on", () => {
+  // The reason this is a counted field rather than `completed >= total`:
+  // both counters include the optional lesson, so the arithmetic version
+  // never reaches zero on this course and the card never unlocks.
+  it("ignores optional lessons", async () => {
+    const { courseId, lessonIds } = await makeCourse({ lessons: 3, optionalFrom: 2 });
+
+    const start = await progress.getCourseProgress(alice, courseId);
+    expect(start.requiredOutstanding).toBe(2);
+
+    await progress.markLessonComplete(alice, lessonIds[0]!);
+    await progress.markLessonComplete(alice, lessonIds[1]!);
+
+    const done = await progress.getCourseProgress(alice, courseId);
+    expect(done.requiredOutstanding).toBe(0);
+    expect(done.lessonsCompleted).toBeLessThan(done.lessonsTotal);
+  });
+
+  it("counts back up when a new required lesson is published", async () => {
+    const { courseId, lessonIds } = await makeCourse({ lessons: 1 });
+    await progress.markLessonComplete(alice, lessonIds[0]!);
+    expect((await progress.getCourseProgress(alice, courseId)).requiredOutstanding).toBe(0);
+
+    const section = await db.courseSection.findFirstOrThrow({
+      where: { courseId },
+      select: { id: true },
+    });
+    const extra = await lessons.createLesson(editor, {
+      sectionId: section.id,
+      title: "Late arrival",
+    });
+    await lessons.saveLesson(editor, {
+      lessonId: extra,
+      meta: {},
+      translation: { locale: "en", title: "Late arrival", content: "<p>x</p>" },
+      attachments: [],
+    });
+    await db.lesson.update({
+      where: { id: extra },
+      data: { status: ContentStatus.PUBLISHED, publishedAt: new Date() },
+    });
+
+    expect((await progress.getCourseProgress(alice, courseId)).requiredOutstanding).toBe(1);
+  });
+});
+
+describe("the final quiz and completion", () => {
+  it("holds a course back until its final quiz is passed, then reports the score", async () => {
+    const { courseId, lessonIds } = await makeCourse({ lessons: 1 });
+    const quizId = await makeQuiz();
+    await db.course.update({ where: { id: courseId }, data: { finalQuizId: quizId } });
+
+    const afterLessons = await progress.markLessonComplete(alice, lessonIds[0]!);
+    expect(afterLessons.requiredOutstanding).toBe(0);
+    expect(afterLessons.isCompleted).toBe(false);
+    expect(afterLessons.finalQuiz).toEqual({ passed: false, bestPercentage: 0, attempts: 0 });
+
+    // Two attempts: passed on the first, worse on the second. "Passed" is ANY
+    // passing attempt, and the best score is the best of them.
+    await recordAttempt(alice, quizId, 90, true, 1);
+    await recordAttempt(alice, quizId, 40, false, 2);
+    const view = await progress.touchLesson(alice, lessonIds[0]!);
+
+    expect(view.isCompleted).toBe(true);
+    expect(view.finalQuiz).toEqual({ passed: true, bestPercentage: 90, attempts: 2 });
+  });
+
+  // ADR-084 #8. Before this, un-publishing a final quiz left every enrolled
+  // learner's course permanently incompletable, with nothing on screen saying
+  // why — the requirement survived, the way to satisfy it did not.
+  it("stops blocking when the final quiz is no longer reachable", async () => {
+    const { courseId, lessonIds } = await makeCourse({ lessons: 1 });
+    const quizId = await makeQuiz();
+    await db.course.update({ where: { id: courseId }, data: { finalQuizId: quizId } });
+
+    await progress.markLessonComplete(bob, lessonIds[0]!);
+    expect((await progress.getCourseProgress(bob, courseId)).isCompleted).toBe(false);
+
+    await db.quiz.update({ where: { id: quizId }, data: { status: ContentStatus.DRAFT } });
+    const unblocked = await progress.touchLesson(bob, lessonIds[0]!);
+
+    expect(unblocked.isCompleted).toBe(true);
+    // And the card is absent rather than locked: the same null that hides it
+    // is the null that stopped it blocking.
+    expect(unblocked.finalQuiz).toBeNull();
+
+    // Re-publishing it puts the requirement back. That is correct — the
+    // course genuinely is not finished any more — and it is the same
+    // behaviour as publishing a new required lesson.
+    await db.quiz.update({
+      where: { id: quizId },
+      data: { status: ContentStatus.PUBLISHED, publishedAt: new Date() },
+    });
+    const reblocked = await progress.touchLesson(bob, lessonIds[0]!);
+    expect(reblocked.isCompleted).toBe(false);
+    expect(reblocked.finalQuiz).toEqual({ passed: false, bestPercentage: 0, attempts: 0 });
+  });
+
+  it("treats a questionless final quiz as unreachable", async () => {
+    const { courseId, lessonIds } = await makeCourse({ lessons: 1 });
+    const quizId = await makeQuiz({ questions: 0 });
+    await db.course.update({ where: { id: courseId }, data: { finalQuizId: quizId } });
+
+    const view = await progress.markLessonComplete(alice, lessonIds[0]!);
+    expect(view.isCompleted).toBe(true);
+    expect(view.finalQuiz).toBeNull();
+  });
+});
+
 // ─── Scoping and visibility (ADR-056 #1, security.md #7) ─────
 
 describe("scoping", () => {

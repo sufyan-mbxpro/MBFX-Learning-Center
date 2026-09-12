@@ -59,3 +59,13 @@ export {
   isSuperAdminOnlyPermission,
   type SuperAdminOnlyPermission,
 } from "./role-exclusions.ts";
+
+// The role editor's permission cards, in order (ADR-083). Read by
+// `prisma/seed.ts` when it assigns each permission a group, and by
+// @repo/core's `loadRoleMatrix()` when it orders them for the screen.
+export {
+  PERMISSION_GROUPS,
+  CONTENT_LIFECYCLE_GROUPS,
+  permissionGroupOrder,
+  type PermissionGroupName,
+} from "./permission-groups.ts";

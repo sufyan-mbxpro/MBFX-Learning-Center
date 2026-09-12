@@ -266,9 +266,9 @@ describe("switching a template off", () => {
   });
 
   it("refuses a key the registry does not declare", async () => {
-    await expect(service.setEmailTemplateActive(actor, "auth.not_a_template", false)).rejects.toThrow(
-      /not a template/,
-    );
+    await expect(
+      service.setEmailTemplateActive(actor, "auth.not_a_template", false),
+    ).rejects.toThrow(/not a template/);
   });
 });
 

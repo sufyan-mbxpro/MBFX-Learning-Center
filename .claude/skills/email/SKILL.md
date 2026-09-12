@@ -19,6 +19,13 @@ packages/db/src/email-template-defaults.ts   # the starting CONTENT (seed + rese
 packages/core/src/email-admin.ts             # the ADMIN's door: transport, templates, log
 apps/web/app/(admin)/admin/settings/email/   # the four screens
 apps/web/app/(admin)/admin/api/email/preview # the isolated preview route
+
+packages/core/src/newsletter.ts               # double opt-in + the admin reads (ADR-080)
+apps/web/app/(public)/[locale]/_actions/newsletter.ts   # the ONE anonymous mutation
+apps/web/app/(public)/[locale]/newsletter/    # confirm + unsubscribe, both POST-only
+apps/web/app/api/newsletter/unsubscribe/      # RFC 8058 one-click (POST, no GET export)
+apps/web/app/api/cron/housekeeping/           # the 90-day + 7-day retention sweeps
+apps/web/app/(admin)/admin/newsletter/        # the subscriber list
 ```
 
 `auth → email` and `core → email` — email sits BELOW both senders, because
@@ -56,8 +63,25 @@ service; `@repo/email` stays the sending layer.
    `seed.ts`, because "Reset to default" writes the same five bodies the seed
    does. `check:email-templates` scans that file against the registry.
 10. **Anonymous public mutation** (newsletter signup) needs the full stack:
-   flag + schema + honeypot + per-IP limit + per-email limit. Nothing else in
-   the repo may write without a subject.
+    flag + schema + honeypot + per-IP limit + per-email limit. Nothing else in
+    the repo may write without a subject. All five are asserted separately by
+    `app/(public)/[locale]/_actions/newsletter.test.ts` — remove one and
+    exactly one test goes red.
+11. **A GET never confirms or unsubscribes** (ADR-080 #4). Mail scanners fetch
+    every link in a message. `/newsletter/confirm` and
+    `/newsletter/unsubscribe` are static shells whose island POSTs, and
+    `/api/newsletter/unsubscribe` exports **no GET at all** — a GET there
+    answers 405, which is the assertion worth keeping.
+12. **Both newsletter tokens are stored HASHED**, and they expire differently:
+    confirm is single-use and 48h, unsubscribe is long-lived because it has to
+    keep working in a message sent months ago. `subscribe()` answers
+    identically for a new, pending, active and unsubscribed address — the form
+    must not become a membership oracle.
+13. **No route-level `export const dynamic`.** It is incompatible with
+    `cacheComponents` (ADR-004) and Next refuses to COMPILE the file, so the
+    route answers 500 to every caller. That is how `/api/cron/publish-due`
+    was broken between ADR-071 and changes-21 F9. A route handler reading env
+    and headers is dynamic already.
 
 ## Adding a template
 
@@ -89,5 +113,10 @@ the database. Floors: 80% for the package, 90% for `render`, `sanitize` and
       preview, test send, delivery log
 - [x] F6 reset/forgot screens on both surfaces, proxy allowlist,
       verification nudge
-- [ ] F7 newsletter: model, double opt-in, public action, admin list, export
-- [ ] F9 gate + DEVLOG
+- [x] F7 newsletter: model, double opt-in, public action, admin list, export
+- [x] F9 gate + DEVLOG
+- [ ] Owed to Module 14: E2E for the four new screens, axe on the two new
+      public routes, and a Mailpit-backed journey (signup → confirm →
+      unsubscribe). The Testcontainers suites could not run on the authoring
+      machine (no Docker socket from that shell) — they are written, not yet
+      executed.

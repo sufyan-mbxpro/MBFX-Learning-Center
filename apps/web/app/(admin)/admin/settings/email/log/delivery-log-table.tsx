@@ -112,7 +112,9 @@ export function DeliveryLogTable({
         meta: { label: labels.timeCol },
         enableHiding: false,
         cell: ({ row }) => (
-          <span className="whitespace-nowrap text-muted-foreground">{row.original.sentAtLabel}</span>
+          <span className="whitespace-nowrap text-muted-foreground">
+            {row.original.sentAtLabel}
+          </span>
         ),
       },
       {

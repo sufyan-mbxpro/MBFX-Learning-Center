@@ -47,9 +47,14 @@ export function LessonContentsSheet({
           <SheetHeader>
             <SheetTitle>{t("lesson.contentsAria")}</SheetTitle>
           </SheetHeader>
+          {/* `rail`, like the desktop sidebar: the Sheet is 24rem at its
+              widest, which is nearer the rail than the article column, and the
+              two surfaces showing the same list differently would be the
+              disagreement this component exists to prevent (ADR-082 #2). */}
           <div className="min-h-0 overflow-y-auto">
             <CurriculumWithProgress
               sections={sections}
+              variant="rail"
               defaultOpenSectionIds={defaultOpenSectionIds}
             />
           </div>

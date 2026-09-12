@@ -86,7 +86,11 @@ export function AdminResetPasswordForm({
         <p role="alert" className="text-sm text-destructive-interactive">
           {failure === "missingToken" ? labels.missingToken : labels.invalidToken}
         </p>
-        <Button variant="outline" className="w-full" render={<Link href="/admin/forgot-password" />}>
+        <Button
+          variant="outline"
+          className="w-full"
+          render={<Link href="/admin/forgot-password" />}
+        >
           {labels.requestAnother}
         </Button>
       </div>

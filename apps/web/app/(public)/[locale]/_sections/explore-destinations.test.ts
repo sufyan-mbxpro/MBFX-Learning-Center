@@ -1,22 +1,23 @@
 // Explore-carousel registry tests.
 //
 // `status` is the one field in this registry that no type can check: it is a
-// claim ABOUT THE FILESYSTEM — "a page exists behind this card" — written by
-// hand in a file that has no reason to change when a route lands. It went
-// stale exactly that way. `/learn` shipped with changes-11 Phase 4 and the
-// card stayed `soon` until 2026-09-11, so the homepage spent two days
-// refusing to link to a live page while advertising it as coming soon.
+// claim ABOUT THE FILESYSTEM, written by hand in a file that has no reason to
+// change when a route lands. It went stale exactly that way. `/learn` shipped
+// with changes-11 Phase 4 and the card stayed `soon` until 2026-09-11, so the
+// homepage spent two days refusing to link to a live page while advertising it
+// as coming soon.
 //
-// So this test resolves each destination's route key to the page file Next.js
-// would serve and asserts the claim both ways: a `live` card must have a page,
-// and a `soon` card must NOT. The second half is the one that catches the
-// staleness — the first would have passed throughout the bug.
+// changes-22 changed what the claim IS, so it changed what this checks.
+// `/tools` and `/markets` have real routes now, rendering the shared
+// `ComingSoon` page, and every card links. The two halves of the invariant:
 //
-// The catch-all is deliberately not counted. `app/(public)/[locale]/[...slug]`
-// answers every unmatched path, finds no published CMS page and 404s, which
-// is the 404 the `soon` tile exists to avoid; treating it as "a page exists"
-// would make every card pass forever.
-import { existsSync } from "node:fs";
+//   * EVERY destination has a page file. Nothing in the carousel may point at
+//     the `[...slug]` catch-all, which answers an unmatched path with the
+//     site's 404 — the thing this registry exists to prevent.
+//   * `soon` ⟺ that page file renders `ComingSoon`. Read from the route's
+//     own source, so building a section and forgetting to flip `status` fails
+//     here rather than leaving the card apologising for a page that shipped.
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { isRouteKey, ROUTE_PATHS } from "@repo/contracts";
@@ -50,16 +51,23 @@ describe("EXPLORE_DESTINATIONS — the registry names only things that exist", (
 describe("EXPLORE_DESTINATIONS — `status` agrees with the filesystem", () => {
   for (const destination of EXPLORE_DESTINATIONS) {
     const href = destinationHref(destination);
-    const hasPage = existsSync(pageFileFor(href));
+    const file = pageFileFor(href);
+    const hasPage = existsSync(file);
+    // A route that renders the shared coming-soon page is the filesystem's
+    // own statement that the section is not built yet.
+    const isComingSoon = hasPage && readFileSync(file, "utf8").includes("<ComingSoon ");
 
-    it(`${destination.key} is "${destination.status}" and ${hasPage ? "has" : "has no"} page at ${href}`, () => {
-      // Written as one assertion on the pair rather than two branches: the
-      // failure message then names the destination, its claim and the truth,
-      // which is everything needed to fix it.
-      expect({ key: destination.key, status: destination.status, hasPage }).toEqual({
+    it(`${destination.key} has a page at ${href}`, () => {
+      expect({ key: destination.key, hasPage }).toEqual({ key: destination.key, hasPage: true });
+    });
+
+    it(`${destination.key} is "${destination.status}" and its route ${isComingSoon ? "renders" : "does not render"} ComingSoon`, () => {
+      // One assertion on the pair rather than two branches: the failure
+      // message then names the destination, its claim and the truth, which is
+      // everything needed to fix it.
+      expect({ key: destination.key, status: destination.status }).toEqual({
         key: destination.key,
-        status: hasPage ? "live" : "soon",
-        hasPage,
+        status: isComingSoon ? "soon" : "live",
       });
     });
   }

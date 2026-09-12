@@ -21,12 +21,7 @@ import { Reveal } from "@repo/ui/components/reveal";
 import { Section } from "@repo/ui/components/section";
 import { ArticleCards } from "../_components/article-list.tsx";
 import { ArticleSidebar } from "../_components/article-sidebar.tsx";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@repo/ui/components/accordion";
+import { FaqPanel } from "@repo/ui/components/faq-panel";
 import { RichText } from "@repo/ui/components/rich-text";
 import { ListingHeader } from "../_components/listing-header.tsx";
 import { ShareRow } from "../_components/share-row.tsx";
@@ -272,31 +267,37 @@ export default async function ArticlePage({ params }: PageProps<"/[locale]/news/
                 into the FAQPage JSON-LD above. Answers are sanitized on save
                 (ADR-009), same as the body — this renders already-clean HTML. */}
             {view.faqItems.length > 0 && (
-              <Reveal variant="up" className="flex flex-col gap-3 border-t pt-6">
-                <h2 className="text-xl font-semibold">{t("news.faqTitle")}</h2>
-                <Accordion>
-                  {view.faqItems.map((item, i) => (
-                    // Authored rows have no stable id on the public view;
-                    // order is their identity, as in @repo/blocks' faq block.
-                    <AccordionItem key={i} value={"faq-" + i}>
-                      <AccordionTrigger>{item.question}</AccordionTrigger>
-                      <AccordionContent>
-                        <div
-                          className="flex flex-col gap-2 leading-relaxed [&_a]:text-primary-interactive [&_a]:underline [&_ol]:list-decimal [&_ol]:ps-5 [&_ul]:list-disc [&_ul]:ps-5"
-                          dangerouslySetInnerHTML={{ __html: item.answer }}
-                        />
-                      </AccordionContent>
-                    </AccordionItem>
-                  ))}
-                </Accordion>
+              /* Its own SURFACE, not another block of prose under a rule
+                 (changes-22). The FAQ answers questions the article did not
+                 set out to answer, and on the same background as the body it
+                 read as more article — the accordion's triggers were the only
+                 sign that anything had changed.
+
+                 That treatment moved into `FaqPanel` when the glossary term
+                 page turned out to carry the identical block, unstyled, and
+                 the owner reported the same thing twice. One component, so a
+                 third detail page cannot invent a fourth shape. `format`
+                 defaults to `"html"` — an article's answers are sanitized
+                 rich text (ADR-009), the same as its body. */
+              <Reveal variant="up">
+                <FaqPanel
+                  title={t("news.faqTitle")}
+                  lead={t("news.faqLead")}
+                  items={view.faqItems}
+                />
               </Reveal>
             )}
 
-            {/* Tags + share always render together as the body's closing
-                row — share doesn't depend on tags existing. */}
+            {/* Tags + share still close the body together — share doesn't
+                depend on tags existing — but they are two ROWS with a rule
+                between them now (changes-22). They had been one stack of
+                identically-styled chips in which half navigated to an archive
+                and half opened a share window; the tags keep the chip shape
+                because they are links to pages, and the share controls became
+                round tinted buttons because they are controls. */}
             <Reveal variant="up" className="flex flex-col gap-4 border-t pt-6">
               {view.tags.length > 0 && (
-                <ul className="flex flex-wrap gap-2">
+                <ul className="flex flex-wrap items-center gap-2 border-b pb-4">
                   {view.tags.map((tag) => (
                     <li key={tag.slug}>
                       <Link

@@ -146,7 +146,6 @@ export default async function GlossaryTopicPage({
 
       <GlossaryTabs
         ariaLabel={t("browseLabel")}
-        current={GLOSSARY_TOPICS_PATH}
         items={[
           { href: GLOSSARY_PATH, label: t("browseAtoZ") },
           { href: GLOSSARY_TOPICS_PATH, label: t("browseTopics") },

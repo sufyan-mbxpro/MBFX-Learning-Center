@@ -269,7 +269,11 @@
     --grid-2-1: minmax(0, 2fr) minmax(0, 1fr);
     --grid-3-2: minmax(0, 3fr) minmax(0, 2fr);
     --grid-intro-main: minmax(0, 24rem) 1fr;
-    --grid-rail-main: minmax(0, 16rem) minmax(0, 1fr);
+    /* 18rem, not 16: at 16 the lesson rail's title column came out ~78px
+       after the marker and the panel padding, so a lesson title wrapped one
+       word per line (changes-24). Read only by the lesson page and its
+       skeleton, which is why widening it is a one-line change. */
+    --grid-rail-main: minmax(0, 18rem) minmax(0, 1fr);
     --grid-menu-main: minmax(0, 14rem) 1fr;
     --grid-label-value: max-content 1fr;
     --grid-fill-auto: 1fr auto;
@@ -444,6 +448,27 @@
   }
   .section-lg {
     padding-block: var(--section-space-lg);
+  }
+
+  /* A section that hands one of its edges to the section next to it
+     (changes-22).
+
+     Two stacked sections each pay their own rhythm, which is right when they
+     are two things to read and wrong when one is CHROME for the other: the
+     /learn toolbar sat in its own `section-sm` between a `section-md` band
+     above and a `section-md` band below, so the filters floated in ~128px of
+     nothing at each end. These collapse the shared edge to zero and let the
+     neighbour's padding be the whole gap.
+
+     Declared AFTER the three rhythm classes on purpose. They set
+     `padding-block`, the shorthand that writes both longhands, and these set
+     one longhand each — equal specificity, so source order is what decides,
+     and source order here is not an accident to be tidied away. */
+  .section-flush-end {
+    padding-block-end: 0;
+  }
+  .section-flush-start {
+    padding-block-start: 0;
   }
 
   /* == Public design system: hover effects ======================= */

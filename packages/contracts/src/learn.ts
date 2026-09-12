@@ -106,6 +106,23 @@ export function learnTrackQuizzesPath(track: LearnTrackKey): string {
   return `${learnTrackPath(track)}/quizzes`;
 }
 
+/**
+ * `/learn/<track>/quizzes/<slug>` — ONE quiz.
+ *
+ * **The only way a surface outside the quiz index builds a quiz href**
+ * (ADR-084 #1). Three of them do now — a course's final assessment, a
+ * `QUIZ_PASS` lesson, and the lesson pager's forward step — and all three are
+ * reading a quiz that belongs to a COURSE, whose track may not be the quiz's.
+ * `Quiz.track` is required and independent (ADR-065 §3), so a href built from
+ * the course's track 404s on a forex course pointing at a crypto quiz. Taking
+ * the track as an argument makes that impossible to get wrong silently, and
+ * `learn/quiz-links.test.ts` fails any call site that goes back to a template
+ * literal.
+ */
+export function quizLinkPath(track: LearnTrackKey, slug: string): string {
+  return `${learnTrackQuizzesPath(track)}/${slug}`;
+}
+
 /** `/learn/<track>/glossary` — the track's A–Z view onto the shared glossary. */
 export function learnTrackGlossaryPath(track: LearnTrackKey): string {
   return `${learnTrackPath(track)}/glossary`;
@@ -459,6 +476,33 @@ export interface CourseProgressView {
   /** Every REQUIRED lesson done (ADR-056 #7). Phase 6 adds the quiz conjunct. */
   isCompleted: boolean;
   completedAt: string | null;
+  /**
+   * How many BLOCKING lessons are still outstanding — required, published,
+   * and not already satisfied (ADR-084 #2). Zero is what unlocks the final
+   * assessment card.
+   *
+   * It cannot be derived from the two counters above: `lessonsCompleted` and
+   * `lessonsTotal` both count optional lessons, so `completed >= total` is
+   * false forever on a course with one optional lesson. This is computed from
+   * the same `blockingLessonWhere()` predicate `recomputeCourseCompletion`
+   * blocks on, so the card and the completion rule cannot disagree.
+   */
+  requiredOutstanding: number;
+  /**
+   * The course's final assessment, as this learner stands on it. `null` when
+   * the course has no final quiz OR its quiz is not publicly reachable — the
+   * same two cases in which `CourseView.finalQuiz` is null and in which the
+   * quiz stops blocking completion (ADR-084 #8), so one answer covers the
+   * card, the lock and the rule.
+   *
+   * `attempts: 0` means the quiz exists and has never been finished.
+   */
+  finalQuiz: {
+    passed: boolean;
+    /** Best completed attempt, 0-100. Zero until one is finished. */
+    bestPercentage: number;
+    attempts: number;
+  } | null;
   /** Drives "Continue learning" — the island maps it to an href it already has. */
   lastLessonId: string | null;
   /** Only lessons the learner has touched; everything else is not-started. */
@@ -705,6 +749,33 @@ export interface QuizView {
   totalPoints: number;
   questions: QuizQuestionView[];
   updatedAt: string;
+}
+
+/**
+ * A quiz as a piece of CONTENT pointed at from somewhere else — a course's
+ * final assessment, or the quiz a `QUIZ_PASS` lesson is completed by
+ * (ADR-084 #1).
+ *
+ * It rides in the CACHED loaders (`CourseView`, `LessonView`), not in the
+ * progress island's payload: a per-learner response carries counters and ids
+ * and no content (ADR-056 #2), so a title and a slug in there would be
+ * content in an uncacheable response — and the island is deliberately never
+ * given slugs.
+ *
+ * `track` is the QUIZ's own, which is why it is here at all. Everything a
+ * card needs to say what the assessment IS, and nothing about how anyone has
+ * done on it. A question COUNT, never the questions: what a learner may see
+ * of a question is `guardQuizRequest`'s business.
+ */
+export interface QuizLinkView {
+  id: string;
+  slug: string;
+  track: LearnTrackKey;
+  title: string;
+  questionCount: number;
+  passingScore: number;
+  /** Null means unlimited, which is the default (D24). */
+  maxAttempts: number | null;
 }
 
 /** The index card at /learn/<track>/quizzes — no questions, so the list stays small. */

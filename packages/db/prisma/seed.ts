@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { hash } from "@node-rs/argon2";
 import type { PrismaClient } from "../src/generated/client/client.ts";
 import { EMAIL_TEMPLATE_DEFAULTS } from "../src/email-template-defaults.ts";
+import { CONTENT_LIFECYCLE_GROUPS } from "../src/permission-groups.ts";
 import { isSuperAdminOnlyPermission } from "../src/role-exclusions.ts";
 import defaultThemeTokens from "./default-theme-tokens.json" with { type: "json" };
 import homePageLayout from "./home-page-layout.json" with { type: "json" };
@@ -32,52 +33,78 @@ const HOME_PAGE_LAYOUT = homePageLayout;
 // ─────────────────────────────────────────────────────────────
 
 const PERMISSIONS = [
-  // Content
-  ["content", "lessons.view", "View lessons"],
-  ["content", "lessons.create", "Create lessons"],
-  ["content", "lessons.update", "Edit lessons"],
-  ["content", "lessons.delete", "Delete lessons"],
-  ["content", "lessons.publish", "Publish lessons"],
-  ["content", "courses.view", "View courses"],
-  ["content", "courses.create", "Create courses"],
-  ["content", "courses.update", "Edit courses"],
-  ["content", "courses.delete", "Delete courses"],
-  ["content", "courses.publish", "Publish courses"],
-  ["content", "glossary.view", "View glossary"],
-  ["content", "glossary.create", "Create glossary terms"],
-  ["content", "glossary.update", "Edit glossary terms"],
-  ["content", "glossary.delete", "Delete glossary terms"],
-  ["content", "glossary.publish", "Publish glossary terms"],
-  ["content", "analysis.view", "View analysis"],
-  ["content", "analysis.create", "Create analysis"],
-  ["content", "analysis.update", "Edit analysis"],
-  ["content", "analysis.delete", "Delete analysis"],
-  ["content", "analysis.publish", "Publish analysis"],
-  ["content", "news.manage", "Manage news"],
-  ["content", "media.view", "View the media library"],
-  ["content", "media.upload", "Upload media"],
-  ["content", "media.update", "Edit media metadata, replace files"],
-  ["content", "media.delete", "Delete media"],
-  ["content", "comments.moderate", "Moderate comments"],
+  // Learning — /admin/learn/* (courses, lessons, quizzes, videos).
+  // Quizzes (ADR-058 #8) and videos (ADR-068 §3) are gated on the LESSON keys
+  // rather than groups of their own, which is why this card is "Courses &
+  // lessons" and covers four screens.
+  ["learning", "courses.view", "View courses"],
+  ["learning", "courses.create", "Create courses"],
+  ["learning", "courses.update", "Edit courses"],
+  ["learning", "courses.delete", "Delete courses"],
+  ["learning", "courses.publish", "Publish courses"],
+  ["learning", "lessons.view", "View lessons"],
+  ["learning", "lessons.create", "Create lessons"],
+  ["learning", "lessons.update", "Edit lessons"],
+  ["learning", "lessons.delete", "Delete lessons"],
+  ["learning", "lessons.publish", "Publish lessons"],
 
-  // Translations
-  ["translations", "translations.view", "View translations"],
-  ["translations", "translations.update", "Edit translations"],
-  ["translations", "translations.approve", "Approve translations"],
-  ["translations", "locales.manage", "Manage locales"],
+  // Glossary — /admin/glossary and /admin/glossary/topics. A topic IS glossary
+  // data (D27), so it reuses these keys rather than adding three nobody holds.
+  ["glossary", "glossary.view", "View glossary"],
+  ["glossary", "glossary.create", "Create glossary terms"],
+  ["glossary", "glossary.update", "Edit glossary terms"],
+  ["glossary", "glossary.delete", "Delete glossary terms"],
+  ["glossary", "glossary.publish", "Publish glossary terms"],
 
-  // SEO
-  ["seo", "seo.update", "Edit SEO fields"],
-  ["seo", "redirects.manage", "Manage redirects"],
-  ["seo", "sitemaps.manage", "Manage sitemaps"],
+  // Media library — /admin/media
+  ["media", "media.view", "View the media library"],
+  ["media", "media.upload", "Upload media"],
+  ["media", "media.update", "Edit media metadata, replace files"],
+  ["media", "media.delete", "Delete media"],
 
-  // Market data
+  // News & Analysis — /admin/articles (+ its categories and tags). Comments
+  // hang off an article and are moderated nowhere else, so they belong here.
+  ["articles", "analysis.view", "View analysis"],
+  ["articles", "analysis.create", "Create analysis"],
+  ["articles", "analysis.update", "Edit analysis"],
+  ["articles", "analysis.delete", "Delete analysis"],
+  ["articles", "analysis.publish", "Publish analysis"],
+  ["articles", "news.manage", "Manage news"],
+  ["articles", "comments.moderate", "Moderate comments"],
+
+  // Website builder (Module 16 — ADR-021 pages, ADR-027 parts). CANCELLED by
+  // ADR-042 and hidden, not deleted; the keys stay seeded for the same reason
+  // the code does. A part publish is site-wide, hence its own key. The
+  // redirects screen reuses the seeded `redirects.manage`; the media library
+  // reuses `media.*`.
+  ["website", "cms.pages.view", "View website pages"],
+  ["website", "cms.pages.create", "Create website pages"],
+  ["website", "cms.pages.update", "Edit website pages"],
+  ["website", "cms.pages.delete", "Delete website pages"],
+  ["website", "cms.pages.publish", "Publish website pages"],
+  ["website", "cms.parts.publish", "Publish global site parts"],
+  ["website", "cms.styles.manage", "Manage style presets"],
+  ["website", "cms.templates.manage", "Manage layout templates"],
+  ["website", "cms.cards.manage", "Manage card templates"],
+
+  // Market data (Module 13)
   ["market", "market.view", "View market data config"],
   ["market", "market.providers.manage", "Manage data providers"],
   ["market", "market.instruments.manage", "Manage instruments"],
   ["market", "calendar.manage", "Manage economic calendar"],
 
-  // Users
+  // Translations & locales (Module 06)
+  ["translations", "translations.view", "View translations"],
+  ["translations", "translations.update", "Edit translations"],
+  ["translations", "translations.approve", "Approve translations"],
+  ["translations", "locales.manage", "Manage locales"],
+
+  // SEO & redirects
+  ["seo", "seo.update", "Edit SEO fields"],
+  ["seo", "redirects.manage", "Manage redirects"],
+  ["seo", "sitemaps.manage", "Manage sitemaps"],
+
+  // Users & roles — /admin/users, /admin/roles
   ["users", "users.view", "View users"],
   ["users", "users.create", "Create users"],
   ["users", "users.update", "Edit users"],
@@ -88,21 +115,20 @@ const PERMISSIONS = [
   ["users", "roles.manage", "Create and edit roles"],
   ["users", "permissions.assign", "Assign permissions"],
 
-  // Employees
+  // Employees — /admin/employees
   ["employees", "employees.view", "View employees"],
   ["employees", "employees.create", "Add employees"],
   ["employees", "employees.update", "Edit employees"],
   ["employees", "employees.delete", "Remove employees"],
   ["employees", "departments.manage", "Manage departments"],
 
-  // Settings
-  ["settings", "settings.view", "View settings"],
-  ["settings", "settings.update", "Edit settings"],
-  ["settings", "theme.update", "Edit theme and branding"],
-  ["settings", "navigation.manage", "Manage navigation"],
-  ["settings", "features.manage", "Toggle features"],
-  ["settings", "social.manage", "Manage social links"],
-  ["settings", "integrations.manage", "Manage integrations"],
+  // Newsletter (Module 17, ADR-080 #7). Administration is a list, not a CRM:
+  // view, manage (unsubscribe + the hard erase an erasure request means) and
+  // export, which is separate because it is the one action that leaves the
+  // building with a copy of the addresses.
+  ["newsletter", "newsletter.view", "View newsletter subscribers"],
+  ["newsletter", "newsletter.manage", "Unsubscribe and delete subscribers"],
+  ["newsletter", "newsletter.export", "Export subscribers as CSV"],
 
   // Email (Module 17, ADR-078). Five keys, split deliberately:
   // `email.settings.manage` guards the TRANSPORT and is super_admin-only
@@ -116,21 +142,19 @@ const PERMISSIONS = [
   ["email", "email.templates.test", "Send test emails"],
   ["email", "email.log.view", "View email delivery log"],
 
-  // Website builder (Module 16 — ADR-021 pages, ADR-027 parts). A part
-  // publish is site-wide, hence its own key. The redirects screen reuses
-  // the seeded `redirects.manage`; the media library reuses `media.*`
-  // (`media.view` / `media.update` land with the library in Phase 3).
-  ["cms", "cms.pages.view", "View website pages"],
-  ["cms", "cms.pages.create", "Create website pages"],
-  ["cms", "cms.pages.update", "Edit website pages"],
-  ["cms", "cms.pages.delete", "Delete website pages"],
-  ["cms", "cms.pages.publish", "Publish website pages"],
-  ["cms", "cms.parts.publish", "Publish global site parts"],
-  ["cms", "cms.styles.manage", "Manage style presets"],
-  ["cms", "cms.templates.manage", "Manage layout templates"],
-  ["cms", "cms.cards.manage", "Manage card templates"],
+  // Settings & branding — /admin/settings and the screens its sub-nav fronts
+  // (theme, navigation, features, social, integrations).
+  ["settings", "settings.view", "View settings"],
+  ["settings", "settings.update", "Edit settings"],
+  ["settings", "theme.update", "Edit theme and branding"],
+  ["settings", "navigation.manage", "Manage navigation"],
+  ["settings", "features.manage", "Toggle features"],
+  ["settings", "social.manage", "Manage social links"],
+  ["settings", "integrations.manage", "Manage integrations"],
 
-  // System
+  // System. `analytics.view` stays here rather than under Learning even though
+  // it gates /admin/learn/progress: it also gates the dashboard, and the
+  // sidebar already records why a numbers audience is not an editing one.
   ["system", "audit.view", "View audit logs"],
   ["system", "analytics.view", "View analytics"],
   ["system", "system.maintenance", "Run maintenance tasks"],
@@ -176,7 +200,14 @@ const ROLES: Array<{
     level: 60,
     description: "Owns the full content lifecycle including publishing.",
     permissions: [
-      ...PERMISSIONS.filter(([g]) => g === "content").map(([, k]) => k),
+      // Every key in the four content groups (ADR-083). This used to read
+      // against the single `content` group they were all cut from; the split
+      // is display-shaped, so the grant set is deliberately identical. A group
+      // added to the registry later does NOT land here on its own — whether a
+      // content manager gets it is a privilege decision.
+      ...PERMISSIONS.filter(([g]) =>
+        (CONTENT_LIFECYCLE_GROUPS as readonly string[]).includes(g),
+      ).map(([, k]) => k),
       "translations.view",
       "translations.update",
       "translations.approve",
@@ -498,7 +529,6 @@ const SETTINGS = [
     "Footer menu columns (which menus, in which order)",
     true,
   ],
-  ["layout", "footer.newsletterEnabled", true, "BOOLEAN", "Show newsletter signup in footer", true],
 
   // Public design system (ADR-018 / changes-03-plan.md §5.1). All default to
   // OFF or empty: these add chrome to the public surface, so an install that
@@ -620,7 +650,8 @@ const SETTINGS = [
   // Newsletter placement (ADR-080 #5). The `newsletter` FLAG decides whether
   // signup exists at all; these decide where it shows. They live in the
   // `email` group because `layout` is paused in admin (ADR-038), which is how
-  // footer.newsletterEnabled became uneditable.
+  // `footer.newsletterEnabled` became uneditable — changes-21 F7 deleted that
+  // key, so these four are the only placement switches.
   ["email", "newsletter.placements.footer", true, "BOOLEAN", "Newsletter in the footer", false],
   ["email", "newsletter.placements.home", true, "BOOLEAN", "Newsletter on the homepage", false],
   ["email", "newsletter.placements.news", true, "BOOLEAN", "Newsletter on /news", false],
@@ -703,12 +734,17 @@ const {
 export async function seed(db: PrismaClient) {
   console.log("Seeding…");
 
-  // Permissions
+  // Permissions. `sortOrder` is the registry index, so a card lists its keys
+  // in the order they were written (view → create → update → delete → publish)
+  // rather than alphabetically, where "create" precedes "view" and a reader
+  // scanning a role has to hunt for the one key that grants access at all.
+  let permissionSortOrder = 0;
   for (const [groupName, key, label] of PERMISSIONS) {
+    const sortOrder = permissionSortOrder++;
     await db.permission.upsert({
       where: { key },
-      update: { groupName, label },
-      create: { key, groupName, label },
+      update: { groupName, label, sortOrder },
+      create: { key, groupName, label, sortOrder },
     });
   }
   console.log(`  permissions: ${PERMISSIONS.length}`);

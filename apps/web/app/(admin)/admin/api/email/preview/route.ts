@@ -43,10 +43,11 @@ export async function POST(request: Request): Promise<Response> {
 
   try {
     const rendered = await renderEmailPreview(parsed.data);
-    if (!rendered) return new Response(document("This template has no content yet."), {
-      status: 404,
-      headers: previewHeaders(),
-    });
+    if (!rendered)
+      return new Response(document("This template has no content yet."), {
+        status: 404,
+        headers: previewHeaders(),
+      });
     return new Response(rendered.html, { status: 200, headers: previewHeaders() });
   } catch (error) {
     // A render error is the useful answer here: a missing required variable or
@@ -65,9 +66,7 @@ async function readInput(request: Request): Promise<unknown> {
   if (type.includes("application/json")) return request.json().catch(() => null);
   const form = await request.formData().catch(() => null);
   if (!form) return null;
-  return Object.fromEntries(
-    [...form.entries()].filter(([, value]) => typeof value === "string"),
-  );
+  return Object.fromEntries([...form.entries()].filter(([, value]) => typeof value === "string"));
 }
 
 function previewHeaders(): Headers {

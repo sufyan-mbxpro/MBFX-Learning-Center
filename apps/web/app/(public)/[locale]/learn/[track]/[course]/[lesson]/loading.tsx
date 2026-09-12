@@ -23,14 +23,24 @@ export default function LessonLoading() {
         <Container className="grid grid-cols-1 gap-8 pb-24 md:grid-cols-(--grid-rail-main) md:items-start md:pb-0">
           {/* The contents rail — hidden below md, exactly as the real one is. */}
           <aside className="hidden md:flex md:flex-col md:gap-3">
-            <Skeleton className="shimmer h-4 w-24" />
-            <div className="flex flex-col gap-2 rounded-xl border p-3">
-              {Array.from({ length: 8 }, (_, index) => (
-                <div key={index} className="flex items-center gap-2">
-                  <Skeleton className="shimmer size-5 rounded-full" />
-                  <Skeleton className="shimmer h-4 flex-1" />
-                </div>
-              ))}
+            {/* The panel the rail became in changes-24: a header band, a rule,
+                then rows whose meta sits under the title. */}
+            <div className="overflow-hidden rounded-xl border">
+              <div className="flex items-center justify-between gap-2 border-b bg-muted/40 px-3 py-2.5">
+                <Skeleton className="shimmer h-3 w-20" />
+                <Skeleton className="shimmer h-3 w-12" />
+              </div>
+              <div className="flex flex-col gap-3 p-3">
+                {Array.from({ length: 7 }, (_, index) => (
+                  <div key={index} className="flex items-start gap-2.5">
+                    <Skeleton className="shimmer mt-0.5 size-5 rounded-full" />
+                    <div className="flex flex-1 flex-col gap-1.5">
+                      <Skeleton className="shimmer h-4 w-full" />
+                      <Skeleton className="shimmer h-3 w-16" />
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
             <Skeleton className="shimmer h-28 w-full rounded-xl" />
           </aside>

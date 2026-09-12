@@ -570,9 +570,6 @@ importers:
       '@repo/eslint-config':
         specifier: workspace:*
         version: link:../../tooling/eslint-config
-      '@repo/rbac':
-        specifier: workspace:*
-        version: link:../rbac
       '@repo/typescript-config':
         specifier: workspace:*
         version: link:../../tooling/typescript-config

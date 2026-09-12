@@ -11,4 +11,5 @@ export * from "./glossary.ts";
 export * from "./videos.ts";
 export * from "./field-issues.ts";
 export * from "./email.ts";
+export * from "./newsletter.ts";
 export * from "./cms/index.ts";

@@ -1,7 +1,14 @@
 // Listing sidebar (changes-03-plan.md §6.3, image-10.png): search,
-// categories, latest posts, popular tags, archives. All four facets come
-// from ONE cached read (getArticleFacets) so they revalidate together with
-// the articles they describe.
+// categories, latest posts and popular tags. All three facets come from ONE
+// cached read (getArticleFacets) so they revalidate together with the
+// articles they describe.
+//
+// The month archive the reference showed is GONE (changes-22). It listed
+// months as plain text with a count and no destination — there is no
+// `/news/archive/2026-09` route and never was — so it was a panel a reader
+// could only look at. Removing it also removed the only facet query that had
+// to scan every published row, which is why the facet itself went with it
+// rather than being left computed and unread.
 import Image from "next/image";
 import { getTranslations } from "next-intl/server";
 import { Search } from "lucide-react";
@@ -43,7 +50,6 @@ export async function ArticleSidebar({
   query?: string;
 }) {
   const t = await getTranslations("news");
-  const monthFormat = new Intl.DateTimeFormat(locale, { month: "long", year: "numeric" });
 
   return (
     <aside className="flex flex-col gap-5 lg:sticky lg:top-24 lg:self-start">
@@ -140,22 +146,6 @@ export async function ArticleSidebar({
                 <Badge variant="pill" render={<Link href={`/news/tag/${tag.slug}`} />}>
                   {tag.name}
                 </Badge>
-              </li>
-            ))}
-          </ul>
-        </Panel>
-      )}
-
-      {facets.archives.length > 0 && (
-        <Panel title={t("archives")}>
-          <ul className="flex flex-col gap-2">
-            {facets.archives.slice(0, 12).map((entry) => (
-              <li
-                key={entry.month.toISOString()}
-                className="flex items-center justify-between gap-2 text-sm text-muted-foreground"
-              >
-                <span>{monthFormat.format(entry.month)}</span>
-                <span className="text-xs">{entry.count}</span>
               </li>
             ))}
           </ul>

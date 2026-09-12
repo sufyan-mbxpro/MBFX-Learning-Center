@@ -5,6 +5,7 @@ import { can, canAssignRole, requirePermission } from "@repo/rbac";
 import { Badge } from "@repo/ui/components/badge";
 import { humanizeKey } from "@repo/utils";
 import { AdminPage, AdminSection } from "../../_components/admin-page.tsx";
+import { permissionGroupViews } from "../../_components/permission-groups.ts";
 import { RoleActions } from "./role-actions.tsx";
 import { RolePermissions } from "./role-permissions.tsx";
 
@@ -96,7 +97,7 @@ export default async function RoleDetailPage({ params }: PageProps<"/admin/roles
         <AdminSection title={t("permissionsCol")} cardClassName="min-w-0 flex-1">
           <RolePermissions
             roleKey={role.key}
-            groups={matrix.groups}
+            groups={permissionGroupViews(t, matrix.groups)}
             grantedKeys={role.permissionKeys}
             readOnly={!editable}
             labels={{

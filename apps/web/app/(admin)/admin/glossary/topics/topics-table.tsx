@@ -49,6 +49,9 @@ export interface TopicRow {
   description: string | null;
   isActive: boolean;
   termCount: number;
+  /** Terms a reader can actually see — 0 means the topic is not on the public
+   * Browse-by-topic index, however published the topic itself is. */
+  publishedTermCount: number;
   updatedAtLabel: string;
   /** Epoch ms — the formatted label sorts lexically, which is not chronological. */
   updatedAtSort: number;
@@ -67,6 +70,8 @@ export interface TopicsTableLabels {
   nameCol: string;
   statusCol: string;
   termsCol: string;
+  notPublic: string;
+  notPublicHint: string;
   updatedCol: string;
   actionsCol: string;
   untitled: string;
@@ -310,7 +315,21 @@ export function TopicsTable({
         id: "terms",
         header: labels.termsCol,
         meta: { label: labels.termsCol },
-        cell: ({ row }) => <span className="tabular-nums">{row.original.termCount}</span>,
+        // The count AND, when it matters, what the count means (changes-22).
+        // `/glossary/topics` omits a topic with no published terms — an empty
+        // group is a promise the page cannot keep — so a topic can be active,
+        // saved and published and still be absent from the one page that
+        // lists topics. Said here, next to the number that explains it.
+        cell: ({ row }) => (
+          <div className="flex flex-col items-start gap-1">
+            <span className="tabular-nums">{row.original.termCount}</span>
+            {row.original.publishedTermCount === 0 && (
+              <span title={labels.notPublicHint}>
+                <StatusBadge tone="warning">{labels.notPublic}</StatusBadge>
+              </span>
+            )}
+          </div>
+        ),
       },
       {
         id: "updatedAt",

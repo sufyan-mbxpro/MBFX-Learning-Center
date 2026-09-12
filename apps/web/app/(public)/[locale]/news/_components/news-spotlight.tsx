@@ -145,17 +145,16 @@ export async function NewsSpotlight({
                 Numbers are `aria-hidden` — "01" is a visual rhythm, not a
                 ranking anyone published, and reading it aloud implies an
                 editorial claim the data does not make. */}
-            <ol className="flex flex-col gap-4">
+            {/* `self-start`, and no `flex-1` on the items: the rail used to
+                stretch each card to half the lead's height, which on a real
+                front left most of both cards empty — a card padded out to
+                twice the height of its own content reads as a card that
+                failed to load, not as breathing room (changes-22). Sized to
+                content, the column simply ends where its two stories do. */}
+            <ol className="flex flex-col gap-4 self-start">
               {runners.map((entry, index) => (
-                <li key={entry.articleId} className="flex-1">
-                  {/* `items-center`, not `items-start`: the rail stretches to
-                      match the lead card beside it (`flex-1` on the li), and
-                      top-aligned content left a third of each card empty
-                      under the text — visible only against a real lead card,
-                      not in isolation. Centred, the extra height reads as
-                      breathing room rather than as a card that failed to
-                      fill. */}
-                  <article className="group card-hover hover-lift relative flex h-full items-center gap-4 rounded-2xl bg-card p-4 ring-1 ring-foreground/10 hover:ring-primary/25">
+                <li key={entry.articleId}>
+                  <article className="group card-hover hover-lift relative flex items-center gap-4 rounded-2xl bg-card p-4 ring-1 ring-foreground/10 hover:ring-primary/25">
                     <Link
                       href={`/news/${entry.slug}`}
                       tabIndex={-1}

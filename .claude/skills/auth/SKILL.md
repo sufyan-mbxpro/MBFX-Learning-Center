@@ -42,6 +42,16 @@ swap contained to this package.
   `MIN/MAX_PASSWORD_LENGTH` live in `@repo/contracts` so a public screen can
   state the rule without importing this package.
 
+## Password recovery has screens (changes-21 F6/F9, ADR-079)
+
+Only **OAuth** is still UI-less. Reset and verification both have screens on
+both surfaces, and the reset link is routed by the USER's `userType`
+(`resetPasswordPath`), never by the screen that asked — so a learner who types
+their address into the staff form still gets a public link, and the public site
+goes on naming no `/admin` path (ADR-052). `ADMIN_PUBLIC_PATHS` in
+`proxy.ts` is the closed set of `/admin` paths reachable unauthenticated:
+sign-in, forgot-password, reset-password.
+
 ## Single-app consequences (ADR-006 — read it)
 
 Same origin for learner and staff sessions. Mandatory: STAFF gate in

@@ -36,7 +36,9 @@ export function EmailDeliveryReadOnly({
     [labels.driver, humanizeKey(transport.driver)],
     [
       labels.host,
-      transport.host ? `${transport.host}${transport.port ? `:${transport.port}` : ""}` : labels.notSet,
+      transport.host
+        ? `${transport.host}${transport.port ? `:${transport.port}` : ""}`
+        : labels.notSet,
     ],
     [labels.security, humanizeKey(transport.security)],
     [labels.username, transport.username ?? labels.notSet],

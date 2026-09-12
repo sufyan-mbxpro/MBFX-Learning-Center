@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Tag } from "lucide-react";
 import { getGlossaryTopics } from "@repo/core";
 import { ROUTE_PATHS } from "@repo/contracts";
 import { Link } from "@repo/i18n/navigation";
 import { getSetting, isFeatureVisible } from "@repo/settings";
 import { AmbientMotif } from "@repo/ui/components/ambient-motif";
+import { Badge } from "@repo/ui/components/badge";
 import { Container } from "@repo/ui/components/container";
 import { Empty, EmptyDescription, EmptyTitle } from "@repo/ui/components/empty";
 import { Reveal } from "@repo/ui/components/reveal";
@@ -68,7 +69,6 @@ export default async function GlossaryTopicsPage({
 
       <GlossaryTabs
         ariaLabel={t("browseLabel")}
-        current={GLOSSARY_TOPICS_PATH}
         items={[
           { href: GLOSSARY_PATH, label: t("browseAtoZ") },
           { href: GLOSSARY_TOPICS_PATH, label: t("browseTopics") },
@@ -85,19 +85,40 @@ export default async function GlossaryTopicsPage({
           ) : (
             <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {topics.map((topic) => (
-                <li key={topic.id}>
+                <li key={topic.id} className="flex">
+                  {/* The design system's full hover vocabulary (changes-22).
+                      It was `card-hover` and a border tint — correct, and
+                      nearly imperceptible: the card did not move, nothing
+                      inside it responded, and the chevron that promises a
+                      destination sat still. Now it lifts, sweeps, tints its
+                      ring, and the mark and the chevron both answer. Each of
+                      these is an existing utility, not a new effect: `sheen`,
+                      `hover-lift`, `card-hover` and `hover-arrow` are the same
+                      four `CourseCard` and `QuizCard` already use, so the
+                      glossary stops being the one index that feels dead. */}
                   <Link
                     href={`${ROUTE_PATHS.glossary}/topics/${topic.slug}`}
-                    className="card-hover flex h-full flex-col gap-2 rounded-xl border bg-card p-5 transition-colors duration-(--duration-base) hover:border-primary/25"
+                    className="group card-hover hover-lift sheen flex h-full w-full flex-col gap-3 rounded-xl border bg-card p-5 ring-1 ring-transparent hover:border-primary/30 hover:ring-primary/15"
                   >
-                    <span className="flex items-center justify-between gap-3">
-                      <span className="font-semibold">{topic.name}</span>
+                    <span className="flex items-start justify-between gap-3">
+                      <span className="flex min-w-0 items-center gap-3">
+                        {/* A tinted mark, so a wall of text cards has
+                            something to scan by. Tint + `-interactive` ink is
+                            ADR-073's tonal pairing, the one combination the
+                            engine derives readable in both modes. */}
+                        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary-interactive transition-colors duration-(--duration-base) group-hover:bg-primary group-hover:text-primary-foreground">
+                          <Tag aria-hidden className="size-4.5" />
+                        </span>
+                        <span className="min-w-0 font-semibold transition-colors duration-(--duration-base) group-hover:text-primary-interactive">
+                          {topic.name}
+                        </span>
+                      </span>
                       {/* The reference's chevron. Mirrored in RTL, because a
                           chevron that points the wrong way in Arabic reads as
                           "back". */}
                       <ChevronRight
                         aria-hidden
-                        className="size-4 shrink-0 text-muted-foreground rtl:rotate-180"
+                        className="hover-arrow mt-2 size-4 shrink-0 text-muted-foreground group-hover:text-primary-interactive rtl:rotate-180"
                       />
                     </span>
                     {topic.description && (
@@ -105,8 +126,10 @@ export default async function GlossaryTopicsPage({
                         {topic.description}
                       </span>
                     )}
-                    <span className="mt-auto pt-2 text-xs text-muted-foreground tabular-nums">
-                      {t("topicTermCount", { count: topic.termCount })}
+                    <span className="mt-auto pt-1">
+                      <Badge variant="pill" className="text-xs tabular-nums">
+                        {t("topicTermCount", { count: topic.termCount })}
+                      </Badge>
                     </span>
                   </Link>
                 </li>

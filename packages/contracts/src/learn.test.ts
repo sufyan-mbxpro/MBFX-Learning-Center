@@ -17,6 +17,7 @@ import {
   learnTrackGlossaryPath,
   learnTrackVideosPath,
   learnTrackVideoCategoryPath,
+  quizLinkPath,
   isReservedVideoSlug,
   RESERVED_VIDEO_SLUGS,
 } from "./learn.ts";
@@ -331,6 +332,24 @@ describe("track route keys", () => {
     expect(isReservedVideoSlug("CATEGORIES ")).toBe(true);
     expect(isReservedVideoSlug("category")).toBe(false);
     expect(RESERVED_VIDEO_SLUGS).toHaveLength(1);
+  });
+
+  // ADR-084 #1 — the one constructor for a quiz href outside the quiz index.
+  it("builds a quiz path under the track's own quiz index", () => {
+    for (const track of LEARN_TRACK_KEYS) {
+      expect(quizLinkPath(track, "pips-and-lots")).toBe(
+        `${learnTrackQuizzesPath(track)}/pips-and-lots`,
+      );
+    }
+  });
+
+  // The whole reason the track is an ARGUMENT rather than derived from the
+  // course: a course in one school may point at a quiz filed under another,
+  // and the href has to follow the QUIZ (ADR-065 §3).
+  it("follows the quiz's own track", () => {
+    const [first, second] = LEARN_TRACK_KEYS;
+    expect(second, "this assertion needs two registered tracks").toBeDefined();
+    expect(quizLinkPath(first!, "risk-of-ruin")).not.toBe(quizLinkPath(second!, "risk-of-ruin"));
   });
 
   it("builds a category path under the track's video library", () => {

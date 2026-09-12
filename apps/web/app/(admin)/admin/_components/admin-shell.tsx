@@ -32,6 +32,7 @@ interface NavEntryDef {
     | "users"
     | "roles"
     | "employees"
+    | "newsletter"
     | "glossary"
     | "glossaryTopics"
     | "learnCourses"
@@ -74,6 +75,15 @@ const ADMIN_NAV_GROUPS: {
         labelKey: "employees",
         icon: "employees",
         permission: "employees.view",
+      },
+      // Subscribers (ADR-080 #7). Under People rather than System: a
+      // newsletter list is an AUDIENCE, and the person who curates it is the
+      // one who manages users — not the one who can repoint the SMTP host.
+      {
+        href: "/admin/newsletter",
+        labelKey: "newsletter",
+        icon: "newsletter",
+        permission: "newsletter.view",
       },
     ],
   },

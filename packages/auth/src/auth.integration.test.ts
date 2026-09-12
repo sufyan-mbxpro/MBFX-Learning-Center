@@ -9,6 +9,7 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { MariaDbContainer, type StartedMariaDbContainer } from "@testcontainers/mariadb";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import type { db as PrismaDb } from "@repo/db";
 import type { authInstance as AuthInstance } from "./index.ts";
 
 const dbPackageRoot = fileURLToPath(new URL("../../db", import.meta.url));
@@ -98,7 +99,7 @@ async function extractTokenFromLoggedUrl(logSpy: ReturnType<typeof vi.spyOn>): P
   for (let attempt = 0; attempt < 40 && !printed; attempt += 1) {
     printed = logSpy.mock.calls
       .map((call: unknown[]) => call.map(String).join(" "))
-      .find((line) => line.includes("http"));
+      .find((line: string) => line.includes("http"));
     if (!printed) await new Promise((resolve) => setTimeout(resolve, 50));
   }
   if (!printed) throw new Error("no email was logged");
@@ -115,9 +116,13 @@ async function extractTokenFromLoggedUrl(logSpy: ReturnType<typeof vi.spyOn>): P
  * with no row (it cannot invent content), and this database is migrated but
  * never seeded.
  */
-async function seedAuthEmailTemplates(db: {
-  emailTemplate: { upsert: (args: unknown) => Promise<unknown> };
-}) {
+// The real client type, queried rather than approximated. A hand-written
+// `{ upsert: (args: unknown) => Promise<unknown> }` does NOT accept it:
+// Prisma's `upsert` is generic over its args, and under strictFunctionTypes
+// a generic method is not assignable to a signature taking `unknown`. The
+// imported type is also the more useful shape, since it typechecks the
+// payload below instead of waving it through.
+async function seedAuthEmailTemplates(db: typeof PrismaDb) {
   for (const [key, subject, bodyHtml] of [
     [
       "auth.password_reset",

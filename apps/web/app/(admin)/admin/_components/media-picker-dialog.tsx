@@ -147,7 +147,7 @@ export function MediaPickerDialog({
             component state. A field whose picker is never opened still
             costs no request. */}
         {open && (
-          <div>
+          <div className="min-w-0">
             <MediaPickerBody
               onSelect={onSelect}
               onOpenChange={onOpenChange}
@@ -279,7 +279,7 @@ function MediaPickerBody({
   ];
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex min-w-0 flex-col gap-3">
       {/* ADR-067 §5: one row, two sides of the same decision. */}
       <div className="flex flex-wrap items-center gap-2">
         <AdminCombobox
@@ -334,9 +334,17 @@ function MediaPickerBody({
         />
       )}
 
-      {/* Absent, not empty, when this surface has placed nothing yet. */}
+      {/* Absent, not empty, when this surface has placed nothing yet.
+          `min-w-0` is load-bearing (changes-22): this section is a flex item,
+          so its automatic minimum width is its min-content — and the strip
+          below is a row of 80px tiles that never wraps, so twelve recent
+          assets asked for ~1,140px inside a 5xl dialog. The strip scrolled
+          as designed, and the DIALOG scrolled too, which put the Upload
+          button off the right edge of the modal. Zero here lets the section
+          shrink to the dialog and hands the overflow to the strip, which is
+          the element that knows how to carry it. */}
       {browser.recent.length > 0 && !query.trim() && (
-        <section className="flex flex-col gap-1.5">
+        <section className="flex min-w-0 flex-col gap-1.5">
           <h3 className="text-xs font-medium text-muted-foreground">{t("mediaRecentlyUsed")}</h3>
           <ul className="flex gap-2 overflow-x-auto pb-1">
             {browser.recent.map((asset) => (

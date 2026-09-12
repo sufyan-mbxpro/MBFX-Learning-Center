@@ -195,7 +195,6 @@ export const SETTINGS_SCHEMAS = {
   "header.cta": headerCtaSchema,
   "header.announcementBar": announcementBarSchema,
   "footer.menuColumns": z.array(footerMenuColumnSchema),
-  "footer.newsletterEnabled": z.boolean(),
 
   // Public design system (ADR-018 / changes-03-plan.md §5.1).
   // `layout.pageLoader` is SiteLoader's kill switch (ADR-018 rule 4d) — the
@@ -237,7 +236,10 @@ export const SETTINGS_SCHEMAS = {
   "email.postalAddress": z.string().max(300),
   // Where the newsletter signup appears (ADR-080 #5). These live here rather
   // than in `layout`, the group ADR-038 paused in admin — which is how
-  // footer.newsletterEnabled ended up uneditable.
+  // `footer.newsletterEnabled` ended up uneditable. changes-21 F7 DELETED that
+  // key rather than leaving it beside these four: two settings meaning "is
+  // there a signup in the footer" is one more than anyone can reason about,
+  // and only one of the two was reachable.
   "newsletter.placements.footer": z.boolean(),
   "newsletter.placements.home": z.boolean(),
   "newsletter.placements.news": z.boolean(),
@@ -281,7 +283,6 @@ export const SETTING_GROUPS: Record<SettingKey, string> = {
   "header.cta": "layout",
   "header.announcementBar": "layout",
   "footer.menuColumns": "layout",
-  "footer.newsletterEnabled": "layout",
 
   "layout.pageLoader": "layout",
   "header.topBar": "layout",

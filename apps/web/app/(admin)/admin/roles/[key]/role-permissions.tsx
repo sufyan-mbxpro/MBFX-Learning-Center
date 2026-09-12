@@ -17,6 +17,10 @@ import { setRolePermissionAction, setRolePermissionsAction } from "../../_action
 
 export interface PermissionGroupView {
   groupName: string;
+  /** Resolved by the page: a catalog string, else `humanizeKey()` (ADR-044 #5). */
+  label: string;
+  /** One line naming the admin screens this card governs. Optional. */
+  description?: string | null;
   permissions: { key: string; label: string }[];
 }
 
@@ -77,7 +81,13 @@ export function RolePermissions({
     .map((group) => ({
       ...group,
       permissions: group.permissions.filter(
-        (p) => !q || p.key.toLowerCase().includes(q) || p.label.toLowerCase().includes(q),
+        (p) =>
+          !q ||
+          // The GROUP label matches too: typing "courses" or "news" is how
+          // someone looks for a card, now that the cards are page-shaped.
+          group.label.toLowerCase().includes(q) ||
+          p.key.toLowerCase().includes(q) ||
+          p.label.toLowerCase().includes(q),
       ),
     }))
     .filter((group) => group.permissions.length > 0);
@@ -119,12 +129,27 @@ export function RolePermissions({
         return (
           <section key={group.groupName} className="rounded-lg border">
             <header className="flex items-center justify-between gap-3 border-b bg-muted/20 px-4 py-2.5">
-              <h3 className="text-sm font-semibold capitalize">
-                {group.groupName}
-                <span className="ms-2 font-normal text-muted-foreground">
-                  {groupGranted} {labels.enabledOf} {groupKeys.length}
-                </span>
-              </h3>
+              {/* The `capitalize` class is gone (ADR-083). It was papering over
+                  a raw group id — and it only ever fixed the first letter, which
+                  is why `seo` rendered as "Seo". The label is a catalog string
+                  now, so nothing may re-case it: `text-transform: capitalize`
+                  would break "News & analysis" the moment a label has a word the
+                  catalog deliberately left lowercase. */}
+              <div className="flex min-w-0 flex-col">
+                {/* The count is a SIBLING of the heading, not inside it. Inside,
+                    the accessible name concatenated to "Users & roles0of9" —
+                    `ms-2` is a margin, and a margin is not a space. A heading
+                    also should not name a number that changes as you click. */}
+                <div className="flex items-baseline gap-2">
+                  <h3 className="text-sm font-semibold">{group.label}</h3>
+                  <span className="text-sm text-muted-foreground">
+                    {groupGranted} {labels.enabledOf} {groupKeys.length}
+                  </span>
+                </div>
+                {group.description ? (
+                  <p className="text-xs text-muted-foreground">{group.description}</p>
+                ) : null}
+              </div>
               {!readOnly && (
                 <Field orientation="horizontal" className="w-auto">
                   <FieldLabel className="font-normal text-muted-foreground">
@@ -136,7 +161,7 @@ export function RolePermissions({
                     checked={groupAll}
                     indeterminate={!groupAll && groupGranted > 0}
                     onCheckedChange={(next) => apply(groupKeys, next === true)}
-                    aria-label={`${labels.selectAll}: ${group.groupName}`}
+                    aria-label={`${labels.selectAll}: ${group.label}`}
                   />
                 </Field>
               )}

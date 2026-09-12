@@ -184,10 +184,7 @@ export function EmailTemplateEditor({
   // Memoised so the `values` object below is stable between renders: the
   // fallback literal is a new object every time, and `useFieldErrors` re-runs
   // the whole schema on every change to its input.
-  const draft = React.useMemo(
-    () => drafts[locale] ?? EMPTY_DRAFT,
-    [drafts, locale],
-  );
+  const draft = React.useMemo(() => drafts[locale] ?? EMPTY_DRAFT, [drafts, locale]);
   const patch = (changes: Partial<Draft>) =>
     setDrafts((current) => ({ ...current, [locale]: { ...draft, ...changes } }));
 

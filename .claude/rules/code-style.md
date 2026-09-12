@@ -19,7 +19,8 @@ the mechanical rules, so edge cases get judged correctly.
    through a catalog key — that part is universal. Whether a non-English
    _value_ is required depends on the surface: **public** namespaces (`common`,
    `home`, `error`, `notFound`, `notTranslated`, `public`, `nav`, `footer`,
-   `glossary`, `news`, `auth`) must be complete for every ACTIVE locale, and
+   `glossary`, `news`, `auth`, `newsletter`) must be complete for every ACTIVE
+   locale, and
    `check:catalog-completeness` fails the build if one isn't. **Admin**
    namespaces (`admin`, `cms`) are English-only by design and are exempt — add
    the key to `en.json` and stop. A new namespace defaults to _public_, so
@@ -95,6 +96,24 @@ these.
     because the surface is its own label (the ⌘K palette), and it still
     renders both elements. Guarded by
     `apps/web/app/admin-dialog-conventions.test.ts` (ADR-057 #5).
+
+### Permission groups (ADR-083)
+
+11b. **A permission belongs to the SCREEN it governs, and the card order is
+code.** `Permission.groupName` is page-shaped: `learning` (courses,
+lessons, and so quizzes and videos, which share the lesson keys),
+`glossary`, `media`, `articles`, `website`, `users`, `employees`,
+`newsletter`, `market`, `translations`, `seo`, `email`, `settings`,
+`system`. A new key names one of those; adding a fifteenth group means adding it to
+`PERMISSION_GROUPS` in `@repo/db`'s `permission-groups.ts`, whose ARRAY
+ORDER is the order the role editor draws the cards in — it mirrors the
+admin sidebar, not the alphabet. The registry holds no strings: the
+screen resolves `admin.permissionGroups.<name>` through `t.has` with a
+`humanizeKey()` fallback (ADR-044 #5's two-step), and never re-cases the
+result — the `capitalize` class is what made `seo` render as "Seo".
+Guarded by `packages/db/src/permission-groups.test.ts`, which fails in
+both directions: a seeded group the registry does not list, and a listed
+group with no keys.
 
 ## TypeScript
 

@@ -42,6 +42,7 @@ import {
   type GlossaryFaqItemInput,
   type SaveGlossaryTermInput,
 } from "@repo/contracts";
+import { slugify } from "@repo/utils";
 import { Button } from "@repo/ui/components/button";
 import { ConfirmDialog } from "@repo/ui/components/confirm-dialog";
 import {
@@ -172,7 +173,20 @@ export function GlossaryEditor({
   const setDraft = (patch: Partial<GlossaryTranslationDraft>) =>
     setDrafts((current) => ({ ...current, [locale]: { ...draft, ...patch } }));
 
-  const publicPath = useMemo(() => `/${locale}/glossary/${draft.slug || ""}`, [locale, draft.slug]);
+  // The slug the SERVER will store if this field is left blank —
+  // `saveGlossaryTerm` derives it with exactly this `slugify` over exactly
+  // this term. Shown as the input's placeholder and used in the URL preview
+  // (changes-22): the field looked required-but-empty and the preview read
+  // "/en/glossary/" with nothing after it, so a term saved with a blank slug
+  // looked like a term with no address. Placeholder rather than writing into
+  // the field, which is what the article editor does — filling it would turn
+  // a derived value into a typed one, and then renaming the term would stop
+  // moving the URL with it.
+  const derivedSlug = useMemo(
+    () => draft.slug.trim() || slugify(draft.term),
+    [draft.slug, draft.term],
+  );
+  const publicPath = useMemo(() => `/${locale}/glossary/${derivedSlug}`, [locale, derivedSlug]);
 
   // Exactly what the action receives — so the inline messages come from the
   // same schema, over the same values, that the server will parse (ADR-077).
@@ -321,6 +335,8 @@ export function GlossaryEditor({
             >
               <Input
                 value={draft.slug}
+                placeholder={slugify(draft.term)}
+                className="font-mono text-xs"
                 disabled={!canUpdate}
                 onChange={(e) => setDraft({ slug: e.target.value })}
               />

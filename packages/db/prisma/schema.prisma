@@ -106,6 +106,10 @@ model User {
   enrollments    CourseEnrollment[]
   lessonFeedback LessonFeedback[]
   quizAttempts   QuizAttempt[]
+  // ADR-080 #6 — the ONE relation here that does NOT cascade. Newsletter
+  // consent is given independently of the account, so a hard erase nulls the
+  // link and keeps the subscription (`onDelete: SetNull` on the other side).
+  subscriptions  NewsletterSubscriber[]
 
   @@unique([email])
   @@index([userType, status])
@@ -2091,4 +2095,57 @@ model EmailDelivery {
   @@index([templateKey, createdAt])
   @@index([status, createdAt])
   @@map("email_deliveries")
+}
+
+// ─── Newsletter (Module 17, ADR-080, changes-21 F7) ──────────────
+
+enum SubscriberStatus {
+  PENDING // signed up, has not clicked confirm yet — purged after 7 days
+  ACTIVE
+  UNSUBSCRIBED
+}
+
+/// Double opt-in newsletter consent (ADR-080).
+///
+/// **Both tokens are stored HASHED** (SHA-256, hex) and never in plaintext:
+/// the row is readable by any admin with `newsletter.view`, and a plaintext
+/// unsubscribe token in that table is a way to unsubscribe anyone from the
+/// admin screen. The confirm token expires in 48h and is single-use; the
+/// unsubscribe token is long-lived on purpose, because it has to keep working
+/// in a message sent months ago (RFC 8058 one-click).
+///
+/// ADR-080 #6: `userId` is filled at CONFIRM time when the address matches a
+/// live user, and the relation is `SetNull`. The consent was given
+/// independently of the account, so a hard erase of the user must not delete
+/// it — today's user deletion is soft (`deletedAt`), which leaves the link
+/// intact and is correct.
+model NewsletterSubscriber {
+  id     String           @id @default(cuid())
+  /// Lower-cased on write, so `@@unique` actually means one consent per address.
+  email  String           @db.VarChar(255)
+  locale String           @db.VarChar(10)
+  status SubscriberStatus @default(PENDING)
+  /// Which placement the address came from: footer | home | news | analysis.
+  source String           @db.VarChar(32)
+
+  confirmTokenHash     String?   @db.VarChar(64)
+  confirmExpiresAt     DateTime?
+  unsubscribeTokenHash String    @db.VarChar(64)
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  confirmedAt       DateTime?
+  unsubscribedAt    DateTime?
+  /// Throttles the "resend the confirmation" path without a second Redis key.
+  lastConfirmSentAt DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@unique([email])
+  @@unique([confirmTokenHash])
+  @@unique([unsubscribeTokenHash])
+  @@index([status, createdAt])
+  @@index([userId])
+  @@map("newsletter_subscribers")
 }

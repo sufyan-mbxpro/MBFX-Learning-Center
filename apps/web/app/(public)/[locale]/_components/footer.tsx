@@ -22,15 +22,21 @@
 import { getTranslations } from "next-intl/server";
 import { cacheLife } from "next/cache";
 import { Apple, ChevronRight, Monitor, Smartphone } from "lucide-react";
-import { buildMenu, getActiveSocialLinks, getBrandAssets } from "@repo/core";
+import {
+  buildMenu,
+  getActiveSocialLinks,
+  getBrandAssets,
+  isNewsletterPlacementEnabled,
+} from "@repo/core";
 import { Link } from "@repo/i18n/navigation";
-import { getSetting } from "@repo/settings";
+import { getSetting, isFeatureVisible } from "@repo/settings";
 import { BrandLogo } from "@repo/ui/components/brand-logo";
 import { SocialGlyph } from "@repo/ui/components/social-glyph";
 import { Container } from "@repo/ui/components/container";
 import { Reveal } from "@repo/ui/components/reveal";
 import { NavLink } from "./nav-link.tsx";
 import { NewsletterForm } from "./newsletter-form.tsx";
+import { newsletterFormLabels } from "./newsletter-labels.ts";
 
 // Cache Components rejects a bare `new Date()` during prerender — rightly:
 // it would bake the build-time year into the static shell forever. Cached
@@ -110,7 +116,8 @@ export async function SiteFooter({ locale }: { locale: string }) {
     copyright,
     disclaimer,
     menuColumns,
-    newsletterEnabled,
+    newsletterFlag,
+    newsletterPlaced,
     appLinks,
     showPaymentBadges,
     socialLinks,
@@ -122,7 +129,12 @@ export async function SiteFooter({ locale }: { locale: string }) {
     getSetting("legal.copyrightNotice"),
     getSetting("legal.riskDisclaimer"),
     getSetting("footer.menuColumns"),
-    getSetting("footer.newsletterEnabled"),
+    // TWO switches with different jobs (ADR-080 #5): the FLAG says signup
+    // exists, the placement SETTING says it is drawn here. One setting,
+    // `footer.newsletterEnabled`, used to do both — and sat in the `layout`
+    // group ADR-038 paused, so nobody could reach it. F7 deleted it.
+    isFeatureVisible("newsletter", null),
+    isNewsletterPlacementEnabled("footer"),
     getSetting("footer.appLinks"),
     getSetting("footer.showPaymentBadges"),
     getActiveSocialLinks(),
@@ -332,7 +344,7 @@ export async function SiteFooter({ locale }: { locale: string }) {
           </div>
 
           {/* ── Band 2: newsletter ───────────────────────────────────── */}
-          {newsletterEnabled && (
+          {newsletterFlag && newsletterPlaced && (
             <div className="border-t border-secondary-foreground/12 py-8">
               {/* .sheen supplies its own position/overflow/isolation, so no
                   Tailwind `relative` here — and nothing that sets `position`
@@ -354,10 +366,9 @@ export async function SiteFooter({ locale }: { locale: string }) {
                   <div className="w-full md:max-w-sm md:shrink-0">
                     <NewsletterForm
                       tone="onSecondary"
-                      placeholder={t("newsletterPlaceholder")}
-                      label={t("newsletterLabel")}
-                      submitLabel={t("newsletterSubmit")}
-                      unavailableLabel={t("newsletterUnavailable")}
+                      locale={locale}
+                      source="footer"
+                      labels={newsletterFormLabels(t)}
                     />
                   </div>
                 </div>

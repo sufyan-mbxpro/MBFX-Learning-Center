@@ -436,18 +436,13 @@ export function ArticleEditor({
               </span>
             </div>
 
-            <Field label={labels.body} error={form.error("translation.body")}>
-              <RichTextEditor
-                value={tr.body}
-                onChange={(html) => setTr({ body: html })}
-                labels={labels.editor}
-                // Item 7: the body is the one field long enough, and edited
-                // by people technical enough, to want a source view.
-                allowHtmlMode
-                mediaCategory="news"
-              />
-            </Field>
-
+            {/* Excerpt BEFORE the body (changes-22). It sat under it, which
+                put a three-line field at the far side of the one control on
+                this screen that can be thousands of words long — so the
+                editor who writes the summary first had to scroll past the
+                body to reach it, and the one who writes it last scrolled
+                twice. It is also the field every card, feed and search result
+                shows, which is an argument for reading it near the title. */}
             <Field
               label={labels.excerpt}
               adornment={<CharCount value={tr.excerpt} max={500} />}
@@ -457,6 +452,18 @@ export function ArticleEditor({
                 value={tr.excerpt}
                 rows={3}
                 onChange={(e) => setTr({ excerpt: e.target.value })}
+              />
+            </Field>
+
+            <Field label={labels.body} error={form.error("translation.body")}>
+              <RichTextEditor
+                value={tr.body}
+                onChange={(html) => setTr({ body: html })}
+                labels={labels.editor}
+                // Item 7: the body is the one field long enough, and edited
+                // by people technical enough, to want a source view.
+                allowHtmlMode
+                mediaCategory="news"
               />
             </Field>
           </EditorSection>

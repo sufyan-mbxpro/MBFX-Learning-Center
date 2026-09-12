@@ -15527,6 +15527,125 @@ super_admin can move where mail leaves from.
   (`index`, `media`, `market`, `sanitize-tiptap`, `term-of-the-day`,
   `content.integration`, `settings-audit.integration`, plus the new file).
 
+## 2026-09-12 — changes-22: the owner's review of the running site (Modules 11/12/15/08/09, ADR-081)
+
+Eighteen items from `docs/changes/changes-22-design-fixes.md`, worked end to
+end. Five of them were rules rather than fixes and are recorded in **ADR-081**;
+the rest are below.
+
+### Shipped — public site
+
+- **The learn CTA band stopped sharing an edge with the footer.** `/learn` and
+  `/learn/[track]` rendered `CtaBand` bare; every other band on the site is
+  already inside a `Section`. These two were the exceptions.
+- **The /news lead block's runners-up size to their content.** They were
+  `flex-1` inside a rail stretched to the lead card's height, so both cards
+  were mostly empty — a card padded to twice its content reads as a card that
+  failed to load, not as breathing room.
+- **The month archive is gone** from the sidebar, from `ArticleFacets` and from
+  the four catalogs. It rendered as unlinked text (there is no archive route)
+  and was the only facet that scanned every published row.
+- **"More in this category" is one band again.** `VideoRelated` wrapped a muted
+  `Section` around `VideoShelf`, which brings its own — so the inner default
+  tone painted `bg-background` straight over the outer tint, and the heading
+  sat on grey while the cards it introduced sat on white. `VideoShelf` takes
+  `tone`, `anchorId` and a `header` slot now; the heading is centred and its
+  "More videos" link became a button.
+- **`/tools` and `/markets` exist** (ADR-081 #1), rendering the new
+  `ComingSoon`. Both were in the header, the footer and the carousel, and both
+  fell through `[...slug]` onto the 404.
+- **The glossary joins the one section bar** (ADR-081 #4) and its topic cards
+  got the design system's full hover vocabulary — `sheen`, `hover-lift`,
+  `card-hover`, `hover-arrow`, a tinted mark that fills on hover — the same
+  four `CourseCard` and `QuizCard` already use.
+- **The glossary term banner is `spacing="sm"`.** `PageHero` is built for a
+  section front; on a leaf the `section-lg` band pushed the definition below
+  the fold.
+- **The /learn toolbar stopped floating.** New `.section-flush-end` (ADR-081
+  #6) on the toolbar and the continue rail.
+- **The article FAQ is its own surface** (`bg-muted/40` + ring), and tags and
+  share are two rows with a rule between them. They had been one stack of
+  identically-styled chips, half of which navigated and half of which opened a
+  share window.
+- **`ShareRow` uses `SocialGlyph`** (ADR-045, code-style.md #22) — round tinted
+  icon buttons that fill on hover. Its comment claiming lucide has no brand
+  icons predated the house glyph set; the footer has used it since.
+
+### Shipped — admin
+
+- **Video categories are a table with a modal** (`categories-table.tsx` +
+  `category-dialog.tsx`), replacing the manager that rendered every category as
+  an expanded four-field form with its own Save. One dialog serves create and
+  edit, because `saveVideoCategory` is one action.
+- **The media picker's Upload button is reachable again.** Three `min-w-0`s:
+  the recently-used strip is a row of 80px tiles that never wraps, so with a
+  dozen assets its min-content ran to ~1,140px inside a 5xl dialog and grew the
+  flex/grid items containing it. The dialog scrolled sideways; the button went
+  off the edge.
+- **The quiz editor's status updates without a reload.** `QuizEditor` read
+  `state.status` from `useState(initial)`, so `router.refresh()` re-rendered it
+  with a fresh `initial` that nothing looked at. The other four editors on
+  `ContentStatusPanel` already read these five facts from props.
+- **The glossary term's slug previews itself** — `slugify(term)` as the
+  placeholder and in the URL line, the same derivation `saveGlossaryTerm` runs
+  when the field is blank.
+- **The article editor's Excerpt sits above the Body**, not past thousands of
+  words of it.
+- **A section that is not published says so** in the curriculum tree, and a
+  glossary topic with no published terms says "Not on the public index" in the
+  topics table (ADR-081 #2, #5).
+
+### Found
+
+- **`Course.lessonCount` and the curriculum answered different questions**
+  (ADR-081 #2) — the "2 lessons over an empty curriculum" the owner reported.
+  The same mismatch made 100% course completion unreachable whenever a lesson
+  was gated or its section unpublished, because `progress.ts` already used the
+  reachable set as its numerator against this denominator.
+- **The reported "published topic is not listed"** was not a bug and not
+  pagination: the topic had zero terms, and the term the owner published was
+  filed as Unfiled. Confirmed against the dev database. Both behaviours are
+  correct and neither was visible — hence ADR-081 #5.
+- **The reported "Trade Ideas count is 0"** was ADR-015 #11 working: the
+  article is `kind: TRADE_IDEA` and belongs to `/analysis`. What was wrong was
+  the /news sidebar listing the category at zero while linking to an archive
+  that spans all three kinds (ADR-081 #3).
+- **Scheduling audit** (the owner asked): schema, editor panel, action,
+  service, public query and the `publishDueContent` sweep are wired for all
+  five entities. One gap — `applyQuizPass` selected lessons on a bare
+  `status: PUBLISHED`, so passing a quiz on a due-but-unswept SCHEDULED lesson
+  credited nothing. It uses `publicLessonWhere()` now, which is the rule
+  everywhere else.
+
+### Verified
+
+- `@repo/core` **learn.integration 48/48** against real MariaDB, including the
+  two new cases: the header count and the curriculum agree when a section is
+  hidden and again when it is shown, and `createSection` creates a visible one.
+  **articles.integration 53/53** including the new "a category with nothing in
+  this feed is omitted, not listed at zero". **progress.integration +
+  quizzes.integration 56/56.** Core unit suites 105/105.
+- `apps/web` **1449/1449** (27 files) before the two new guards, then the
+  guards themselves: `quiz-editor.test.ts` (5 — every server-owned prop comes
+  from `initial`, none from `state`) and the picker's new min-w-0 case.
+  `explore-destinations.test.ts` rewritten for ADR-081 #1 and passing (19).
+- `@repo/ui` **387/387**. Typecheck clean on `apps/web` and `@repo/core`; lint
+  clean on every file touched. `next typegen` re-run for the two new routes.
+- Not run: the full root `pnpm test`/`pnpm build`, which still exhaust memory
+  on this machine — suites were run per package.
+
+### Owed
+
+- E2E and axe for `/tools`, `/markets`, the rebuilt video-categories screen and
+  the reworked article footer, to Module 14.
+- The `public.comingSoon*` and `public.tools*`/`public.markets*` keys are
+  English-only, like every public key added since ADR-043 #3. Enforced only for
+  active locales, and `en` is the only one.
+- Six files from the in-flight changes-21 F5 commit are not prettier-clean
+  (`admin/api/email/preview/route.ts`, four `admin/settings/email/**` screens,
+  `@repo/core`'s `email-admin.ts`). A formatting pass over them was reverted to
+  keep this change set out of that workstream; `pnpm format` will pick them up.
+
 ## 2026-09-12 — changes-21 F6: password recovery has screens, and the staff link stops pointing at /admin/admin (Modules 04/12/09, ADR-079)
 
 Better Auth has minted reset tokens since Module 04 and F4 gave them a real
@@ -15627,3 +15746,546 @@ names no portal (ADR-052). Normalising to exactly one `/admin` handles both.
 - `check:reserved-paths` currently FAILS on `markets` and `tools`, two route
   directories that belong to a different, uncommitted changeset in this working
   tree. Not this PR's to reserve — the check is doing its job.
+
+## 2026-09-12 — changes-24: the lesson pager, the contents rail, and a course outline that reads as a sequence (Modules 07/12, ADR-082)
+
+Three items from `docs/changes/changes-24-fixes.md`, each with a screenshot.
+All three are recorded as rules in **ADR-082** rather than only as edits,
+because each will be wrong again the next time somebody adds a learning
+surface.
+
+### Shipped — the "Next" pager was a slab with an unreadable label
+
+`LessonNav` rendered two `flex-1` `Button`s. A Button is `whitespace-nowrap`
+at a fixed height, so the lesson title had to `truncate` on one line and the
+pair came out as two wide, flat, half-height blocks — and the word that says
+which way the reader is going was `text-xs opacity-80` on the brand ground.
+
+It is two cards now: back is an outline card on `bg-card` with a muted disc,
+forward is filled `bg-primary` with a `--primary-foreground` disc, two lines of
+title in flow and one in the pinned mobile bar. **The eyebrow separates from
+the title by SIZE, not by opacity** — `text-2xs` caps against `text-base`
+semibold, every string at full strength.
+
+Nothing in CI could see the old version. It types, it lints, and axe does not
+compute contrast through an `opacity` set on an ancestor of the text, so
+`lesson-nav.test.tsx` asserts it structurally instead: the component contains
+no `opacity-*` at all, and the eyebrow is `text-2xs uppercase`.
+
+### Shipped — the contents rail was the course page's layout in a 16rem column
+
+`CurriculumList`'s `full` variant lays a row out as
+`[marker] [title …] [duration]`. Subtract the panel's `px-4`, the row's `px-3`,
+a 20px marker, two gaps and a `shrink-0` "42-min read" from 256px and the title
+has about **78px** left — which is why `price-action-candlesticks` came out one
+word per line and a two-lesson section stood taller than the article beside it.
+
+- **A new `rail` variant** (ADR-082 #2), used by the lesson sidebar AND its
+  mobile Sheet. The reading time and the badges drop to their own line under
+  the title, the section count sits under the section title, and the
+  Accordion's `hover:underline` is turned off — at rail width it underlined
+  four wrapped lines of a section title at once.
+- **`rail` renders no card of its own.** It is used bare inside a Sheet, where
+  a second border would be a panel inside a panel; the lesson page supplies the
+  header band and the rule that were the missing separation.
+- `--grid-rail-main` 16rem → **18rem**. Read by the lesson page and its
+  skeleton and nothing else, so it is a one-line change.
+- `CurriculumLesson` gains `isCurrent`, which is **not** `state`: the island
+  can mark several lessons `in-progress` and exactly one row is the page the
+  reader is on. It drives `aria-current="page"` plus a tint AND an
+  inline-start edge bar.
+
+### Shipped — the course outline is a timeline of play marks
+
+The owner's reference (image-41) is a vertical timeline: a circled play mark
+per lesson, joined by a connector, the whole row a target. The `full` variant
+draws that now — an `<ol>`, a `size-9` marker per lesson, a `w-px` connector
+below every node but the last.
+
+- **`LessonStateIcon`'s `not-started` glyph is `Play`, filled.** It was the one
+  state whose glyph said nothing: an empty ring is the ABSENCE of a mark, so
+  three states carried meaning and the fourth carried a hole. Check / dot /
+  triangle / padlock stay mutually distinct in greyscale and the `aria-label`
+  is unchanged, so plan §10's never-colour-alone rule is untouched.
+- **The marker is outside the anchor and clickable anyway** — the
+  stretched-link construction `CourseCard` and `QuizCard` already document,
+  which is the only shape that keeps the play mark in the click target without
+  nesting anchors or adding a second entry to the accessibility tree. The trap
+  it brings is that nothing between the anchor and the `<li>` may be
+  positioned; `curriculum-list.test.tsx` asserts the `<li>` is the nearest
+  positioned ancestor rather than trusting the row to look right.
+- Only the `not-started` marker takes the hover tint. Tinting every node would
+  erase the state it is there to report.
+
+### Decided here
+
+- **A layout that only works above some width is a VARIANT, not a
+  breakpoint.** The alternative was `md:` overrides inside `full` — but the
+  component cannot see which column it was dropped into, and the rail and the
+  Sheet are different widths at the same viewport. The caller names the
+  surface and the component stops guessing.
+- **`isCurrent` is a separate flag from `state`.** Reusing `in-progress` for
+  "this page" worked only because the server has no session; the moment the
+  island answers, several rows are in progress and the highlight would land on
+  all of them.
+- **`<ol>`, not `<ul>`, in the timeline.** The curriculum was always ordered
+  and the accordion only implied it; drawing a sequence and announcing an
+  unordered list would be the markup disagreeing with the picture.
+- **The pager labels changed value, not key.** `learn.lesson.previous` / `.next`
+  read "Previous lesson" / "Next lesson". They are eyebrows now, and "Next"
+  alone above a lesson title read as a heading for it. `en.json` only —
+  `learn.*` is absent from the three inactive catalogs (ADR-043 #3).
+
+### Verified
+
+- `@repo/ui` **406/406** across 23 files, including the two new guard files
+  (`curriculum-list.test.tsx` 12, `lesson-nav.test.tsx` 7); `apps/web`
+  **1487/1487** across 28 files — `grid-base`, `loading-states` and the
+  public-chrome guards all still green over the changed files.
+- Typecheck and lint clean on `@repo/ui` and `apps/web`.
+- **Dev server, rendered HTML.** `/learn/forex/forex-foundations-how-currency-markets-work`
+  serves the `<ol>` timeline with two `size-9` markers, one connector, two
+  filled play glyphs and two stretched links; the lesson page serves the rail
+  panel's header band, one `before:bg-primary` current-row bar, the
+  `aria-current="page"` it belongs to, and the filled forward card. Both 200.
+- **Not verified visually.** The devtools browser profile was held by two
+  Chrome windows already open on the site, and killing the owner's own windows
+  to take a screenshot was the wrong trade. The structure is asserted in the
+  guards and in the served HTML; the look is the owner's call on the next pass.
+
+### Owed
+
+- axe and Lighthouse over `/learn/**`, still Module 14's.
+- The RTL smoke pass that would prove the timeline connector and the pager's
+  flipped chevrons in `ar` — the pager's arrows are one of the three surfaces
+  plan §10 names as highest-risk, and the guard only asserts the class is
+  present.
+- `changes-23-livestream.md` is untracked in this tree and not started.
+
+## 2026-09-12 — changes-22 round two: one FAQ panel for both detail pages, and related terms become a destination card (Modules 07/12/15)
+
+The owner's changes-22 review had ended with "in the details page the
+frequently asked question color should be different from the above details".
+That was read as a /news fix and shipped as one. The same message came back
+pointed at `/glossary/yield` — the glossary term page carried the identical
+block and had never been touched. Fixing it in place would have left a third
+detail page free to invent a fourth shape, so the treatment became a component.
+
+### Shipped — `@repo/ui/components/faq-panel`
+
+`FaqPanel` is the surface changes-22 gave /news, now the ONE FAQ treatment on
+a public detail page: a `bg-muted/40` panel with `ring-1 ring-foreground/10`, a
+tinted `MessageCircleQuestionMark` disc, an optional lead, and the accordion
+under it. The tint is the page's existing second surface (`Section
+tone="muted"`), not a new one.
+
+The icon disc is `bg-primary/10`, **not `--primary-subtle`** — the fixed
+near-white tint Lighthouse measured at 1.65:1 against `--primary-interactive`
+in dark mode on 2026-09-04. `badge.tsx`, `card.tsx` and `icon-card.tsx` each
+carry a test for that pairing; `faq-panel.test.tsx` now carries the fourth, and
+the glossary page's Related-terms disc took the same fix in the same pass.
+
+- **`format` is the only thing the two call sites disagree about.** An
+  article's answers are sanitized rich text from the editor; a glossary term's
+  are plain textarea text stored unparsed (`format="text"`, rendered
+  `whitespace-pre-wrap`). Both render inside the component, so the answer's
+  prose styling has one home. It selects a renderer — sanitization is still the
+  save path's job (ADR-009 / security.md #8).
+- **The first answer is open.** Base UI unmounts a closed panel, so an
+  all-closed accordion is a stack of triggers and nothing else: the block would
+  say "there are questions here" without showing that it answers any of them,
+  which is half of what was asked for. `defaultValue={["faq-0"]}`; the rest stay
+  collapsed so a long FAQ cannot push the page's own ending out of reach.
+- **Absent, not empty-headed,** when a page has no questions.
+- `/news/[slug]` was retrofitted in the same pass and dropped its four
+  `Accordion*` imports.
+
+### Shipped — the glossary term page
+
+- **The FAQ leaves the prose stack.** It had been a fifth `h2` over a `<dl>`
+  inside the same `flex-col gap-8` as the four explanations, on the same
+  background: nothing told a reader the page had stopped explaining the term
+  and started answering questions about it. It is now a sibling of the prose
+  block with its own `Reveal`.
+- **Related terms became a card, not a rule over chips.** A `border-t` is how a
+  page separates two parts of the SAME thing; these are exits to other terms,
+  so they take the `border bg-card shadow-sm` surface the glossary gives a
+  destination everywhere else, with a `Waypoints` disc, a lead, and pill chips
+  that lift on hover. A card against the FAQ's tinted panel is what keeps the
+  two blocks telling apart at a glance — one shared surface would not.
+
+Two catalog keys added to the public `glossary` namespace (`faqLead`,
+`relatedLead`) and one to `news` (`faqLead`). English only, per ADR-043 #3 —
+`check:catalog-completeness` exits 0 (the other three locales warn, as they
+already did for every glossary key).
+
+### Tests
+
+`packages/ui/src/components/faq-panel.test.tsx` — absent when empty, the tint
+and the ring present (a silent loss of them is the bug returning), every
+question a disclosure with the first answer rendered and the second not, both
+formats, and the lead only when a caller passes one.
+
+`pnpm lint` and `pnpm typecheck` clean in `packages/ui` and `apps/web`;
+`packages/ui` 412 tests pass, `apps/web` 1487 pass; `/glossary/yield` and
+`/news/[slug]` verified rendering against the dev server.
+
+No ADR: this is changes-22's own rule ("a FAQ on a detail page is its own
+surface") applied to the page that had been missed, plus the component that
+makes it unrepresentable to miss the next one.
+
+## 2026-09-12 — Module 03/10: permission cards are page-shaped (ADR-083)
+
+The owner asked that permissions be listed the way the admin's own pages are
+grouped — courses and lessons in a card of their own, the way News & Analysis
+has one.
+
+They weren't. `Permission.groupName` held nine values and one of them,
+`content`, held 26 of the 75 keys: every course, lesson, glossary, media,
+article and comment capability in a single scrolling column. The role editor
+ordered the cards alphabetically, so `cms` — a module cancelled by ADR-042 —
+drew first and `users` ninth, and it rendered the raw group id under a
+`capitalize` class, which is how `seo` had been reading as "Seo".
+
+### Shipped
+
+- **Thirteen page-shaped groups.** `content` splits into `learning` (courses
+  and lessons, and so quizzes and videos, which are gated on the lesson keys by
+  ADR-058 #8 and ADR-068 §3), `glossary`, `media` and `articles` — which takes
+  `comments.moderate`, since a comment hangs off an article and is moderated
+  nowhere else. `cms` is renamed `website` to match the screen it governs.
+- **`packages/db/src/permission-groups.ts`** — `PERMISSION_GROUPS` as an ordered
+  array mirroring the admin sidebar (People → Learning → Content → data and
+  reach → System), plus `permissionGroupOrder()`, which returns the array length
+  for a name it does not know: a group seeded before a rename sorts last rather
+  than vanishing, because a card that disappears hides granted permissions. It
+  lives in `@repo/db` for the reason `role-exclusions.ts` does — the seed reads
+  it, `@repo/core` reads it, and `db` is the only package below both.
+- **`loadRoleMatrix()` orders groups by the registry index** and permissions by
+  `sortOrder`, which the seed now writes from the registry index. A card reads
+  view → create → update → delete → publish; alphabetically `create` came first
+  and the key that grants access at all was fourth.
+- **Labels are catalog keys.** `admin.permissionGroups.*` and
+  `admin.permissionGroupDesc.*`, resolved through `t.has` with a `humanizeKey()`
+  fallback — the two-step `settings-shared.ts` already uses for settings groups
+  (ADR-044 #5). New shared helper
+  `app/(admin)/admin/_components/permission-groups.ts`. The `capitalize` class
+  is gone: a catalog string is never re-cased.
+- **Each card carries a one-line description naming the screens it governs** —
+  ADR-044 #8 one level down.
+- **The count left the heading.** It had been a `<span className="ms-2">` INSIDE
+  the `<h3>`, so the accessible name concatenated to "Users & roles0of9" — a
+  margin is not a space. It is a sibling now, which is also better semantics: a
+  heading should not name a number that changes as you click.
+- **The per-user override dropdown takes the same order and the same labels.**
+  It had been rendering 75 raw dotted identifiers in one alphabetical list
+  (ADR-044 #5 again, and unusable besides). Options are now
+  `"<group> · <permission label>"` in card order, which is what makes the
+  combobox's search input useful: "courses" narrows to all ten course and
+  lesson keys.
+
+### What did not change
+
+No permission key was added, removed or renamed, so every `requirePermission()`
+string in the repo is untouched and `check:permission-keys` reads the same
+registry — the tuple shape its regex parses is unchanged. `content_manager` was
+seeded by filtering for the `content` group; it filters for
+`CONTENT_LIFECYCLE_GROUPS` now, whose union is exactly the old group, and the
+test pins the resulting 26 keys. No migration and no reset: `groupName` is a
+value, and the seed's permission upsert already updated it.
+
+### Tests
+
+`packages/db/src/permission-groups.test.ts` — 8 tests. The registry and the
+seed's group column agree in BOTH directions (a seeded group the registry does
+not list; a listed group with no keys), no duplicates, the order spelled out
+rather than derived, an unregistered group sorting last, the content split
+covering exactly the old group's 26 keys, and two source guards on the seed
+itself.
+
+`pnpm lint` and `pnpm typecheck` clean across `packages/db`, `packages/core` and
+`apps/web` — the six `admin-reads.ts` `groupBy` errors are from separate
+in-progress work in the tree, not this change. `packages/db` 19 pass,
+`packages/core` 105 pass (unit), `apps/web` 1487 pass.
+`check:permission-keys` OK; `check:catalog-completeness` exits 0 (the admin
+namespace is English-only by ADR-043 #2).
+
+Verified against the dev server on `/admin/roles/content_manager`: thirteen
+cards in sidebar order, "Courses & lessons 10 of 10" and "News & Analysis 7 of
+7" as separate cards, every card described, and the override combobox on
+`/admin/users/[id]` listing "Users & roles · View users" and on down.
+
+## 2026-09-12 — changes-26: the dashboard stops being about articles (Modules 09/11/03, ADR-085)
+
+The owner asked for "stats & graphs presentations of other features like
+courses, glossary, video, analysis etc on the admin dashboard as well".
+
+`/admin` showed four platform stat cards, a growth curve of users + articles,
+a donut of **article** statuses and an activity feed. Courses, lessons,
+quizzes, glossary terms and video topics — five content types with their own
+admin sections, their own workflow and their own public surfaces — appeared
+nowhere. An editor with six draft lessons and a quiz stuck in review had to
+open four screens to learn that.
+
+### Shipped — `@repo/core`
+
+`admin-reads.ts` gained a content section built on ONE registry,
+`CONTENT_MODELS`: per entity, the permission key that gates it and three
+closures (status breakdown, published-in-window count, published dates).
+`DASHBOARD_CONTENT_ENTITIES`, `DASHBOARD_CONTENT_PERMISSIONS`,
+`loadAdminContentStats(range, entities)` and
+`loadAdminContentSeries(range, entities)` all derive from it, so a seventh
+content type is one entry.
+
+Two Prisma details are recorded in the code because both cost time:
+
+- **Explicit closures, not a delegate lookup.** The six model delegates are
+  differently generic, so a `Record<string, delegate>` collapses to a union
+  that neither `groupBy` nor `count` survives.
+- **`groupBy` infers its generic from its ARGUMENT.** A contextual return
+  type — the interface field's `Promise<{status, _count}[]>` — hijacks that
+  inference and then reports the *argument* as the type error, six times over.
+  Assigning the call to an un-annotated local inside the closure is the fix.
+
+**`DASHBOARD_CONTENT_STATUSES` is `Object.values(ContentStatus)`.** The
+schema's declaration order already is pipeline order, and deriving it means an
+eighth workflow state arrives here on its own and fails the bucket guard until
+somebody says which bar it belongs in. A retyped list would have dropped it
+silently and the bars would have stopped summing to their row's total.
+
+`foldContentStatusCounts` is exported for its own test: zero-fill every state,
+sum the total. The zero-fill is what keeps the bars' segment order and the
+legend's length stable as content moves.
+
+### Shipped — `apps/web`
+
+**Content library** — six stat cards (courses · lessons · quizzes · glossary
+terms · video topics · articles), each the live published count with a trend
+against the previous window and the period's own publish count on the meta
+line, each a link to its admin section.
+
+**Content pipeline** — replaces the article donut. Six labelled rows of
+proportional segments over five buckets: draft · in review · scheduled ·
+published · archived. That fold is `CONTENT_STATUS_TONE`'s own grouping
+(`status-badge.tsx` already decided IN_REVIEW, SEO_REVIEW and APPROVED are one
+tone), so a bar cannot tell an editor a different story from a badge on the
+courses table. Colour belongs to the **bucket**: the donut indexed a colour
+array, so a status changed colour whenever a zero-count one dropped out.
+
+**Publishing output** — six small multiples, one per type, each scaled to its
+own peak (the card's description says so). Small multiples rather than a
+six-series stack because the palette forces it: three of this theme's six
+saturated hues are the status colours the pipeline uses two cards away, and
+painting "videos" in the warning hue beside a card where that hue means
+"archived" is the reserved-status-colour mistake.
+
+**Learning engagement** — enrolments, active learners, lessons completed, quiz
+attempts, plus the five most-started courses as started-vs-completed bars on
+one scale, and a link through to `/admin/learn/progress`. Reuses
+`loadLearnAnalyticsSummary` / `loadCourseAnalytics`; no new read.
+
+### Decisions
+
+- **Each new block is permission-scoped, and an unscoped block is not
+  queried.** `/admin` has no page permission (the layout's STAFF gate covers
+  it), which was fine while every number was a platform total and is not fine
+  for draft counts. The page resolves its subject and narrows the content read
+  through `visibleContentEntities()`; the learning block is behind
+  `can(subject, "analytics.view")`, the key `/admin/learn/progress` has used
+  since changes-11 Phase 9. The narrowing is in the READ, not the render — a
+  block a subject may not see costs no round trip and reaches no RSC payload.
+- **No permission key added.** Quizzes and videos gate on `lessons.view`, the
+  keys they publish under (ADR-058 #6, ADR-068). A subject holding only
+  `lessons.view` therefore sees three cards, which is intended.
+- **The donut is deleted, not kept.** `DashboardStatusChart`,
+  `DashboardStatusLegend` and `loadAdminArticleStatusBreakdown` are gone;
+  keeping them would have shown articles twice in two geometries. Recharts'
+  `Pie`/`PieChart`/`Cell` imports went with them.
+- **The three new graphics are server components drawn in CSS.**
+  `dashboard-charts.tsx` stays Recharts for the growth curve — that is what a
+  charting library is for. A proportion bar is a `<div>` with a width, and in
+  a one-third column Recharts' category axis truncates each type to ~70px and
+  hides the counts behind a hover.
+- Registries live in ONE file, `admin/_lib/dashboard-content.ts` (icon, href,
+  label key, pipeline buckets), plain `.ts` with no JSX so the guard imports
+  it rather than reading the page as source.
+
+### Tests
+
+`packages/core/src/admin-dashboard.test.ts` — 13 pass. The status list IS the
+Prisma enum and opens on DRAFT; the fold zero-fills, totals what it breaks
+down, and is all zeroes for an empty type; `visibleContentEntities` returns
+nothing for no keys, everything for all keys, exactly `["lessons","quizzes",
+"videos"]` for the one shared key, and keeps registry order regardless of which
+keys are held; `DASHBOARD_CONTENT_PERMISSIONS` is deduped, covers every entity
+and names only `*.view`.
+
+`apps/web/app/admin-dashboard-registries.test.ts` — 15 pass. Every entity has
+an icon, an `/admin/` destination and a catalog VALUE (ADR-044 #5's real
+failure mode is `t()` missing and the identifier rendering); destinations are
+distinct; the buckets claim every workflow status exactly once; every bucket is
+labelled, filled from a `var(--color-*)` token, and has its own fill; every
+gate key is in the seed registry — testing.md #5's silent-403 check in its read
+form, where a typo hides a block from everyone forever.
+
+`pnpm lint`, `pnpm --filter web typecheck` and `pnpm --filter @repo/core
+typecheck` clean.
+
+### Owed
+
+- Integration coverage for `loadAdminContentStats` / `loadAdminContentSeries`
+  against real MariaDB. Docker was not running on this machine, so the
+  Testcontainers suites could not be executed here at all — the queries are
+  unverified against a live database.
+- Not verified visually: no dev-server pass was taken over `/admin`.
+- axe over the new blocks, still Module 14's.
+
+---
+
+## 2026-09-12 — changes-26 round two: the dashboard's windows land on days, and the content reads meet a real database (Modules 09/11, ADR-085)
+
+Reviewing the blocks ADR-085 shipped, against the two items its Consequences
+left owed. The coverage landed; the review found two defects in the window
+arithmetic underneath every number on the screen, and both are fixed here with
+their regression tests (testing.md #2).
+
+### The bug: a bucket labelled with a day did not contain that day
+
+`dashboardWindow()` anchored the period at `now` — `now − 30 days`, to the
+millisecond — while `loadAdminDashboardSeries` and `loadAdminContentSeries`
+label each bucket `bucketStart.toISOString().slice(0, 10)`. So on a render at
+14:37, the bucket labelled `2026-09-09` actually ran 09-09 14:37 → 09-10 14:37,
+and **everything published before 14:37 on its own day was plotted, and
+hovered, under the previous day's date.** The growth chart has had this since
+Module 09; the publishing-output panels inherited it, and they state the date
+in a `title` on every bar, which is where it becomes something an editor reads
+rather than something an axis blurs.
+
+`dashboardWindow` now floors to the start of a UTC day and spans `days - 1`
+back from it, so a range is that many **calendar** days ending today, and a
+bucket contains its label. Both series and every stat-card window read the one
+function, so the card and the panel beside it still agree — which is the reason
+the fix belongs in the shared helper rather than in the two series.
+
+Second defect in the same arithmetic: `bucketSize` hand-wrote `{ unitDays: 30,
+buckets: 12 }` for the 1y range. 12 × 30 = 360 < 365, so everything published
+in the most recent five days was clamped into a bucket labelled a month
+earlier. The count is now derived — `ceil(days / unitDays)` — which is the
+value that cannot be wrong: 7d → 7, 30d → 30, 90d → 13, 1y → 13.
+
+`dashboardWindow` and `bucketSize` are exported for their tests, the way
+`foldContentStatusCounts` already is.
+
+### Shipped — tests
+
+`packages/core/src/admin-dashboard.integration.test.ts` — NEW, 12 pass against
+MariaDB 11.4 via Testcontainers. `CONTENT_MODELS` is six entries of three
+hand-written closures, each repeating the same three clauses (the right
+delegate, `deletedAt: null`, `status: PUBLISHED` inside a `publishedAt`
+window), and a closure that reads its neighbour's table type-checks and passes
+every unit test in the file next door. So each type is seeded with a different
+shape, and the assertions fail in pairs if one strays:
+
+- each type reports from its own table (six distinct totals);
+- a soft-deleted PUBLISHED row dated inside the window reaches no number —
+  not the total, not `published`, not the status fold, not the period count;
+- the bars sum to their row, and `published` equals the PUBLISHED bucket, for
+  every type;
+- the period and the previous period are disjoint, and 7d reaches neither the
+  40-day-old row nor its own previous window;
+- a PUBLISHED row with a null `publishedAt` counts as live and belongs to no
+  window — it must not be bucketed into one;
+- `entities` narrows the read and returns registry order, and an empty list
+  returns nothing at all;
+- the series sums to `publishedInPeriod` for every type (the two numbers sit
+  on screen together);
+- a row lands in the bucket for the day it was published — **the regression
+  test for the alignment bug**, which fails on the old anchoring;
+- every entity key is a finite number even for a type that was never read (a
+  missing key plots as NaN and takes the panel with it);
+- a 90d fold keeps both rows across 13 weekly buckets, and a row published
+  before the window opened does not clamp into the first one.
+
+`packages/core/src/admin-dashboard.test.ts` — 19 pass (was 13). Six added for
+the window arithmetic: `periodStart` is a UTC midnight; each range spans its
+own number of calendar days, today included; the previous window is the same
+length, immediately before, non-overlapping; `buckets × unitDays` covers the
+window for every range; 1y reaches 365; 7d and 30d stay daily.
+
+`apps/web/app/admin-dashboard-registries.test.ts` — 15 pass, unchanged.
+
+### Two lint fixes on the way through
+
+`apps/web/app/(admin)/admin/_lib/dashboard-content.ts` imported
+`DASHBOARD_CONTENT_STATUSES` as a value and used it only inside a `typeof`
+query; `packages/core/src/quizzes.ts` did the same with `FeatureVisibility`.
+Both are now `import type` (code-style.md #13). The previous entry recorded
+lint clean; it was not.
+
+### Tests run
+
+`pnpm --filter @repo/core exec vitest run src/admin-dashboard.test.ts` — 19
+pass. `… src/admin-dashboard.integration.test.ts` — 12 pass.
+`pnpm --filter web exec vitest run app/admin-dashboard-registries.test.ts` —
+15 pass. `pnpm --filter @repo/core lint` clean; `pnpm --filter @repo/core
+typecheck` clean.
+
+### The dev-server pass, and the bug only it could find
+
+Docker came back, so `/admin` was finally opened in a browser — the item the
+previous entry had owed twice. Everything ADR-085 shipped renders: the pipeline
+bars and their legend, the six content cards, the six output panels, the
+learning block, and the growth curve (whose 8-article spike now sits on
+2026-09-07, where it happened). The 1y range was checked in the running app for
+the bucket fix above: 13 buckets, the last one starting 2026-09-08 and holding
+today's rows, where before there were 12 and today's rows were folded into a
+bucket labelled a month earlier.
+
+**What it found: the content cards rendered no meta line at all.**
+`DashboardStatCard` builds its meta only when a PERCENTAGE can be computed,
+and a previous period of 0 makes the percentage undefined — so on a platform
+whose content all arrived this month, every one of the six cards showed a
+number and nothing else. The line it dropped is the one ADR-085 added them
+for: "12 published this period", which is what stops the figure (a live total)
+from being read against the trend's denominator (a window's publishes).
+
+The fix separates the two kinds of caption, because they are not the same kind
+of sentence. `trendLabel` ("vs previous period") is a SUFFIX to a percentage
+and reads as nothing without one, so it stays inside the branch that prints a
+number. The new `note` is a statement in its own right and renders whether or
+not a trend exists. The content cards pass `note`; the platform tiles keep
+`trendLabel`. Verified in the browser: the cards now read "5 published this
+period", "16 published this period", and so on.
+
+`apps/web/app/(admin)/admin/_components/dashboard-stat-card.test.ts` — NEW, 3
+pass. A source guard, the idiom apps/web already uses (`top-bar-icons.test.ts`)
+since it has no jsdom: the note has a branch of its own, `trendLabel` stays
+inside the percentage branch, and the page passes the period sentence as
+`note` rather than `trendLabel`.
+
+One observation, not acted on: `--color-success` in this theme is `#2D72C7`
+and `--color-info` is `#004284` — ADR-072 §3's AA-safe siblings of the
+reference's palette, so "published" and "in review" are two blues. They are
+never adjacent in a bar (scheduled sits between them) and the legend prints
+every count, so the card stays readable, but the palette has less separation
+than ADR-085 §4 assumed when it reasoned about six hues. Colour is
+admin-dynamic (ADR-072), so this is a note for whoever next touches the
+default palette, not a code change.
+
+### Owed, and what is not this work's
+
+- axe over the new blocks — Module 14's.
+- **Blocking the repo-wide gate, and NOT from this work:** `pnpm lint` and
+  `pnpm build` fail at the turbo graph with a cyclic package dependency —
+  `@repo/rbac → @repo/auth → @repo/email → @repo/settings → @repo/rbac`. The
+  last edge is `@repo/settings`'s **devDependency** on `@repo/rbac`, which
+  exists for one import in `settings.integration.test.ts`; the cycle closed
+  when changes-21 (ADR-078) added `auth → email → settings`. architecture.md
+  #8 permits every edge individually — nothing here has to move — but turbo
+  refuses the cycle, so lint and build can only be run per package until that
+  dev-only edge is broken.
+- Also failing and not this work's: `apps/web/app/(public)/[locale]/newsletter/
+  _components/token-action.tsx` (`react-hooks/set-state-in-effect`, plus two
+  `useActionState` overload errors) and `app/(admin)/admin/newsletter/
+  subscribers-table.tsx` (`asChild` is not a `Button` prop). Left to the
+  changes-21 surface that owns them.

@@ -25,7 +25,13 @@ import { publishDueArticles, publishDueContent } from "@repo/core";
 // system user to satisfy it would put a fictional actor in the audit trail.
 // The sweeps audit with `userId: null`, the convention `publishDueArticles`
 // set for exactly this case.
-export const dynamic = "force-dynamic";
+//
+// **No `export const dynamic`**: a route-level segment config is INCOMPATIBLE with
+// `cacheComponents` (ADR-004), and Next refuses to compile the file — which is
+// how `publish-due` came to answer 500 to every caller rather than running the
+// sweep. It is also unnecessary: a route handler reading `process.env` and the
+// request headers is dynamic already. architecture.md #12 bars the sibling
+// `export const revalidate` for the same reason.
 
 function unauthorized(): NextResponse {
   return NextResponse.json(

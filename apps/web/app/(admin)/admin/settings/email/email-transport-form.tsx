@@ -101,13 +101,16 @@ export function EmailTransportForm({
 
   const submit = (clearPassword?: boolean) => {
     if (!form.validate()) return;
-    run(() => saveEmailTransportAction({ ...values, ...(clearPassword ? { clearPassword } : {}) }), {
-      successMessage: labels.saved,
-      onDone: () => {
-        setPassword("");
-        setTestResult(null);
+    run(
+      () => saveEmailTransportAction({ ...values, ...(clearPassword ? { clearPassword } : {}) }),
+      {
+        successMessage: labels.saved,
+        onDone: () => {
+          setPassword("");
+          setTestResult(null);
+        },
       },
-    });
+    );
   };
 
   const isSmtp = driver === "SMTP";

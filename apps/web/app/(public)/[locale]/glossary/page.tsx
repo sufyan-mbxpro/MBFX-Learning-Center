@@ -98,7 +98,6 @@ export default async function GlossaryPage({ params }: PageProps<"/[locale]/glos
           it did before Phase 10. */}
       <GlossaryTabs
         ariaLabel={t("browseLabel")}
-        current={GLOSSARY_PATH}
         items={
           topics.length === 0
             ? []

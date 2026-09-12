@@ -29,9 +29,7 @@ export async function generateMetadata({
   };
 }
 
-export default async function ResetPasswordPage({
-  params,
-}: PageProps<"/[locale]/reset-password">) {
+export default async function ResetPasswordPage({ params }: PageProps<"/[locale]/reset-password">) {
   const { locale } = await params;
   setRequestLocale(locale);
   const t = await getTranslations("auth");
