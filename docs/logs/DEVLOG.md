@@ -18521,3 +18521,59 @@ locale — today `en` (ADR-091).
 ### Owed
 
 B5 (alt text) → B6 (quiz generation).
+
+## 2026-09-14 — B5: alt text, and a bulk screen that writes nothing
+
+**Module 18** — changes-29 PR B5. A **Describe it** button in the media detail
+dialog, and a review list on `/admin/media` for every image that has none.
+
+### Where §2.2 #7 was easiest to break
+
+A bulk alt-text run over 200 images is one `updateMany` away from being a
+background writer, and the result would LOOK right. So generation returns
+SUGGESTIONS: every row is editable, every row is accepted individually, and the
+accepted ones are saved through `updateMediaMetaAction` — the same action,
+schema and `media.update` check a hand-typed alt text goes through. A row the
+model could not describe arrives NOT accepted, because an image nothing could
+describe is information rather than a blank to be saved.
+
+`media.integration.test.ts` asserts the negative against a real database:
+generation runs, suggestions come back, and the whole `MediaAsset` row is
+byte-identical afterwards. Not just `altText` — a path that quietly touched the
+title would be the same mistake wearing a different name.
+
+### Four decisions
+
+1. **The bytes are read in `@repo/core`**, through `readStoredFile`, which
+   serves only keys the `MediaAsset` table knows and carries the MIME recorded
+   at upload. `@repo/ai` never touches storage and is never handed a URL —
+   security.md #9 restated for a client that would happily follow one.
+2. **An oversize image is refused with a reason**, not downscaled. Adding
+   `sharp` is a supply-chain decision (security.md #15), and the honest empty
+   state is the ADR-087 #11 pattern.
+3. **The bulk run is sequential**, not `Promise.all`: these are provider calls
+   against one budget and one rate window, and firing twenty at once is how a
+   bulk screen turns a cap into a race.
+4. **The estimated cost is shown before the run starts.** It is the one AI
+   control in the admin that spends N times, so "suggest descriptions" has to
+   be a decision rather than a guess.
+
+### A CI script fixed on the way past
+
+`check:phantom-deps` reported a phantom dependency on the words **"the list is
+empty"**. Its import pattern is a regex, not a parser, and a JSDoc line ending
+`… tell "the column is null" from "the list is empty"` matched it. The scanner
+strips comments now — no import has ever lived inside one — with two new cases
+in its own test: an import-shaped sentence is ignored, and a real import on the
+line after a comment is still caught.
+
+### Tests
+
+Two new integration cases, seven new source guards, two new CI-script cases.
+apps/web **2029 passing across 44 files**; catalog completeness,
+`check:phantom-deps` and `governance:check` green.
+
+### Owed
+
+B6 (quiz generation) — the last Phase 2 PR, and the other place §2.2 #7 is a
+design constraint rather than a description.

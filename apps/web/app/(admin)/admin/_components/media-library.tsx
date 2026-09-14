@@ -24,7 +24,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import Image from "next/image";
-import { FileText, Music, Trash2, Upload, Video } from "lucide-react";
+import { FileText, Music, Sparkles, Trash2, Upload, Video } from "lucide-react";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { ConfirmDialog } from "@repo/ui/components/confirm-dialog";
@@ -38,6 +38,7 @@ import {
 } from "@repo/ui/components/dialog";
 import { EmptyState, ErrorState } from "@repo/ui/components/empty";
 import { Skeleton } from "@repo/ui/components/skeleton";
+import { Spinner } from "@repo/ui/components/spinner";
 import { Input } from "@repo/ui/components/input";
 import { SearchInput } from "@repo/ui/components/search-input";
 import { ControlSizeProvider } from "@repo/ui/components/control-size";
@@ -50,6 +51,8 @@ import {
   folderForCategory,
   updateMediaMetaSchema,
 } from "@repo/contracts";
+import { toast } from "sonner";
+import { suggestAltTextAction } from "../_actions/ai-actions.ts";
 import { deleteMediaAction, updateMediaMetaAction } from "../_actions/media-actions.ts";
 import { useFieldErrors } from "../_hooks/use-field-errors.ts";
 import {
@@ -79,6 +82,18 @@ interface MediaLabels {
   detailDescription: string;
   titleLabel: string;
   altTextLabel: string;
+  /**
+   * B5's half, or nothing.
+   *
+   * Its PRESENCE is the availability answer (ADR-097 #6): an AI-off install
+   * passes no `ai` key and the button does not exist.
+   */
+  ai?: {
+    generate: string;
+    generating: string;
+    failed: string;
+    reasons: Record<string, string>;
+  };
   categoryLabel: string;
   allCategories: string;
   categories: Record<MediaCategory, string>;
@@ -148,6 +163,7 @@ function AssetDetailDialog({
     asset.category ? asset.folder.slice(folderForCategory(asset.category).length + 1) : "",
   );
   const [tagsText, setTagsText] = useState(asset.tags.join(", "));
+  const [suggesting, setSuggesting] = useState(false);
   const { run, pending } = useServerAction();
   const router = useRouter();
   const replaceUpload = useUploadProgress<StoredMediaAsset>(
@@ -210,7 +226,43 @@ function AssetDetailDialog({
             <FieldError>{form.error("title")}</FieldError>
           </Field>
           <Field invalid={form.invalid("altText")}>
-            <FieldLabel>{labels.altTextLabel}</FieldLabel>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <FieldLabel>{labels.altTextLabel}</FieldLabel>
+              {/* changes-29 B5. ABSENT when the feature is off — there is
+                  nothing to grey out. The suggestion lands in the field; this
+                  Save is what persists it, through the same action and the
+                  same `media.update` check as a hand-typed one. */}
+              {canManage && labels.ai && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="xs"
+                  onClick={() => {
+                    setSuggesting(true);
+                    void suggestAltTextAction(asset.id)
+                      .then((result) => {
+                        if (result.altText) {
+                          setAltText(result.altText);
+                          return;
+                        }
+                        const reason = result.reason ?? "provider_error";
+                        toast.error(
+                          `${labels.ai!.failed} — ${labels.ai!.reasons[reason] ?? reason}`,
+                        );
+                      })
+                      .catch(() => toast.error(labels.ai!.failed))
+                      .finally(() => setSuggesting(false));
+                  }}
+                >
+                  {suggesting ? (
+                    <Spinner size="xs" aria-label={labels.ai.generating} data-icon="inline-start" />
+                  ) : (
+                    <Sparkles aria-hidden data-icon="inline-start" />
+                  )}
+                  {labels.ai.generate}
+                </Button>
+              )}
+            </div>
             <Input
               value={altText}
               onChange={(e) => setAltText(e.target.value)}

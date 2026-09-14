@@ -239,6 +239,68 @@ describe("updateMediaMeta", () => {
   });
 });
 
+// changes-29 B5 — the invariant, against a real database.
+//
+// ADR-097 #4 says AI never writes. A bulk alt-text screen is where that is
+// easiest to break and hardest to notice, because the "obvious" implementation
+// is one `updateMany` and the result LOOKS right. So this asserts the negative:
+// generation runs, suggestions come back, and the column is untouched.
+describe("AI alt text suggests and writes NOTHING (ADR-097 #4)", () => {
+  it("leaves altText exactly as it was", async () => {
+    const { driver } = fakeDriver();
+    media.setStorageDriverForTests(driver);
+
+    const aiMedia = await import("./ai-media.ts");
+
+    const asset = await media.storeMedia(actor.id, {
+      bytes: PNG,
+      fileName: "undescribed.png",
+      purpose: "content",
+      category: "general",
+    });
+
+    const before = await ctx.db.mediaAsset.findUniqueOrThrow({ where: { id: asset.id } });
+    expect(before.altText ?? null).toBeNull();
+
+    // AI is seeded OFF in this database, so every call refuses before any
+    // provider is reached — which is the point: a REFUSED path must not write
+    // either, and this is the state a fresh install is in.
+    const suggestions = await aiMedia.suggestAltTextForUndescribed({
+      actorId: actor.id,
+      assetIds: [asset.id],
+    });
+    expect(suggestions).toHaveLength(1);
+    expect(suggestions[0]?.assetId).toBe(asset.id);
+
+    const after = await ctx.db.mediaAsset.findUniqueOrThrow({ where: { id: asset.id } });
+    expect(after.altText ?? null).toBeNull();
+    // The WHOLE row, not just the one column: a suggestion path that quietly
+    // touched the title or the folder would be the same mistake wearing a
+    // different name. (`MediaAsset` carries no `updatedAt` to compare — the
+    // row itself is the comparison.)
+    expect(JSON.stringify(after)).toBe(JSON.stringify(before));
+  });
+
+  it("returns a reason rather than throwing when it cannot describe one", async () => {
+    const { driver } = fakeDriver();
+    media.setStorageDriverForTests(driver);
+    const aiMedia = await import("./ai-media.ts");
+
+    // A PDF is not an image: the service refuses it rather than sending bytes
+    // no vision model can read.
+    const asset = await media.storeMedia(actor.id, {
+      bytes: PDF,
+      fileName: "notes.pdf",
+      purpose: "content",
+      category: "general",
+    });
+
+    const suggestion = await aiMedia.suggestAltText({ actorId: actor.id, assetId: asset.id });
+    expect(suggestion.altText).toBeNull();
+    expect(suggestion.reason).not.toBeNull();
+  });
+});
+
 describe("deleteMedia — usage-guarded (ADR-034 §4)", () => {
   it("soft-deletes an unreferenced asset", async () => {
     const { driver } = fakeDriver();

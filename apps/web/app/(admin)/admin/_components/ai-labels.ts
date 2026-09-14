@@ -13,6 +13,7 @@ import type { AiAssistantLabels } from "./ai-assistant.tsx";
 import type { AiSeoLabels } from "./ai-seo-dialog.tsx";
 import type { AiTranslateLabels } from "./ai-translate-button.tsx";
 import type { TakeawaysLabels } from "./takeaways-field.tsx";
+import type { AltTextReviewLabels } from "../media/alt-text-review.tsx";
 
 /** Resolves a key under the `admin.ai` namespace. */
 type Translate = (key: string) => string;
@@ -137,5 +138,41 @@ export function takeawaysLabels(common: Translate, t: Translate): TakeawaysLabel
     failed: t("assistantFailed"),
     done: t("takeawaysDone"),
     reasons: aiReasonLabels(t),
+  };
+}
+
+/** B5's in-dialog half — the Generate button beside the alt-text field. */
+export function altTextFieldLabels(t: Translate): {
+  generate: string;
+  generating: string;
+  failed: string;
+  reasons: Record<string, string>;
+} {
+  return {
+    generate: t("altTextGenerate"),
+    generating: t("assistantGenerating"),
+    failed: t("assistantFailed"),
+    reasons: aiReasonLabels(t),
+  };
+}
+
+/** B5's bulk screen. `costNote` is interpolated by the page, which knows the price. */
+export function altTextReviewLabels(
+  t: (key: string, values?: Record<string, string | number>) => string,
+  costNote: string,
+): AltTextReviewLabels {
+  return {
+    title: t("altTextReviewTitle"),
+    description: t("altTextReviewDescription"),
+    costNote,
+    start: t("altTextStart"),
+    running: t("altTextRunning"),
+    save: t("altTextSave"),
+    saved: t("altTextSaved"),
+    accept: t("altTextAccept"),
+    empty: t("altTextEmpty"),
+    emptyBody: t("altTextEmptyBody"),
+    failedRow: t("altTextFailedRow"),
+    reasons: aiReasonLabels((key) => t(key)),
   };
 }

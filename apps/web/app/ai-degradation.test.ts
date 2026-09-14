@@ -322,6 +322,62 @@ describe("B4 — the takeaways list is an ordinary field", () => {
   });
 });
 
+describe("B5 — alt text suggests, and the bulk screen writes nothing", () => {
+  const review = stripped(join(APP_ROOT, "(admin)", "admin", "media", "alt-text-review.tsx"));
+  const library = stripped(join(APP_ROOT, "(admin)", "admin", "_components", "media-library.tsx"));
+  const page = readFileSync(join(APP_ROOT, "(admin)", "admin", "media", "page.tsx"), "utf8");
+  // Stripped: the service's own comments have to NAME `sharp` and
+  // `Promise.all` in order to explain why neither is used, and a guard that
+  // trips on its own explanation teaches the next reader to delete it.
+  const service = stripped(
+    resolve(process.cwd(), "..", "..", "packages", "core", "src", "ai-media.ts"),
+  );
+
+  it("writes nothing itself — accepted rows go through the media action", () => {
+    // §2.2 #7's hardest case before B6: a background writer over 200 images is
+    // one `updateMany` away and would make the model an editor.
+    expect(review).not.toContain("updateMany");
+    expect(review).toContain("updateMediaMetaAction(");
+    expect(service).not.toContain("mediaAsset.update");
+  });
+
+  it("does not accept a row the model could not describe", () => {
+    // An image nothing could describe is information, not a blank to be saved.
+    expect(review).toContain("accepted: suggestion.altText !== null");
+  });
+
+  it("shows the estimated cost BEFORE the run", () => {
+    // The one AI control in the admin that spends N times.
+    expect(review).toContain("costNote");
+    expect(page).toContain("altTextCostNote");
+  });
+
+  it("reads bytes in core and never hands the model a URL", () => {
+    // security.md #9 restated for a client that would happily follow one.
+    expect(service).toContain("readStoredFile(");
+    expect(service).not.toMatch(/fetch\(/);
+    expect(service).toContain("imageBase64");
+  });
+
+  it("refuses an oversize image honestly rather than adding an image library", () => {
+    // Adding `sharp` to downscale is a supply-chain decision (security.md #15),
+    // not a convenience.
+    expect(service).toContain("AI_ALT_TEXT_MAX_BYTES");
+    expect(service).toContain('reason: "content_too_large"');
+    expect(service).not.toContain("sharp");
+  });
+
+  it("generates one at a time, so a bulk run cannot outrun the cap", () => {
+    expect(service).not.toContain("Promise.all");
+    expect(service).toContain("for (const asset of assets)");
+  });
+
+  it("puts the Generate button behind a present prop, not a disabled state", () => {
+    expect(library).toContain("labels.ai && (");
+    expect(library).not.toMatch(/disabled=\{[^}]*labels\.ai/);
+  });
+});
+
 describe("the sealed key reaches no screen", () => {
   it("names apiKey only as a write-only form field, never as a rendered value", () => {
     for (const file of AI_SCREENS) {

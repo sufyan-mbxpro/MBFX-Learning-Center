@@ -27,6 +27,20 @@ function packageNameOf(specifier) {
   return specifier.startsWith("@") ? parts.slice(0, 2).join("/") : parts[0];
 }
 
+/**
+ * The source with comments removed.
+ *
+ * The import pattern is a REGEX, not a parser, so prose that happens to read
+ * like an import statement matches it. A JSDoc line ending
+ * `… tell "the column is null" from "the list is empty" —` did exactly that
+ * and reported a phantom dependency on a sentence. Stripping comments first is
+ * cheaper than parsing and removes the whole class: no import has ever lived
+ * inside a comment.
+ */
+function withoutComments(source) {
+  return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)\/\/.*$/gm, "$1");
+}
+
 /** Returns [{file, specifier}] for imports not declared in pkgJson. */
 export function findPhantomImports(pkgJson, files) {
   const declared = new Set([
@@ -37,7 +51,7 @@ export function findPhantomImports(pkgJson, files) {
   ]);
   const phantoms = [];
   for (const { path, source } of files) {
-    for (const match of source.matchAll(IMPORT_RE)) {
+    for (const match of withoutComments(source).matchAll(IMPORT_RE)) {
       const spec = match[1] ?? match[2];
       if (!spec || spec.startsWith(".") || spec.startsWith("/") || spec.startsWith("@/")) continue;
       if (BUILTINS.has(spec) || IMPLICIT_OK.has(spec)) continue;

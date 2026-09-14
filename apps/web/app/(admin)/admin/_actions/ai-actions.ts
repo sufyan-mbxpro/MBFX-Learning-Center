@@ -19,6 +19,9 @@ import { revalidateTag } from "next/cache";
 import { z } from "zod";
 import { aiFeatureSchema, aiLimitsSchema, aiModelSchema, aiProviderSchema } from "@repo/contracts";
 import {
+  suggestAltText,
+  suggestAltTextForUndescribed,
+  type AltTextSuggestion,
   deleteAiModel,
   deleteAiProvider,
   resetAiBudget,
@@ -29,7 +32,19 @@ import {
   testAiProvider,
   type AiProviderTestResult,
 } from "@repo/core";
-import { requirePermission } from "@repo/rbac";
+import { ForbiddenError, can, requirePermission, type Subject } from "@repo/rbac";
+
+/**
+ * A SECOND permission check on a subject already loaded.
+ *
+ * `requirePermission` loads the session; asking it twice in one action would
+ * mean two session reads to answer two questions about the same person. The
+ * throw is the same `ForbiddenError` the boundary raises, so a caller cannot
+ * tell the two apart — which is right, because they are the same refusal.
+ */
+function requirePermissionOn(subject: Subject, permission: string): void {
+  if (!can(subject, permission)) throw new ForbiddenError(`Missing ${permission}`);
+}
 
 const id = z.string().min(1).max(64);
 
@@ -116,4 +131,38 @@ export async function resetAiBudgetPeriodAction(): Promise<void> {
   const subject = await requirePermission("ai.settings.manage");
   await resetAiBudget(subject);
   invalidateLimits();
+}
+
+// ─── Alt text (B5) ───────────────────────────────────────────
+//
+// Server actions rather than the run endpoint, because the bytes are read
+// SERVER-side through `readStoredFile` — `@repo/ai` never touches storage and
+// the browser never sends an image it already has on the server
+// (security.md #9).
+//
+// Gated on `ai.use` AND `media.update`: the first is the spend, the second is
+// what a suggestion may eventually be saved into. Neither of them writes
+// anything — the admin saves through `updateMediaMetaAction` as always.
+
+export async function suggestAltTextAction(assetId: unknown): Promise<AltTextSuggestion> {
+  const subject = await requirePermission("ai.use");
+  // The SURFACE key, checked here for the same reason the run endpoint checks
+  // it: the key that governs the entity governs the AI that writes into it.
+  requirePermissionOn(subject, "media.update");
+  return suggestAltText({ actorId: subject.id, assetId: id.parse(assetId) });
+}
+
+export async function suggestAltTextBulkAction(input: {
+  assetIds?: unknown;
+  limit?: unknown;
+}): Promise<AltTextSuggestion[]> {
+  const subject = await requirePermission("ai.use");
+  requirePermissionOn(subject, "media.update");
+  const assetIds = z.array(id).max(25).optional().parse(input.assetIds);
+  const limit = z.number().int().min(1).max(25).optional().parse(input.limit);
+  return suggestAltTextForUndescribed({
+    actorId: subject.id,
+    ...(assetIds ? { assetIds } : {}),
+    ...(limit ? { limit } : {}),
+  });
 }
