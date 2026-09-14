@@ -51,6 +51,7 @@ import { saveQuizAction, setQuizStatusAction } from "../../../_actions/quiz-acti
 import { useFieldErrors } from "../../../_hooks/use-field-errors.ts";
 import { useServerAction } from "../../../_hooks/use-server-action.ts";
 import { trackLabels } from "../../_lib/learn-labels.ts";
+import { AiQuizButton, type AiQuizLabels } from "../../../_components/ai-quiz-dialog.tsx";
 
 /** Field issues for one question, by path relative to it (`prompt`, `options.0`). */
 interface QuestionIssues {
@@ -102,12 +103,24 @@ export function QuizEditor({
   canPublish,
   canUpdate,
   statusLabels,
+  ai,
 }: {
   initial: QuizEditorState;
   /** Holds `lessons.publish` (ADR-058 #8). The service re-checks it. */
   canPublish: boolean;
   canUpdate: boolean;
   statusLabels: ContentStatusLabels;
+  /**
+   * B6's generator, or nothing.
+   *
+   * Absent when the feature is off AND when this quiz has no published lesson
+   * to build from — a standalone quiz has no source, so the button that would
+   * use one does not exist (ADR-097 #6).
+   */
+  ai?: {
+    labels: AiQuizLabels;
+    lesson: { id: string; title: string; content: string; locale?: string };
+  };
 }) {
   const t = useTranslations("admin");
   const [state, setState] = useState(initial);
@@ -456,11 +469,42 @@ export function QuizEditor({
               />
             ))}
 
-            <div>
+            <div className="flex flex-wrap items-center gap-2">
               <Button variant="outline" size="sm" onClick={addQuestion}>
                 <Plus data-icon="inline-start" aria-hidden />
                 {t("quizzes.addQuestion")}
               </Button>
+              {/* changes-29 B6. Accepted questions join the editor's existing
+                  state and NOTHING is persisted until Save — the one feature
+                  where §2.2 #7 is a design constraint rather than a
+                  description. */}
+              {ai && (
+                <AiQuizButton
+                  labels={ai.labels}
+                  lesson={ai.lesson}
+                  onAdd={(generated) =>
+                    setState((s) => ({
+                      ...s,
+                      questions: [
+                        ...s.questions,
+                        ...generated.map((question) => ({
+                          type: "SINGLE_CHOICE" as QuestionTypeInput,
+                          points: 1,
+                          prompt: question.prompt,
+                          options: question.options,
+                          // The generated explanation belongs to the CORRECT
+                          // option, and the editor stores explanations
+                          // positionally — so it lands there and nowhere else.
+                          explanations: question.options.map((_, index) =>
+                            index === question.correctIndex ? (question.explanation ?? "") : "",
+                          ),
+                          correctAnswer: question.correctIndex as AnswerValue,
+                        })),
+                      ],
+                    }))
+                  }
+                />
+              )}
             </div>
           </div>
         </EditorSection>

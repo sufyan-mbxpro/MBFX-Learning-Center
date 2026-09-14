@@ -18577,3 +18577,62 @@ apps/web **2029 passing across 44 files**; catalog completeness,
 
 B6 (quiz generation) — the last Phase 2 PR, and the other place §2.2 #7 is a
 design constraint rather than a description.
+
+## 2026-09-14 — B6: quiz generation, and Phase 2 is complete
+
+**Module 18** — changes-29 PR B6, the last of the plan. A **Generate
+questions** button in the quiz editor's question section, and a review dialog
+behind it.
+
+### The second place "AI never writes" is a constraint
+
+Every other Phase 2 feature fills form fields. A quiz is a parent row plus N
+questions plus M options each, which is more than a form holds comfortably —
+and "just write it as a DRAFT" is exactly the shortcut ADR-097 #4 forbids. A
+draft nobody asked for is still a row somebody has to find and delete.
+
+So generation returns a PARSED OBJECT and the accepted questions join the
+editor's existing state, unsaved. Nothing is persisted until the admin presses
+Save, through `saveQuizAction`, with `lessons.update` enforced as always
+(quizzes reuse the lesson keys — ADR-058).
+
+### Four decisions
+
+1. **The correct answer is MARKED in the review list**, not hidden. The admin
+   is reviewing; a review that cannot see the answer is a guess.
+2. **The schema rejects the WHOLE set** when one question's `correctIndex` is
+   not among its own options — the one failure mode a generated quiz has that a
+   hand-written one does not. Silently dropping the bad question would turn a
+   five-question request into four with no explanation.
+3. **The generated explanation lands on the correct option and nowhere else.**
+   The editor stores explanations positionally, so an explanation written for
+   the right answer must not appear under a wrong one.
+4. **A standalone quiz gets no button at all.** `getQuizSourceLesson` returns
+   null when nothing points at the quiz, and only PUBLISHED lesson text is
+   offered — a quiz drafted from an unpublished lesson would test material no
+   learner can read.
+
+### A control character, twice
+
+Writing the B5 guard put a literal backspace into `ai-degradation.test.ts` —
+`\b` inside a hand-written regex, through a shell that interpreted it. ESLint's
+`no-control-regex` caught it the second time. The assertion is a plain
+substring now, which says the same thing more directly.
+
+### Tests
+
+Four new integration cases (the source lesson is found, a standalone quiz has
+none, an unpublished lesson is not offered, and reading a source writes
+nothing), six new source guards. apps/web **2042 passing across 44 files**; all
+eight `check:*` scripts and `governance:check` green.
+
+### changes-29 is complete
+
+A0–A9 and B1–B6 are all in. The tutor chatbot remains spec-only with no
+registry key, exactly as §15 left it.
+
+**Owed to Module 14**, unchanged from A9 and now larger by six features: E2E
+for the five admin screens and every Phase 2 affordance (`fixme`, same
+auth-setup reason as every admin spec); axe on the AI screens and on B4's
+public takeaways block; and a Lighthouse check that no AI client code reaches a
+public route.

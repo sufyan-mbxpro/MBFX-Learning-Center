@@ -1279,3 +1279,45 @@ export async function hasPassedQuiz(userId: string, quizId: string): Promise<boo
   });
   return passed !== null;
 }
+
+// ─── The lesson a quiz can be generated FROM (changes-29 B6) ──
+
+export interface QuizSourceLesson {
+  id: string;
+  title: string;
+  /** The lesson's prose, as stored. Sanitized on save, like everything else. */
+  content: string;
+}
+
+/**
+ * The lesson this quiz is attached to, if any.
+ *
+ * `Lesson.quizId` is the FK — the consumer holds it (ADR-058) — so a quiz finds
+ * its lesson by looking for the row that points at it. Returns `null` for a
+ * standalone quiz, which is the honest answer: there is nothing to generate
+ * FROM, and the button that would do it is therefore absent rather than
+ * disabled.
+ *
+ * Only PUBLISHED lesson text is offered. A quiz drafted from an unpublished
+ * lesson would test material no learner can read.
+ */
+export async function getQuizSourceLesson(
+  quizId: string,
+  locale: string,
+): Promise<QuizSourceLesson | null> {
+  const lesson = await db.lesson.findFirst({
+    where: { quizId, status: "PUBLISHED", deletedAt: null },
+    select: {
+      id: true,
+      translations: {
+        where: { locale },
+        select: { title: true, content: true },
+        take: 1,
+      },
+    },
+  });
+
+  const translation = lesson?.translations[0];
+  if (!lesson || !translation?.content) return null;
+  return { id: lesson.id, title: translation.title, content: translation.content };
+}

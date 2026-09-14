@@ -355,7 +355,11 @@ describe("B5 — alt text suggests, and the bulk screen writes nothing", () => {
   it("reads bytes in core and never hands the model a URL", () => {
     // security.md #9 restated for a client that would happily follow one.
     expect(service).toContain("readStoredFile(");
-    expect(service).not.toMatch(/fetch\(/);
+    // A plain substring, not a regex: the claim is that this service makes no
+    // HTTP call at all, which `fetch(` says more directly than a word-boundary
+    // escape would — and a hand-written escape is how a literal control
+    // character reached this file twice while the guard was being written.
+    expect(service).not.toContain("fetch(");
     expect(service).toContain("imageBase64");
   });
 
@@ -375,6 +379,54 @@ describe("B5 — alt text suggests, and the bulk screen writes nothing", () => {
   it("puts the Generate button behind a present prop, not a disabled state", () => {
     expect(library).toContain("labels.ai && (");
     expect(library).not.toMatch(/disabled=\{[^}]*labels\.ai/);
+  });
+});
+
+describe("B6 — a generated quiz is unsaved until somebody saves it", () => {
+  const dialog = stripped(join(APP_ROOT, "(admin)", "admin", "_components", "ai-quiz-dialog.tsx"));
+  const editor = readFileSync(
+    join(APP_ROOT, "(admin)", "admin", "learn", "quizzes", "[id]", "quiz-editor.tsx"),
+    "utf8",
+  );
+  const page = readFileSync(
+    join(APP_ROOT, "(admin)", "admin", "learn", "quizzes", "[id]", "page.tsx"),
+    "utf8",
+  );
+
+  it("calls no save action of its own", () => {
+    // The whole of ADR-097 #4 at the one place a quiz makes it tempting to
+    // break: a parent row plus N questions plus M options is more than a form
+    // holds comfortably, and "write it as a DRAFT" is the shortcut.
+    expect(dialog).not.toContain("saveQuizAction");
+    expect(dialog).not.toContain("Action(");
+  });
+
+  it("hands accepted questions to the editor's own state", () => {
+    expect(dialog).toContain("onAdd(");
+    expect(editor).toContain("questions: [");
+    expect(editor).toContain("<AiQuizButton");
+  });
+
+  it("parses the answer with the quiz schema, which refuses a stray correctIndex", () => {
+    expect(dialog).toContain("quizSuggestionSchema.parse");
+  });
+
+  it("shows which option is correct, because a review that cannot see it is a guess", () => {
+    expect(dialog).toContain("optionIndex === row.correctIndex");
+  });
+
+  it("is absent without a published lesson to build from", () => {
+    // A standalone quiz has no source. Absence, not a disabled button.
+    expect(page).toContain("getQuizSourceLesson(");
+    expect(page).toContain("sourceLesson");
+    expect(page).toContain('can(subject, "lessons.update")');
+    expect(page).toContain('can(subject, "ai.use")');
+  });
+
+  it("puts the generated explanation on the CORRECT option and nowhere else", () => {
+    // The editor stores explanations positionally, so an explanation written
+    // for the right answer must not land under a wrong one.
+    expect(editor).toContain("index === question.correctIndex");
   });
 });
 

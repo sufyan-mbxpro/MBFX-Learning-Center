@@ -4,12 +4,19 @@ ADR-097 (the platform), ADR-098 (the sealed provider key), ADR-099 (the
 provider seam + model tiers), ADR-100 (cost estimation).
 Plan: `docs/changes/changes-29-ai-platform.md` (PRs A0–A9, then B1–B6).
 
-**Status: PHASE 1 COMPLETE (A1-A9, 2026-09-14).** `@repo/ai`, six tables, five
-admin screens, one generation endpoint and the meter are all in. `ai.enabled`
-ships `false` and the default provider is `ECHO`, so a fresh clone has a
-working AI area that cannot spend a cent. **Phase 2 (B1-B6) is not started** —
-no editor has an AI control yet, which is why the invariants below read as
-rules rather than as descriptions of existing screens.
+**Status: COMPLETE (A0-A9 + B1-B6, 2026-09-14).** `@repo/ai`, six tables, five
+admin screens, one generation endpoint, the meter, and all six features.
+`ai.enabled` ships `false` and the default provider is `ECHO`, so a fresh clone
+has a working AI area that cannot spend a cent and no AI control anywhere in
+the editors.
+
+**Where each feature lives:** the writing assistant is a toolbar menu in
+`rich-text-editor.tsx`; SEO is a button in the article editor's SEO header;
+translation is in the locale-switcher row; takeaways are an ordinary field
+beside the excerpt; alt text is in the media detail drawer and a review list on
+`/admin/media`; quiz generation is in the quiz editor's question section. Each
+arrives as a PROP — its absence is how an AI-off install ships no AI client
+code.
 
 ## The shape
 
@@ -96,10 +103,10 @@ path must not acquire a dependency that takes two seconds and spends money.
     period are unusable. Documented, not a bug — the limits screen shows
     "available to spend".
 
-## What Phase 1 learned
+## What building it learned
 
-Three failures worth knowing before B1, all found by tests rather than by
-running the thing:
+Six failures worth knowing, all found by tests rather than by running the
+thing:
 
 - **`upsert` is not atomic, and the obvious fix is half of one.** Two
   concurrent meter writes race; catching the 1062 and retrying as an increment
@@ -115,6 +122,16 @@ running the thing:
 - **`NOTIFY_ONLY` is identical to `DISABLE` unless the pre-flight check skips
   it.** The worst-case budget refusal fires the moment `availableUsd` hits
   zero, whatever the cap behaviour says.
+- **`Button loading` is `Button disabled`.** The assistant's Stop button is the
+  one control that must stay clickable while its work runs; the shared
+  `Spinner` sits beside it instead.
+- **A guard trips on its own explanation.** Three times: `ogImageUrl`, `sharp`
+  and `Promise.all` all had to be NAMED in a comment saying why they are
+  absent. Read `stripped(path)` in `ai-degradation.test.ts`, never the raw
+  source, for any "must not appear" assertion.
+- **`\b` written by hand through a shell becomes a literal backspace.** It
+  reached `ai-degradation.test.ts` twice and `no-control-regex` caught it. A
+  plain `toContain` says the same thing and cannot carry a control byte.
 
 ## Where things go wrong
 

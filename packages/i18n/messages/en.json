@@ -2290,7 +2290,17 @@
       "altTextAccept": "Use this description",
       "altTextEmpty": "Every image already has alt text",
       "altTextEmptyBody": "Nothing to describe — that is the state this screen exists to reach.",
-      "altTextFailedRow": "Could not describe this image"
+      "altTextFailedRow": "Could not describe this image",
+      "quizAction": "Generate questions",
+      "quizTitle": "Questions from this lesson",
+      "quizDescription": "Drafts questions from the lesson this quiz belongs to. Nothing is saved until you save the quiz, and you can edit or reject any of them first.",
+      "quizCountLabel": "How many",
+      "quizDifficultyLabel": "Level",
+      "quizGenerate": "Generate",
+      "quizAccept": "Use this question",
+      "quizAdd": "Add accepted questions",
+      "quizCorrect": "Correct",
+      "quizEmpty": "No questions came back. Try a smaller number, or a lesson with more prose."
     },
     "machineTranslatedQueue": "Machine-translated, not yet reviewed",
     "statusMACHINE_TRANSLATED": "Machine translated",

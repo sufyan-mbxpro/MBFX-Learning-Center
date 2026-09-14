@@ -14,6 +14,7 @@ import type { AiSeoLabels } from "./ai-seo-dialog.tsx";
 import type { AiTranslateLabels } from "./ai-translate-button.tsx";
 import type { TakeawaysLabels } from "./takeaways-field.tsx";
 import type { AltTextReviewLabels } from "../media/alt-text-review.tsx";
+import type { AiQuizLabels } from "./ai-quiz-dialog.tsx";
 
 /** Resolves a key under the `admin.ai` namespace. */
 type Translate = (key: string) => string;
@@ -174,5 +175,36 @@ export function altTextReviewLabels(
     emptyBody: t("altTextEmptyBody"),
     failedRow: t("altTextFailedRow"),
     reasons: aiReasonLabels((key) => t(key)),
+  };
+}
+
+/**
+ * B6's labels.
+ *
+ * The difficulty names come from the `admin` namespace, not `admin.ai`: they
+ * are the LESSON difficulties this repo already has words for, and a second
+ * set under AI would be two vocabularies for one idea.
+ */
+export function aiQuizLabels(
+  t: Translate,
+  common: Translate,
+  difficulties: Record<string, string>,
+): AiQuizLabels {
+  return {
+    action: t("quizAction"),
+    title: t("quizTitle"),
+    description: t("quizDescription"),
+    countLabel: t("quizCountLabel"),
+    difficultyLabel: t("quizDifficultyLabel"),
+    difficulties,
+    generate: t("quizGenerate"),
+    generating: t("assistantGenerating"),
+    accept: t("quizAccept"),
+    add: t("quizAdd"),
+    cancel: common("cancel"),
+    correct: t("quizCorrect"),
+    failed: t("assistantFailed"),
+    empty: t("quizEmpty"),
+    reasons: aiReasonLabels(t),
   };
 }

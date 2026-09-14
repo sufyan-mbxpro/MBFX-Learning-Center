@@ -1,11 +1,13 @@
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
-import { getQuizAdmin } from "@repo/core";
+import { getAiAvailability } from "@repo/ai";
+import { getQuizAdmin, getQuizSourceLesson } from "@repo/core";
 import { routing } from "@repo/i18n/routing";
 import { can, requirePermission } from "@repo/rbac";
 import { AdminPage } from "../../../_components/admin-page.tsx";
 import type { ContentStatusLabels } from "../../../_components/editor/content-status-panel.tsx";
-import { contentStatusLabels, transitionLabels } from "../../_lib/learn-labels.ts";
+import { aiQuizLabels } from "../../../_components/ai-labels.ts";
+import { contentStatusLabels, difficultyLabels, transitionLabels } from "../../_lib/learn-labels.ts";
 import { QuizEditor, type EditorQuestion } from "./quiz-editor.tsx";
 
 // Quiz editor (changes-11 Phase 6, ADR-058).
@@ -26,6 +28,30 @@ export default async function QuizEditPage({ params }: PageProps<"/admin/learn/q
   const t = await getTranslations("admin");
   const detail = await getQuizAdmin(id, routing.defaultLocale);
   if (!detail) notFound();
+
+  // changes-29 B6. THREE conditions, and all three are absence rather than
+  // disablement: the feature is on, this person may spend and may edit
+  // lessons, and this quiz has a published lesson to build from. A standalone
+  // quiz has no source, so the button does not exist for it.
+  const [tAi, availability, sourceLesson] = await Promise.all([
+    getTranslations("admin.ai"),
+    getAiAvailability(),
+    getQuizSourceLesson(detail.id, routing.defaultLocale),
+  ]);
+  const ai =
+    availability.features.quiz_generation &&
+    can(subject, "ai.use") &&
+    can(subject, "lessons.update") &&
+    sourceLesson
+      ? {
+          labels: aiQuizLabels(
+            (key) => tAi(key as "quizAction"),
+            (key) => t(key as "cancel"),
+            difficultyLabels(t),
+          ),
+          lesson: { ...sourceLesson, locale: routing.defaultLocale },
+        }
+      : undefined;
 
   const translation =
     detail.translations.find((tr) => tr.locale === routing.defaultLocale) ?? detail.translations[0];
@@ -65,6 +91,7 @@ export default async function QuizEditPage({ params }: PageProps<"/admin/learn/q
   return (
     <AdminPage title={t("quizzes.editorTitle")} description={t("quizzes.editorDescription")}>
       <QuizEditor
+        ai={ai}
         canPublish={can(subject, "lessons.publish")}
         canUpdate={can(subject, "lessons.update")}
         statusLabels={statusLabels}

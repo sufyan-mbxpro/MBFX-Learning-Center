@@ -631,6 +631,50 @@ describe("getQuizProgressForUser", () => {
 
 // ─── Authoring (ADR-058 #8) ──────────────────────────────────
 
+// changes-29 B6 — the source a generated quiz is built FROM, and the invariant
+// that nothing is written while it is built.
+describe("quiz generation's source lesson (ADR-097 #4)", () => {
+  it("finds the PUBLISHED lesson a quiz is attached to", async () => {
+    const quizId = await quizzes.createQuiz(editor, { title: "From a lesson", track: "forex" });
+    const course = await makeCourse({ quizId });
+
+    const source = await quizzes.getQuizSourceLesson(quizId, "en");
+    expect(source?.id).toBe(course.lessonId);
+    expect(source?.content).toContain("Body.");
+  });
+
+  it("returns null for a standalone quiz, so the affordance is ABSENT", async () => {
+    // A quiz with no lesson has nothing to generate from. Absence, not a
+    // disabled button (ADR-097 #6).
+    const quizId = await quizzes.createQuiz(editor, { title: "Standalone", track: "forex" });
+    expect(await quizzes.getQuizSourceLesson(quizId, "en")).toBeNull();
+  });
+
+  it("offers no UNPUBLISHED lesson — a quiz must not test unreadable material", async () => {
+    const quizId = await quizzes.createQuiz(editor, { title: "Draft source", track: "forex" });
+    const course = await makeCourse({ quizId });
+    await db.lesson.update({
+      where: { id: course.lessonId },
+      data: { status: ContentStatus.DRAFT },
+    });
+
+    expect(await quizzes.getQuizSourceLesson(quizId, "en")).toBeNull();
+  });
+
+  it("writes NOTHING — reading a source creates no question and no quiz", async () => {
+    const quizId = await quizzes.createQuiz(editor, { title: "Untouched", track: "forex" });
+    await makeCourse({ quizId });
+
+    const quizzesBefore = await db.quiz.count();
+    const questionsBefore = await db.quizQuestion.count();
+
+    await quizzes.getQuizSourceLesson(quizId, "en");
+
+    expect(await db.quiz.count()).toBe(quizzesBefore);
+    expect(await db.quizQuestion.count()).toBe(questionsBefore);
+  });
+});
+
 describe("authoring", () => {
   it("requires lessons.publish to publish, because quizzes reuse the lesson keys", async () => {
     const quizId = await quizzes.createQuiz(editor, { title: "Gated", track: "forex" });
