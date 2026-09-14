@@ -1,72 +1,25 @@
 "use client";
 
-// Client-side auth chip. The public surface is static/cached; a SERVER
-// session read here put an uncached auth() (DB/Redis round trip, cookie
-// cache deliberately bypassed) on EVERY public navigation — Cache
-// Components' dev insight rightly flagged it. Auth state on the public
-// header is DISPLAY, not authorization, so it hydrates client-side from
-// Better Auth's get-session endpoint (which honors the fast signed cookie
-// cache) and the server shell carries no session read at all. The real
-// boundaries are untouched: proxy gate + admin layout's loadSubject
-// re-check + requirePermission in every action.
-import { useEffect, useState, useTransition } from "react";
+// The header's auth chip.
+//
+// It owned the public surface's session fetch until changes-28 (ADR-094); it
+// now consumes `PublicSessionProvider`, which does that fetch once for the
+// whole page. The reasoning for reading the session on the CLIENT at all — a
+// cached public shell must not carry an uncached `auth()` — moved with it, and
+// lives in `public-session.tsx`.
+import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { Link } from "@repo/i18n/navigation";
 import { Button } from "@repo/ui/components/button";
 import { resendVerification } from "../../../_lib/credentials.ts";
 import { Skeleton, SkeletonButton } from "@repo/ui/components/skeleton";
-
-type AuthState =
-  | { status: "loading" }
-  | { status: "anonymous" }
-  | { status: "learner"; name: string; email: string; emailVerified: boolean };
+import { usePublicSession } from "./public-session.tsx";
 
 export function AuthSlot({ verifiedHref }: { verifiedHref: string }) {
   const t = useTranslations("nav");
-  const [state, setState] = useState<AuthState>({ status: "loading" });
+  const state = usePublicSession();
   const [resent, setResent] = useState<"idle" | "sent" | "failed">("idle");
   const [resending, startResend] = useTransition();
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/auth/get-session", { headers: { Accept: "application/json" } })
-      .then((response) => (response.ok ? response.json() : null))
-      .then(
-        (
-          session: {
-            user?: { name?: string; email?: string; userType?: string; emailVerified?: boolean };
-          } | null,
-        ) => {
-          if (cancelled) return;
-          // A STAFF session renders as anonymous here. Staff sign in at
-          // /admin/sign-in and belong to the admin surface (ADR-052): putting
-          // "System Administrator" in the public header both advertises the
-          // portal the public site deliberately hides and hands a visitor an
-          // identity chip with nowhere to go. Display-only — the session is
-          // untouched, and /admin still recognizes it.
-          setState(
-            session?.user && session.user.userType !== "STAFF"
-              ? {
-                  status: "learner",
-                  name: session.user.name ?? "",
-                  email: session.user.email ?? "",
-                  // Better Auth returns this on the session user by default.
-                  // ADR-079 #7's consequence applies: an unverified learner
-                  // keeps full access, so nothing may ASSUME this is true —
-                  // which is exactly why the nudge is a nudge.
-                  emailVerified: session.user.emailVerified === true,
-                }
-              : { status: "anonymous" },
-          );
-        },
-      )
-      .catch(() => {
-        if (!cancelled) setState({ status: "anonymous" });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   // The anonymous pair's own shape — the link and the 36px pill — because that
   // is what most visitors resolve to, so the header does not shift when the

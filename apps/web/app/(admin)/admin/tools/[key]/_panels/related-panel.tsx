@@ -151,9 +151,7 @@ export function RelatedPanel({
             aria-label={labels.relatedItem}
             value={pending}
             onValueChange={setPending}
-            options={
-              available.length > 0 ? available : [{ value: "", label: labels.none }]
-            }
+            options={available.length > 0 ? available : [{ value: "", label: labels.none }]}
           />
         </div>
         <Button

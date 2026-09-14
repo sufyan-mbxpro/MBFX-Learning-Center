@@ -15,6 +15,26 @@ import { Reveal } from "@repo/ui/components/reveal";
 import { Section } from "@repo/ui/components/section";
 import { cn } from "@repo/ui/lib/utils";
 
+// Two vertical densities, and nothing between them.
+//
+// `default` is the section front every masthead has been since ADR-047: a
+// tall brand band that is the first thing on the site and has a job to do.
+// `compact` is the thin top banner — the SAME anatomy at a third of the
+// height, for a page whose real content should start near the top.
+//
+// A named variant rather than a `spacing` prop the caller passes through
+// (which is what `/glossary/[term]` and `ComingSoon` were each doing on their
+// own, and what this replaces), for ADR-082 §Rail's reason: a density is
+// several numbers that have to move together, and a call site that shortens
+// only the padding leaves the copy stack's own 60px of gaps behind. Height
+// is the only axis here — the TYPE scale is untouched, because ADR-072's
+// rule is that a band which looks wrong gets its spacing fixed, never a
+// private font size.
+const HERO_SIZE = {
+  default: { spacing: "lg", copyGap: "gap-5" },
+  compact: { spacing: "sm", copyGap: "gap-3" },
+} as const;
+
 const ALIGN_CLASS = {
   start: "items-start text-start",
   center: "items-center text-center",
@@ -53,10 +73,13 @@ function PageHero({
   footnote,
   tone = "brand",
   align = "start",
+  size = "default",
   className,
   ...props
-}: Omit<React.ComponentProps<typeof Section>, "title" | "tone"> & {
+}: Omit<React.ComponentProps<typeof Section>, "title" | "tone" | "spacing"> & {
   tone?: keyof typeof HERO_TONE_CLASS;
+  /** Vertical density. `compact` is the thin top banner — see HERO_SIZE. */
+  size?: keyof typeof HERO_SIZE;
   eyebrow?: React.ReactNode;
   /**
    * A breadcrumb trail, rendered above the eyebrow inside the copy column.
@@ -100,7 +123,7 @@ function PageHero({
   return (
     <Section
       data-slot="page-hero"
-      spacing="lg"
+      spacing={HERO_SIZE[size].spacing}
       data-tone={tone}
       className={cn("relative isolate overflow-hidden", HERO_TONE_CLASS[tone], className)}
       {...props}
@@ -120,7 +143,7 @@ function PageHero({
       )}
       {motif}
       <Container className={cn("grid items-center gap-10", media && "lg:grid-cols-2")}>
-        <div className={cn("flex flex-col gap-5", ALIGN_CLASS[align])}>
+        <div className={cn("flex flex-col", HERO_SIZE[size].copyGap, ALIGN_CLASS[align])}>
           {breadcrumb}
           {eyebrow && (
             <Reveal variant="up">

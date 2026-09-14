@@ -14,20 +14,18 @@
 // **No new keys were added.** `market.view`, `market.instruments.manage` and
 // `market.providers.manage` have been seeded since Module 01 and had governed
 // nothing (ADR-086 #7).
-import {
-  marketInstrumentSchema,
-  marketProviderSchema,
-  marketReorderSchema,
-} from "@repo/contracts";
+import { marketInstrumentSchema, marketProviderSchema, marketReorderSchema } from "@repo/contracts";
 import {
   MARKET_CACHE_TAG,
   deleteInstrument,
   reorderInstruments,
+  runMarketSync,
   saveInstrument,
   saveMarketProvider,
   setInstrumentActive,
   testMarketProvider,
   type ProviderTestResult,
+  type SyncResult,
 } from "@repo/core";
 import { requirePermission } from "@repo/rbac";
 import { revalidateTag } from "next/cache";
@@ -94,4 +92,22 @@ export async function saveMarketProviderAction(input: unknown): Promise<void> {
 export async function testMarketProviderAction(symbol: string): Promise<ProviderTestResult> {
   await requirePermission("market.providers.manage");
   return testMarketProvider(z.string().min(1).max(20).parse(symbol));
+}
+
+/**
+ * "Sync now" (ADR-096 #3). The same sweep the cron route runs, with a person
+ * behind it — so it audits as that person, and it skips the due check because
+ * the interval governs the SCHEDULER, not somebody pressing a button.
+ *
+ * Gated on `market.providers.manage`, the stricter of the two market keys:
+ * this spends the provider's request budget, which is the credential's
+ * resource, not the instrument list's.
+ */
+export async function syncMarketDataAction(): Promise<SyncResult> {
+  const subject = await requirePermission("market.providers.manage");
+  const result = await runMarketSync(subject);
+  // Same rule as the route: a sweep that wrote nothing has no reason to evict
+  // a snapshot that is still the best available answer.
+  if (result.barsWritten > 0) invalidate();
+  return result;
 }

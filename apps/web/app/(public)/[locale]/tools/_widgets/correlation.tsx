@@ -40,7 +40,8 @@ function cellTone(value: number | null): string {
   if (value === null) return "text-muted-foreground";
   const strong = Math.abs(value) >= 0.6;
   if (value > 0) return strong ? "text-success font-semibold" : "text-success";
-  if (value < 0) return strong ? "text-destructive-interactive font-semibold" : "text-destructive-interactive";
+  if (value < 0)
+    return strong ? "text-destructive-interactive font-semibold" : "text-destructive-interactive";
   return "text-muted-foreground";
 }
 

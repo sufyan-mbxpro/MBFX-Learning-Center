@@ -14,7 +14,7 @@ import { db, type FeatureVisibility } from "@repo/db";
 import { can, type Subject } from "@repo/rbac";
 import { evaluateVisibility } from "@repo/settings";
 import { pickTranslation, type LocaleFallbackInfo } from "@repo/i18n";
-import { isRouteKey } from "@repo/contracts";
+import { isRouteKey, isToolKey, TOOL_ROUTE_KEYS } from "@repo/contracts";
 import type { LinkTarget } from "@repo/contracts";
 import { resolveStatelessLinkTarget } from "./cms/links.ts";
 
@@ -52,13 +52,32 @@ export interface MenuData {
   items: RawMenuItem[];
   /** key → isEnabled, for requiresFeature checks. Flag VISIBILITY is evaluated per subject at build time. */
   flags: Record<string, { isEnabled: boolean; visibility: FeatureVisibility }>;
+  /**
+   * Tool ROUTE key → isEnabled (changes-26 #1).
+   *
+   * A second pruning source in exactly the shape `flags` has, and fail-closed
+   * for the same reason: an absent entry hides the row. That is agreement
+   * rather than caution — `getToolPage` returns null for "no row" and for
+   * "switched off" alike, so both spellings of absent already 404, and a menu
+   * offering what the site will not serve is the bug being fixed.
+   */
+  tools: Record<string, boolean>;
   locales: LocaleFallbackInfo[];
   defaultLocale: string;
 }
 
+/**
+ * The route keys that belong to a tool, so `visible()` can tell one menu row
+ * from another without a second query.
+ *
+ * Derived from `TOOL_ROUTE_KEYS`, never typed out: a ninth tool joins this set
+ * by being registered, which is the only place ADR-086 #1 lets the SET change.
+ */
+const TOOL_ROUTE_KEY_SET = new Set<string>(Object.values(TOOL_ROUTE_KEYS));
+
 /** Pure DB read, exported for tests (ADR-004: `"use cache"` is inert outside a real Next.js process). */
 export async function loadMenuData(menuKey: string): Promise<MenuData> {
-  const [menu, flags, locales] = await Promise.all([
+  const [menu, flags, tools, locales] = await Promise.all([
     db.menu.findUnique({
       where: { key: menuKey },
       select: {
@@ -84,6 +103,7 @@ export async function loadMenuData(menuKey: string): Promise<MenuData> {
       },
     }),
     db.featureFlag.findMany({ select: { key: true, isEnabled: true, visibility: true } }),
+    db.tool.findMany({ select: { key: true, isEnabled: true } }),
     db.locale.findMany({ select: { code: true, fallbackCode: true, isDefault: true } }),
   ]);
 
@@ -92,6 +112,18 @@ export async function loadMenuData(menuKey: string): Promise<MenuData> {
     items: menu?.items ?? [],
     flags: Object.fromEntries(
       flags.map((f) => [f.key, { isEnabled: f.isEnabled, visibility: f.visibility }]),
+    ),
+    // Keyed by ROUTE key, not by tool key: a menu row carries an href, so the
+    // conversion belongs here rather than at every comparison. A row for an
+    // unregistered key is dropped, as every other reader of this table drops
+    // it (schema.prisma's own note on `Tool.key`).
+    // `flatMap` rather than filter-then-map: `isToolKey` is a type predicate,
+    // and only this shape carries its narrowing to the indexed read — the
+    // other needs a cast to say what the filter already proved.
+    tools: Object.fromEntries(
+      tools.flatMap((tool) =>
+        isToolKey(tool.key) ? [[TOOL_ROUTE_KEYS[tool.key], tool.isEnabled] as const] : [],
+      ),
     ),
     locales: locales.map((l) => ({ code: l.code, fallbackCode: l.fallbackCode })),
     defaultLocale: locales.find((l) => l.isDefault)?.code ?? "en",
@@ -162,6 +194,13 @@ export function assembleNavigation(
       if (!flag || !flag.isEnabled || !evaluateVisibility(flag.visibility, subject)) return false;
     }
     if (item.requiresPermission && !can(subject, item.requiresPermission)) return false;
+    // A switched-off tool leaves the header and the footer too, not only the
+    // section bar under /tools (owner, changes-26 #1). The bar, the index and
+    // the homepage band all read `getEnabledTools` already; the menu was the
+    // one surface still offering a link to a page that 404s.
+    if (item.routeKey && TOOL_ROUTE_KEY_SET.has(item.routeKey) && !data.tools[item.routeKey]) {
+      return false;
+    }
     return true;
   };
 

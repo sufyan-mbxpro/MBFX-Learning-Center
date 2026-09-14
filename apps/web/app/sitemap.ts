@@ -1,16 +1,5 @@
 import type { MetadataRoute } from "next";
-import {
-  articlePath,
-  glossaryTermPath,
-  loadArticleSitemapEntries,
-  loadGlossarySitemapEntries,
-  loadLearnSitemapEntries,
-  loadPageSitemapEntries,
-  loadGlossaryTopicSitemapEntries,
-  loadQuizSitemapEntries,
-  loadVideoSitemapEntries,
-  getEnabledTools,
-} from "@repo/core";
+import { articlePath, glossaryTermPath, getSitemapEntries, getEnabledTools } from "@repo/core";
 import {
   ABOUT_PATHS,
   learnTrackGlossaryPath,
@@ -22,33 +11,47 @@ import {
   toolPath,
   publicPagePath,
 } from "@repo/contracts";
+import { getServableLocales } from "@repo/i18n";
 import { routing } from "@repo/i18n/routing";
+import { siteUrl } from "./_lib/site-url.ts";
 
 // Per-locale sitemap from PUBLISHED content only (the loaders are
 // query-scoped to published/publicly-visible + non-deleted; article
 // translations flagged noIndex are excluded at the query). Base URL from
-// env — the same var Better Auth already requires.
+// env — the same var Better Auth already requires, read through the one
+// helper that owns its fallback (ADR-090).
+//
+// The seven content reads are ONE cached call now (`getSitemapEntries`,
+// tagged `content`): this route used to run every loader uncached on every
+// crawler hit, alone among the public surfaces.
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const base = process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
-  const [
-    glossaryEntries,
-    articleEntries,
-    pageEntries,
-    learnEntries,
-    quizEntries,
-    topicEntries,
-    videoEntries,
-    enabledTools,
-  ] = await Promise.all([
-    loadGlossarySitemapEntries(),
-    loadArticleSitemapEntries(),
-    loadPageSitemapEntries(),
-    loadLearnSitemapEntries(),
-    loadQuizSitemapEntries(),
-    loadGlossaryTopicSitemapEntries(),
-    loadVideoSitemapEntries(),
-    getEnabledTools(),
-  ]);
+  const base = siteUrl();
+  const [entries, enabledTools] = await Promise.all([getSitemapEntries(), getEnabledTools()]);
+  // ADR-091: active locales, not the static superset. Listing /es and /ar
+  // when neither is served is a crawl hint pointing at a 404 — the reasoning
+  // ADR-086 #5 already applied to a disabled tool, and that this file already
+  // applies twice below to unpublished content.
+  const servableLocales = await getServableLocales();
+  const servable = new Set<string>(servableLocales);
+
+  /**
+   * Content rows carry their OWN locale, so the same rule has to be applied a
+   * second time here. A glossary term translated into `es` is a published row
+   * whose URL 404s while `es` is inactive — filtering the locale list alone
+   * would fix the static paths and leave every translated row behind.
+   */
+  const served = <T extends { locale: string }>(rows: T[]): T[] =>
+    rows.filter((row) => servable.has(row.locale));
+
+  const {
+    glossary: glossaryEntries,
+    articles: articleEntries,
+    pages: pageEntries,
+    learn: learnEntries,
+    quizzes: quizEntries,
+    glossaryTopics: topicEntries,
+    videos: videoEntries,
+  } = entries;
 
   // Coded routes — the home page, the About section (ADR-047) and the
   // economic calendar (ADR-050). These are files, not content rows, so they
@@ -81,7 +84,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ROUTE_PATHS.tools,
     ...enabledTools.map((tool) => toolPath(tool.key)),
   ];
-  const staticPages: MetadataRoute.Sitemap = routing.locales.flatMap((locale) => {
+  const staticPages: MetadataRoute.Sitemap = servableLocales.flatMap((locale) => {
     const prefix = locale === routing.defaultLocale ? "" : `/${locale}`;
     return staticPaths.map((path) => ({
       url: `${base}${prefix}${path}`,
@@ -89,19 +92,19 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }));
   });
 
-  const glossaryPages: MetadataRoute.Sitemap = glossaryEntries.map((entry) => ({
+  const glossaryPages: MetadataRoute.Sitemap = served(glossaryEntries).map((entry) => ({
     url: `${base}${glossaryTermPath(entry.locale, routing.defaultLocale, entry.slug)}`,
     lastModified: entry.updatedAt,
   }));
 
-  const articlePages: MetadataRoute.Sitemap = articleEntries.map((entry) => ({
+  const articlePages: MetadataRoute.Sitemap = served(articleEntries).map((entry) => ({
     url: `${base}${articlePath(entry.locale, routing.defaultLocale, entry.slug)}`,
     lastModified: entry.updatedAt,
   }));
 
   // Module 16: CMS STATIC/COLLECTION pages (Phase 1 has only STATIC — the
   // home page is excluded by construction until it is published, PR 2.7).
-  const cmsPages: MetadataRoute.Sitemap = pageEntries.map((entry) => ({
+  const cmsPages: MetadataRoute.Sitemap = served(pageEntries).map((entry) => ({
     url: `${base}${publicPagePath(entry.locale, routing.defaultLocale, entry.path)}`,
     lastModified: entry.updatedAt,
   }));
@@ -117,7 +120,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
    * second locale would have put unprefixed duplicates in the sitemap.
    */
   const localised = (entries: { path: string; locale: string; updatedAt: Date }[]) =>
-    entries.map((entry) => ({
+    served(entries).map((entry) => ({
       url: `${base}${entry.locale === routing.defaultLocale ? "" : `/${entry.locale}`}${entry.path}`,
       lastModified: entry.updatedAt,
     }));

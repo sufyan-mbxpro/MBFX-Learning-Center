@@ -165,8 +165,7 @@ describe("correlationMatrix", () => {
   // ADR-088 #1's whole point, and getting it wrong here first is what this
   // comment is for. A genuinely inverse series mirrors the RETURNS.
   const mirrored = rising.closes.reduce<number[]>(
-    (acc, close, i) =>
-      i === 0 ? [100] : [...acc, acc[i - 1]! * (rising.closes[i - 1]! / close)],
+    (acc, close, i) => (i === 0 ? [100] : [...acc, acc[i - 1]! * (rising.closes[i - 1]! / close)]),
     [],
   );
   const falling = { key: "c", closes: mirrored };
@@ -300,10 +299,13 @@ describe("riskSentimentScore", () => {
   });
 
   it("returns a null score and null band when nothing reports", () => {
-    const result = riskSentimentScore([{ key: "dead", closes: [1], weight: 1, direction: "risk-on" }], {
-      lookback: 30,
-      bands,
-    });
+    const result = riskSentimentScore(
+      [{ key: "dead", closes: [1], weight: 1, direction: "risk-on" }],
+      {
+        lookback: 30,
+        bands,
+      },
+    );
     expect(result.score).toBeNull();
     expect(result.band).toBeNull();
     expect(result.reporting.reported).toBe(0);

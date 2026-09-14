@@ -173,24 +173,30 @@ export default async function AdminHome({ searchParams }: PageProps<"/admin">) {
   // Email deliveries takes its place: a real number, with a live screen behind
   // it, and the one an admin actually goes looking for ("did the mail go out").
   const secondaryCards = [
-    overview.enabledFlags === undefined ? undefined : {
-      href: "/admin/features",
-      icon: ToggleRight,
-      label: t("dashboardFeatureFlags"),
-      value: overview.enabledFlags,
-    },
-    overview.settings === undefined ? undefined : {
-      href: "/admin/settings",
-      icon: SettingsIcon,
-      label: t("dashboardSettings"),
-      value: overview.settings,
-    },
-    overview.emailDeliveries === undefined ? undefined : {
-      href: "/admin/settings/email/log",
-      icon: Mail,
-      label: t("dashboardEmailDeliveries"),
-      value: overview.emailDeliveries,
-    },
+    overview.enabledFlags === undefined
+      ? undefined
+      : {
+          href: "/admin/features",
+          icon: ToggleRight,
+          label: t("dashboardFeatureFlags"),
+          value: overview.enabledFlags,
+        },
+    overview.settings === undefined
+      ? undefined
+      : {
+          href: "/admin/settings",
+          icon: SettingsIcon,
+          label: t("dashboardSettings"),
+          value: overview.settings,
+        },
+    overview.emailDeliveries === undefined
+      ? undefined
+      : {
+          href: "/admin/settings/email/log",
+          icon: Mail,
+          label: t("dashboardEmailDeliveries"),
+          value: overview.emailDeliveries,
+        },
   ].filter((card): card is NonNullable<typeof card> => card !== undefined);
 
   return (

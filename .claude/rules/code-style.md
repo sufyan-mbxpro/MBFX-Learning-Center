@@ -21,12 +21,21 @@ the mechanical rules, so edge cases get judged correctly.
    `home`, `error`, `notFound`, `notTranslated`, `public`, `nav`, `footer`,
    `glossary`, `news`, `auth`, `newsletter`) must be complete for every ACTIVE
    locale, and `check:catalog-completeness` fails the build if one isn't.
-   **Note:** `next build` PRERENDERS every seeded locale, active or not, and a
-   missing key is a hard `MISSING_MESSAGE` there — so the check passing does
-   not mean the build will. **Admin**
-   namespaces (`admin`, `cms`) are English-only by design and are exempt — add
-   the key to `en.json` and stop. A new namespace defaults to _public_, so
-   getting this wrong errs toward more translation, not less.
+   **Admin** namespaces (`admin`, `cms`) are English-only by design and are
+   exempt — add the key to `en.json` and stop. A new namespace defaults to
+   _public_, so getting this wrong errs toward more translation, not less.
+
+   **Filling `en` alone is now correct, and the build agrees (ADR-091).**
+   `next build` used to PRERENDER every SEEDED locale, active or not, so a key
+   missing from an INACTIVE locale was a hard `MISSING_MESSAGE` at build time
+   while the check only warned — which is how eight `nav.mega.*` keys from
+   ADR-076 sat broken until changes-21 F9, and how `about.*`, `learn.*` and
+   `economicCalendar.*` went missing from es/ar/ur entirely. ADR-091 resolved
+   the mismatch the way this paragraph used to anticipate: **only an ACTIVE
+   locale is prerendered, served or listed in the sitemap**, so an inactive
+   locale's catalog is genuinely not owed yet. Add the key to `en.json` and
+   stop; `ENFORCED_LOCALES` is what makes it owed, on the PR that activates
+   the locale.
 
 3. **Logical properties only:** `ps-`/`pe-`/`ms-`/`me-`/`text-start`/
    `text-end`. Physical `pl-`/`pr-`/`ml-`/`mr-` utilities fail lint
@@ -204,3 +213,41 @@ group with no keys.
       both surfaces; raw red fails 4.5:1 on the dark ground. Icons may keep
       `text-destructive`.
     - **Guard.** `apps/web/app/admin-form-conventions.test.ts`.
+
+25. **A switch sits on a row, and the switch leads it (ADR-089).** A `Switch`
+    is always in a `Field orientation="horizontal"`, never a vertical one, and
+    it is the FIRST child — the label (or a `FieldContent` holding label plus
+    hint) comes after it. A vertical Field puts a control under its label,
+    which is the shape of a field being filled in; a switch is a state being
+    flipped and reads on one line with the words it governs. It also carries
+    `*:w-full`, which is right for an Input and wrong for the one control
+    whose 44×24 geometry IS its meaning (ADR-074) — that stretched the tool
+    editor's toggle into a 288px bar. `fieldVariants` now exempts
+    `[data-slot=switch]` as well, so the rule does not rest on memory. A
+    switch with no label in its row (a table cell's, named by its column
+    header) is out of scope. Same guard as #24.
+
+## Metadata (ADR-090)
+
+26. **A route never returns `robots: undefined`.** Where the directive is
+    conditional, write a conditional SPREAD —
+    `...(cond ? { robots: { index: false } } : {})` — so the key is absent
+    when it does not apply. This is not style: Next's `mergeMetadata`
+    iterates the child's keys by **presence**, and `resolveRobots(undefined)`
+    is `null`, so a present-but-undefined `robots` ERASES the root layout's
+    site-wide directive rather than inheriting it. The same reasoning applies
+    to any metadata field a layout sets and a page conditionally overrides.
+    Guarded by `apps/web/app/seo-metadata.test.ts`.
+
+27. **The site's origin has one owner.** `siteUrl()`
+    (`apps/web/app/_lib/site-url.ts`) is the only place
+    `process.env.BETTER_AUTH_URL` and its localhost fallback are spelled out
+    — the sitemap, robots, the RSS feed and the public root layout's
+    `metadataBase` all read it. Same guard.
+
+28. **A setting that is read by nothing does not ship.** A seeded, typed,
+    admin-editable row whose value reaches no code is worse than a missing
+    feature: the admin saves it, sees success, and believes something
+    changed. Either wire it or leave it out of the seed. This is what put
+    `seo.robotsIndex` and `seo.googleSiteVerification` in the admin for two
+    modules without effect (ADR-090).

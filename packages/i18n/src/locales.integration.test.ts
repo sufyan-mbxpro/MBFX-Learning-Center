@@ -148,3 +148,68 @@ describe("getActiveLocales / invalidateActiveLocales — production entry points
     await expect(fresh.invalidateActiveLocales()).resolves.not.toThrow();
   });
 });
+
+// ADR-091. The rule these pin is "a locale is served when it is active", and
+// each test covers one of the two directions it can be got wrong in: an
+// untranslated locale being published, and a routable locale being dropped.
+describe("getServableLocales / isServableLocale (ADR-091)", () => {
+  const cacheStub = () => ({ cacheTag: () => {}, cacheLife: () => {}, revalidateTag: () => {} });
+
+  async function seedLocales(active: string[]): Promise<typeof I18nModule> {
+    await db.locale.updateMany({ data: { isActive: false }, where: {} });
+    for (const code of active) {
+      await db.locale.upsert({
+        where: { code },
+        update: { isActive: true },
+        create: {
+          code,
+          name: code,
+          nativeName: code,
+          direction: "LTR",
+          isActive: true,
+          sortOrder: 1,
+        },
+      });
+    }
+    vi.doMock("next/cache", cacheStub);
+    return import("./locales.ts");
+  }
+
+  it("publishes an active locale and withholds a seeded-but-inactive one", async () => {
+    const fresh = await seedLocales(["en"]);
+    const servable = await fresh.getServableLocales();
+
+    expect(servable).toEqual(["en"]);
+    // es is in routing.locales and seeded in the database. It is NOT served,
+    // because it is not active — this is the whole of ADR-091 in one line, and
+    // the reason `next build` no longer prerenders three untranslated locales.
+    expect(servable).not.toContain("es");
+    await expect(fresh.isServableLocale("es")).resolves.toBe(false);
+    await expect(fresh.isServableLocale("en")).resolves.toBe(true);
+  });
+
+  it("serves a locale the moment it is activated — no rule of its own beyond isActive", async () => {
+    const fresh = await seedLocales(["en", "es"]);
+    await expect(fresh.getServableLocales()).resolves.toContain("es");
+    await expect(fresh.isServableLocale("es")).resolves.toBe(true);
+  });
+
+  it("drops an active row that next-intl cannot route", async () => {
+    // `de` is active in the database but absent from routing.locales, so no
+    // prefix reaches the app for it. Prerendering it would emit pages nothing
+    // can request; the intersection has to cut both ways.
+    const fresh = await seedLocales(["en", "de"]);
+    const servable = await fresh.getServableLocales();
+
+    expect(servable).toEqual(["en"]);
+    await expect(fresh.isServableLocale("de")).resolves.toBe(false);
+  });
+
+  it("falls back to the default locale rather than serving nothing", async () => {
+    // No active locale is a misconfiguration, but returning [] would make
+    // `generateStaticParams` prerender zero pages — a site with no pages is a
+    // worse answer than the default one.
+    const fresh = await seedLocales([]);
+    await expect(fresh.getServableLocales()).resolves.toEqual(["en"]);
+  });
+});

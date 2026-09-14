@@ -67,7 +67,11 @@ describe("the six-band flow lives in ONE place (ADR-086 #9)", () => {
     // Read from the RETURN block only: the props destructured above it list
     // the same names in a different order, and matching those would pin the
     // signature rather than the layout.
-    const jsx = shell.slice(shell.indexOf("  return ("));
+    //
+    // And read it through `code()`, for the reason that helper documents: a
+    // band comment explaining WHY the masthead is compact says the word
+    // "widget", and read as source that put the widget band above PageHero.
+    const jsx = code(shell).slice(code(shell).indexOf("  return ("));
     const order = ["PageHero", "widget", "body", "faq", "related", "disclaimer"];
     let previous = -1;
     for (const band of order) {
@@ -76,6 +80,17 @@ describe("the six-band flow lives in ONE place (ADR-086 #9)", () => {
       expect(at, `"${band}" is out of order in tool-shell.tsx`).toBeGreaterThan(previous);
       previous = at;
     }
+  });
+
+  it("pays the section rhythm once between the widget and its explainer", () => {
+    // changes-26 #2. Four stacked `Section`s each paid `section-md`
+    // (`clamp(3rem, 6vw, 5rem)`), so the calculator and the paragraph about it
+    // were 160px apart on a laptop. Asserted by COUNT rather than by class:
+    // "there is one Section between the masthead and the related strip" is
+    // the property, and it survives the gap being retuned.
+    const jsx = code(shell).slice(code(shell).indexOf("  return ("));
+    expect(jsx.split("<Section").length - 1).toBe(1);
+    expect(jsx).toContain("flex flex-col gap-");
   });
 
   it("keeps the page from laying itself out", () => {
@@ -161,11 +176,9 @@ describe('never "real-time", never "live" (ADR-088 #7)', () => {
   });
 
   it.each([["real-time"], ["realtime"], ["live rates"], ["live data"]])(
-    'says %s nowhere in the tools namespace',
+    "says %s nowhere in the tools namespace",
     (phrase) => {
-      const offenders = toolsStrings.filter(([, value]) =>
-        value.toLowerCase().includes(phrase),
-      );
+      const offenders = toolsStrings.filter(([, value]) => value.toLowerCase().includes(phrase));
       expect(offenders).toEqual([]);
     },
   );
@@ -215,14 +228,20 @@ const seed = readFileSync(
 
 describe("the tools mega panel", () => {
   it("names EVERY registered tool across its three columns", () => {
-    const panel = megaMenu.slice(megaMenu.indexOf("  tools: {"), megaMenu.indexOf('viewAll: "tools"'));
+    const panel = megaMenu.slice(
+      megaMenu.indexOf("  tools: {"),
+      megaMenu.indexOf('viewAll: "tools"'),
+    );
     for (const key of TOOL_KEYS) {
       expect(panel, `the tools panel never lists "${key}"`).toContain(`"tool-${key}"`);
     }
   });
 
   it("names no tool twice", () => {
-    const panel = megaMenu.slice(megaMenu.indexOf("  tools: {"), megaMenu.indexOf('viewAll: "tools"'));
+    const panel = megaMenu.slice(
+      megaMenu.indexOf("  tools: {"),
+      megaMenu.indexOf('viewAll: "tools"'),
+    );
     for (const key of TOOL_KEYS) {
       const count = panel.split(`"tool-${key}"`).length - 1;
       expect(count, `"${key}" appears ${count} times in the tools panel`).toBe(1);
@@ -241,7 +260,10 @@ describe("the tools mega panel", () => {
 
 describe("the seeded menu tree", () => {
   it("seeds a child row for every registered tool", () => {
-    const tree = seed.slice(seed.indexOf("const TOOLS_NAV = {"), seed.indexOf("  /**\n   * A root row"));
+    const tree = seed.slice(
+      seed.indexOf("const TOOLS_NAV = {"),
+      seed.indexOf("  /**\n   * A root row"),
+    );
     expect(tree.length).toBeGreaterThan(100);
     for (const key of TOOL_KEYS) {
       expect(tree, `the seeded tools menu has no row for "${key}"`).toContain(`"tool-${key}"`);
@@ -252,7 +274,61 @@ describe("the seeded menu tree", () => {
     // `upsertNavTree` matches a root on [menuId, routeKey, parentId: null], so
     // a leftover flat row would be adopted as the tree's root and the header
     // would show one entry with children it did not expect.
-    const flat = seed.slice(seed.indexOf("const NAV = ["), seed.indexOf("];", seed.indexOf("const NAV = [")));
+    const flat = seed.slice(
+      seed.indexOf("const NAV = ["),
+      seed.indexOf("];", seed.indexOf("const NAV = [")),
+    );
     expect(flat).not.toContain('routeKey: "tools"');
+  });
+});
+
+describe("the masthead", () => {
+  // Both surfaces, not one. The index and the eight tool pages are separate
+  // files and the reason they are compact is the same on both — content the
+  // reader came for sits directly under the band — so a change that shortens
+  // one and forgets the other is the failure worth catching. `PageHero`'s own
+  // guard (`about-primitives.test.tsx`) proves `compact` IS the shorter band;
+  // this proves these two ask for it.
+  it("is the compact banner on the index and on every tool page", () => {
+    for (const [name, source] of [
+      ["the tools index", indexPage],
+      ["the tool shell", shell],
+    ] as const) {
+      expect(code(source), `${name} does not ask for the compact masthead`).toContain(
+        'size="compact"',
+      );
+    }
+  });
+
+  it("sets no `spacing` of its own — density comes from the variant", () => {
+    // `PageHero` omits `spacing` from its props, so this is a type error too;
+    // the assertion is what a reader of the test file sees, and it is what
+    // catches the prop being handed back to callers later.
+    for (const source of [indexPage, shell]) {
+      expect(code(source)).not.toMatch(/<PageHero[\s\S]*?spacing=/);
+    }
+  });
+});
+
+describe("the area opens one landmark", () => {
+  // The layout owns the `<main>`, the way `about/layout.tsx` and
+  // `learn/layout.tsx` do. Before that, no page under /tools had one at all:
+  // axe reports a missing region as MODERATE, so the suite’s serious/critical
+  // gate could not see it, and eight pages shipped with their whole content
+  // outside any landmark.
+  it("wraps the tools area in a main element", () => {
+    expect(code(layout)).toContain("<main");
+  });
+
+  it("does not open a second one in a page", () => {
+    // Two `main` elements is its own axe violation, and the reason the
+    // landmark belongs to the layout rather than to each page.
+    for (const [name, source] of [
+      ["the tools index", indexPage],
+      ["the tool page", toolPage],
+      ["the tool shell", shell],
+    ] as const) {
+      expect(code(source), `${name} opens a second <main>`).not.toContain("<main");
+    }
   });
 });

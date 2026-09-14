@@ -38,10 +38,21 @@ export const HOME_SECTION_VARIANTS = {
   // pass straight through to it, so the section can still be a plain grid.
   latest_news: ["split", "standard", "featured", "compact"],
   latest_analysis: ["standard", "featured", "compact"],
-  glossary_spotlight: ["chips", "grid"],
+  // changes-28 added `cards` and made it the default: term PLUS its
+  // plain-language line. `chips` and `grid` are kept — a site with three
+  // hundred published terms may well want the dense row back.
+  glossary_spotlight: ["cards", "chips", "grid"],
   forex_rates: ["marquee", "grid"],
   newsletter: ["default", "full-width"],
   faq: ["accordion", "split"],
+  // changes-28 (ADR-093). `single` shows the day's quote (deterministic, the
+  // term-of-the-day technique); `carousel` offers the whole set in the
+  // scroll-snap rail. `connect` is deliberately ABSENT from this registry:
+  // it has one shape, and what varies is which social rows an admin has
+  // activated. An empty list here would reject every variant while looking
+  // like it configured something — the case `settings.test.ts` pins — and
+  // `risk_disclaimer` sets the precedent for a built band with no vocabulary.
+  quotes: ["single", "carousel"],
 } as const satisfies Record<string, readonly string[]>;
 
 export type HomeSectionKey = keyof typeof HOME_SECTION_VARIANTS;
@@ -73,6 +84,11 @@ export const HOME_SECTION_BUILT_KEYS = [
   "glossary_spotlight",
   "newsletter",
   "faq",
+  // Built by changes-25 T9; moved out of the stub list in the same breath.
+  "popular_tools",
+  // Built by changes-28 (ADR-093), in the same PRs that seeded them.
+  "connect",
+  "quotes",
   "risk_disclaimer",
 ] as const satisfies readonly string[];
 
@@ -85,7 +101,6 @@ export const HOME_SECTION_BUILT_KEYS = [
 export const HOME_SECTION_STUB_KEYS = [
   "forex_rates",
   "economic_events",
-  "popular_tools",
   "market_sentiment",
   "trading_sessions",
 ] as const satisfies readonly string[];

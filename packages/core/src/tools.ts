@@ -213,7 +213,7 @@ function toolSourceMaterial(input: {
     input.intro ?? "",
     input.body ?? "",
     ...(input.faq ?? []).flatMap((entry) => [entry.question, entry.answer]),
-      // A separator that cannot occur in prose, written as an ESCAPE rather
+    // A separator that cannot occur in prose, written as an ESCAPE rather
     // than as a raw byte: a NUL in a source file survives git but not every
     // editor. A space would be wrong — ["a b", "c"] and ["a", "b c"] hash
     // the same, so moving a word from the title into the tagline would leave
@@ -366,7 +366,10 @@ export async function setToolEnabled(
   });
 }
 
-export async function reorderTools(subject: Subject, orderedKeys: readonly string[]): Promise<void> {
+export async function reorderTools(
+  subject: Subject,
+  orderedKeys: readonly string[],
+): Promise<void> {
   const keys = orderedKeys.filter(isToolKey);
   await db.$transaction(
     keys.map((key, index) => db.tool.update({ where: { key }, data: { sortOrder: index } })),
@@ -522,7 +525,8 @@ export async function listRelatedCandidates(
     }),
   ]);
 
-  const titled = (targetType: string) =>
+  const titled =
+    (targetType: string) =>
     (row: { id: string; translations: { title: string }[] }): RelatedCandidate => ({
       targetType,
       targetId: row.id,

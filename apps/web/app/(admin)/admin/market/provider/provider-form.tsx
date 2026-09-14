@@ -9,13 +9,20 @@
 // alone is safe. Blank means UNCHANGED; the contract says so, the service
 // implements it, and an integration test pins it.
 import { useState } from "react";
-import { AlertTriangle, Info, Plug } from "lucide-react";
-import { MARKET_DRIVERS, marketProviderSchema } from "@repo/contracts";
-import type { ProviderTestResult } from "@repo/core";
+import { useRouter } from "next/navigation";
+import { AlertTriangle, Info, Plug, RefreshCw } from "lucide-react";
+import {
+  MARKET_DRIVERS,
+  MARKET_REFRESH_CHOICES,
+  MARKET_STALE_CHOICES,
+  marketProviderSchema,
+} from "@repo/contracts";
+import type { ProviderTestResult, SyncResult } from "@repo/core";
 import { Alert, AlertDescription, AlertTitle } from "@repo/ui/components/alert";
 import { Button } from "@repo/ui/components/button";
 import {
   Field,
+  FieldContent,
   FieldDescription,
   FieldError,
   FieldGroup,
@@ -24,8 +31,12 @@ import {
 import { Input } from "@repo/ui/components/input";
 import { PasswordInput } from "@repo/ui/components/password-input";
 import { Switch } from "@repo/ui/components/switch";
-import { humanizeKey } from "@repo/utils";
-import { saveMarketProviderAction, testMarketProviderAction } from "../../_actions/market-actions.ts";
+import { formatDurationSeconds, humanizeKey } from "@repo/utils";
+import {
+  saveMarketProviderAction,
+  syncMarketDataAction,
+  testMarketProviderAction,
+} from "../../_actions/market-actions.ts";
 import { AdminCombobox } from "../../_components/combobox.tsx";
 import { AdminSection } from "../../_components/admin-page.tsx";
 import { useFieldErrors } from "../../_hooks/use-field-errors.ts";
@@ -64,6 +75,18 @@ export interface ProviderFormLabels {
   secretKeyMissingBody: string;
   manualTitle: string;
   manualBody: string;
+  syncTitle: string;
+  syncDescription: string;
+  syncAction: string;
+  syncRunning: string;
+  syncDone: string;
+  syncPartial: string;
+  syncAttempted: string;
+  syncSynced: string;
+  syncBars: string;
+  syncSkipped: string;
+  syncFailuresLabel: string;
+  nextDue: string;
 }
 
 export interface ProviderView {
@@ -76,6 +99,28 @@ export interface ProviderView {
   lastSyncLabel: string | null;
   lastSyncError: string | null;
   hasSecretKey: boolean;
+  /** Already resolved by the page — which of the four things to say is state. */
+  nextDueLabel: string;
+}
+
+/**
+ * The picker's options, with the STORED value folded in if it is not one of
+ * them. A row written before this list existed — or by a future list — must
+ * still round-trip: an option set that quietly drops the current value turns
+ * "I came here to change the base URL" into "I also changed the refresh
+ * interval to whatever was first in the list".
+ */
+function intervalOptions(choices: readonly number[], current: string) {
+  const seconds = Number(current);
+  const values = [...choices];
+  if (Number.isFinite(seconds) && seconds > 0 && !values.includes(seconds)) {
+    values.push(seconds);
+    values.sort((a, b) => a - b);
+  }
+  return values.map((value) => ({
+    value: String(value),
+    label: formatDurationSeconds(value),
+  }));
 }
 
 export function ProviderForm({
@@ -86,6 +131,7 @@ export function ProviderForm({
   labels: ProviderFormLabels;
 }) {
   const { run, pending } = useServerAction();
+  const router = useRouter();
 
   const [driver, setDriver] = useState(provider.driver);
   const [baseUrl, setBaseUrl] = useState(provider.baseUrl ?? "");
@@ -97,6 +143,10 @@ export function ProviderForm({
   const [testSymbol, setTestSymbol] = useState("EUR/USD");
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<ProviderTestResult | null>(null);
+
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
 
   const values = {
     driver,
@@ -119,6 +169,27 @@ export function ProviderForm({
       // means: there is now a stored key, and this box is not it.
       onDone: () => setApiKey(""),
     });
+  };
+
+  /**
+   * Not `run()` from useServerAction: this reports a RESULT, and a toast that
+   * says "done" over a sweep that failed on nine of twenty-eight instruments
+   * would be the wrong summary. Same shape as the test button beside it.
+   */
+  const sync = async () => {
+    setSyncing(true);
+    setSyncError(null);
+    try {
+      setSyncResult(await syncMarketDataAction());
+      // The status block above is server-rendered from `lastSyncAt`, so the
+      // page has to re-read for "Last run" to stop saying "Never run".
+      router.refresh();
+    } catch (error) {
+      setSyncResult(null);
+      setSyncError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSyncing(false);
+    }
   };
 
   const test = async () => {
@@ -195,32 +266,40 @@ export function ProviderForm({
           </Field>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {/* Durations, not a seconds box. Both are stored in seconds and both
+                are chosen in the units people say them in — an admin picking a
+                daily refresh should not have to know that a day is 86400. */}
             <Field required invalid={form.invalid("refreshSeconds")}>
               <FieldLabel>{labels.refreshField}</FieldLabel>
-              <Input
-                type="number"
+              <AdminCombobox
                 value={refreshSeconds}
-                onChange={(event) => setRefreshSeconds(event.target.value)}
+                onValueChange={setRefreshSeconds}
+                options={intervalOptions(MARKET_REFRESH_CHOICES, refreshSeconds)}
               />
               <FieldDescription>{labels.refreshHint}</FieldDescription>
               <FieldError>{form.error("refreshSeconds")}</FieldError>
             </Field>
             <Field required invalid={form.invalid("staleSeconds")}>
               <FieldLabel>{labels.staleField}</FieldLabel>
-              <Input
-                type="number"
+              <AdminCombobox
                 value={staleSeconds}
-                onChange={(event) => setStaleSeconds(event.target.value)}
+                onValueChange={setStaleSeconds}
+                options={intervalOptions(MARKET_STALE_CHOICES, staleSeconds)}
               />
               <FieldDescription>{labels.staleHint}</FieldDescription>
               <FieldError>{form.error("staleSeconds")}</FieldError>
             </Field>
           </div>
 
+          {/* Switch first, then its label and hint (ADR-089). The two texts
+              stack in a FieldContent so the hint sits under the label rather
+              than after it on the same row. */}
           <Field orientation="horizontal">
-            <FieldLabel>{labels.enabledField}</FieldLabel>
             <Switch checked={isEnabled} onCheckedChange={setIsEnabled} />
-            <FieldDescription>{labels.enabledHint}</FieldDescription>
+            <FieldContent>
+              <FieldLabel>{labels.enabledField}</FieldLabel>
+              <FieldDescription>{labels.enabledHint}</FieldDescription>
+            </FieldContent>
           </Field>
         </FieldGroup>
 
@@ -257,11 +336,61 @@ export function ProviderForm({
         )}
       </AdminSection>
 
+      {/* Sync (ADR-096 #3). Between the test and the status block on purpose:
+          the test proves the credential, this spends it, and the block below
+          records what happened. */}
+      <AdminSection title={labels.syncTitle}>
+        <p className="text-sm text-muted-foreground">{labels.syncDescription}</p>
+        <div className="flex justify-end">
+          <Button onClick={sync} disabled={syncing}>
+            <RefreshCw aria-hidden data-icon="inline-start" />
+            {syncing ? labels.syncRunning : labels.syncAction}
+          </Button>
+        </div>
+
+        {syncError && (
+          <Alert variant="destructive">
+            <AlertTitle>{labels.syncPartial}</AlertTitle>
+            <AlertDescription>{syncError}</AlertDescription>
+          </Alert>
+        )}
+
+        {syncResult && (
+          // A free tier that runs out mid-sweep is the EXPECTED case, not an
+          // exception — so a run with failures is "finished with failures",
+          // not "failed". The staleness rotation (ADR-087 #9) puts whatever
+          // was missed at the front of the next run, which is only reassuring
+          // if the numbers are visible.
+          <Alert variant={syncResult.failures.length > 0 ? "warning" : "success"}>
+            <AlertTitle>
+              {syncResult.failures.length > 0 ? labels.syncPartial : labels.syncDone}
+            </AlertTitle>
+            <AlertDescription>
+              <span>
+                {labels.syncAttempted}: {syncResult.attempted} · {labels.syncSynced}:{" "}
+                {syncResult.synced} · {labels.syncBars}: {syncResult.barsWritten} ·{" "}
+                {labels.syncSkipped}: {syncResult.skipped}
+              </span>
+              {syncResult.failures.length > 0 && (
+                <span>
+                  {labels.syncFailuresLabel}:{" "}
+                  {syncResult.failures.map((failure) => failure.symbol).join(", ")}
+                </span>
+              )}
+            </AlertDescription>
+          </Alert>
+        )}
+      </AdminSection>
+
       <AdminSection title={labels.statusTitle}>
         <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
           <div className="flex flex-col gap-1">
             <dt className="text-muted-foreground">{labels.lastSync}</dt>
             <dd>{provider.lastSyncLabel ?? labels.lastSyncNever}</dd>
+          </div>
+          <div className="flex flex-col gap-1">
+            <dt className="text-muted-foreground">{labels.nextDue}</dt>
+            <dd>{provider.nextDueLabel}</dd>
           </div>
           <div className="flex flex-col gap-1">
             <dt className="text-muted-foreground">{labels.lastError}</dt>

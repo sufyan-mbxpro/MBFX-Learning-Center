@@ -24,7 +24,11 @@
 // **`locked` is a disabled Button, never dimmed text.** `opacity` on an
 // ancestor is invisible to axe's contrast check and was exactly the defect
 // ADR-082 #3 removed from `LessonNav` — so the locked state changes the
-// ground and the glyph, and every string stays at full ink.
+// ground and the glyph, and every string the reader is meant to READ stays
+// at full ink. The one opacity left standing is the design system's own
+// `disabled:opacity-50` on the CTA, which WCAG 1.4.3 exempts because the
+// control is inactive; `assessment-card.test.tsx` allows exactly that one
+// and nothing else.
 import { Award, GraduationCap, ListChecks, Lock, RotateCcw, Target } from "lucide-react";
 
 import { Badge } from "@repo/ui/components/badge";

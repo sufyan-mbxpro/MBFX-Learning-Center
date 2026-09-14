@@ -27,7 +27,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { sendTemplatedEmail } from "@repo/email";
 import type { NewsletterSource, SubscriberFilter, SubscriberExportFilter } from "@repo/contracts";
 import { db, SubscriberStatus } from "@repo/db";
-import { loadSetting } from "@repo/settings";
+import { getSetting } from "@repo/settings";
 import { recordAudit } from "./index.ts";
 
 /** ADR-080 #1. A row that never gets confirmed disappears and can try again. */
@@ -318,9 +318,19 @@ export async function unsubscribe(token: string): Promise<UnsubscribeResult> {
  * The four placement settings (ADR-080 #5). The FLAG decides whether signup
  * exists at all; this decides where the form is drawn — which is why a
  * placement read never touches the flag, and every render site checks both.
+ *
+ * **`getSetting`, not `loadSetting`** (architecture.md #11). The footer draws
+ * on every public page, so an uncached read here is an uncached read
+ * everywhere: Prisma reaches for `Date.now()` while timing a query, Cache
+ * Components rejects an unstable value during prerender, and the whole route
+ * falls out of ISR. That is not theoretical — writing this with `loadSetting`
+ * broke the prerender of `/[locale]/learn/[track]/[course]` outright, and it
+ * is the same trap `resolveRecommendations` documents in `public-courses.ts`.
+ * `getSetting` carries the frozen `settings:email` tag, so an admin toggling a
+ * placement still invalidates it.
  */
 export async function isNewsletterPlacementEnabled(source: NewsletterSource): Promise<boolean> {
-  return (await loadSetting(`newsletter.placements.${source}`)) !== false;
+  return (await getSetting(`newsletter.placements.${source}`)) !== false;
 }
 
 // ─── Admin ───────────────────────────────────────────────────

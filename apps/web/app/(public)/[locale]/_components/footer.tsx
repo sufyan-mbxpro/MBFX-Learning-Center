@@ -31,7 +31,7 @@ import {
 import { Link } from "@repo/i18n/navigation";
 import { getSetting, isFeatureVisible } from "@repo/settings";
 import { BrandLogo } from "@repo/ui/components/brand-logo";
-import { SocialGlyph } from "@repo/ui/components/social-glyph";
+import { SocialLinkIcon } from "./social-link-icon.tsx";
 import { Container } from "@repo/ui/components/container";
 import { Reveal } from "@repo/ui/components/reveal";
 import { NavLink } from "./nav-link.tsx";
@@ -46,21 +46,6 @@ async function getCurrentYear(): Promise<number> {
   "use cache";
   cacheLife({ revalidate: 3600 });
   return new Date().getFullYear();
-}
-
-// A social link's icon: the admin-uploaded asset when there is one,
-// otherwise the built-in glyph named by `icon` (ADR-045). This used to
-// look the name up as a `lucide-react` export, which resolved to
-// `undefined` for every brand icon after lucide v1 removed them — the
-// footer rendered five empty circles and said nothing about it.
-function SocialLinkIcon({ icon, iconUrl }: { icon: string; iconUrl: string | null }) {
-  if (iconUrl) {
-    // Plain <img>: uploaded assets are served by our own route (ADR-017),
-    // and the icon is decorative here — the <a> carries the label.
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img src={iconUrl} alt="" aria-hidden className="size-4 object-contain" />;
-  }
-  return <SocialGlyph name={icon} />;
 }
 
 // App-store links are admin-configured URLs (footer.appLinks). The BADGE

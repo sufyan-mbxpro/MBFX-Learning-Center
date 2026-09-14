@@ -135,9 +135,10 @@ export function RelatedPanel({
         icon={Settings2}
         accent="neutral"
       >
+        {/* Switch first, label after (ADR-089). */}
         <UiField orientation="horizontal">
-          <FieldLabel className="font-normal">{labels.showRelated}</FieldLabel>
           <Switch checked={showRelated} onCheckedChange={(v) => onShowRelatedChange(v === true)} />
+          <FieldLabel className="font-normal">{labels.showRelated}</FieldLabel>
         </UiField>
         <Field label={labels.relatedCount}>
           <AdminCombobox

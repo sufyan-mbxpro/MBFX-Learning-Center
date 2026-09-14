@@ -63,14 +63,16 @@ describe("createPage", () => {
   });
 
   it("derives a nested path from the parent's path", async () => {
-    const toolsId = await pages.createPage(actor, { title: "Tools", slug: "tools" });
+    // Not `tools`: ADR-081 #1 reserved that segment for the coded route, and
+    // the claim under test is path derivation, not the word.
+    const parentId = await pages.createPage(actor, { title: "Resources", slug: "resources" });
     const childId = await pages.createPage(actor, {
       title: "Pip Calculator",
       slug: "pip-calculator",
-      parentId: toolsId,
+      parentId,
     });
     const child = await ctx.db.pageTranslation.findFirstOrThrow({ where: { pageId: childId } });
-    expect(child.path).toBe("/tools/pip-calculator");
+    expect(child.path).toBe("/resources/pip-calculator");
   });
 
   it("refuses a reserved first segment", async () => {

@@ -15,16 +15,15 @@
 // translation and the mixed relation set in ONE transaction, so a tool whose
 // copy saved and whose related list did not is a state that cannot be reached.
 import { useState } from "react";
-import {
-  BookOpen,
-  Image as ImageIcon,
-  Link2,
-  Search,
-  Settings2,
-  Wrench,
-} from "lucide-react";
+import { BookOpen, Image as ImageIcon, Link2, Search, Settings2, Wrench } from "lucide-react";
 import { saveToolSchema, type ToolFaqEntry, type ToolKey } from "@repo/contracts";
 import { Button } from "@repo/ui/components/button";
+import {
+  Field as FieldRoot,
+  FieldContent,
+  FieldDescription,
+  FieldLabel,
+} from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
 import { Switch } from "@repo/ui/components/switch";
 import { Textarea } from "@repo/ui/components/textarea";
@@ -32,14 +31,19 @@ import { saveToolAction, setToolEnabledAction } from "../../_actions/tool-action
 import { EditorSection, Field } from "../../_components/editor/editor-section.tsx";
 import { FaqPanel, type FaqLabels } from "../../_components/editor/faq-panel.tsx";
 import { ImageUploadField } from "../../_components/image-upload-field.tsx";
-import {
-  RichTextEditor,
-  type RichTextLabels,
-} from "../../_components/rich-text-editor.tsx";
+import { RichTextEditor, type RichTextLabels } from "../../_components/rich-text-editor.tsx";
 import { useFieldErrors } from "../../_hooks/use-field-errors.ts";
 import { useServerAction } from "../../_hooks/use-server-action.ts";
-import { ConfigPanel, type ConfigPanelLabels, type InstrumentOption } from "./_panels/config-panel.tsx";
-import { RelatedPanel, type RelatedOption, type RelatedPanelLabels } from "./_panels/related-panel.tsx";
+import {
+  ConfigPanel,
+  type ConfigPanelLabels,
+  type InstrumentOption,
+} from "./_panels/config-panel.tsx";
+import {
+  RelatedPanel,
+  type RelatedOption,
+  type RelatedPanelLabels,
+} from "./_panels/related-panel.tsx";
 
 export interface ToolEditorLabels extends ConfigPanelLabels, RelatedPanelLabels {
   contentSection: string;
@@ -278,7 +282,15 @@ export function ToolEditor({
           description={labels.settingsDescription}
           icon={Wrench}
         >
-          <Field label={labels.enabledField} hint={labels.enabledHint}>
+          {/* Switch ROWS, so @repo/ui's horizontal Field rather than the
+              section's label-above-control wrapper (ADR-089).
+
+              These were the wrapper's vertical Field, whose `*:w-full` is what
+              makes an Input fill the column — and it reached the Switch too, so
+              a 44px control was drawn as a 288px bar across the rail. Both
+              halves of that are fixed: `fieldVariants` no longer stretches a
+              switch, and a switch belongs on a row with its label anyway. */}
+          <FieldRoot orientation="horizontal">
             <Switch
               checked={isEnabled}
               disabled={!canPublish}
@@ -291,10 +303,15 @@ export function ToolEditor({
                 run(() => setToolEnabledAction(tool.key, next));
               }}
             />
-          </Field>
-          <Field label={labels.showRelatedField}>
+            <FieldContent>
+              <FieldLabel>{labels.enabledField}</FieldLabel>
+              <FieldDescription>{labels.enabledHint}</FieldDescription>
+            </FieldContent>
+          </FieldRoot>
+          <FieldRoot orientation="horizontal">
             <Switch checked={showRelated} onCheckedChange={setShowRelated} />
-          </Field>
+            <FieldLabel>{labels.showRelatedField}</FieldLabel>
+          </FieldRoot>
           <Field
             label={labels.relatedCountField}
             hint={labels.relatedCountHint}

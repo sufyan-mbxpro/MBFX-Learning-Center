@@ -100,9 +100,28 @@ test.describe("the five About pages", () => {
   // the test about the effect, not the implementation.
   test("gives a mega-menu panel row a visible hover state", async ({ page }) => {
     await page.goto("/about");
-    await page.getByRole("button", { name: "About", exact: true }).first().hover();
+
+    // Retry the HOVER, and LEAVE before each attempt. Two things go wrong
+    // without this, and the second one hides the first.
+    //
+    // The nav is a client component, so a pointer event that lands before
+    // React has hydrated the trigger is simply lost: nothing is listening for
+    // it, and waiting longer for the panel cannot open a menu that was never
+    // asked to open. That much the keyboard test below already documents.
+    //
+    // But retrying `hover()` on its own does not recover it. The pointer is
+    // already on the trigger, so Playwright moves it to the same coordinates
+    // and Chromium fires `mousemove` with no fresh `pointerenter` — and
+    // `pointerenter` is the event the menu opens on. Measured: twelve retries
+    // over six seconds never open it; one leave-and-return does. So each
+    // attempt has to be a real boundary crossing, which is also what a person
+    // does when a menu does not drop.
     const panel = page.locator("[data-slot=mega-menu-panel]");
-    await expect(panel).toBeVisible();
+    await expect(async () => {
+      await page.mouse.move(0, 0);
+      await page.getByRole("button", { name: "About", exact: true }).first().hover();
+      await expect(panel).toBeVisible({ timeout: 2000 });
+    }).toPass({ timeout: 30_000 });
 
     const row = panel.getByRole("link").first();
     const resting = await row.evaluate((el) => getComputedStyle(el).backgroundColor);
@@ -131,12 +150,24 @@ test.describe("the mega menu (ADR-048)", () => {
     await page.goto("/about");
 
     const trigger = page.getByRole("button", { name: "About" });
-    await trigger.hover();
 
     // Column headings come from the registry's catalog keys; the rows come
     // from the database menu. Seeing both proves the two halves are bound.
-    await expect(page.getByText("COMPANY")).toBeVisible();
-    await expect(page.getByText("HOW WE WORK")).toBeVisible();
+    //
+    // Scoped to the PANEL, not to the page: the footer renders a "Company"
+    // sitemap column of its own (three seeded footer menus since 2026-09-07),
+    // and an unscoped getByText would be satisfied by it whether the menu
+    // opened or not — and would fail strict mode once both are on screen.
+    // Leave-and-return on every attempt, for the reason the hover test above
+    // sets out: a repeated hover at an unchanged position is a `mousemove`,
+    // not a `pointerenter`, and this menu opens on the latter.
+    const panel = page.locator("[data-slot=mega-menu-panel]");
+    await expect(async () => {
+      await page.mouse.move(0, 0);
+      await trigger.hover();
+      await expect(panel.getByText("COMPANY")).toBeVisible({ timeout: 2000 });
+    }).toPass({ timeout: 30_000 });
+    await expect(panel.getByText("HOW WE WORK")).toBeVisible();
 
     await page
       .getByRole("link", { name: /Security & trust/ })
@@ -153,14 +184,18 @@ test.describe("the mega menu (ADR-048)", () => {
     await page.goto("/about");
 
     const trigger = page.getByRole("button", { name: "About" });
+    // Panel-scoped for the reason the hover test above gives: "Help" is a
+    // word that can appear anywhere on a page, and a guard that a support
+    // link elsewhere could satisfy is not guarding the menu.
+    const help = page.locator("[data-slot=mega-menu-panel]").getByText("HELP");
     await expect(async () => {
       await trigger.focus();
       await page.keyboard.press("Enter");
-      await expect(page.getByText("HELP")).toBeVisible({ timeout: 2000 });
+      await expect(help).toBeVisible({ timeout: 2000 });
     }).toPass({ timeout: 30_000 });
 
     await page.keyboard.press("Escape");
-    await expect(page.getByText("HELP")).toBeHidden();
+    await expect(help).toBeHidden();
     await expect(trigger).toHaveAttribute("aria-expanded", "false");
   });
 

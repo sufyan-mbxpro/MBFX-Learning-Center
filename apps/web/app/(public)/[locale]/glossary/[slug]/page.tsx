@@ -122,10 +122,10 @@ export default async function GlossaryTermPage({ params }: PageProps<"/[locale]/
         // tall band is the first thing on the site and has a job to do. A
         // glossary term is a leaf: the reader arrived to read two paragraphs,
         // and at `section-lg` the band pushed the definition itself below the
-        // fold on a laptop. `spacing="sm"` matches `/glossary/topics`, which
-        // is the shape the owner pointed at — and the brand fill stays, since
-        // what was wrong was the height, not the colour.
-        spacing="sm"
+        // fold on a laptop. `compact` matches `/glossary/topics`, which is the
+        // shape the owner pointed at — and the brand fill stays, since what
+        // was wrong was the height, not the colour.
+        size="compact"
         backdrop={<GlossaryBackdrop slot="termBanner" priority />}
         motif={<AmbientMotif variant="learn" intensity={0.7} />}
         breadcrumb={

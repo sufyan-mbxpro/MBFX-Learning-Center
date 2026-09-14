@@ -461,7 +461,11 @@ const SETTINGS = [
       // make both promises distinctly (see latest-news.tsx).
       { key: "latest_news", enabled: true, order: 5, variant: "split", limit: 5 },
       { key: "latest_analysis", enabled: true, order: 6, variant: "standard", limit: 3 },
-      { key: "glossary_spotlight", enabled: true, order: 7, variant: "chips", limit: 8 },
+      // changes-28: `cards`, not `chips`. A row of eight term pills under a
+      // two-line heading is a band whose heading is three times the height of
+      // its content — and a chip says nothing to the reader this band exists
+      // for. `cards` shows the plain-language line beside the term.
+      { key: "glossary_spotlight", enabled: true, order: 7, variant: "cards", limit: 8 },
 
       // The seven keys below are seeded but DISABLED, and that is the point:
       // nothing is built behind them, so enabling one renders the dashed
@@ -489,9 +493,18 @@ const SETTINGS = [
       { key: "market_sentiment", enabled: false, order: 13 },
       { key: "trading_sessions", enabled: false, order: 14 },
 
+      // changes-28 (ADR-093). Placed where the brief's screenshot puts it:
+      // after the reading sections, before the newsletter ask — "here is where
+      // else to find us" reads as a closing offer, not as a second header.
+      // Renders nothing until an admin activates a social link.
+      { key: "connect", enabled: true, order: 14 },
+
       { key: "newsletter", enabled: true, order: 15, variant: "full-width" },
       { key: "faq", enabled: true, order: 16, variant: "accordion", limit: 6 },
-      { key: "risk_disclaimer", enabled: true, order: 17 },
+      // The page closes on a quote, above the risk disclaimer — the last thing
+      // a reader sees before the legal line. `single` is the day's quote.
+      { key: "quotes", enabled: true, order: 17, variant: "single" },
+      { key: "risk_disclaimer", enabled: true, order: 18 },
     ],
     "JSON",
     "Homepage sections",
@@ -2798,7 +2811,7 @@ export async function seed(db: PrismaClient) {
   //
   // ─── Why almost every demo topic has a body and no video ─────────────────
   //
-  // `_content/home-videos.ts` records the rule and the reason: a video URL is a
+  // ADR-047 §3 records the rule and the reason: a video URL is a
   // FACTUAL CLAIM — it asserts "this specific recording exists and teaches
   // this" — and an invented eleven-character id resolves to whatever happens to
   // occupy it. So these rows do not invent one. The capability rule in

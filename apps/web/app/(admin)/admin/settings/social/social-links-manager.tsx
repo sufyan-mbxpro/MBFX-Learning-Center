@@ -402,12 +402,14 @@ export function SocialLinksManager({
               <Input value={form.handle} onChange={(e) => set("handle", e.target.value)} />
               <FieldError>{errors.error("handle")}</FieldError>
             </Field>
+            {/* Switch first, label after (ADR-089) — the same order as the
+                two checkbox rows directly below it, which had it right. */}
             <Field orientation="horizontal">
-              <FieldLabel>{labels.active}</FieldLabel>
               <Switch
                 checked={form.isActive}
                 onCheckedChange={(next) => set("isActive", next === true)}
               />
+              <FieldLabel>{labels.active}</FieldLabel>
             </Field>
             <Field orientation="horizontal">
               <Checkbox

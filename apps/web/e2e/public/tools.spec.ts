@@ -87,22 +87,30 @@ test.describe("the deep journey: size a trade, then read on", () => {
     const balance = page.getByLabel("Account balance");
     const risk = page.getByLabel("Risk per trade (%)");
 
-    // Wait for the island to be INTERACTIVE before typing into it. A `fill`
-    // that lands mid-hydration is overwritten when React takes over, and the
-    // failure is nasty: the later fields keep their values, so the page shows
-    // a number that is correct arithmetic over the wrong inputs. Asserting
-    // the seeded default is the cheapest proof the island has mounted.
-    await expect(balance).toHaveValue("10000");
-
-    await balance.fill("20000");
-    await expect(balance).toHaveValue("20000");
-    await risk.fill("2");
-    await expect(risk).toHaveValue("2");
-    await page.getByLabel("Stop loss (pips)").fill("40");
-
+    // A `fill` that lands mid-hydration is overwritten when React takes over,
+    // and the failure is nasty: the later fields keep their values, so the
+    // page shows a number that is correct arithmetic over the wrong inputs —
+    // 2% of the DEFAULT balance, looking every bit like a real answer.
+    //
+    // `await expect(balance).toHaveValue("10000")` is what used to guard this,
+    // and it cannot: the server-rendered HTML already carries that value, so
+    // it passes before React has mounted and proves nothing. Nothing marks an
+    // island hydrated, so the honest gate is the OUTPUT — the amount at risk
+    // is computed on the client, so it can only read 400.00 once the inputs
+    // have reached React. Retry the whole sequence until it does.
+    //
     // 2% of 20,000 = 400, whatever the rates say — the amount at risk needs
     // no market data (ADR-087 #11).
-    await expect(page.getByText("400.00", { exact: false }).first()).toBeVisible();
+    const atRisk = page.getByText("400.00", { exact: false }).first();
+    await expect(async () => {
+      await balance.fill("20000");
+      await risk.fill("2");
+      await page.getByLabel("Stop loss (pips)").fill("40");
+      await expect(atRisk).toBeVisible({ timeout: 2000 });
+    }).toPass({ timeout: 30_000 });
+
+    await expect(balance).toHaveValue("20000");
+    await expect(risk).toHaveValue("2");
 
     // The strip is curated-then-topped-up, so it is never empty on a site
     // with any published content (ADR-086 #4).
@@ -134,7 +142,15 @@ test.describe('ADR-088 #7 — never "real-time", never "live"', () => {
   for (const path of ["/tools/correlation", "/tools/risk-sentiment"]) {
     test(`${path} says neither word`, async ({ page }) => {
       await page.goto(path);
-      const body = (await page.locator("body").innerText()).toLowerCase();
+      // `main`, not `body`. ADR-088 #7 governs what the TOOL says about its
+      // own data, and everything the tool renders — masthead, widget,
+      // explainer, FAQ, related strip, disclaimer — is inside the landmark.
+      // The footer is not: it carries a seeded "Live Rates" row pointing at
+      // /markets, so a body-wide scan failed on chrome this page does not own
+      // and says nothing whatever about the correlation copy. Whether that is
+      // the right label for a section still being built is a question for the
+      // footer, not for this rule.
+      const body = (await page.locator("main").innerText()).toLowerCase();
       expect(body).not.toContain("real-time");
       expect(body).not.toContain("realtime");
       // "live" as a WORD — "delivered" and "lives" must not trip it.

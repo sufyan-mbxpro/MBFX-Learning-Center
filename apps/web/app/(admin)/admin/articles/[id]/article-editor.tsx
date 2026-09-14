@@ -687,20 +687,21 @@ export function ArticleEditor({
             accent="warning"
             footer={
               <div className="flex flex-col gap-2">
+                {/* Switch first, label after — all three (ADR-089). */}
                 <UiField orientation="horizontal">
-                  <FieldLabel className="font-normal">{labels.featuredPost}</FieldLabel>
                   <Switch checked={isFeatured} onCheckedChange={(v) => setIsFeatured(v === true)} />
+                  <FieldLabel className="font-normal">{labels.featuredPost}</FieldLabel>
                 </UiField>
                 <UiField orientation="horizontal">
-                  <FieldLabel className="font-normal">{labels.activeLabel}</FieldLabel>
                   <Switch checked={isActive} onCheckedChange={(v) => setIsActive(v === true)} />
+                  <FieldLabel className="font-normal">{labels.activeLabel}</FieldLabel>
                 </UiField>
                 <UiField orientation="horizontal">
+                  <Switch checked={isPremium} onCheckedChange={(v) => setIsPremium(v === true)} />
                   <FieldContent>
                     <FieldLabel className="font-normal">{labels.premium}</FieldLabel>
                     <FieldDescription className="text-xs">{labels.premiumHint}</FieldDescription>
                   </FieldContent>
-                  <Switch checked={isPremium} onCheckedChange={(v) => setIsPremium(v === true)} />
                 </UiField>
               </div>
             }

@@ -34,6 +34,7 @@ export * from "./market.ts";
 export * from "./market-admin.ts";
 export * from "./market-analytics.ts";
 export * from "./tools.ts";
+export * from "./sitemap.ts";
 export * from "./notifications.ts";
 export * from "./search.ts";
 export * from "./media.ts";

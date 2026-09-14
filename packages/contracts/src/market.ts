@@ -63,6 +63,29 @@ export const marketInstrumentSchema = z
 
 export type MarketInstrumentSaveInput = z.infer<typeof marketInstrumentSchema>;
 
+/**
+ * The refresh intervals the admin can pick from — 1 minute to 24 hours.
+ *
+ * The SET is code and the words are stored nowhere: an option's label is
+ * `formatDurationSeconds()` of the number. Free text was the old control, and
+ * a box accepting any integer between 30 and 86400 asks an admin to know that
+ * a day is 86400 seconds in order to choose a day.
+ *
+ * Every value here has to satisfy `marketProviderSchema` below, which is why
+ * the two live in one file — `market.test.ts` fails if one drifts from the
+ * other. A value stored OUTSIDE this list still loads and still saves: the
+ * form adds the current value as its own option rather than silently rounding
+ * it to a neighbour.
+ */
+export const MARKET_REFRESH_CHOICES = [
+  60, 300, 900, 1_800, 3_600, 7_200, 21_600, 43_200, 86_400,
+] as const;
+
+/** How long stored data stays presentable before every tool labels it — 1 hour to 30 days. */
+export const MARKET_STALE_CHOICES = [
+  3_600, 21_600, 43_200, 86_400, 172_800, 604_800, 2_592_000,
+] as const;
+
 export const marketProviderSchema = z.object({
   driver: z.enum(MARKET_DRIVERS),
   baseUrl: z.url().max(255).nullish().or(z.literal("")),
@@ -73,7 +96,11 @@ export const marketProviderSchema = z.object({
    */
   apiKey: z.string().max(200).optional(),
   refreshSeconds: z.number().int().min(30).max(86_400),
-  staleSeconds: z.number().int().min(60).max(30 * 86_400),
+  staleSeconds: z
+    .number()
+    .int()
+    .min(60)
+    .max(30 * 86_400),
   isEnabled: z.boolean(),
 });
 

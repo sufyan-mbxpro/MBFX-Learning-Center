@@ -68,7 +68,13 @@ function Sparkline({ points }: { points: { date: string; score: number }[] }) {
       role="img"
       aria-hidden
     >
-      <path d={path} fill="none" stroke="currentColor" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+      <path
+        d={path}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        vectorEffect="non-scaling-stroke"
+      />
     </svg>
   );
 }
@@ -86,9 +92,7 @@ export function RiskSentimentWidget({
     return (
       <div className="flex flex-col gap-4">
         <Alert variant="info">
-          <AlertDescription>
-            {t("risk.empty", { total: data.reporting.total })}
-          </AlertDescription>
+          <AlertDescription>{t("risk.empty", { total: data.reporting.total })}</AlertDescription>
         </Alert>
         <Methodology
           points={[

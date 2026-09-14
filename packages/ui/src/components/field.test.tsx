@@ -180,3 +180,48 @@ describe("Field — every @repo/ui control reads it", () => {
     expect(input.getAttribute("aria-describedby")).toBeNull();
   });
 });
+
+// ADR-089 — the vertical variant's `*:w-full` is what makes an Input fill its
+// field, and it reached the Switch too: a 44×24 control (ADR-074) drawn as a
+// bar the width of the settings rail. jsdom applies no stylesheet, so the
+// class list is the only thing there is to assert — which is exactly the
+// property, since the bug WAS a class list.
+describe("ADR-089 — a vertical Field does not stretch a switch", () => {
+  const classesOf = (orientation: "vertical" | "horizontal") => {
+    cleanup();
+    render(
+      <Field orientation={orientation}>
+        <Switch />
+        <FieldLabel>Live</FieldLabel>
+      </Field>,
+    );
+    return screen.getByRole("group").className;
+  };
+
+  it("exempts [data-slot=switch] from the stretch", () => {
+    const vertical = classesOf("vertical");
+    // Both halves: the stretch is still there for everything else, and the
+    // switch is pulled back to its own geometry. Asserting only the second
+    // would pass if `*:w-full` were dropped altogether, which would leave
+    // every Input in the admin sized to its content.
+    expect(vertical).toContain("*:w-full");
+    expect(vertical).toContain("[&>[data-slot=switch]]:w-11");
+  });
+
+  it("does not need the exemption on the horizontal variant", () => {
+    // Nothing stretches there, so the rule would be noise — and its absence
+    // is what says the vertical one is a fix rather than a decoration.
+    expect(classesOf("horizontal")).not.toContain("[&>[data-slot=switch]]");
+  });
+
+  it("still wires the switch it no longer stretches", () => {
+    cleanup();
+    render(
+      <Field orientation="vertical">
+        <Switch />
+        <FieldLabel>Live</FieldLabel>
+      </Field>,
+    );
+    expect(screen.getByRole("switch", { name: "Live" })).toBeTruthy();
+  });
+});

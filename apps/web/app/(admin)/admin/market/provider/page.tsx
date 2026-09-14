@@ -1,5 +1,5 @@
 import { getTranslations } from "next-intl/server";
-import { loadMarketProvider } from "@repo/core";
+import { getSyncDueState, loadMarketProvider } from "@repo/core";
 import { requirePermission } from "@repo/rbac";
 import { AdminPage } from "../../_components/admin-page.tsx";
 import { ProviderForm, type ProviderFormLabels } from "./provider-form.tsx";
@@ -21,7 +21,7 @@ export default async function MarketProviderPage() {
   await requirePermission("market.providers.manage");
   const t = await getTranslations("admin");
 
-  const provider = await loadMarketProvider();
+  const [provider, due] = await Promise.all([loadMarketProvider(), getSyncDueState()]);
 
   const labels: ProviderFormLabels = {
     driverField: t("marketData.driverField"),
@@ -56,9 +56,34 @@ export default async function MarketProviderPage() {
     secretKeyMissingBody: t("marketData.secretKeyMissingBody"),
     manualTitle: t("marketData.manualTitle"),
     manualBody: t("marketData.manualBody"),
+    syncTitle: t("marketData.syncTitle"),
+    syncDescription: t("marketData.syncDescription"),
+    syncAction: t("marketData.syncAction"),
+    syncRunning: t("marketData.syncRunning"),
+    syncDone: t("marketData.syncDone"),
+    syncPartial: t("marketData.syncPartial"),
+    syncAttempted: t("marketData.syncAttempted"),
+    syncSynced: t("marketData.syncSynced"),
+    syncBars: t("marketData.syncBars"),
+    syncSkipped: t("marketData.syncSkipped"),
+    syncFailuresLabel: t("marketData.syncFailuresLabel"),
+    nextDue: t("marketData.nextDue"),
   };
 
   const dateFormat = new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" });
+
+  // Resolved here rather than in the form: which of the four things to say is
+  // a question about state, not about layout. An instance with no CRON_SECRET
+  // is told the truth — the endpoint refuses every caller, so no schedule can
+  // reach it (ADR-096 #5) — instead of being shown a due time that will never
+  // arrive on its own.
+  const nextDueLabel = !provider.cronConfigured
+    ? t("marketData.nextDueUnscheduled")
+    : due.lastSyncAt === null
+      ? t("marketData.nextDueNever")
+      : due.nextDueAt && !due.due
+        ? dateFormat.format(due.nextDueAt)
+        : t("marketData.nextDueNow");
 
   return (
     <AdminPage
@@ -78,6 +103,7 @@ export default async function MarketProviderPage() {
           lastSyncLabel: provider.lastSyncAt ? dateFormat.format(provider.lastSyncAt) : null,
           lastSyncError: provider.lastSyncError,
           hasSecretKey: provider.hasSecretKey,
+          nextDueLabel,
         }}
         labels={labels}
       />

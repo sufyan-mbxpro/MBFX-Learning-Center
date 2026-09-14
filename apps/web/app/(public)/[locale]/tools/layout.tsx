@@ -29,11 +29,17 @@ export default async function ToolsLayout({ children, params }: LayoutProps<"/[l
   }));
 
   return (
-    <>
+    // The area’s single `<main>`, and the bar renders INSIDE it — the pattern
+    // `about/layout.tsx` and `learn/layout.tsx` already follow, and for the
+    // reason the latter states: no page under /tools has to remember to open
+    // a landmark. The eight tool pages and the index had none at all, which
+    // axe reports as a moderate `region` violation and so slipped past the
+    // serious/critical gate the suite runs.
+    <main className="flex flex-col">
       {/* A row of one tab is chrome that tells the reader nothing — the same
           rule the learn bar and GlossaryTabs already follow. */}
       {items.length > 1 && <SectionNav items={items} ariaLabel={t("nav.sectionLabel")} />}
       {children}
-    </>
+    </main>
   );
 }

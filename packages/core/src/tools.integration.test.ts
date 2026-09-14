@@ -71,8 +71,24 @@ beforeAll(async () => {
 
   await db.locale.createMany({
     data: [
-      { code: "en", name: "English", nativeName: "English", direction: "LTR", isDefault: true, isActive: true, sortOrder: 1 },
-      { code: "es", name: "Spanish", nativeName: "Español", direction: "LTR", isDefault: false, isActive: true, sortOrder: 2 },
+      {
+        code: "en",
+        name: "English",
+        nativeName: "English",
+        direction: "LTR",
+        isDefault: true,
+        isActive: true,
+        sortOrder: 1,
+      },
+      {
+        code: "es",
+        name: "Spanish",
+        nativeName: "Español",
+        direction: "LTR",
+        isDefault: false,
+        isActive: true,
+        sortOrder: 2,
+      },
     ],
   });
   await db.user.create({
@@ -94,7 +110,10 @@ afterEach(async () => {
 
 describe("saveTool", () => {
   it("creates the tool, its translation and its relations together", async () => {
-    await tools.saveTool(subject, saveInput({ related: [{ targetType: "lesson", targetId: "l1" }] }));
+    await tools.saveTool(
+      subject,
+      saveInput({ related: [{ targetType: "lesson", targetId: "l1" }] }),
+    );
 
     expect(await db.tool.count()).toBe(1);
     expect(await db.toolTranslation.count()).toBe(1);
@@ -125,7 +144,7 @@ describe("saveTool", () => {
         translation: {
           locale: "en",
           title: "Gain & loss",
-          intro: '<p>ok</p><script>alert(1)</script>',
+          intro: "<p>ok</p><script>alert(1)</script>",
           body: '<p onclick="steal()">body</p>',
         },
       }),
@@ -143,7 +162,7 @@ describe("saveTool", () => {
         translation: {
           locale: "en",
           title: "T",
-          faq: [{ question: "Why?", answer: '<p>because</p><script>x()</script>' }],
+          faq: [{ question: "Why?", answer: "<p>because</p><script>x()</script>" }],
         },
       }),
     );
@@ -161,7 +180,10 @@ describe("saveTool", () => {
         translation: { locale: "en", title: "T", faq: [{ question: "Q", answer: "A" }] },
       }),
     );
-    await tools.saveTool(subject, saveInput({ translation: { locale: "en", title: "T", faq: [] } }));
+    await tools.saveTool(
+      subject,
+      saveInput({ translation: { locale: "en", title: "T", faq: [] } }),
+    );
 
     const row = await db.toolTranslation.findFirst();
     expect(row!.faq).toEqual([]);
@@ -173,7 +195,12 @@ describe("the source hash (ADR-069's rule, applied here)", () => {
     await tools.saveTool(
       subject,
       saveInput({
-        translation: { locale: "en", title: "T", body: "<p>body</p>", faq: [{ question: "Q", answer: "<p>A</p>" }] },
+        translation: {
+          locale: "en",
+          title: "T",
+          body: "<p>body</p>",
+          faq: [{ question: "Q", answer: "<p>A</p>" }],
+        },
       }),
     );
     const tool = (await db.tool.findFirst())!;
@@ -196,7 +223,12 @@ describe("the source hash (ADR-069's rule, applied here)", () => {
     await tools.saveTool(
       subject,
       saveInput({
-        translation: { locale: "en", title: "T", body: "<p>different</p>", faq: [{ question: "Q", answer: "<p>A</p>" }] },
+        translation: {
+          locale: "en",
+          title: "T",
+          body: "<p>different</p>",
+          faq: [{ question: "Q", answer: "<p>A</p>" }],
+        },
       }),
     );
     const es = await db.toolTranslation.findFirst({ where: { locale: "es" } });
@@ -211,7 +243,12 @@ describe("the source hash (ADR-069's rule, applied here)", () => {
     await tools.saveTool(
       subject,
       saveInput({
-        translation: { locale: "en", title: "T", body: "<p>body</p>", faq: [{ question: "Q", answer: "<p>DIFFERENT</p>" }] },
+        translation: {
+          locale: "en",
+          title: "T",
+          body: "<p>body</p>",
+          faq: [{ question: "Q", answer: "<p>DIFFERENT</p>" }],
+        },
       }),
     );
     const es = await db.toolTranslation.findFirst({ where: { locale: "es" } });
@@ -223,7 +260,12 @@ describe("the source hash (ADR-069's rule, applied here)", () => {
     await tools.saveTool(
       subject,
       saveInput({
-        translation: { locale: "en", title: "T", body: "<p>body</p>", faq: [{ question: "DIFFERENT?", answer: "<p>A</p>" }] },
+        translation: {
+          locale: "en",
+          title: "T",
+          body: "<p>body</p>",
+          faq: [{ question: "DIFFERENT?", answer: "<p>A</p>" }],
+        },
       }),
     );
     const es = await db.toolTranslation.findFirst({ where: { locale: "es" } });
@@ -236,7 +278,12 @@ describe("the source hash (ADR-069's rule, applied here)", () => {
       subject,
       saveInput({
         sortOrder: 3,
-        translation: { locale: "en", title: "T", body: "<p>body</p>", faq: [{ question: "Q", answer: "<p>A</p>" }] },
+        translation: {
+          locale: "en",
+          title: "T",
+          body: "<p>body</p>",
+          faq: [{ question: "Q", answer: "<p>A</p>" }],
+        },
       }),
     );
     const es = await db.toolTranslation.findFirst({ where: { locale: "es" } });
@@ -278,8 +325,14 @@ describe("mixed relations (ADR-086 #4)", () => {
   });
 
   it("replaces rather than merges", async () => {
-    await tools.saveTool(subject, saveInput({ related: [{ targetType: "lesson", targetId: "l1" }] }));
-    await tools.saveTool(subject, saveInput({ related: [{ targetType: "article", targetId: "a1" }] }));
+    await tools.saveTool(
+      subject,
+      saveInput({ related: [{ targetType: "lesson", targetId: "l1" }] }),
+    );
+    await tools.saveTool(
+      subject,
+      saveInput({ related: [{ targetType: "article", targetId: "a1" }] }),
+    );
 
     const tool = (await db.tool.findFirst())!;
     const loaded = await relations.loadMixedRelationTargets({

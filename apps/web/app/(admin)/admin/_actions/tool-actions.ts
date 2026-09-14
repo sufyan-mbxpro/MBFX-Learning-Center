@@ -17,9 +17,18 @@ import { z } from "zod";
 
 const key = z.string().min(1).max(40);
 
-/** Tool copy is content, so it drops the `content` tag — not `market`. */
+/**
+ * Tool copy is content, so it drops the `content` tag — not `market`.
+ *
+ * And `navigation`, because the on/off switch reaches the header (changes-26
+ * #1): `loadMenuData` reads `Tool.isEnabled` to prune a row whose page would
+ * 404, and that read is cached under the `navigation` tag. Dropped for every
+ * write rather than only for `setToolEnabled`, since `saveTool` writes
+ * `isEnabled` too — one invalidation nobody has to remember to widen.
+ */
 function invalidate(): void {
   revalidateTag("content", { expire: 0 });
+  revalidateTag("navigation", { expire: 0 });
 }
 
 export async function saveToolAction(input: unknown): Promise<void> {

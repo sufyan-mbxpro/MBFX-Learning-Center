@@ -4,6 +4,7 @@ import { getMessages, getTranslations, setRequestLocale } from "next-intl/server
 import { notFound } from "next/navigation";
 import { getBrandAssets } from "@repo/core";
 import { getSetting } from "@repo/settings";
+import { getServableLocales, isServableLocale } from "@repo/i18n";
 import { LOCALE_DIRECTION, routing } from "@repo/i18n/routing";
 import { buildThemeStyleSheet, getActiveTheme } from "@repo/theme";
 import { curatedFontVariables } from "@repo/ui/fonts";
@@ -11,8 +12,11 @@ import { RevealObserver } from "@repo/ui/components/reveal-observer";
 import { ScrollToTop } from "@repo/ui/components/scroll-to-top";
 import { SiteLoader } from "@repo/ui/components/site-loader";
 import { SiteFooter } from "./_components/footer.tsx";
+import { PublicSessionProvider } from "./_components/public-session.tsx";
+import { VisitorCta } from "./_components/visitor-cta.tsx";
 import { SiteHeader } from "./_components/header.tsx";
 import { faviconIcons } from "../../_lib/favicon.ts";
+import { siteUrl } from "../../_lib/site-url.ts";
 import { ThemeProvider } from "@repo/ui/components/theme-provider";
 import { ThemeScript } from "@repo/ui/components/theme-script";
 import "@repo/ui/globals.css";
@@ -40,11 +44,31 @@ export async function generateMetadata({ params }: LayoutProps<"/[locale]">): Pr
   if (!hasLocale(routing.locales, locale)) return {};
   setRequestLocale(locale);
 
-  const [brandAssets, t] = await Promise.all([getBrandAssets(), getTranslations("common")]);
+  const [brandAssets, t, allowIndexing, googleVerification] = await Promise.all([
+    getBrandAssets(),
+    getTranslations("common"),
+    getSetting("seo.robotsIndex"),
+    getSetting("seo.googleSiteVerification"),
+  ]);
   return {
+    // ADR-090. Every relative URL in the tree below — an OG image stored as
+    // `/uploads/…`, a canonical path, a JSON-LD `url` — resolves against this.
+    // Without it Next falls back to localhost, which neither throws nor warns
+    // in production: it just ships share cards nobody can load.
+    metadataBase: new URL(siteUrl()),
     title: t("siteName"),
     description: t("siteDescription"),
     icons: faviconIcons(brandAssets.favicon),
+    // ADR-090. The site-wide indexing switch — the page-side half of the rule
+    // `robots.ts` applies to the crawler. A null value is an unseeded row and
+    // means "do not interfere": only an explicit `false` deindexes. It reaches
+    // the pages below only because no public route returns `robots: undefined`
+    // any more — Next merges by key PRESENCE, so an undefined would erase it.
+    ...(allowIndexing === false ? { robots: { index: false, follow: false } } : {}),
+    // Seeded as "" and read by nothing until now. Empty stays ABSENT: an empty
+    // `<meta name="google-site-verification">` is a failed verification, not a
+    // neutral one.
+    ...(googleVerification ? { verification: { google: googleVerification } } : {}),
   };
 }
 
@@ -59,8 +83,18 @@ export async function generateMetadata({ params }: LayoutProps<"/[locale]">): Pr
 // Cache Components support (tracked in DEVLOG Module 14 checklist).
 export const instant = false;
 
-export function generateStaticParams() {
-  return routing.locales.map((locale) => ({ locale }));
+// ADR-091: the ACTIVE locales, not `routing.locales`. Prerendering the
+// static superset built every page three extra times in locales nobody has
+// translated, and next-intl throws `MISSING_MESSAGE` on a missing key — so
+// the 573 gaps in each of es/ar/ur were hard build errors, and enough of them
+// to exhaust the build worker's heap.
+//
+// This reads the database, which adds no requirement the build did not
+// already have: the layout below renders theme, settings, navigation and
+// brand assets from it on every prerendered page.
+export async function generateStaticParams() {
+  const locales = await getServableLocales();
+  return locales.map((locale) => ({ locale }));
 }
 
 export default async function PublicRootLayout({ children, params }: LayoutProps<"/[locale]">) {
@@ -71,6 +105,12 @@ export default async function PublicRootLayout({ children, params }: LayoutProps
   // the defense-in-depth 404 for a locale segment that isn't in
   // routing.locales (SKILL.md's required "unknown locale → 404" case).
   if (!hasLocale(routing.locales, locale)) notFound();
+
+  // ADR-091: and a 404 for a locale that IS routable but is not active. This
+  // is the boundary, not `generateStaticParams` — dropping a locale from the
+  // prerender list alone would only move the missing-key error to the first
+  // request for /es, which is the same defect served later instead of built.
+  if (!(await isServableLocale(locale))) notFound();
 
   // Required for static rendering under Cache Components (ADR-004) — tells
   // next-intl which locale this render is for before any message lookup,
@@ -121,15 +161,24 @@ export default async function PublicRootLayout({ children, params }: LayoutProps
                 scroll-driven animation support. */}
             {pageLoader && <SiteLoader />}
             <RevealObserver />
-            <SiteHeader locale={locale} />
-            {/* overflow-x-clip: a `Reveal variant="end"` rests 1.5rem toward
+            {/* ADR-094: the public surface's ONE session read, wrapping both
+                consumers — the header's auth chip and the visitor band below
+                the content. It renders no markup of its own. */}
+            <PublicSessionProvider>
+              <SiteHeader locale={locale} />
+              {/* overflow-x-clip: a `Reveal variant="end"` rests 1.5rem toward
                 the inline end until it scrolls into view (ADR-018 rule 2),
                 and at the page edge that made phones scroll sideways (8px on
                 /about/* and /economic-calendar at 390px — changes-20 Phase 6
                 browser pass). `clip`, not `hidden`: it does not create a
                 scroll container, so every `sticky` bar and sidebar inside
                 the page keeps sticking to the viewport. */}
-            <div className="flex-1 overflow-x-clip">{children}</div>
+              <div className="flex-1 overflow-x-clip">{children}</div>
+              {/* Above the footer and in flow, never fixed to the viewport —
+                  visitor-cta.tsx records why. Absent for a signed-in learner
+                  and while the session is still loading. */}
+              <VisitorCta />
+            </PublicSessionProvider>
             <SiteFooter locale={locale} />
             <ScrollToTop label={t("backToTop")} />
           </ThemeProvider>

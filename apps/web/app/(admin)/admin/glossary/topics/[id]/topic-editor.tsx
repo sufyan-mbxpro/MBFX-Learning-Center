@@ -307,13 +307,14 @@ export function TopicEditor({
             accent="success"
           >
             {/* A switch row, so @repo/ui's horizontal Field rather than the
-                section's label-above-control wrapper. */}
+                section's label-above-control wrapper — and the switch leads
+                it (ADR-089). */}
             <FieldRoot orientation="horizontal">
+              <Switch checked={isActive} disabled={!canUpdate} onCheckedChange={setIsActive} />
               <FieldContent>
                 <FieldLabel>{labels.publishedLabel}</FieldLabel>
                 <FieldDescription>{labels.publishedHint}</FieldDescription>
               </FieldContent>
-              <Switch checked={isActive} disabled={!canUpdate} onCheckedChange={setIsActive} />
             </FieldRoot>
 
             <p className="border-t pt-3 text-xs text-muted-foreground">{labels.saveHint}</p>

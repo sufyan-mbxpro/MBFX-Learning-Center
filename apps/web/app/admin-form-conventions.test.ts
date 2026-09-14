@@ -119,3 +119,75 @@ describe("audit F-03 — destructive text uses text-destructive-interactive", ()
     expect(offenders).toEqual([]);
   });
 });
+
+// ─── ADR-089: a switch row is a row, and the switch leads it ──
+//
+// Two properties, and both were broken in the same screenshot (owner,
+// changes-26 #3 and #4):
+//
+//   1. A Switch in a VERTICAL Field is stretched by that variant's `*:w-full`
+//      to the width of the column. The Switch is a fixed 44×24 control
+//      (ADR-074), so what got drawn was a 288px bar. `fieldVariants` now
+//      exempts it, and this guard keeps a switch out of the vertical Field
+//      regardless — a control that sits above its own label is not a row.
+//   2. Label-then-switch put the control at the far end of the rail, metres
+//      from the word naming it, and the same file's checkbox rows already had
+//      it the other way round. The control leads; the label follows.
+//
+// Read as source, like every other assertion in this file.
+const SWITCH_FIELD = /<(Field|FieldRoot|UiField)\b([^>]*)>([\s\S]{0,600}?)<\/\1>/g;
+
+interface SwitchRow {
+  file: string;
+  line: number;
+  attrs: string;
+  inner: string;
+}
+
+function switchRows(relative: string): SwitchRow[] {
+  const source = adminSrc(relative);
+  const rows: SwitchRow[] = [];
+  for (const match of source.matchAll(SWITCH_FIELD)) {
+    const [whole, , attrs = "", inner = ""] = match;
+    if (!/<Switch\b/.test(inner)) continue;
+    rows.push({
+      file: relative,
+      line: source.slice(0, source.indexOf(whole)).split("\n").length,
+      attrs,
+      inner,
+    });
+  }
+  return rows;
+}
+
+const allSwitchRows = adminFiles.flatMap(switchRows);
+
+describe("ADR-089 — a switch sits on a row, with the switch first", () => {
+  it("finds switch fields to check at all", () => {
+    // A regex that silently matches nothing would pass both assertions below
+    // for the rest of the repo's life.
+    expect(allSwitchRows.length).toBeGreaterThan(8);
+  });
+
+  it("never puts a Switch in a vertical Field", () => {
+    const offenders = allSwitchRows
+      .filter((row) => !/orientation="horizontal"/.test(row.attrs))
+      .map((row) => `${row.file}:${row.line}`);
+    expect(offenders).toEqual([]);
+  });
+
+  it("puts the Switch before its label in every one", () => {
+    const offenders = allSwitchRows
+      .filter((row) => {
+        const control = row.inner.indexOf("<Switch");
+        const text = [row.inner.indexOf("<FieldLabel"), row.inner.indexOf("<FieldContent")]
+          .filter((at) => at > -1)
+          .sort((a, b) => a - b)[0];
+        // A switch with no label in the row is a table cell's control named by
+        // its column header — not this rule's business.
+        return text !== undefined && text < control;
+      })
+      .map((row) => `${row.file}:${row.line}`);
+    expect(offenders).toEqual([]);
+  });
+});

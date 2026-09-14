@@ -30,6 +30,24 @@ export interface MarketDataProvider {
 
 // ─── AlphaVantage implementation ─────────────────────────────
 
+/** The provider's own origin, used when the admin has not overridden it. */
+const ALPHAVANTAGE_BASE_URL = "https://www.alphavantage.co";
+
+/**
+ * The configured origin with trailing slashes removed.
+ *
+ * Both drivers build their URL as `${baseUrl}/query?…`, so a base URL saved
+ * as "https://www.alphavantage.co/" — which is what a browser gives you when
+ * you copy the address bar — asks the provider for "//query" and gets an error
+ * that looks like a bad API key. Normalised here rather than on save, so a row
+ * already holding the slash starts working without being re-entered.
+ *
+ * A base URL of only slashes falls back to the default: it is not an origin.
+ */
+function resolveBaseUrl(baseUrl: string | undefined): string {
+  return baseUrl?.replace(/[/]+$/, "") || ALPHAVANTAGE_BASE_URL;
+}
+
 interface AlphaVantageOptions {
   apiKey: string;
   baseUrl?: string;
@@ -37,7 +55,7 @@ interface AlphaVantageOptions {
 }
 
 export function alphaVantageProvider(options: AlphaVantageOptions): MarketDataProvider {
-  const baseUrl = options.baseUrl ?? "https://www.alphavantage.co";
+  const baseUrl = resolveBaseUrl(options.baseUrl);
   const doFetch = options.fetchImpl ?? fetch;
 
   return {
@@ -231,7 +249,7 @@ export function parseAlphaVantageDaily(series: Record<string, unknown>): DailyBa
 export function alphaVantageHistoryProvider(
   options: AlphaVantageHistoryOptions,
 ): MarketHistoryProvider {
-  const baseUrl = options.baseUrl ?? "https://www.alphavantage.co";
+  const baseUrl = resolveBaseUrl(options.baseUrl);
   const doFetch = options.fetchImpl ?? fetch;
 
   return {
@@ -638,8 +656,7 @@ export interface SyncOptions {
 export async function syncDailyBars(options: SyncOptions = {}): Promise<SyncResult> {
   const now = options.now ?? new Date();
   const budget = options.budget ?? 500;
-  const provider =
-    options.provider !== undefined ? options.provider : await loadProviderDriver();
+  const provider = options.provider !== undefined ? options.provider : await loadProviderDriver();
 
   const result: SyncResult = {
     attempted: 0,
@@ -730,6 +747,40 @@ export async function syncDailyBars(options: SyncOptions = {}): Promise<SyncResu
   });
 
   return result;
+}
+
+/**
+ * Whether enough time has passed since the last provider call (ADR-096 #1).
+ *
+ * The provider row owns the cadence; the scheduler only supplies ticks. This
+ * is read by `/api/cron/market-sync` BEFORE it spends anything and by the
+ * provider screen to render "next due", so the number an admin is shown is
+ * computed by the same function that gates the sweep.
+ *
+ * A row that has never synced is always due — that is the state a fresh
+ * instance is in, and it is the one run that must not be deferred.
+ */
+export interface SyncDueState {
+  due: boolean;
+  lastSyncAt: Date | null;
+  /** Null when there is nothing to wait for: never synced, or no provider row. */
+  nextDueAt: Date | null;
+  intervalSeconds: number;
+}
+
+export async function getSyncDueState(now: Date = new Date()): Promise<SyncDueState> {
+  const provider = await db.marketProvider.findUnique({
+    where: { id: MARKET_PROVIDER_ID },
+    select: { refreshSeconds: true, lastSyncAt: true },
+  });
+
+  const intervalSeconds = provider?.refreshSeconds ?? 300;
+  const lastSyncAt = provider?.lastSyncAt ?? null;
+
+  if (!lastSyncAt) return { due: true, lastSyncAt: null, nextDueAt: null, intervalSeconds };
+
+  const nextDueAt = new Date(lastSyncAt.getTime() + intervalSeconds * 1000);
+  return { due: nextDueAt.getTime() <= now.getTime(), lastSyncAt, nextDueAt, intervalSeconds };
 }
 
 /** Drop every cached market read. Called after a sweep and after any write. */

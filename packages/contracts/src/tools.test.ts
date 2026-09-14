@@ -62,10 +62,9 @@ describe("TOOL_KEYS registry", () => {
     for (const routeKey of Object.keys(ROUTE_PATHS)) {
       const match = /^tool-(.+)$/.exec(routeKey);
       if (!match) continue;
-      expect(
-        registered.has(match[1]!),
-        `route key "${routeKey}" names no registered tool`,
-      ).toBe(true);
+      expect(registered.has(match[1]!), `route key "${routeKey}" names no registered tool`).toBe(
+        true,
+      );
     }
   });
 
@@ -103,20 +102,24 @@ describe("tool config schemas", () => {
     // The store is daily bars (ADR-087 #2). 1Y folds them exactly as 1W and
     // 1M do; a 4h interval would need data that does not exist.
     expect(PIVOT_INTERVALS).toEqual(["1D", "1W", "1M", "1Y"]);
-    expect(pivotPointsConfigSchema.safeParse({
-      intervals: ["4h"],
-      defaultInterval: "1D",
-      symbolIds: [],
-    }).success).toBe(false);
+    expect(
+      pivotPointsConfigSchema.safeParse({
+        intervals: ["4h"],
+        defaultInterval: "1D",
+        symbolIds: [],
+      }).success,
+    ).toBe(false);
   });
 
   it("offers the reference's seven correlation windows", () => {
     expect(CORRELATION_WINDOWS).toEqual(["5d", "10d", "30d", "60d", "90d", "180d", "250d"]);
-    expect(correlationConfigSchema.safeParse({
-      windows: ["30d", "90d"],
-      defaultWindow: "30d",
-      instrumentIds: [],
-    }).success).toBe(true);
+    expect(
+      correlationConfigSchema.safeParse({
+        windows: ["30d", "90d"],
+        defaultWindow: "30d",
+        instrumentIds: [],
+      }).success,
+    ).toBe(true);
   });
 
   it("refuses a risk basket whose weights sum to zero", () => {
@@ -160,7 +163,13 @@ describe("tool config schemas", () => {
       marketHoursConfigSchema.safeParse({
         ...base,
         sessions: [
-          { name: "London", city: "London", timeZone: "Europe/London", open: "08:00", close: "17:00" },
+          {
+            name: "London",
+            city: "London",
+            timeZone: "Europe/London",
+            open: "08:00",
+            close: "17:00",
+          },
         ],
       }).success,
     ).toBe(true);
@@ -168,7 +177,13 @@ describe("tool config schemas", () => {
       marketHoursConfigSchema.safeParse({
         ...base,
         sessions: [
-          { name: "London", city: "London", timeZone: "Europe/London", open: "8am", close: "17:00" },
+          {
+            name: "London",
+            city: "London",
+            timeZone: "Europe/London",
+            open: "8am",
+            close: "17:00",
+          },
         ],
       }).success,
     ).toBe(false);

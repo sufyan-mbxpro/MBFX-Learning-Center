@@ -235,9 +235,10 @@ export function InstrumentDialog({
             </Field>
           </div>
 
+          {/* Switch first, label after (ADR-089). */}
           <Field orientation="horizontal">
-            <FieldLabel>{labels.activeField}</FieldLabel>
             <Switch checked={isActive} onCheckedChange={setIsActive} />
+            <FieldLabel>{labels.activeField}</FieldLabel>
           </Field>
         </FieldGroup>
 

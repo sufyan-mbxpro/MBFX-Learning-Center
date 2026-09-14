@@ -1,7 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { revalidateTag } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
-import { MARKET_CACHE_TAG, syncDailyBars } from "@repo/core";
+import { MARKET_CACHE_TAG, getSyncDueState, syncDailyBars } from "@repo/core";
 import { recordAudit } from "@repo/core";
 
 // The nightly market sweep (ADR-087 #9/#11) — `publish-due`'s twin, and
@@ -24,6 +24,19 @@ import { recordAudit } from "@repo/core";
 // system user to satisfy it would put a fictional actor in the audit trail.
 // The sweep audits with `userId: null`, the convention `publishDueArticles`
 // set for exactly this case.
+//
+// **The scheduler ticks; the provider row decides** (ADR-096 #1). Before
+// spending anything this asks `getSyncDueState()` whether
+// `lastSyncAt + refreshSeconds` has elapsed, and answers 200 with
+// `swept: false` if it has not. So the external schedule is not the cadence —
+// point a scheduler here every five minutes and the admin's "Sync interval"
+// setting is what governs how often the provider is actually called. It is a
+// 200 because the call succeeded and the system is in the asked-for state; a
+// scheduler that alerts on non-2xx should not page anyone for "not yet".
+//
+// `?force=1` skips the check for an operator holding the secret. The admin's
+// "Sync now" button does NOT come through here — it has a subject and goes
+// through `runMarketSync()`, which audits as that admin.
 //
 // **No `export const dynamic`**: a route-level segment config is INCOMPATIBLE
 // with `cacheComponents` (ADR-004) and stops the file COMPILING — which is how
@@ -63,6 +76,26 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (!timingSafeEqual(digest(presented), digest(secret))) return unauthorized();
 
   const startedAt = new Date();
+
+  // A forced run is an operator saying "now", which is the same thing the
+  // admin's button says — the interval governs the SCHEDULER, not people.
+  const force = new URL(request.url).searchParams.get("force") === "1";
+  if (!force) {
+    const state = await getSyncDueState(startedAt);
+    if (!state.due) {
+      return NextResponse.json(
+        {
+          swept: false,
+          reason: "not_due",
+          lastSyncAt: state.lastSyncAt?.toISOString() ?? null,
+          nextDueAt: state.nextDueAt?.toISOString() ?? null,
+          intervalSeconds: state.intervalSeconds,
+        },
+        { headers: { "cache-control": "no-store" } },
+      );
+    }
+  }
+
   const result = await syncDailyBars({ now: startedAt });
 
   // Only drop the cache when something actually changed. A sweep that wrote no
@@ -87,7 +120,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   });
 
   return NextResponse.json(
-    { sweptAt: startedAt.toISOString(), ...result },
+    { swept: true, forced: force, sweptAt: startedAt.toISOString(), ...result },
     { headers: { "cache-control": "no-store" } },
   );
 }

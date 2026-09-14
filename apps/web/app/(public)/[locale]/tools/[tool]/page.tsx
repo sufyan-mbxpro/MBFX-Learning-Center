@@ -114,7 +114,11 @@ export default async function ToolPage({ params }: PageProps<"/[locale]/tools/[t
   // The two history-backed tools, each read once on the server so the island
   // holds no fetching of its own (ADR-056 #1's rule extended: a cached page
   // reads, an island renders).
-  const correlationConfig = config as { windows?: string[]; defaultWindow?: string; instrumentIds?: string[] };
+  const correlationConfig = config as {
+    windows?: string[];
+    defaultWindow?: string;
+    instrumentIds?: string[];
+  };
   const correlation =
     key === "correlation"
       ? await (async () => {
@@ -150,12 +154,10 @@ export default async function ToolPage({ params }: PageProps<"/[locale]/tools/[t
   // says it the same way.
   const asOfSource = correlation?.matrices[correlation.defaultWindow]?.asOf ?? risk?.asOf ?? null;
   const asOfLabel = asOfSource
-    // `dataAsOf`, not `asOf`: neither a correlation grid nor a sentiment
-    // score is a RATE, and saying so would be a small lie in a caption.
-    ? t("common.dataAsOf", {
-        date: new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(
-          new Date(asOfSource),
-        ),
+    ? // `dataAsOf`, not `asOf`: neither a correlation grid nor a sentiment
+      // score is a RATE, and saying so would be a small lie in a caption.
+      t("common.dataAsOf", {
+        date: new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(new Date(asOfSource)),
       })
     : null;
 

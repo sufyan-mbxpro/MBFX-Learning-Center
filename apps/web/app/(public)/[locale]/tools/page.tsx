@@ -49,7 +49,16 @@ export default async function ToolsPage({ params }: PageProps<"/[locale]/tools">
 
   return (
     <>
-      <PageHero eyebrow={t("eyebrow")} title={t("index.title")} lead={t("index.lead")} />
+      {/* A compact banner, not a section front: the eight cards below are
+          what the reader came for, and a full `section-lg` masthead over a
+          three-column grid pushed the first row of them off a laptop screen.
+          The same density the tool pages use, for the same reason. */}
+      <PageHero
+        size="compact"
+        eyebrow={t("eyebrow")}
+        title={t("index.title")}
+        lead={t("index.lead")}
+      />
 
       <Section>
         <Container>

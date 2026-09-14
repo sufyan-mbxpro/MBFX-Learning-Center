@@ -49,7 +49,11 @@ export async function ToolWidget({
   /** The last complete period per interval — pivot's autofill, empty for the rest. */
   autofill: Record<string, PivotOhlc | null>;
   /** Every offered window's matrix, from one read (T8). */
-  correlation: { matrices: Record<string, CorrelationData>; windows: string[]; defaultWindow: string } | null;
+  correlation: {
+    matrices: Record<string, CorrelationData>;
+    windows: string[];
+    defaultWindow: string;
+  } | null;
   risk: RiskSentimentData | null;
   /** "Rates as of …", resolved on the server so the islands share one format. */
   asOfLabel: string | null;
@@ -142,10 +146,7 @@ export async function ToolWidget({
         <CurrencyConverterWidget
           config={{
             ...config,
-            currencies: (Array.isArray(config.currencyIds)
-              ? (config.currencyIds as string[])
-              : []
-            )
+            currencies: (Array.isArray(config.currencyIds) ? (config.currencyIds as string[]) : [])
               .map((id) => byId.get(id)?.symbol)
               .filter((s): s is string => Boolean(s)),
           }}

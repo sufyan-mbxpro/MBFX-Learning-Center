@@ -378,11 +378,7 @@ export interface MarkupQuote {
  * Lives here rather than in the island so that the one piece of money
  * arithmetic on the public side sits under the 90% pure-logic floor.
  */
-export function quoteWithMarkup({
-  amount,
-  midRate,
-  markupPercent,
-}: MarkupQuoteInput): MarkupQuote {
+export function quoteWithMarkup({ amount, midRate, markupPercent }: MarkupQuoteInput): MarkupQuote {
   if (amount < 0) throw new RangeError("amount must not be negative");
   if (midRate <= 0) throw new RangeError("midRate must be positive");
   if (markupPercent < 0 || markupPercent >= 100) {

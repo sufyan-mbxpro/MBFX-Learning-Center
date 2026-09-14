@@ -67,10 +67,10 @@ export async function ComingSoon({ section }: { section: ComingSoonSection }) {
   return (
     <main>
       <PageHero
-        // `sm`, like the glossary term banner: this page's job is to explain
-        // itself and move the reader on, and a full section masthead over
-        // three bullets is a lot of band for a little news.
-        spacing="sm"
+        // `compact`, like the glossary term banner: this page's job is to
+        // explain itself and move the reader on, and a full section masthead
+        // over three bullets is a lot of band for a little news.
+        size="compact"
         motif={<AmbientMotif variant="learn" intensity={0.7} />}
         eyebrow={t("comingSoonEyebrow")}
         title={t("comingSoonTitle", { section: sectionName })}

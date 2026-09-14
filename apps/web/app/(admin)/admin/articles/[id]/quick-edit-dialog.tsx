@@ -117,9 +117,10 @@ export function QuickEditDialog({
             />
             <FieldError>{form.error("categoryId")}</FieldError>
           </Field>
+          {/* Switch first, label after (ADR-089). */}
           <Field orientation="horizontal">
-            <FieldLabel className="font-normal">{labels.featuredLabel}</FieldLabel>
             <Switch checked={isFeatured} onCheckedChange={(v) => setIsFeatured(v === true)} />
+            <FieldLabel className="font-normal">{labels.featuredLabel}</FieldLabel>
           </Field>
         </FieldGroup>
 

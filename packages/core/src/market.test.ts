@@ -309,3 +309,48 @@ describe("alphaVantageHistoryProvider", () => {
     ).rejects.toThrow(/HTTP 503/);
   });
 });
+
+describe("the configured base URL", () => {
+  // MSW runs with onUnhandledRequest: "error", so a request to "//query"
+  // fails this suite rather than quietly 404ing at the provider — which is
+  // exactly how the trailing slash presented in the admin: an error that
+  // read like a bad API key.
+  it("tolerates a trailing slash, which is what copying the address bar gives you", async () => {
+    server.use(http.get(`${BASE}/query`, () => HttpResponse.json(goodPayload)));
+    const rate = await alphaVantageProvider({
+      apiKey: "k",
+      baseUrl: `${BASE}/`,
+    }).fetchRate("EUR/USD");
+    expect(rate.rate).toBeCloseTo(1.0845, 8);
+  });
+
+  it("tolerates several, and on the history provider too", async () => {
+    server.use(
+      http.get(`${BASE}/query`, () =>
+        HttpResponse.json({
+          "Time Series FX (Daily)": {
+            "2026-09-01": {
+              "1. open": "1.08",
+              "2. high": "1.09",
+              "3. low": "1.07",
+              "4. close": "1.085",
+            },
+          },
+        }),
+      ),
+    );
+    const bars = await alphaVantageHistoryProvider({
+      apiKey: "k",
+      baseUrl: `${BASE}///`,
+    }).fetchDailySeries("EUR/USD", "compact");
+    expect(bars).toHaveLength(1);
+  });
+
+  it("falls back to the default when the configured value is only slashes", async () => {
+    // "/" is not an origin. Stripping it would leave "", and "/query" would
+    // then be fetched against whatever host the process happens to resolve.
+    server.use(http.get(`${BASE}/query`, () => HttpResponse.json(goodPayload)));
+    const rate = await alphaVantageProvider({ apiKey: "k", baseUrl: "/" }).fetchRate("EUR/USD");
+    expect(rate.rate).toBeCloseTo(1.0845, 8);
+  });
+});

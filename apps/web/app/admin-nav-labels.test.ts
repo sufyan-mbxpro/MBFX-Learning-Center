@@ -38,21 +38,18 @@ describe("admin sidebar label keys", () => {
     expect(navLabelKeys().length).toBeGreaterThan(10);
   });
 
-  it.each([...new Set(navLabelKeys())])(
-    "admin.%s is a string, not a namespace",
-    (key) => {
-      // The failure this catches reads "INSUFFICIENT_PATH: Message at
-      // `admin.<key>` resolved to `object`" and takes the ENTIRE admin shell
-      // down, not just the screen that owns the key.
-      expect(admin, `admin.${key} is missing from en.json`).toHaveProperty(key);
-      expect(
-        typeof admin[key],
-        `admin.${key} holds an object, so t("${key}") throws INSUFFICIENT_PATH and the ` +
-          `sidebar cannot render. Put the screen's keys under a different name — ` +
-          `admin.glossary/admin.glossaryEditor and admin.market/admin.marketData are the precedents.`,
-      ).toBe("string");
-    },
-  );
+  it.each([...new Set(navLabelKeys())])("admin.%s is a string, not a namespace", (key) => {
+    // The failure this catches reads "INSUFFICIENT_PATH: Message at
+    // `admin.<key>` resolved to `object`" and takes the ENTIRE admin shell
+    // down, not just the screen that owns the key.
+    expect(admin, `admin.${key} is missing from en.json`).toHaveProperty(key);
+    expect(
+      typeof admin[key],
+      `admin.${key} holds an object, so t("${key}") throws INSUFFICIENT_PATH and the ` +
+        `sidebar cannot render. Put the screen's keys under a different name — ` +
+        `admin.glossary/admin.glossaryEditor and admin.market/admin.marketData are the precedents.`,
+    ).toBe("string");
+  });
 
   it("gives each nav GROUP a distinct label key", () => {
     // The groups are keyed by their label, so two groups sharing one produce

@@ -98,7 +98,9 @@ export default async function MarketPage() {
               {t("marketData.providerLink")}
             </Button>
           )}
-          {canManage && <NewInstrumentButton labels={labels} triggerLabel={t("marketData.newTrigger")} />}
+          {canManage && (
+            <NewInstrumentButton labels={labels} triggerLabel={t("marketData.newTrigger")} />
+          )}
         </div>
       }
     >

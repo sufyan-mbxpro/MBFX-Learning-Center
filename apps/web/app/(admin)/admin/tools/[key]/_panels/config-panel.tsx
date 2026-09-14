@@ -112,9 +112,7 @@ function InstrumentPicker({
             <Checkbox
               checked={selected.has(option.id)}
               onCheckedChange={(checked) =>
-                onChange(
-                  checked ? [...value, option.id] : value.filter((id) => id !== option.id),
-                )
+                onChange(checked ? [...value, option.id] : value.filter((id) => id !== option.id))
               }
             />
             <FieldLabel className="min-w-0 font-normal">
@@ -217,10 +215,12 @@ export function ConfigPanel({
     ...instruments.map((i) => ({ value: i.id, label: `${i.symbol} — ${i.displayName}` })),
   ];
 
-  const arr = (key: string): string[] => (Array.isArray(config[key]) ? (config[key] as string[]) : []);
+  const arr = (key: string): string[] =>
+    Array.isArray(config[key]) ? (config[key] as string[]) : [];
   const num = (key: string): number | undefined =>
     typeof config[key] === "number" ? (config[key] as number) : undefined;
-  const str = (key: string): string => (typeof config[key] === "string" ? (config[key] as string) : "");
+  const str = (key: string): string =>
+    typeof config[key] === "string" ? (config[key] as string) : "";
 
   switch (toolKey) {
     case "position-size":
@@ -385,7 +385,10 @@ export function ConfigPanel({
                 // Index keys are correct here and only here: the rows have no
                 // id, and reordering is not offered — add and remove are the
                 // only mutations, and remove rebuilds the list.
-                <div key={index} className="grid grid-cols-1 gap-2 rounded-md border border-border p-3 sm:grid-cols-6">
+                <div
+                  key={index}
+                  className="grid grid-cols-1 gap-2 rounded-md border border-border p-3 sm:grid-cols-6"
+                >
                   <Input
                     aria-label={labels.sessionName}
                     placeholder={labels.sessionName}

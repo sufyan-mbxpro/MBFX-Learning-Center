@@ -16853,9 +16853,10 @@ mismatched config writes NOTHING; sanitising on save, FAQ answers included; the
 empty-array-not-undefined rule; the three source-hash cases; mixed order across
 types; PAIR-wise dedup; the dropped unregistered key.
 `admin-form-conventions` + `admin-dialog-conventions` + `admin-page-conventions`
-+ `admin-nav-labels` — 878 pass.
-`pnpm --filter @repo/core typecheck` / `lint` clean;
-`pnpm --filter web typecheck` / `lint` clean.
+
+- `admin-nav-labels` — 878 pass.
+  `pnpm --filter @repo/core typecheck` / `lint` clean;
+  `pnpm --filter web typecheck` / `lint` clean.
 
 ## 2026-09-12 — changes-25 T6: the public tools area, and five working tools
 
@@ -17231,3 +17232,853 @@ until `auth.setup.ts` is resolved.
 A real Lighthouse run on `/tools/**`; the admin E2E, blocked with every other
 admin spec; and `popular_tools` needs `pnpm db:reset` to appear in an existing
 database.
+
+## 2026-09-13 — changes-25 follow-up: the compact masthead, the two failures, and the first real Lighthouse run
+
+**Module:** 12 (public site), 07 (ui), 14 (hardening) · **PR:** none (follow-up
+to T10)
+
+Everything T10's DEVLOG listed as still owed, plus the owner's ask for a
+shorter banner over the tools area. No ADR: nothing here deviates from a plan,
+and every change either follows an existing documented pattern or fixes a
+defect.
+
+### `PageHero size="compact"` — a named density, not a spacing prop
+
+The owner asked for the tools masthead to be "the small (vertically) top
+banner". `PageHero` had no notion of density, so `/glossary/[term]` and
+`ComingSoon` had each reached for `spacing="sm"` on their own — the same shape,
+arrived at twice, named nowhere.
+
+So `compact` is now a variant (`section-sm` plus a `gap-3` copy stack, against
+`section-lg` plus `gap-5`), `spacing` is **omitted from `PageHero`'s props** so
+density can only come from the variant, and both existing call sites are
+retrofitted onto it. `/tools` and all eight tool pages opt in.
+
+**Height only — the TYPE scale is untouched.** ADR-072's rule is that a band
+which looks wrong gets its spacing fixed, never a private font size, and a
+density that also moved the headline would have silently re-sized the glossary
+term page. Measured at 1366px: the tool masthead goes from ~360px to **232px**,
+which puts the widget's first input above the fold on a laptop.
+
+`about-primitives.test.tsx` asserts the two densities COMPARATIVELY — that
+`compact` is the shorter band, not merely that it renders `section-sm`, because
+the latter would still pass if the default ever moved down to meet it — and
+that both keep `text-display-md`.
+
+### The two "pre-existing failures" T10 recorded, both root-caused
+
+**1. `@repo/ui`'s `assessment-card.test.tsx` (3 assertions).** Two of them
+asked for the `link` ROLE from a `Button render={<a>}`, which Base UI announces
+as a button — a position `course-card.test.tsx` already documents deliberately
+("the CTA is a control, not a destination, in the accessibility tree"). The
+test was written against the opposite assumption. Rather than re-litigate the
+convention in a new component, the assertions now count **`[href]`**: that
+tests navigability, which is the actual claim ADR-084 #3 makes, and it survives
+the convention being revisited either way.
+
+The third was a blanket `[class*="opacity-"]` guard, and it matched `Button`'s
+own base class list — `disabled:opacity-50` — in **every** state, including the
+two where nothing is disabled. Narrowed to opacity that can actually fade ink a
+reader is meant to read: a bare `opacity-*` counts, so does a `hover:` one, and
+`disabled:opacity-*` is the single exemption, because WCAG 1.4.3 drops the
+contrast requirement for an inactive control. **Verified in both directions** —
+adding `opacity-70` to the state line fails it, removing it passes.
+
+**2. `about-section.spec.ts`'s mega-menu hover tests — two of them, not one;
+T10 undercounted.** Not a product bug; the panel opens correctly. The nav is a
+client component, so a pointer event that lands before React hydrates is lost —
+which the file's own keyboard test already documents and works around with
+`toPass`. The hover tests did not.
+
+But **wrapping the hover in `toPass` alone does not fix it**, and this is the
+part worth keeping: the pointer is already on the trigger, so Playwright moves
+it to the same coordinates and Chromium fires `mousemove` with no fresh
+`pointerenter` — and `pointerenter` is the event the menu opens on. Measured
+with a throwaway spec: **twelve retries over six seconds never open it; one
+leave-and-return does.** Both tests now `page.mouse.move(0, 0)` before each
+attempt.
+
+Two text assertions were also scoped to `[data-slot=mega-menu-panel]`. Unscoped
+`getByText("COMPANY")` could be satisfied by the footer's own sitemap column
+whether the menu opened or not, and `getByText("HELP")` by any support link.
+
+### The E2E database was frozen in the past
+
+`global-setup.ts` said `CREATE DATABASE IF NOT EXISTS`, and the seed upserts
+create-only. Together those meant a database first created weeks ago kept its
+**original** value for every setting the seed will not overwrite — so the suite
+was asserting against a one-column footer months after the footer became a
+three-column sitemap, and against a homepage with none of the sections added
+since. The comment claimed this "keeps the suite's starting state honest"; it
+did the opposite.
+
+It now DROPs and re-creates, one statement per `db execute` call (MySQL rejects
+two semicolon-separated statements there). Cost: one `migrate deploy` per run.
+The guard rail that refuses to run against the dev database is what makes this
+safe, and it was already there.
+
+**This immediately exposed three real gaps in `tools.spec.ts`:**
+
+- The never-"live" rule (ADR-088 #7) scanned `body`, and the restored footer
+  carries a seeded **"Live Rates"** row pointing at `/markets`. Scoped to
+  `main` — the rule governs what the TOOL says about its own data. Whether
+  "Live Rates" is the right label for a section still being built is a
+  question for the footer, not for this rule.
+- Scoping to `main` found that **the tools area had no `<main>` at all** —
+  eight pages and the index with their whole content outside any landmark.
+  axe reports a missing region as MODERATE, so the serious/critical gate the
+  suite runs could never see it. The layout now owns it, with the section bar
+  inside, exactly as `about/layout.tsx` and `learn/layout.tsx` do; guarded in
+  `tools-area.test.ts` in both directions (the layout opens one, no page opens
+  a second).
+- The deep journey's hydration guard was **vacuous**. It asserted that
+  `balance` still held the seeded `10000` as "proof the island has mounted",
+  but the server-rendered HTML already carries that value, so it passed before
+  React mounted and the fills were then overwritten — 200.00 where 400.00 was
+  expected, correct arithmetic over the wrong inputs. Nothing marks an island
+  hydrated, so the gate is now the OUTPUT: the amount at risk is computed on
+  the client, so it can only read 400.00 once the inputs reached React, and the
+  whole input sequence retries until it does. (T10's DEVLOG describes writing
+  the guard that does not work — it is corrected here, not re-learned.)
+
+### `popular_tools` is live
+
+`pnpm db:reset` run against the dev database with the owner's explicit consent
+(Prisma 7 refuses this for an AI agent without it, and will not accept an
+earlier message as consent). The homepage band renders as "Do the arithmetic
+first" with its four cards.
+
+**Worth knowing: a dev server running across a `db:reset` serves stale
+everything.** The seed writes straight to the database and invalidates no cache
+tag, and Next's dev cache is on disk. The first symptom here was a header with
+**no navigation at all** — the nav had been cached while the tables were
+mid-reset. Restarting `next dev` fixes it; nothing in the app is wrong.
+
+### The first real Lighthouse run in this repo
+
+T10 shipped a JS weight ratio and said a real run was owed. It is done, against
+a **production build** (`next build` then `next start`), which is the only way
+the numbers mean anything:
+
+| Route                  | A11y    | Best practices | SEO | LCP    | CLS  |
+| ---------------------- | ------- | -------------- | --- | ------ | ---- |
+| `/tools`               | **100** | 96             | 92  | 238 ms | 0.00 |
+| `/tools/position-size` | **100** | 96             | 92  | 563 ms | 0.00 |
+
+Caveat stated plainly: localhost, 1x CPU, no network throttling, so the timings
+are optimistic and are a floor rather than a field measurement. The a11y, SEO
+and best-practices scores do not depend on throttling.
+
+**It found three things, none of them this work's, none of them fixed here:**
+
+1. **`rel=canonical` is relative on every page that sets one** —
+   `<link rel="canonical" href="/tools/position-size"/>`. Lighthouse's
+   explanation is exact: "Is not an absolute URL". `metadataBase` is unset, so
+   Next leaves the value as authored. Site-wide SEO defect, small fix, blast
+   radius every canonical on the site.
+2. **Any URL whose first segment contains a dot returns HTTP 500.** The proxy
+   matcher is the standard Next idiom, which skips dotted paths — so no locale
+   rewrite happens, `[locale]` receives `llms.txt` **as the locale**, and
+   `public-content.ts`'s `term.localeCompare(b.term, locale)` throws
+   `RangeError: Incorrect locale information provided`. Reproduced: `/llms.txt`,
+   `/anything.txt` and `/foo.json` all 500, while `/zz` correctly soft-404s.
+   Crawlers ask for `/llms.txt`, `/ads.txt` and `/security.txt` as a matter of
+   course. The fix belongs in the `[locale]` layout — validate the segment and
+   `notFound()` — not in the matcher, which would start routing real static
+   files.
+3. One CSP issue logged in Chrome's Issues panel, with no sub-items; not yet
+   attributed.
+
+### Tests run
+
+`e2e/public` — **43 pass, 0 fail**, against a freshly recreated database (was
+41 pass / 1 fail at T10, then 40 pass / 3 fail once the database was honest).
+`packages/ui` — 25 files, **421 pass**. `apps/web` unit — 36 files,
+**1778 pass**, including the two new masthead guards and the two landmark ones.
+`typecheck` and `lint` clean on `apps/web` and `@repo/ui`.
+`next build` — succeeds.
+
+### Still owed to Module 14
+
+The three Lighthouse findings above; a throttled Lighthouse run against a
+deployed origin rather than localhost; and the admin E2E, still `fixme` for the
+`auth.setup.ts` reason every admin spec shares.
+
+## 2026-09-14 — changes-26: four asks about the tools area, and the switch that was a bar
+
+**Module:** 08 (navigation), 12 (public site), 07 (ui), 09 (admin shell) ·
+**PR:** none (fix round, changes-24's shape) · **ADR:** ADR-089
+
+Brief: `docs/changes/changes-26-tools-updates.md` (owner, images 44–46). The
+file arrived empty — the images landed and the text did not — and the four asks
+were dictated afterwards and written into it, so the record matches what was
+asked rather than what was inferred from three screenshots.
+
+### 1. A switched-off tool leaves the menu
+
+`/admin/tools` has an on/off switch per tool. It reached the section bar under
+`/tools`, the tools index and the homepage band — all three read
+`getEnabledTools` — and **not the header**, which is the surface that links to
+the page. So a disabled tool kept a mega-menu row pointing at its own 404.
+
+The header is not a fourth reader of `getEnabledTools`: its rows come from the
+`Menu` tree, and the pruning belongs where every other pruning rule already
+lives. `MenuData` gains `tools: Record<string, boolean>` in exactly the shape
+`flags` has, `loadMenuData` fills it from `Tool.isEnabled` keyed by ROUTE key,
+and `assembleNavigation`'s `visible()` drops a `tool-*` row whose tool is not
+enabled. That reaches the footer too, for free, if a tool row is ever seeded
+there.
+
+**Fail-closed, and that is agreement rather than caution.** An absent `Tool`
+row hides the menu item, because `getToolPage` returns null for "no row" and
+for "switched off" alike — both already 404, so a menu that distinguished them
+would disagree with the page it points at. The same rule the missing-flag case
+has followed since Module 08.
+
+The **parent** row is untouched: it carries `routeKey: "tools"`, so it stands
+on its own link and `/tools` stays reachable with every child pruned. Removing
+the section entirely is the `calculators` flag's job, and it already does it.
+
+`tool-actions.ts` now drops the `navigation` tag alongside `content` — the read
+is cached, so without it the switch would have been correct and invisible.
+Dropped on every tool write rather than only on `setToolEnabled`, since
+`saveTool` writes `isEnabled` too.
+
+### 2. The tool page paid its section rhythm four times
+
+`ToolShell` stacked four `Section`s: intro+widget, explainer, FAQ. Each pays
+`section-md` — `clamp(3rem, 6vw, 5rem)` of `padding-block` — so between the
+calculator and the paragraph explaining it there were **two** of them: 160px of
+nothing at 1366px, which is what image-44 is a picture of.
+
+They are now one band with `gap-10` inside it. Rhythm separates things a reader
+treats separately, and this is one thing: the tool, then what it does. 160px →
+40px, and the band ORDER is untouched (ADR-086 #9) — `tools-area.test.ts` still
+reads it from the same place, and now also asserts there is exactly ONE
+`Section` between the masthead and the related strip. Asserted by count, not by
+class, so retuning the gap does not fail it.
+
+### 3 + 4. ADR-089 — a switch sits on a row, and the switch leads it
+
+Two asks about the same control, and the first is a bug.
+
+**The size.** `fieldVariants`' vertical orientation carries `*:w-full`. That is
+correct for an Input, a Textarea and a Combobox — no intrinsic width, and a
+column of ragged boxes reads as an accident. It is wrong for the one control
+whose fixed 44×24 geometry IS its meaning (ADR-074), and it reached it: the
+tool editor's `Live` toggle rendered as a 288px bar across the settings rail.
+Nothing caught it because nothing was wrong at the call site — the screen asked
+for a Field and a Switch, both correctly, and the stretch happened a layer down.
+
+**The order.** Eleven labelled switch rows existed in two shapes. Eight read
+label-then-switch, which the horizontal variant renders with the label taking
+the slack and the control pinned to the far end — on the instrument dialog the
+word `Active` and the thing it names sat ~500px apart. Three read
+switch-then-label. `social-links-manager.tsx` had **both**: a label-first switch
+directly above two control-first checkbox rows. There was no convention to
+break, only a coin flip made eleven times.
+
+So: a Switch is always `orientation="horizontal"` and always first, with the
+label (or a `FieldContent` holding label plus hint) after it. Seven files
+changed. `fieldVariants` also exempts `[data-slot=switch]` from the stretch
+regardless, because a rule that holds only while every author remembers it had
+already been forgotten in the newest screen in the repo.
+
+A table cell's switch is out of scope — it is named by its column header and
+has no Field at all.
+
+**Guards, both verified in both directions.**
+`admin-form-conventions.test.ts` fails on a Switch in a non-horizontal Field
+(checked by making one vertical: it named `tool-editor.tsx:313`) and on a
+`FieldLabel`/`FieldContent` preceding one (checked by flipping the instrument
+dialog back). It also asserts it found more than eight rows, because a regex
+that quietly matches nothing passes everything else forever.
+`field.test.tsx` pins BOTH halves of the CSS — `*:w-full` still present, the
+switch exemption alongside it — since asserting only the second would pass with
+the stretch dropped altogether, which would resize every Input in the admin.
+
+### Tests run
+
+`apps/web` unit — 620 pass across the two guard files, full suite green.
+`@repo/ui` — 25 files, 421 pass, plus 3 new Field assertions (15 in
+`field.test.tsx`). `@repo/core` `assembleNavigation` truth table — 15 pass, 4
+new. `lint` clean on `web`, `@repo/ui`, `@repo/core`; `typecheck` clean on all
+three.
+
+### Found, reported, NOT fixed — neither is in the brief
+
+- **Every pair in a tool's instrument dropdown reads "EUR/USD — EUR/USD".**
+  `tool-widget.tsx` builds `` `${symbol} — ${displayName}` `` and the seed
+  writes `displayName: symbol` for all 28 `PAIRS`. Currencies are fine
+  ("EUR — Euro"). Visible in image-44 and named to the owner before the brief
+  was written.
+- **The instrument dialog shows Chrome's native "Please fill out this field."**
+  (image-46). On its face an ADR-077 violation, but the dialog source is
+  correct — `useFieldErrors`, no `reportValidity()`, and the popup is portalled
+  so there is no ancestor `<form>`. `<Field required>` does put a native
+  `required` on the Input, which alone should not bubble. Not explicable from
+  source; needs reproducing in a browser.
+
+## 2026-09-14 — changes-27: three silent SEO failures, and the merge rule that hid one of them
+
+**Module:** 12 (public site), 05 (settings), 14 (hardening) · **ADR-090**
+
+A walk through the whole SEO path, then a review of the walk. The design came
+out clean and is untouched: SEO fields on the translation rows, hreflang only
+for locales that really have one, unpublished content ABSENT from the sitemap
+rather than listed and noindexed, 301 rows on every slug or track change. What
+the walk found instead were three wirings that were never connected, each of
+which fails without a sound.
+
+### 1. `metadataBase` was never set
+
+Two JSON-LD components carried a comment saying Next resolves their relative
+`url` against `metadataBase`. No layout exported one. So `/og-default.png`,
+every uploaded `/uploads/…` OG image and every JSON-LD `url` resolved against
+Next's own fallback origin — localhost in dev, host-supplied in production. It
+neither throws nor warns; the failure is only visible in an unfurled share card
+on someone else's timeline.
+
+Fixed on the public root layout, which covers every public route because
+metadata inherits. The origin comes from a new `siteUrl()` — four files had
+their own copy of `process.env.BETTER_AUTH_URL ?? "http://localhost:3000"`
+(sitemap, robots, RSS, and now the layout), and the newest copy is the one that
+fails silently.
+
+### 2. Two settings were stored, seeded, editable and read by nothing
+
+`seo.robotsIndex` and `seo.googleSiteVerification` have schemas in
+`@repo/contracts`, rows in the seed and a form at `/admin/settings/seo`. No
+code read either one. An admin could turn "Allow search indexing" off, watch it
+save, and change nothing a crawler saw. That is worse than the control not
+existing — a missing control sends you to a developer, a dead one sends you
+away satisfied. Hence code-style.md #28.
+
+Indexing is now a **two-part** switch and both halves are required:
+`robots.ts` returns `Disallow: /` with no sitemap pointer, and the root layout
+adds `index: false, follow: false`. A `Disallow` alone stops the crawl without
+removing anything already indexed, because the crawler never fetches the page
+whose `noindex` would have told it to drop the URL. Only an explicit `false`
+closes the site; a `null` row is an unseeded database. The verification token
+renders through Next's `verification.google`, and an empty string stays ABSENT
+— an empty verification meta is a failed verification, not a neutral one.
+
+### 3. …and the merge rule that would have eaten half of it
+
+Next 16.3.3's `mergeMetadata` iterates the child's keys with `for…in` —
+**presence**, not definedness — and `resolveRobots(undefined)` returns `null`.
+So `robots: cond ? {…} : undefined` does not inherit the parent's directive, it
+ERASES it. Two routes were written exactly that way (`news/[slug]`, the CMS
+catch-all), and both are article-shaped pages the new site-wide switch most
+needs to reach. Both are conditional spreads now, and the rule is
+code-style.md #26.
+
+### 4. The sitemap was the only public surface reading uncached
+
+Seven `load*SitemapEntries` per request, while every other public read is
+`"use cache"` + `cacheTag("content")`. The cost was the smaller half — the real
+defect was that the sitemap's freshness had nothing to do with the publish that
+changed it. `@repo/core`'s new `getSitemapEntries()` is one cached aggregate
+tagged `content`. The cache sits on the aggregate, not on the seven loaders,
+because `load*` is the pure read an integration test calls without Next's
+transform and `get*` is the cached entry point (the `@repo/settings`
+precedent).
+
+### The guard, and the direction it first failed in
+
+`apps/web/app/seo-metadata.test.ts` reads source, like `grid-base.test.ts`.
+Worth recording how it went wrong: the `robots` check was first a regex,
+`/robots:[^,;\n]*\bundefined\b/`, and `[^,;\n]` cannot cross the comma inside
+`{ index: false, follow: false }` — so it could never reach the `: undefined`
+after it. It matched only the PROSE in the comments explaining the fix, which
+is why its first run "failed" on the two files that carry the fix, and why it
+then passed cleanly with the bug deliberately reinstated in
+`[...slug]/page.tsx`. It is now a brace-depth scan of the property's value,
+re-checked against that same reinstated offender (it named the file) and
+restored after. The origin check asserts the fallback appears nowhere but
+`site-url.ts` **and** that it still appears there.
+
+### Named, not done
+
+The 39 `generateMetadata` exports remain 39 copies of one fallback chain. A
+shared `buildMetadata(translationRow)` would make them provably identical, and
+the `robots` bug above is exactly the drift it would have prevented once rather
+than by guard. It is a refactor across every public route and does not belong
+in a fix for three silent failures. The reviewer also asked why only 36 of the
+39 read `seo.titleTemplate`: the three are the public root layout, the admin
+root layout and the admin design-system page — all intentional, the first
+because it IS the fallback title and the other two because admin is noindexed.
+
+### Tests run
+
+`apps/web` unit — 38 files, **1796 pass**, including 14 new across
+`seo-metadata.test.ts` (10) and `_lib/site-url.test.ts` (4). `lint` and
+`typecheck` clean on `apps/web` and `@repo/core`. `check:phantom-deps` OK.
+Not run: `@repo/core`'s Testcontainers integration suite (unchanged queries —
+the new file only composes existing loaders), and no E2E; a Playwright check
+that `/robots.txt` flips with the setting is owed to Module 14 alongside the
+rest of the deferred public E2E.
+
+## 2026-09-14 — the build, and the locale it had been failing over
+
+**Module:** 06 (`@repo/i18n`), 12 (public site), 11/14 (two test defects) ·
+**PR:** none (merge of `changes-20-phase-5-6` to `main`)
+
+Asked for a green build and a merge. The build turned out to have been failing
+for months, and the gate surfaced four separate defects on the way there. One
+needed an ADR; three were plain fixes.
+
+### ADR-091 — only an active locale is served
+
+`routing.locales` is the STATIC superset next-intl needs to recognise a prefix.
+`Locale.isActive` is what decides whether we publish one. Three callers read
+the first as though it were the second: `generateStaticParams`, the public root
+layout's guard, and `sitemap.ts`.
+
+ADR-007 activates `en` alone, so the build was prerendering `es`, `ar` and `ur`
+— and each is missing **573 public keys**, with `about.*` (230), `learn.*`
+(197) and `economicCalendar.*` (50) absent in their entirety since the modules
+that introduced them shipped. next-intl throws `MISSING_MESSAGE` on a missing
+key, so every one of those gaps was a hard build error; thrown across three
+locales and 180 pages, they then exhausted the build worker's heap. `pnpm
+build` had been dying on `FATAL ERROR: Zone Allocation failed` downstream of
+the first one.
+
+The two halves of the repo had never agreed. `check:catalog-completeness` is
+built on the premise that an inactive locale is allowed to be incomplete — a
+gap warns, `ENFORCED_LOCALES` makes it fail, and activating a locale means
+adding it to that list in the same PR so CI refuses the activation until the
+catalog is filled. The build treated the same locale as shipping. All three
+call sites now read one new function, `getServableLocales()` (active ∩
+routable), because three copies of the rule is how they came to disagree.
+
+**The layout's 404 is the boundary, not `generateStaticParams`.** Dropping a
+locale from the prerender list alone would have moved the missing-key error to
+the first request for `/es` — the same defect, served later instead of built.
+And `routing.locales` keeps its existing guard and its existing job: it is what
+makes `/es/about` a recognised locale prefix that can 404 cleanly, rather than
+a content slug falling through `[...slug]`.
+
+**Multilingual is untouched** — ADR-043 #1 stands in full. No machinery and no
+locale was removed. What changed is that a locale nobody has translated is no
+longer published half-English. The alternative was machine-translating 1,719
+strings across three languages, two of them RTL, with no reviewer; that ships a
+worse thing than a 404 and fixes nothing, since the next `en`-only key breaks
+the build again the same way.
+
+### Three defects the gate found
+
+**`popular_tools` was built and still registered as a stub.** changes-25 T9
+added it to `SECTION_COMPONENTS` but not to `HOME_SECTION_BUILT_KEYS`, so
+`check:home-sections` failed. Moved; `settings.test.ts`'s "declares variants but
+isn't built" pin moves to `forex_rates`, the third key to hold that role (after
+`learning_paths` and now `popular_tools`), which is the test working as its own
+comment predicts.
+
+**`pages.integration.test.ts` used `tools` as a fixture slug.** ADR-081 #1
+reserved that segment. The claim under test is path derivation, not the word —
+renamed to `resources`.
+
+**`progress.integration.test.ts` asserted the opposite of its own name.**
+"summarises without counting an abandoned attempt as activity" asserted
+`quizAttempts === 0` under a comment claiming no quizzes exist in the file. Two
+are created 260 lines above it, both COMPLETED, so the number was 2 and the
+abandoned-attempt claim was never tested at all. It now creates an attempt with
+a null `completedAt` and asserts the count does not move. Verified in both
+directions: dropping the `completedAt` filter from `loadLearnAnalyticsSummary`
+fails it (3 vs 2), restoring it passes.
+
+### Tests run
+
+Full gate, all green. `lint` and `typecheck` workspace-wide. Per package:
+utils 266 · contracts 326 · theme 68 · rbac 28 · i18n 26 (+4 new, ADR-091) ·
+settings 33 · secrets 21 · email 93 · blocks 33 · db 32 · auth 20 · ui 424 ·
+core 653 · web 1801 (+5 new in `locale-serving.test.ts`). All eight `check:*`
+scripts pass, `governance:check` included. `pnpm build` succeeds — 180 static
+pages, `en` only, zero `es`/`ar`/`ur` paths emitted.
+
+`locale-serving.test.ts` reads source, like `seo-metadata.test.ts`: the defect
+is "read the wrong list", and no type can catch it — `routing.locales` and the
+served list are both `AppLocale[]`. Confirmed in the failing direction by
+reinstating `routing.locales` in `generateStaticParams`.
+
+**Not run:** E2E (needs the dev server stopped and is deferred to Module 14
+regardless). Note for this machine: 11 render workers do not fit alongside a
+running `next dev` in 15.7 GB — the dev server has to be stopped for `pnpm
+build`, which is a local resource limit, not a config one.
+
+### Owed
+
+The 1,719 missing translations are now scoped work rather than a build blocker:
+`es` goes live the day `es.json` is complete and its code joins
+`ENFORCED_LOCALES`. Nothing else changed about what Module 14 is owed.
+
+## 2026-09-14 — the market key that could not be written, and the seconds box
+
+**Module 13** (`@repo/contracts`, `@repo/utils`, the provider screen).
+Two owner reports against `/admin/market/provider`, one an environment fault
+and one a control that asked the wrong question.
+
+### `MARKET_SECRET_KEY is not set`
+
+Not a bug. `SecretKeyMissingError` is `@repo/secrets` refusing to seal a value
+it could never open again, and the local `.env` predates ADR-087 — it still
+carried the pre-seal `MARKET_DATA_API_KEY` pair and neither of the two sealed-
+secret keys. Both are now generated into it (`EMAIL_SECRET_KEY` as well: it was
+missing for the same reason and fails identically the first time an SMTP
+password is saved). `.env` is gitignored; nothing was committed.
+
+Worth recording because the screen was already right about this. The
+`hasSecretKey` banner ADR-087 #5 put above the form says exactly what happened,
+before the save rather than after it — the error the owner saw is what you get
+by saving anyway. No code changed here.
+
+**The dev server has to be restarted.** Next reads `.env` at boot, so the
+banner and the save both keep failing until it is.
+
+### The interval fields
+
+`refreshSeconds` and `staleSeconds` were `type="number"` boxes labelled
+"(seconds)". The stored unit is seconds because the arithmetic is in seconds;
+that is not a reason to ask an admin to know that a day is 86400 in order to
+choose a day. Both are now `AdminCombobox` (ADR-044 #10 — refresh has nine
+options so it lands on the searchable branch, stale has seven so it stays a
+Select; both are the rule working). Labels dropped their "(seconds)" suffix.
+
+- `MARKET_REFRESH_CHOICES` / `MARKET_STALE_CHOICES` live in
+  `packages/contracts/src/market.ts`, beside the schema whose `min`/`max` they
+  have to satisfy. `market.test.ts` is new and parses every choice through
+  `marketProviderSchema`, so a value added to one and out of range in the other
+  fails rather than reaching an admin as a save that will not go through.
+- `formatDurationSeconds()` (`@repo/utils`) is the label. It uses
+  `Intl.NumberFormat`'s `unit` style, so "1 minute"/"2 minutes" is not a
+  hardcoded string and needs no catalog entry per value (code-style.md #2). It
+  picks the largest unit the value divides into EXACTLY — 5400 stays "90
+  minutes" rather than becoming "1.5 hours", because an option has to read back
+  as the quantity that was chosen. 86400 is deliberately "24 hours", not "1
+  day": days start above it.
+- **A stored value outside the list is folded in as its own option.** A picker
+  that silently drops the current value turns "I came here to change the base
+  URL" into "I also changed the refresh interval to whatever was first in the
+  list".
+
+### Not done
+
+`staleSeconds < refreshSeconds` is still accepted — a sensible refinement, and
+a validation change nobody asked for. Noted, not shipped. The duplicated
+`MARKET_DATA_PROVIDER`/`MARKET_DATA_API_KEY` block in `.env.example` is dead
+since ADR-087 moved the key into the sealed row; left alone for the same reason.
+
+### Tests run
+
+`lint` and `typecheck` on `@repo/utils`, `@repo/contracts`, `@repo/web` — green.
+utils 270 (+4, `duration.test.ts`) · contracts 344 (+18, `market.test.ts`) ·
+web's `admin-form-conventions` + `admin-dialog-conventions` 638.
+`check:catalog-completeness` and `check:phantom-deps` both exit 0.
+**Not run:** E2E, and the admin provider spec is `fixme` for the usual
+auth-setup reason.
+
+## 2026-09-14 — changes-28: the homepage, and the placeholder that outlived its reason
+
+**Module 12** (public site), with reads in **11** and one refactor in **08**.
+Six asks in `changes-28-public-site-ui.md`, delivered as the PRs in
+`changes-28-plan.md`. Four ADRs: **092** (the video rail is published content),
+**093** (two new bands), **094** (one public session read), **095** (the page
+streams band by band).
+
+### The rail had been reading the wrong source for a month (ADR-092)
+
+The homepage opened on six "Recording soon" tiles. The brief read that as a
+content gap — "add a seeder for these, with real data and media" — and it is
+not one. `_content/home-videos.ts` shipped every `url` null on purpose, and its
+argument was correct: a video URL asserts "this recording exists and teaches
+this", and an invented eleven-character id resolves to whatever happens to
+occupy it.
+
+What had changed underneath it is that **changes-16 shipped `VideoTopic`**
+(ADR-068) — translations, categories, covers, a seven-state machine, an admin
+editor, public routes, and eight seeded rows, two of them playable. The
+placeholder was honest; the source was wrong. The rail now reads
+`getFeaturedVideoTopics`, a new cross-track reader in `@repo/core`, and the
+registry plus its 18 catalog keys are deleted.
+
+Ordered `publishedAt desc`, **not** `sortOrder`: `sortOrder` is a per-track
+editorial ordering, and interleaving two of them by it produces an order
+neither editor chose. The reader takes the first video it can make SAFE rather
+than the first row, so one unrecognised URL cannot mute a topic with a good
+recording behind it, and `resolveVideoSource` stays the single place a stored
+string becomes an embed URL (security.md #9).
+
+**Two defects fell out of the same change.** The rail's heading was the literal
+"Start with the six that matter" — a count in a catalog string that nothing
+kept true. And `/learn`'s masthead decided whether to offer its "watch" jump
+from `LEARNING_VIDEOS.length > 0`: the length of a hardcoded array, which is
+`true` on a database with no videos in it at all. It now asks the database,
+with the same arguments as the rail, so the two share one cache entry.
+
+**"Recording soon" is gone**, and only because a third state became available.
+Under the registry a null URL meant a recording that did not exist. A
+`VideoTopic` with no video is a page that can be read today — the shape
+`videoTopicInputSchema` explicitly allows and most seeded topics take — so the
+tile links to it, badged "Read the guide".
+
+**Covers seed no `MediaAsset`.** An asset row means bytes, and a row whose file
+does not exist 404s in every picker and every `next/image` request — the
+failure the videos seed already refuses for uploaded sources.
+`videoTopicCoverUrl(slug)` hashes into the six committed panels instead, the
+fourth use of the ADR-047 §3 pattern.
+
+### The tile grew a second target
+
+Once every tile stands for a real page, playing and navigating are different
+destinations — the distinction ADR-068 §7 already draws on the videos shelf. A
+playable tile is now an `<article>` holding a full-bleed play `<button>` and a
+title `<a>` as **siblings**. Not nested: an anchor inside a button is invalid
+HTML, and an overlay that swallows the title is the exact bug §7 was written
+about. `home-composition.test.ts` fails the nesting in both directions.
+
+### Two new bands (ADR-093)
+
+`quotes` closes the page above the risk disclaimer; `connect` sits before the
+newsletter ask.
+
+The quote text is a catalog key and **the attribution is not** — a person's
+name is not translated, and routing it through a catalog invites a translator
+to render "Albert Einstein" phonetically in Arabic, which is a claim about a
+different person. The dash before it IS a key: punctuation around a name is
+typographic, and not the same mark in every script. The day's quote is the UTC
+day number modulo the list (the `term-of-the-day` technique, D29) — a random
+pick would differ between the server render and any later revalidation of the
+same cached page, so "quote of the day" would become quote of the request.
+
+`connect` reads real `SocialLink` rows and renders **nothing** when none is
+active. The reference it is modelled on embeds a named analyst's livestream and
+offers "view all interactive livestreams"; changes-23 is unbuilt, so neither is
+copied. The panel is the newest published video topic and the button points at
+`/analysis`, which is what the heading actually promises.
+
+`SocialLinkIcon` moved out of `footer.tsx` into its own file rather than being
+copied into the second call site — a fallback rule that exists twice is a
+fallback rule that gets fixed once. It is the rule ADR-045 wrote after the
+footer rendered five empty circles.
+
+**One test caught a real mistake.** `connect` was registered with an empty
+variant list, and `settings.test.ts` has pinned since changes-03 that an empty
+list "rejects EVERY variant while looking like it configures something". It is
+now absent from `HOME_SECTION_VARIANTS` entirely, which is what
+`risk_disclaimer` already does.
+
+### Glossary and tools stopped looking like the same band twice
+
+The glossary spotlight's default was `chips`: a wrapped row of eight term pills
+under a two-line heading — a band whose heading was three times the height of
+its content, which is what the brief's image 50 caught. A chip also says
+nothing: "Arbitrage" is only useful to a reader who already knows what
+arbitrage is, and the band exists for the reader who does not. The new default
+`cards` shows the term with the plain-language line `GlossaryListEntry` has
+carried all along. `chips` and `grid` are kept.
+
+The tools band picked up the design system's own `.card-hover .hover-lift
+.sheen` trio in place of a bespoke `hover:shadow-md`, a larger ringed icon
+tile, and an "Open the calculator" affordance. That affordance is **always
+visible and brightens on hover**, never `opacity-0` revealed on hover: a
+pointer is not the only way onto the page, and it is also what keeps axe able
+to measure its contrast — the reason `lesson-nav.test.tsx` forbids an ancestor
+opacity outright.
+
+### One session read for the public surface (ADR-094)
+
+The visitor band needed the same answer the header's auth chip already fetches.
+Two islands each calling `/api/auth/get-session` is two round trips for one
+question and two chances for the header and the footer to disagree, so
+`PublicSessionProvider` now does it once and `AuthSlot` consumes it. The
+STAFF-reads-as-anonymous rule (ADR-052) moved to the provider, so every
+consumer inherits it rather than each remembering to.
+
+The band sits **above the footer, in flow, never pinned**. A fixed bar covers
+content on exactly the screens with least of it, and competes with the sticky
+header for a phone's vertical budget. It renders for `anonymous` alone — one
+condition, so a fourth session state cannot fall through to showing it — and is
+absent while loading, because otherwise it appears and then vanishes for every
+signed-in learner, a layout shift at the bottom of every page.
+
+### The page streams (ADR-095)
+
+`page.tsx` rendered twelve bands as siblings with no boundary, so the document
+was exactly as slow as its slowest section. Every band below the first two now
+has its own `<Suspense>` with a tone-matched skeleton. The tone is the point:
+a muted band whose placeholder is white flashes a stripe that then disappears,
+which reads as a bug rather than as loading — so `SECTION_PENDING` lives beside
+`SECTION_COMPONENTS`, and a key with no entry falls back to a default band
+exactly as a key with no component falls back to the stub.
+
+The eager bands are wrapped in a `Fragment`, not a `<div>`: `main` is a flex
+column, and an element between it and a full-bleed `Section` becomes the flex
+item and collapses the band's background to content width.
+
+### Tests run
+
+`lint` and `typecheck` workspace-wide, both green. Per package: contracts 326 ·
+web 1808 + 31 new (`home-composition.test.ts` 14, `public-session.test.ts` 11,
+`home-quotes.test.ts` 6) · ui 424 · core `videos.integration.test.ts` 25 (19
+before — six new against a real MariaDB, covering the cross-track span, the
+draft/soft-delete exclusion, the skip-to-the-first-safe-source loop, the
+null-source guide, the de-registered track, and the over-fetch before the
+limit). All eight `check:*` scripts pass; `check:catalog-completeness` warns
+only for the three inactive locales, which ADR-091 makes correct.
+
+**Not run:** `pnpm build` and E2E. Both need the dev server stopped on this
+machine, and E2E for the public site is owed to Module 14 regardless.
+
+### Owed
+
+axe on the two new bands and on the visitor band, a Lighthouse pass to confirm
+ADR-095 actually moved the number rather than only the architecture, and an
+E2E asserting the band is absent for a signed-in learner. All to Module 14.
+
+## 2026-09-14 — the base URL with a slash on the end
+
+**Module 13** (`@repo/core`). Follow-up to the entry above, from the owner
+re-testing the provider save.
+
+### The key error was the dev server, not the file
+
+`.env` was written at 16:07:35; the running `next dev` started at 16:00:52.
+[next.config.ts](../../apps/web/next.config.ts) loads the root `.env` with
+`dotenv.config()` ONCE at startup — Next auto-loads `apps/web/.env`, which does
+not exist, so the root file reaches the process through that one call and
+nothing re-reads it. An edited `.env` therefore does nothing until the server
+is restarted, and the error message is identical before and after the fix,
+which is what made it look unfixed. No code changed; recorded because the next
+person to hit it will read the same message and reach the same wrong
+conclusion.
+
+### `resolveBaseUrl()`
+
+The owner entered `https://www.alphavantage.co/`. Both drivers build
+`${baseUrl}/query?…`, so the trailing slash asks the provider for `//query` —
+and a provider error at that point reads exactly like a rejected API key, which
+is the second reason one problem looked like the other.
+
+Normalised in `market.ts` at the point of USE, not on save, so a row already
+holding the slash starts working without being re-entered. Only-slashes falls
+back to the default: `"/"` is not an origin, and stripping it to `""` would
+fetch `/query` against whatever host the process resolved. The default
+`https://www.alphavantage.co` is now the named `ALPHAVANTAGE_BASE_URL` instead
+of the same literal written twice.
+
+### Tests run
+
+Three new cases in `market.test.ts`, on both the rate and the history provider.
+They work because MSW runs `onUnhandledRequest: "error"`: a request to `//query`
+fails the suite rather than quietly 404ing, which is the same reason the real
+failure was hard to read. Confirmed in the failing direction — reverting
+`resolveBaseUrl` to `baseUrl || DEFAULT` fails all three.
+
+core `market.test.ts` 25 (+3) · `eslint` and `tsc --noEmit` clean on the
+package. **Not run:** the full `@repo/core` lint task, which exits 134 (OOM) on
+this machine — a local resource limit, noted before against `pnpm test`.
+
+## 2026-09-14 — the sweep gets a button, an interval that means something, and a runbook
+
+**Module 13 / 09 — ADR-096.** Three owner asks in one: a manual sync, a cron
+that honours the admin's setting, and instructions for running it. They are one
+change because the second is what makes the first honest — a button that syncs
+and a setting that does not is worse than neither.
+
+### The scheduler ticks; the provider row decides
+
+`/api/cron/market-sync` now asks `getSyncDueState()` before spending
+anything, and answers **200** `{ swept: false, reason: "not_due", nextDueAt }`
+inside the interval. 200 and not 429: the call succeeded and the system is in
+the asked-for state, and a scheduler alerting on non-2xx must not page anyone
+for "not yet".
+
+The point is what it buys. **The external schedule stops being the cadence.**
+Point any scheduler at the route every 15 minutes and the admin's dropdown
+governs how often the provider is actually called. Changing the cadence is a
+dropdown, not a redeploy — which is what "admin-managed interval" was always
+supposed to mean, and never was.
+
+`?force=1` skips the check for an operator with the secret, and is not a
+bypass of anything else: a forced call with a wrong token is still 401.
+
+### `refreshSeconds` was read by nothing
+
+Stored, seeded, typed, admin-editable, rendered as a control, and consumed
+nowhere — its only reader, `createMarketService()`'s `ttlSeconds`, is called
+by no code in the app, because ADR-087 #7 had tools read a cached snapshot of
+stored bars instead. An admin could change it, get a success toast, and change
+nothing. That is code-style.md #28 exactly, in the module that shipped after
+the rule.
+
+Wired rather than removed, which is the direction #28 prefers. No new column: a
+second `syncIntervalSeconds` would be two sources of truth about one cadence
+and the unread one is the one that drifts. Label is now **"Sync interval"**.
+Found while answering "how does sync happen now" — the honest answer was "it
+does not, and one of the settings on that screen is decorative".
+
+### Sync now
+
+`runMarketSync()` (core) + `syncMarketDataAction()`, gated on
+`market.providers.manage` — the key that owns the request budget. It does NOT
+go through the cron route: that route's job is authenticating an unattended
+caller with a shared secret, and having an admin screen present a bearer token
+to its own app would be a second authorization scheme for one action. The audit
+row is the visible difference — `market.sync.manual` with the admin's id
+against the route's `market.sync` with `userId: null`.
+
+**A run with failures reports "finished with failures", not "failed."** A free
+tier running out mid-sweep is the expected case; ADR-087 #9's staleness
+rotation puts what was missed at the front of the next run, which is only
+reassuring if the numbers are on screen. The button renders attempted / synced
+/ bars / skipped and names the failing symbols.
+
+The due check is deliberately skipped for the button. The interval governs a
+SCHEDULER, not a person who pressed a thing. A forced run still writes
+`lastSyncAt`, so the next scheduled tick is measured from it — that column
+means "when we last called the provider", and nothing else.
+
+### `docs/ops/cron.md`
+
+All three cron routes, local and production, one page because they share one
+secret and one shape. Windows Task Scheduler, crontab, Vercel, GitHub Actions,
+systemd. Two things in it are findings, not instructions:
+
+- **Vercel Cron issues GET and these routes export only POST.** A cron that
+  405s is silent. Flagged rather than fixed — adding a GET export is a decision
+  about the deployment, which does not exist yet.
+- **The free Alpha Vantage plan is 25 requests/day and the sweep spends one per
+  active instrument.** 28 are seeded active, so a first run cannot complete on a
+  free key. Worse, the driver only speaks `FX_DAILY`, which is forex-only: the
+  two metals, two crypto, three indices and one commodity will fail every run
+  until it learns the other endpoints. They are seeded ACTIVE, which is the
+  part worth knowing before reading a failure list.
+
+`.env.example` lost its two dead market blocks — `MARKET_DATA_PROVIDER` and
+`ALPHAVANTAGE_API_KEY` have been read by nothing since ADR-087 moved the key
+into the sealed row, and the owner had filled them in. Its `CRON_SECRET` entry
+now names all three routes.
+
+### Tests run
+
+core `market.integration.test.ts` **30** (+4, real MariaDB via Testcontainers)
+· `market.test.ts` 25 · web cron routes + admin convention guards **658**
+(+5 in `market-sync/route.test.ts`). `eslint` and `tsc --noEmit` clean on
+every changed package. `governance:check`, `check:permission-keys`,
+`check:phantom-deps`, `check:catalog-completeness` all OK.
+
+Confirmed in the failing direction: relaxing `getSyncDueState`'s boundary from
+`<=` to `<` fails "is due exactly ON the boundary", which is the case a
+scheduler ticking on the hour against an hourly interval hits every time.
+
+**Verified against the running app, not only in tests.** With the real
+`CRON_SECRET`: no token 401, wrong token 401, and — with `lastSyncAt` staged
+to now and rolled back to null afterwards — a correct token inside the interval
+returned exactly `{"swept":false,"reason":"not_due","nextDueAt":…}` at 200,
+having made no provider request.
+
+**Not run:** a real sweep. It would spend the owner's entire free-tier daily
+quota (28 attempts against a 25/day cap), so it is theirs to trigger. E2E for
+the new button is owed to Module 14 with every other admin spec.

@@ -47,9 +47,7 @@ test.describe.fixme("the tools admin", () => {
     expect(seededTool("gain-loss").relatedCount).toBe(4);
 
     // ONE transaction ⇒ ONE audit row for the whole screen.
-    expect(auditCount("gain-loss", "tool.update")).toBe(
-      auditCount(before.key, "tool.update"),
-    );
+    expect(auditCount("gain-loss", "tool.update")).toBe(auditCount(before.key, "tool.update"));
   });
 
   test("the live switch runs on its own key and writes immediately", async ({ page }) => {
@@ -60,9 +58,7 @@ test.describe.fixme("the tools admin", () => {
     // with no companion fields.
     await page.getByRole("switch", { name: "Live" }).first().click();
 
-    await expect
-      .poll(() => seededTool("gain-loss").isEnabled, { timeout: 15_000 })
-      .toBe(!before);
+    await expect.poll(() => seededTool("gain-loss").isEnabled, { timeout: 15_000 }).toBe(!before);
 
     // Put it back, so the rest of the suite sees the seeded state.
     await page.getByRole("switch", { name: "Live" }).first().click();

@@ -19,7 +19,13 @@ const SESSIONS: SessionSpec[] = [
   { name: "Sydney", city: "Sydney", timeZone: "Australia/Sydney", open: "07:00", close: "16:00" },
   { name: "Tokyo", city: "Tokyo", timeZone: "Asia/Tokyo", open: "09:00", close: "18:00" },
   { name: "London", city: "London", timeZone: "Europe/London", open: "08:00", close: "17:00" },
-  { name: "New York", city: "New York", timeZone: "America/New_York", open: "08:00", close: "17:00" },
+  {
+    name: "New York",
+    city: "New York",
+    timeZone: "America/New_York",
+    open: "08:00",
+    close: "17:00",
+  },
 ];
 
 describe("parseClockTime", () => {
@@ -167,7 +173,13 @@ describe("sessionState", () => {
 
   it("handles a session that wraps midnight in its own zone", () => {
     const wrapping: SessionSpec[] = [
-      { name: "Overnight", city: "Sydney", timeZone: "Australia/Sydney", open: "21:00", close: "06:00" },
+      {
+        name: "Overnight",
+        city: "Sydney",
+        timeZone: "Australia/Sydney",
+        open: "21:00",
+        close: "06:00",
+      },
     ];
     // 22:00 Sydney in January is 11:00 UTC.
     const inside = sessionState(wrapping, new Date("2026-01-14T11:00:00Z"), "UTC");

@@ -197,7 +197,9 @@ export function sessionState(
     const openMinutes = parseClockTime(session.open);
     const closeMinutes = parseClockTime(session.close);
     const durationMinutes =
-      closeMinutes > openMinutes ? closeMinutes - openMinutes : closeMinutes + MINUTES_PER_DAY - openMinutes;
+      closeMinutes > openMinutes
+        ? closeMinutes - openMinutes
+        : closeMinutes + MINUTES_PER_DAY - openMinutes;
 
     // Yesterday's window can still be running (the wrap case), so both are
     // considered and the one containing `now` wins; otherwise the next one.

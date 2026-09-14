@@ -76,11 +76,16 @@ function item(overrides: Partial<MenuData["items"][number]>): MenuData["items"][
   };
 }
 
-function dataOf(items: MenuData["items"], flags: MenuData["flags"] = {}): MenuData {
+function dataOf(
+  items: MenuData["items"],
+  flags: MenuData["flags"] = {},
+  tools: MenuData["tools"] = {},
+): MenuData {
   return {
     name: "Main",
     items,
     flags,
+    tools,
     locales: [
       { code: "en", fallbackCode: null },
       { code: "es", fallbackCode: "en" },
@@ -124,6 +129,54 @@ describe("assembleNavigation — truth table", () => {
     expect(assembleNavigation(dataOf([item({ requiresFeature: "ghost" })]), "en", null)).toEqual(
       [],
     );
+  });
+
+  // changes-26 #1 — the tool switch is a THIRD pruning source, and the one
+  // the header was missing: /tools' section bar, the index and the homepage
+  // band all read `getEnabledTools`, so a tool switched off in
+  // /admin/tools vanished from every surface except the menu that links to it.
+  it("prunes a tool row whose tool is switched off, keeps it when on", () => {
+    const items = [item({ routeKey: "tool-position-size" })];
+    expect(
+      assembleNavigation(dataOf(items, {}, { "tool-position-size": false }), "en", null),
+    ).toEqual([]);
+    expect(
+      assembleNavigation(dataOf(items, {}, { "tool-position-size": true }), "en", null),
+    ).toHaveLength(1);
+  });
+
+  it("prunes a tool row with no Tool row at all (fail closed, like a missing flag)", () => {
+    // `getToolPage` returns null for "no row" and for "switched off" alike, so
+    // showing the link for one and not the other would make the menu disagree
+    // with the page it points at.
+    expect(assembleNavigation(dataOf([item({ routeKey: "tool-pip-value" })]), "en", null)).toEqual(
+      [],
+    );
+  });
+
+  it("leaves a non-tool row alone whatever the tool map says", () => {
+    // The gate keys on the ROUTE, so it must not reach a row that is not a
+    // tool — /glossary does not disappear because eight tools are off.
+    expect(assembleNavigation(dataOf([item({ routeKey: "glossary" })]), "en", null)).toHaveLength(
+      1,
+    );
+  });
+
+  it("keeps the Tools parent and drops only the children that are off", () => {
+    // The parent carries `routeKey: "tools"`, so it stands on its own link and
+    // the index stays reachable — the `calculators` flag is what removes the
+    // section entirely. What has to go is the child pointing at a 404.
+    const parent = item({ id: "p", routeKey: "tools" });
+    const on = item({ id: "c1", parentId: "p", routeKey: "tool-position-size" });
+    const off = item({ id: "c2", parentId: "p", routeKey: "tool-correlation" });
+
+    const result = assembleNavigation(
+      dataOf([parent, on, off], {}, { "tool-position-size": true, "tool-correlation": false }),
+      "en",
+      null,
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0]!.children.map((c) => c.href)).toEqual(["/tools/position-size"]);
   });
 
   it("permission-gated item: pruned for anonymous and learner, present for staff WITH the permission, pruned for staff without it", () => {

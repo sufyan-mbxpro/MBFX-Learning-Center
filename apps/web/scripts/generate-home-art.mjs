@@ -55,16 +55,19 @@ const PIECES = [
 ];
 
 /**
- * Video posters for the learning showcase, keyed to `_content/home-videos.ts`.
+ * Video posters for the learning showcase — the pool `_content/video-covers.ts`
+ * picks from for a topic with no cover asset of its own (ADR-092).
  *
  * `wide` (1600×900) rather than `card`, because a video tile is 16:9 — the
  * shape of the player that replaces it on play. A poster at the wrong ratio
  * would make the tile jump the moment someone pressed play, which is the one
  * thing a facade exists to avoid.
  *
- * Motifs are chosen to say what the lesson is ABOUT, so the rail reads as a
- * curriculum rather than six decorative rectangles: the market itself, then
- * the chart, then risk, then structure, then process, then the trader.
+ * Motifs cover the shapes a trading lesson takes, so whichever one a topic
+ * hashes to still reads as being about markets: the market itself, the chart,
+ * risk, structure, process, the trader. Since ADR-092 they are a POOL rather
+ * than a per-lesson pairing — the rail's copy comes from the database, so no
+ * poster is promised to any particular topic.
  */
 const VIDEO_PIECES = [
   { name: "basics", motif: "globe", size: "wide" },

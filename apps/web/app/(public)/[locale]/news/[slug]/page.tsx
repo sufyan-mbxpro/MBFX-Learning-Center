@@ -67,8 +67,14 @@ export async function generateMetadata({
     },
     // index and follow are now INDEPENDENT (changes-07): the editor exposes
     // them as two checkboxes, so noIndex no longer implies nofollow.
-    robots:
-      view.noIndex || view.noFollow ? { index: !view.noIndex, follow: !view.noFollow } : undefined,
+    //
+    // A conditional SPREAD, never `robots: … : undefined` (ADR-090): Next
+    // merges parent and child metadata by iterating the child's PRESENT keys,
+    // and `resolveRobots(undefined)` is null — so the key being there at all
+    // erases the root layout's site-wide directive.
+    ...(view.noIndex || view.noFollow
+      ? { robots: { index: !view.noIndex, follow: !view.noFollow } }
+      : {}),
     openGraph: {
       type: "article",
       title: ogTitle,

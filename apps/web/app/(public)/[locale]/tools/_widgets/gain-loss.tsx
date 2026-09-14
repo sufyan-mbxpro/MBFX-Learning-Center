@@ -38,7 +38,11 @@ export function GainLossWidget({ config }: { config: GainLossConfig }) {
     if (!Number.isFinite(start) || start <= 0) return null;
     if (!Number.isFinite(known_) || known_ < 0) return null;
     try {
-      return gainLoss({ startBalance: start, direction, known: { kind: known, value: known_ } as GainLossKnown });
+      return gainLoss({
+        startBalance: start,
+        direction,
+        known: { kind: known, value: known_ } as GainLossKnown,
+      });
     } catch {
       // The pure function throws a RangeError on a value it cannot use; a
       // widget renders an empty state for that rather than a stack trace.
@@ -47,7 +51,10 @@ export function GainLossWidget({ config }: { config: GainLossConfig }) {
   }, [startBalance, direction, known, value]);
 
   const money = (n: number) =>
-    n.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+    n.toLocaleString(undefined, {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+    });
   const percent = (n: number) => `${n.toFixed(decimals)}%`;
 
   return (
@@ -100,10 +107,7 @@ export function GainLossWidget({ config }: { config: GainLossConfig }) {
             >
               {(["amount", "percent", "endingBalance"] as const).map((option) => (
                 <label key={option} className="flex items-center gap-2 text-sm">
-                  <RadioGroupItem
-                    value={option}
-                    aria-label={t(`gainLoss.known.${option}`)}
-                  />
+                  <RadioGroupItem value={option} aria-label={t(`gainLoss.known.${option}`)} />
                   {t(`gainLoss.known.${option}`)}
                 </label>
               ))}

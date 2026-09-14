@@ -24,7 +24,9 @@ import {
   MARKET_SECRET_KEY_ENV,
   loadProviderDriver,
   sealProviderKey,
+  syncDailyBars,
   type InstrumentView,
+  type SyncResult,
 } from "./market.ts";
 
 // ─── The provider ────────────────────────────────────────────
@@ -51,6 +53,14 @@ export interface MarketProviderView {
    * credential that will never work.
    */
   hasSecretKey: boolean;
+  /**
+   * Whether `CRON_SECRET` is set. Not proof that anything CALLS the sync
+   * endpoint — only the deployment knows that — but its absence is proof that
+   * nothing can: the route fails closed on an unset secret (ADR-096 #5). The
+   * screen says "only when a scheduler calls it" rather than promising a
+   * cadence it cannot see.
+   */
+  cronConfigured: boolean;
 }
 
 export async function loadMarketProvider(): Promise<MarketProviderView> {
@@ -81,6 +91,7 @@ export async function loadMarketProvider(): Promise<MarketProviderView> {
       lastSyncAt: null,
       lastSyncError: null,
       hasSecretKey: hasSecretKey(MARKET_SECRET_KEY_ENV),
+      cronConfigured: Boolean(process.env.CRON_SECRET),
     };
   }
 
@@ -89,6 +100,7 @@ export async function loadMarketProvider(): Promise<MarketProviderView> {
     ...rest,
     hasApiKey: Boolean(apiKeyCipher),
     hasSecretKey: hasSecretKey(MARKET_SECRET_KEY_ENV),
+    cronConfigured: Boolean(process.env.CRON_SECRET),
   };
 }
 
@@ -252,9 +264,7 @@ export async function listInstruments(filter?: {
     isActive: row.isActive,
     sortOrder: row.sortOrder,
     lastBarDate: row.bars[0]?.date ?? null,
-    staleDays: row.bars[0]
-      ? Math.floor((now - row.bars[0].date.getTime()) / 86_400_000)
-      : null,
+    staleDays: row.bars[0] ? Math.floor((now - row.bars[0].date.getTime()) / 86_400_000) : null,
     barCount: row._count.bars,
   }));
 }
@@ -335,4 +345,49 @@ export async function reorderInstruments(
     entityType: "MarketInstrument",
     changes: { after: { count: orderedIds.length } },
   });
+}
+
+// ─── The manual sweep (ADR-096 #3) ───────────────────────────
+
+/**
+ * "Sync now" — the same sweep the cron route runs, with a person behind it.
+ *
+ * **It does not go through `/api/cron/market-sync`.** That route's job is to
+ * authenticate an unattended caller with a shared secret; this one already has
+ * a subject that passed `requirePermission()`, and making an admin screen
+ * present a bearer token to its own app would be a second authorization
+ * scheme for the same action.
+ *
+ * The audit row is the visible difference: an admin-initiated run records the
+ * admin, the unattended one records `userId: null`. Both are true, and
+ * inventing a system user to make them look alike would put a fictional actor
+ * in the trail (security.md #5).
+ *
+ * **The due check is deliberately skipped.** A person pressing a button has
+ * said what they want; the interval exists to stop a SCHEDULER from calling
+ * the provider too often. The run still writes `lastSyncAt`, so the next
+ * scheduled tick is measured from it — "when we last called the provider" is
+ * the only honest reading of that column (ADR-096 #3).
+ */
+export async function runMarketSync(subject: Subject): Promise<SyncResult> {
+  const startedAt = new Date();
+  const result = await syncDailyBars({ now: startedAt });
+
+  await recordAudit({
+    userId: subject.id,
+    action: "market.sync.manual",
+    entityType: "MarketProvider",
+    entityId: MARKET_PROVIDER_ID,
+    changes: {
+      after: {
+        attempted: result.attempted,
+        synced: result.synced,
+        barsWritten: result.barsWritten,
+        skipped: result.skipped,
+        failures: result.failures.length,
+      },
+    },
+  });
+
+  return result;
 }

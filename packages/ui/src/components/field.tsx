@@ -163,7 +163,13 @@ function FieldGroup({ className, ...props }: React.ComponentProps<"div">) {
 const fieldVariants = cva("group/field flex w-full gap-2", {
   variants: {
     orientation: {
-      vertical: "flex-col *:w-full [&>.sr-only]:w-auto",
+      // `*:w-full` is what makes an Input, a Textarea and a Combobox fill the
+      // field — and it reached the Switch too, which has a FIXED 44×24
+      // geometry (ADR-074). A 44px control stretched to the width of a rail
+      // is not a switch any more; it is a bar (changes-26 #3). The exclusion
+      // is written as a second, more specific rule rather than by narrowing
+      // `*:`, so `[&>.sr-only]:w-auto` keeps winning the way it does today.
+      vertical: "flex-col *:w-full [&>[data-slot=switch]]:w-11 [&>.sr-only]:w-auto",
       horizontal:
         "flex-row items-center has-[>[data-slot=field-content]]:items-start *:data-[slot=field-label]:flex-auto has-[>[data-slot=field-content]]:[&>[role=checkbox],[role=radio]]:mt-px",
       responsive:

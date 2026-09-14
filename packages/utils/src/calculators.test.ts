@@ -111,14 +111,22 @@ describe("marginRequired — hand-computed", () => {
 
 describe("gainLoss — hand-computed, from each of its three entry points", () => {
   it("solves from an amount", () => {
-    const r = gainLoss({ startBalance: 1000, direction: "gain", known: { kind: "amount", value: 250 } });
+    const r = gainLoss({
+      startBalance: 1000,
+      direction: "gain",
+      known: { kind: "amount", value: 250 },
+    });
     expect(r.amount).toBe(250);
     expect(r.percent).toBeCloseTo(25, 10);
     expect(r.endingBalance).toBe(1250);
   });
 
   it("solves from a percent", () => {
-    const r = gainLoss({ startBalance: 1000, direction: "loss", known: { kind: "percent", value: 40 } });
+    const r = gainLoss({
+      startBalance: 1000,
+      direction: "loss",
+      known: { kind: "percent", value: 40 },
+    });
     expect(r.amount).toBeCloseTo(400, 10);
     expect(r.endingBalance).toBeCloseTo(600, 10);
   });
@@ -136,12 +144,20 @@ describe("gainLoss — hand-computed, from each of its three entry points", () =
   it("shows the asymmetry: a 50% loss needs a 100% gain back", () => {
     // The one number in this tool that surprises people, and the reason it
     // is computed rather than left to the reader.
-    const r = gainLoss({ startBalance: 1000, direction: "loss", known: { kind: "percent", value: 50 } });
+    const r = gainLoss({
+      startBalance: 1000,
+      direction: "loss",
+      known: { kind: "percent", value: 50 },
+    });
     expect(r.breakevenPercent).toBeCloseTo(100, 10);
   });
 
   it("needs no gain back after a gain", () => {
-    const r = gainLoss({ startBalance: 1000, direction: "gain", known: { kind: "percent", value: 50 } });
+    const r = gainLoss({
+      startBalance: 1000,
+      direction: "gain",
+      known: { kind: "percent", value: 50 },
+    });
     expect(r.breakevenPercent).toBe(0);
   });
 
@@ -170,7 +186,11 @@ describe("gainLoss — hand-computed, from each of its three entry points", () =
         fc.double({ min: 0, max: 99, noNaN: true }).map((v) => Math.round(v * 100) / 100),
         fc.constantFrom("gain" as const, "loss" as const),
         (startBalance, percent, direction) => {
-          const fromPercent = gainLoss({ startBalance, direction, known: { kind: "percent", value: percent } });
+          const fromPercent = gainLoss({
+            startBalance,
+            direction,
+            known: { kind: "percent", value: percent },
+          });
           const fromAmount = gainLoss({
             startBalance,
             direction,
@@ -239,7 +259,9 @@ describe("pivotPoints — the five methods", () => {
   });
 
   it("refuses a high below its low", () => {
-    expect(() => pivotPoints({ open: 1, high: 1, low: 2, close: 1, method: "floor" })).toThrow(RangeError);
+    expect(() => pivotPoints({ open: 1, high: 1, low: 2, close: 1, method: "floor" })).toThrow(
+      RangeError,
+    );
   });
 
   it("orders Floor levels S3 < S2 < S1 < PP < R1 < R2 < R3 for any period", () => {
@@ -419,7 +441,9 @@ describe("quoteWithMarkup", () => {
   it("refuses a negative amount, a non-positive rate and an out-of-range markup", () => {
     expect(() => quoteWithMarkup({ amount: -1, midRate: 1, markupPercent: 0 })).toThrow(RangeError);
     expect(() => quoteWithMarkup({ amount: 1, midRate: 0, markupPercent: 0 })).toThrow(RangeError);
-    expect(() => quoteWithMarkup({ amount: 1, midRate: 1, markupPercent: 100 })).toThrow(RangeError);
+    expect(() => quoteWithMarkup({ amount: 1, midRate: 1, markupPercent: 100 })).toThrow(
+      RangeError,
+    );
     expect(() => quoteWithMarkup({ amount: 1, midRate: 1, markupPercent: -1 })).toThrow(RangeError);
   });
 

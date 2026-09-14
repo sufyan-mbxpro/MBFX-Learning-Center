@@ -56,10 +56,7 @@ export function CurrencyConverterWidget({
   const [to, setTo] = useState(config.defaultTo ?? currencies[1] ?? "EUR");
   const [rateType, setRateType] = useState<RateType>(offered[0] ?? "market");
 
-  const mid = useMemo(
-    () => crossRate(from, to, snapshot?.rates ?? {}),
-    [from, to, snapshot],
-  );
+  const mid = useMemo(() => crossRate(from, to, snapshot?.rates ?? {}), [from, to, snapshot]);
 
   const markup = rateType === "market" ? 0 : (config.rateMarkups?.[rateType] ?? 0);
 

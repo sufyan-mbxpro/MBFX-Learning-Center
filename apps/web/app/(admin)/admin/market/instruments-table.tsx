@@ -13,7 +13,15 @@
 // repo has no drag-and-drop dependency and is not acquiring one for a list of
 // thirty rows.
 import { useCallback, useMemo, useState } from "react";
-import { ChevronDown, ChevronUp, LineChart, MoreHorizontal, Pencil, Power, Trash2 } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  LineChart,
+  MoreHorizontal,
+  Pencil,
+  Power,
+  Trash2,
+} from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { MARKET_INSTRUMENT_KINDS } from "@repo/contracts";
 import { Badge } from "@repo/ui/components/badge";
@@ -112,7 +120,9 @@ export interface InstrumentsTableLabels extends InstrumentDialogLabels {
  * twenty-eight failures. A fault has a screen of its own: `lastSyncError` on
  * the provider page, which is also the screen that can fix it.
  */
-function freshnessTone(staleDays: number | null): "success" | "warning" | "destructive" | "outline" {
+function freshnessTone(
+  staleDays: number | null,
+): "success" | "warning" | "destructive" | "outline" {
   if (staleDays === null) return "outline";
   if (staleDays <= 4) return "success";
   if (staleDays <= 10) return "warning";

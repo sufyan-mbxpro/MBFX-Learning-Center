@@ -87,7 +87,14 @@ afterEach(async () => {
 
 async function makeInstrument(symbol: string, sortOrder = 0) {
   return db.marketInstrument.create({
-    data: { symbol, displayName: symbol, kind: "PAIR", base: symbol.split("/")[0], quote: "USD", sortOrder },
+    data: {
+      symbol,
+      displayName: symbol,
+      kind: "PAIR",
+      base: symbol.split("/")[0],
+      quote: "USD",
+      sortOrder,
+    },
   });
 }
 
@@ -161,8 +168,22 @@ describe("syncDailyBars", () => {
 
     await db.marketDailyBar.createMany({
       data: [
-        { instrumentId: fresh.id, date: new Date("2026-09-10T00:00:00Z"), open: 1, high: 1, low: 1, close: 1 },
-        { instrumentId: stale.id, date: new Date("2026-01-10T00:00:00Z"), open: 1, high: 1, low: 1, close: 1 },
+        {
+          instrumentId: fresh.id,
+          date: new Date("2026-09-10T00:00:00Z"),
+          open: 1,
+          high: 1,
+          low: 1,
+          close: 1,
+        },
+        {
+          instrumentId: stale.id,
+          date: new Date("2026-01-10T00:00:00Z"),
+          open: 1,
+          high: 1,
+          low: 1,
+          close: 1,
+        },
       ],
     });
 
@@ -305,8 +326,22 @@ describe("getOhlc and foldBars", () => {
     const instrument = await makeInstrument("EUR/USD");
     await db.marketDailyBar.createMany({
       data: [
-        { instrumentId: instrument.id, date: new Date("2026-09-01T00:00:00Z"), open: 1, high: 2, low: 0.5, close: 1.5 },
-        { instrumentId: instrument.id, date: new Date("2026-09-02T00:00:00Z"), open: 1.5, high: 3, low: 1, close: 2.5 },
+        {
+          instrumentId: instrument.id,
+          date: new Date("2026-09-01T00:00:00Z"),
+          open: 1,
+          high: 2,
+          low: 0.5,
+          close: 1.5,
+        },
+        {
+          instrumentId: instrument.id,
+          date: new Date("2026-09-02T00:00:00Z"),
+          open: 1.5,
+          high: 3,
+          low: 1,
+          close: 2.5,
+        },
       ],
     });
 
@@ -356,7 +391,14 @@ describe("getRateSnapshot", () => {
       data: { symbol: "USD/JPY", displayName: "USD/JPY", kind: "PAIR", base: "USD", quote: "JPY" },
     });
     await db.marketDailyBar.create({
-      data: { instrumentId: instrument.id, date: new Date(), open: 157, high: 158, low: 156, close: 157 },
+      data: {
+        instrumentId: instrument.id,
+        date: new Date(),
+        open: 157,
+        high: 158,
+        low: 156,
+        close: 157,
+      },
     });
 
     const snapshot = await market.getRateSnapshot();
@@ -371,7 +413,14 @@ describe("getRateSnapshot", () => {
       data: { symbol: "EUR/GBP", displayName: "EUR/GBP", kind: "PAIR", base: "EUR", quote: "GBP" },
     });
     await db.marketDailyBar.create({
-      data: { instrumentId: instrument.id, date: new Date(), open: 0.85, high: 0.86, low: 0.84, close: 0.85 },
+      data: {
+        instrumentId: instrument.id,
+        date: new Date(),
+        open: 0.85,
+        high: 0.86,
+        low: 0.84,
+        close: 0.85,
+      },
     });
 
     const snapshot = await market.getRateSnapshot();
@@ -487,5 +536,59 @@ describe("the provider key (ADR-087 #5)", () => {
       data: { driver: "MANUAL", isEnabled: true, apiKeyCipher: market.sealProviderKey("k") },
     });
     expect(await market.loadProviderDriver()).toBeNull();
+  });
+});
+
+describe("getSyncDueState (ADR-096 #1)", () => {
+  it("is always due when nothing has ever synced", async () => {
+    // The one run that must never be deferred: a fresh instance has no bars,
+    // so every rate-backed surface is empty until this happens.
+    await db.marketProvider.update({
+      where: { id: "default" },
+      data: { lastSyncAt: null, refreshSeconds: 86_400 },
+    });
+
+    const state = await market.getSyncDueState(new Date("2026-09-14T12:00:00Z"));
+    expect(state.due).toBe(true);
+    expect(state.lastSyncAt).toBeNull();
+    // Null, not a date: there is nothing to wait for, and inventing a due time
+    // would make the screen promise a moment that means nothing.
+    expect(state.nextDueAt).toBeNull();
+    expect(state.intervalSeconds).toBe(86_400);
+  });
+
+  it("is not due inside the interval, and names when it will be", async () => {
+    await db.marketProvider.update({
+      where: { id: "default" },
+      data: { lastSyncAt: new Date("2026-09-14T00:00:00Z"), refreshSeconds: 3_600 },
+    });
+
+    const state = await market.getSyncDueState(new Date("2026-09-14T00:30:00Z"));
+    expect(state.due).toBe(false);
+    expect(state.nextDueAt?.toISOString()).toBe("2026-09-14T01:00:00.000Z");
+  });
+
+  it("is due exactly ON the boundary, not a second after", async () => {
+    // A scheduler ticking on the hour against an hourly interval must not skip
+    // every other run to a rounding error.
+    await db.marketProvider.update({
+      where: { id: "default" },
+      data: { lastSyncAt: new Date("2026-09-14T00:00:00Z"), refreshSeconds: 3_600 },
+    });
+
+    expect((await market.getSyncDueState(new Date("2026-09-14T01:00:00Z"))).due).toBe(true);
+    expect((await market.getSyncDueState(new Date("2026-09-14T00:59:59Z"))).due).toBe(false);
+  });
+
+  it("reads the admin's own interval, so changing it moves the next run", async () => {
+    // This is the whole claim of ADR-096 #2: the setting is load-bearing.
+    await db.marketProvider.update({
+      where: { id: "default" },
+      data: { lastSyncAt: new Date("2026-09-14T00:00:00Z"), refreshSeconds: 86_400 },
+    });
+    expect((await market.getSyncDueState(new Date("2026-09-14T02:00:00Z"))).due).toBe(false);
+
+    await db.marketProvider.update({ where: { id: "default" }, data: { refreshSeconds: 3_600 } });
+    expect((await market.getSyncDueState(new Date("2026-09-14T02:00:00Z"))).due).toBe(true);
   });
 });

@@ -709,12 +709,35 @@ describe("learning analytics", () => {
   });
 
   it("summarises without counting an abandoned attempt as activity", async () => {
-    const summary = await analytics.loadLearnAnalyticsSummary();
-    expect(summary.enrolments).toBeGreaterThan(0);
-    expect(summary.activeLearners).toBeGreaterThan(0);
-    expect(summary.lessonsCompleted).toBeGreaterThan(0);
-    // No quizzes are created in this file, so this asserts the aggregate copes
-    // with an empty table rather than throwing on a null average.
-    expect(summary.quizAttempts).toBe(0);
+    const before = await analytics.loadLearnAnalyticsSummary();
+    expect(before.enrolments).toBeGreaterThan(0);
+    expect(before.activeLearners).toBeGreaterThan(0);
+    expect(before.lessonsCompleted).toBeGreaterThan(0);
+    // The final-quiz block above left two COMPLETED attempts behind, which is
+    // what makes the next assertion mean something: the table is not empty, so
+    // a count that ignored `completedAt` would not read as zero either.
+    expect(before.quizAttempts).toBeGreaterThan(0);
+
+    // A learner who opens a quiz and walks away. `quizAttempts` filters on
+    // `completedAt`, so this row must not move the number the screen shows —
+    // an abandoned attempt is not activity, and counting it would inflate
+    // engagement with the learners who bounced.
+    const quizId = await makeQuiz();
+    await db.quizAttempt.create({
+      data: {
+        quizId,
+        userId: alice,
+        attemptNumber: 1,
+        score: 0,
+        percentage: 0,
+        passed: false,
+        answers: {},
+        grades: {},
+        completedAt: null,
+      },
+    });
+
+    const after = await analytics.loadLearnAnalyticsSummary();
+    expect(after.quizAttempts).toBe(before.quizAttempts);
   });
 });

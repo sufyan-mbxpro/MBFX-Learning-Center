@@ -22,8 +22,8 @@ A calculator is worse: a pivot-point formula assembled out of admin fields is
 a programming language with no type checker, and the first wrong result looks
 exactly like a right one.
 
-So the question is not *whether* to make tools admin-controlled but *where the
-line runs*, and the answer has to be the same line ADR-042 drew for the site
+So the question is not _whether_ to make tools admin-controlled but _where the
+line runs_, and the answer has to be the same line ADR-042 drew for the site
 and ADR-078 #5 drew for email templates, one level down.
 
 ## Decision
@@ -36,7 +36,7 @@ whether it is live. Adding a ninth tool is a code change with a seed row beside
 it; changing every word on a tool page is a form.
 
 This is exactly ADR-078 #5's shape: a code registry with data content. Code
-decides *when* an email is sent and *what* a calculator computes, because both
+decides _when_ an email is sent and _what_ a calculator computes, because both
 are behaviour; admins own the copy, because copy is content.
 
 **2. One `Tool` table, not eight.** `Tool` + `ToolTranslation`, plus a `config`

@@ -4,8 +4,10 @@
 // switcher and content-fallback resolution both read this, not
 // routing.locales, so an admin flipping `Locale.isActive` takes effect
 // immediately for everything except next-intl's own route matching.
+import { hasLocale } from "next-intl";
 import { cacheLife, cacheTag, revalidateTag } from "next/cache";
 import { db, type TextDirection } from "@repo/db";
+import { routing, type AppLocale } from "./routing.ts";
 
 export interface ActiveLocale {
   code: string;
@@ -49,4 +51,37 @@ export async function getActiveLocales(): Promise<ActiveLocale[]> {
 /** Call after an admin activates/deactivates a locale. */
 export async function invalidateActiveLocales(): Promise<void> {
   revalidateTag(LOCALES_TAG, { expire: 0 });
+}
+
+/**
+ * The locales the site actually SERVES — the active list narrowed to codes
+ * next-intl can route (ADR-091).
+ *
+ * `routing.locales` is the static superset that lets next-intl recognise a
+ * prefix at all; `Locale.isActive` is what decides whether we publish it.
+ * Three callers used to read the superset as though it were this list:
+ * `generateStaticParams` (so the build prerendered three untranslated
+ * locales), the public root layout's guard, and the sitemap. They now share
+ * one rule, because three copies of it is how they came to disagree.
+ *
+ * The intersection matters in both directions: a DB row for a code that is
+ * not in `routing.locales` is unroutable whatever the column says, and a code
+ * in `routing.locales` that nobody activated is not ours to publish.
+ *
+ * The empty fallback is deliberate. A database with no active locale is a
+ * misconfiguration, but a build that prerenders NOTHING turns it into a site
+ * with no pages; the default locale is the one answer that is always safe.
+ */
+export async function getServableLocales(): Promise<AppLocale[]> {
+  const active = await getActiveLocales();
+  const servable = active
+    .map((locale) => locale.code)
+    .filter((code): code is AppLocale => hasLocale(routing.locales, code));
+  return servable.length > 0 ? servable : [routing.defaultLocale];
+}
+
+/** Is this locale one we publish? The request-time half of `getServableLocales`. */
+export async function isServableLocale(locale: string): Promise<boolean> {
+  const servable = await getServableLocales();
+  return (servable as readonly string[]).includes(locale);
 }

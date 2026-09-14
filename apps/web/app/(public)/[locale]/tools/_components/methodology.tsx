@@ -20,10 +20,7 @@ export function Methodology({ points }: { points: string[] }) {
     <details className="group rounded-lg border border-border bg-muted/30 p-4">
       <summary className="flex cursor-pointer items-center justify-between gap-2 text-sm font-medium">
         {t("methodology.title")}
-        <ChevronDown
-          aria-hidden
-          className="size-4 transition-transform group-open:rotate-180"
-        />
+        <ChevronDown aria-hidden className="size-4 transition-transform group-open:rotate-180" />
       </summary>
       <ul className="mt-3 flex flex-col gap-2 text-sm text-muted-foreground">
         {points.map((point) => (

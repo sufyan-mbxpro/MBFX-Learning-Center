@@ -153,9 +153,7 @@ export function PivotPointsWidget({
                   type="number"
                   inputMode="decimal"
                   step="0.00001"
-                  value={
-                    manual ? ohlc[key] : fetched ? String(fetched[key]) : (ohlc[key] ?? "")
-                  }
+                  value={manual ? ohlc[key] : fetched ? String(fetched[key]) : (ohlc[key] ?? "")}
                   placeholder={fetched ? String(fetched[key]) : undefined}
                   onChange={setField(key)}
                 />
