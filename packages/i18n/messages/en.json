@@ -2233,7 +2233,31 @@
       },
       "clearFilters": "Clear filters",
       "searchPlaceholder": "Search calls",
-      "providerDisabled": "Off"
+      "providerDisabled": "Off",
+      "assistantMenu": "AI writing assistant",
+      "assistantPanel": "AI suggestion",
+      "assistantGenerating": "Generating…",
+      "assistantStop": "Stop",
+      "assistantInsert": "Insert",
+      "assistantReplace": "Replace selection",
+      "assistantDiscard": "Discard",
+      "assistantFailed": "That did not work",
+      "assistantBriefLabel": "What should it write?",
+      "assistantBriefPlaceholder": "An opening paragraph about spreads…",
+      "assistantBriefSubmit": "Draft it",
+      "assistantActions": {
+        "draft": "Draft something new",
+        "expand": "Expand the selection",
+        "change_tone": "Change the tone",
+        "summarize": "Summarise the selection",
+        "fix_grammar": "Fix grammar and spelling"
+      },
+      "assistantTones": {
+        "professional": "Professional",
+        "friendly": "Friendly",
+        "concise": "Concise",
+        "plain": "Plain language"
+      }
     }
   },
   "glossary": {

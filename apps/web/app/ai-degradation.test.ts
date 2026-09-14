@@ -130,6 +130,64 @@ describe("the usage log holds no bodies, and the screen says so", () => {
   });
 });
 
+describe("B1 — the writing assistant is a PROP, not a flag", () => {
+  const editor = readFileSync(
+    join(APP_ROOT, "(admin)", "admin", "_components", "rich-text-editor.tsx"),
+    "utf8",
+  );
+  const assistant = readFileSync(
+    join(APP_ROOT, "(admin)", "admin", "_components", "ai-assistant.tsx"),
+    "utf8",
+  );
+  const articlePage = readFileSync(
+    join(APP_ROOT, "(admin)", "admin", "articles", "[id]", "page.tsx"),
+    "utf8",
+  );
+
+  it("takes an optional `ai` object, never an `aiEnabled` boolean", () => {
+    // A boolean is what invites `disabled={!aiEnabled}`. An absent prop cannot
+    // be rendered as a greyed control, which is the whole mechanism.
+    expect(editor).toContain("ai?: {");
+    expect(editor).not.toMatch(/aiEnabled\s*[?:]/);
+  });
+
+  it("renders the menu and the panel only when the prop is present", () => {
+    expect(editor).toContain("{ai && (");
+    expect(editor).toContain("<AiAssistantMenu");
+    expect(editor).toContain("<AiResultPanel");
+  });
+
+  it("omits an assistant action that needs a selection, rather than greying it", () => {
+    // §2.2 #11 applies inside a toolbar too.
+    expect(assistant).toContain("!action.needsSelection || hasSelection");
+    expect(assistant).not.toMatch(/disabled=\{!hasSelection\}/);
+  });
+
+  it("resolves availability on the server and gates on `ai.use` too", () => {
+    expect(articlePage).toContain("getAiAvailability()");
+    expect(articlePage).toContain('can(subject, "ai.use")');
+    // Folded with the global switch and the budget inside `getAiAvailability`,
+    // so the page reads one boolean rather than three.
+    expect(articlePage).toContain("availability.features.writing_assistant");
+  });
+
+  it("sends the selection as TEXT and inserts the result as text", () => {
+    // Tiptap's marks are class-based because the stock extensions emit inline
+    // styles the sanitizer strips (ADR-046) — a model asked for HTML would
+    // produce formatting that silently disappears on save.
+    expect(assistant).toContain("textBetween(");
+    expect(editor).toContain("insertContent(text)");
+    expect(assistant).not.toContain("getHTML()");
+  });
+
+  it("never auto-inserts — the panel's buttons are the only way in", () => {
+    // ADR-097 #4: the model suggests, the admin decides where the text goes.
+    expect(editor).toContain("onInsert=");
+    expect(editor).toContain("onReplace=");
+    expect(editor).toContain("onDiscard=");
+  });
+});
+
 describe("the sealed key reaches no screen", () => {
   it("names apiKey only as a write-only form field, never as a rendered value", () => {
     for (const file of AI_SCREENS) {

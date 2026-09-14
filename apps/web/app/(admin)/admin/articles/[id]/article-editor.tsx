@@ -61,6 +61,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@repo/ui/components/ta
 import { Textarea } from "@repo/ui/components/textarea";
 import { ImageUploadField } from "../../_components/image-upload-field.tsx";
 import { RichTextEditor } from "../../_components/rich-text-editor.tsx";
+import type { AiAssistantConfig, AiAssistantLabels } from "../../_components/ai-assistant.tsx";
 import {
   duplicateArticleAction,
   saveArticleAction,
@@ -145,6 +146,7 @@ export function ArticleEditor({
   canDelete,
   canCreate,
   labels,
+  ai,
 }: {
   article: ArticleData;
   categories: { id: string; name: string; count: number }[];
@@ -157,6 +159,18 @@ export function ArticleEditor({
   canDelete: boolean;
   canCreate: boolean;
   labels: EditorLabels;
+  /**
+   * The AI affordances this screen may draw, or nothing at all.
+   *
+   * **Its PRESENCE is the availability answer** (ADR-097 #6): the page resolves
+   * `getAiAvailability()` on the server, and an AI-off install passes
+   * `undefined` — so no AI control renders, and no AI client code reaches this
+   * bundle. A boolean would invite a `disabled` prop, which is the failure
+   * `ai-degradation.test.ts` exists to catch.
+   */
+  ai?: {
+    assistant?: { config: AiAssistantConfig; labels: AiAssistantLabels };
+  };
 }) {
   const router = useRouter();
   const { run, pending } = useServerAction();
@@ -464,6 +478,10 @@ export function ArticleEditor({
                 // by people technical enough, to want a source view.
                 allowHtmlMode
                 mediaCategory="news"
+                // changes-29 B1. The body is the only field the assistant is
+                // wired into: it is the one long enough for drafting, expanding
+                // or a tone change to mean anything.
+                {...(ai?.assistant ? { ai: ai.assistant } : {})}
               />
             </Field>
           </EditorSection>

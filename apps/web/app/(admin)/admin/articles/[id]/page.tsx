@@ -9,7 +9,9 @@ import {
 } from "@repo/core";
 import { can, requireAnyPermission } from "@repo/rbac";
 import { routing } from "@repo/i18n/routing";
+import { getAiAvailability } from "@repo/ai";
 import { AdminPage } from "../../_components/admin-page.tsx";
+import { aiAssistantLabels } from "../../_components/ai-labels.ts";
 import { richTextLabels } from "../../_components/editor-labels.ts";
 import { ArticlesSubnav } from "../_components/articles-subnav.tsx";
 import { articlesSubnavItems } from "../_components/subnav-items.ts";
@@ -24,13 +26,33 @@ export default async function ArticleEditPage({ params }: PageProps<"/admin/arti
   const subject = await requireAnyPermission(["analysis.view", "news.manage"]);
   const { id } = await params;
 
-  const [t, detail, categories, tags] = await Promise.all([
+  const [t, tAi, detail, categories, tags, availability] = await Promise.all([
     getTranslations("admin"),
+    getTranslations("admin.ai"),
     loadArticleAdminDetail(id),
     loadArticleCategoriesAdmin(),
     loadArticleTagsAdmin(),
+    // ONE server read for the whole screen (ADR-097 #6). What comes back is
+    // already folded with the global switch and the budget, so a feature's
+    // boolean cannot be true on a platform whose cap was reached an hour ago.
+    getAiAvailability(),
   ]);
   if (!detail) notFound();
+
+  // Spending is gated on `ai.use`; what a suggestion may be saved INTO is
+  // gated by the article key this page already required. Neither is decided
+  // here — both are re-checked server-side on the run endpoint and the save
+  // action (security.md #1). The absence of this prop is what makes an AI-off
+  // install ship no AI client code.
+  const ai =
+    availability.features.writing_assistant && can(subject, "ai.use")
+      ? {
+          assistant: {
+            config: { entity: { type: "article", id: detail.id } },
+            labels: aiAssistantLabels((key) => tAi(key as "assistantMenu")),
+          },
+        }
+      : undefined;
 
   const canPublish = can(subject, articleKindPermission(detail.kind, "publish"));
   const canDelete = can(subject, articleKindPermission(detail.kind, "delete"));
@@ -99,6 +121,7 @@ export default async function ArticleEditPage({ params }: PageProps<"/admin/arti
         })}
       />
       <ArticleEditor
+        ai={ai}
         article={{
           id: detail.id,
           kind: detail.kind,

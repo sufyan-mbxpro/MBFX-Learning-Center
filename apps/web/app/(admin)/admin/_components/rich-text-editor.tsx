@@ -79,6 +79,14 @@ import { Textarea } from "@repo/ui/components/textarea";
 import { cn } from "@repo/ui/lib/utils";
 import { useUploadProgress } from "../_hooks/use-upload-progress.ts";
 import { UploadProgress } from "./upload-progress.tsx";
+import {
+  AI_RESULT_IDLE,
+  AiAssistantMenu,
+  AiResultPanel,
+  type AiAssistantConfig,
+  type AiAssistantLabels,
+  type AiResultState,
+} from "./ai-assistant.tsx";
 import { describeOversizeFile } from "./media-constraints.ts";
 import { MediaPickerDialog } from "./media-picker-dialog.tsx";
 import type { MediaCategory } from "@repo/contracts";
@@ -239,6 +247,7 @@ export function RichTextEditor({
   mediaCategory = "general",
   /** Opt-in source view. Body-length prose wants it; a one-line hint doesn't. */
   allowHtmlMode = false,
+  ai,
 }: {
   id?: string;
   /** Stored HTML (sanitized server-side on the last save). */
@@ -255,6 +264,16 @@ export function RichTextEditor({
    */
   mediaCategory?: MediaCategory;
   allowHtmlMode?: boolean;
+  /**
+   * The writing assistant (changes-29 B1), or nothing.
+   *
+   * **Its PRESENCE is the availability answer** (ADR-097 #6): resolved on the
+   * server by `getAiAvailability()` and passed down, so an AI-off install
+   * renders no AI control and ships no AI client code into this bundle. There
+   * is deliberately no `aiEnabled` boolean — a boolean invites a `disabled`
+   * prop, which is the failure `ai-degradation.test.ts` exists to catch.
+   */
+  ai?: { config: AiAssistantConfig; labels: AiAssistantLabels };
 }) {
   const t = useTranslations("admin");
   // ADR-077: inside a Field the editor is that Field's control.
@@ -266,6 +285,9 @@ export function RichTextEditor({
   // without a second upload. Same dialog the image FIELDS use.
   const [pickerOpen, setPickerOpen] = React.useState(false);
   const [sizeError, setSizeError] = React.useState<string | null>(null);
+  // The assistant's result lives here rather than in the menu, because the
+  // panel that renders it is a sibling of the toolbar, not a child of it.
+  const [aiResult, setAiResult] = React.useState<AiResultState>(AI_RESULT_IDLE);
   const upload = useUploadProgress<StoredImage>("/admin/api/uploads/image", { autoResetMs: 2000 });
 
   // The last HTML this component itself emitted. Used to tell the user
@@ -808,6 +830,20 @@ export function RichTextEditor({
             >
               <Eraser aria-hidden />
             </ToolbarButton>
+
+            {/* changes-29 B1. Last in the row, and present only when the host
+                was given AI availability — there is nothing to grey out. */}
+            {ai && (
+              <>
+                <Separator orientation="vertical" className="mx-1 h-5!" />
+                <AiAssistantMenu
+                  editor={editor}
+                  config={ai.config}
+                  labels={ai.labels}
+                  onResult={setAiResult}
+                />
+              </>
+            )}
           </div>
 
           {sizeError && (
@@ -843,6 +879,24 @@ export function RichTextEditor({
           <div className="min-w-0 overflow-x-auto">
             <EditorContent editor={editor} />
           </div>
+          {/* The result is a PANEL, never an auto-insert: the model suggests
+              and the admin decides where the text goes (ADR-097 #4). */}
+          {ai && (
+            <AiResultPanel
+              state={aiResult}
+              labels={ai.labels}
+              hasSelection={!editor.state.selection.empty}
+              onInsert={(text) => {
+                editor.chain().focus().insertContent(text).run();
+                setAiResult(AI_RESULT_IDLE);
+              }}
+              onReplace={(text) => {
+                editor.chain().focus().deleteSelection().insertContent(text).run();
+                setAiResult(AI_RESULT_IDLE);
+              }}
+              onDiscard={() => setAiResult(AI_RESULT_IDLE)}
+            />
+          )}
           <input
             ref={fileRef}
             type="file"

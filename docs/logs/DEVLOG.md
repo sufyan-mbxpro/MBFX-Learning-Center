@@ -18315,3 +18315,62 @@ identical uncovered line.
 Phase 2: B1 (writing assistant) → B2 (SEO) → B3 (translation) → B4
 (summarization) → B5 (alt text) → B6 (quiz generation). The tutor chatbot stays
 spec-only and has no registry key.
+
+## 2026-09-14 — B1: the writing assistant, and a Stop button that can be pressed
+
+**Module 18** — changes-29 PR B1, the first Phase 2 feature. One more toolbar
+menu in `rich-text-editor.tsx`, a result PANEL below it, and the client-side
+door every later B PR will reuse.
+
+### What it is
+
+Five actions from `AI_ASSISTANT_ACTIONS`, each carrying its own tier and
+effort — this is ADR-099 #4's worked example in the flesh: `fix_grammar` runs
+on the LIGHT tier and `draft` on HEAVY, inside one feature with one switch and
+one row in the admin. `change_tone` takes a tone from a closed list, because a
+free-text tone field is a free-text prompt field wearing a label.
+
+The result never auto-inserts. Insert, Replace selection and Discard are the
+only three things the panel does, which is ADR-097 #4 at the point where it is
+easiest to break: auto-insertion would be one line shorter and would make the
+model a writer rather than a suggester.
+
+### Three decisions
+
+1. **`RichTextEditor` takes an optional `ai` object, not an `aiEnabled`
+   boolean.** A boolean is what invites `disabled={!aiEnabled}`, which is the
+   exact failure `ai-degradation.test.ts` exists to catch. An absent prop cannot
+   be greyed out, and it also means an AI-off install ships no AI client code
+   into the editor bundle.
+2. **An action that needs a selection is ABSENT without one.** §2.2 #11 applies
+   inside a toolbar, not only to a page.
+3. **The streamed-error marker is read in the client, not rendered.** A stream
+   cannot change its status code once it has started, so the reason arrives
+   behind the 0x1F marker and is mapped to a catalog string; what preceded the
+   marker was generated and billed, so it is still shown.
+
+### The bug in the fix
+
+`loading-states.test.ts` refused the lucide spinner on the Stop button, which
+was right. The obvious remedy — `Button loading` — is WRONG here and would have
+shipped: `loading` sets `disabled={disabled || loading}`, so the one control
+that has to stay clickable while its work runs would have been unclickable for
+exactly as long as it mattered. The shared `Spinner` sits beside the button
+instead.
+
+`admin-form-conventions.test.ts` caught the brief input as a raw `<label
+htmlFor>`; it is a `Field` now (ADR-077).
+
+### Tests
+
+apps/web **1984 passing across 44 files**, including six new B1 cases in
+`ai-degradation.test.ts`: the prop shape, the absent-not-greyed action list,
+the server-side availability read gated on `ai.use` as well as on the feature,
+and text-in/text-out both directions. Lint, typecheck, catalog completeness and
+`governance:check` green.
+
+### Owed
+
+B2 (SEO) → B3 (translation) → B4 (summarization) → B5 (alt text) → B6 (quiz
+generation). E2E for the assistant goes to Module 14 with every other admin
+spec.
