@@ -80,6 +80,33 @@ the new `@repo/secrets` is `node:crypto`. There is no charting library — the
 risk meter's sparkline is hand-drawn SVG, and ADR-086's Lighthouse budget is
 the reason.
 
+## AI platform (Module 18, changes-29)
+
+Two new runtime dependencies, both **server-only and admin-only**: they are
+dependencies of `@repo/ai`, and `app/(public)` provably never imports it
+(architecture.md #5). Pinned EXACTLY after a registry sweep on 2026-09-14, per
+Part F #9 — this plan deliberately named no number a week early, because a
+number written a week early is a number nobody swept.
+
+| Package           | Pin         | Module | Notes                                                                                                                                                                                                                                                                     |
+| ----------------- | ----------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| @anthropic-ai/sdk | **0.125.0** | 18     | ADR-099's first driver. Only `packages/ai/src/drivers/anthropic.ts` imports it. Token accounting is provider-shaped on purpose: `cache_creation_input_tokens` and `cache_read_input_tokens` are priced differently and are NOT flattened (ADR-100 #1).                    |
+| openai            | **7.15.0**  | 18     | ADR-099's second driver, `packages/ai/src/drivers/openai.ts` only. Its `prompt_tokens` INCLUDES cached tokens, unlike Anthropic's — the driver subtracts, and `drivers.test.ts` pins it, because getting it backwards double-counts the cheapest tokens at the full rate. |
+
+**Rejected: the Vercel AI SDK (`ai` + `@ai-sdk/*`)** — ADR-099 records why in
+full. The short version: this repo has chosen a driver seam twice already
+(ADR-078, ADR-087), its React half is precisely the part we would not use, and
+a normalising `{ promptTokens, completionTokens }` shape makes our cost figure
+wrong by design.
+
+**No embedding model, no vector store, no queue.** The tutor chatbot is
+spec-only (ADR-097), and its storage question is open — MariaDB 11.4 has no
+`VECTOR` type and Redis 7 no vector index.
+
+**`AI_SECRET_KEY`** joins `EMAIL_SECRET_KEY` and `MARKET_SECRET_KEY` in
+`.env.example`: base64 of 32 random bytes, and the key itself never leaves the
+environment (ADR-098).
+
 ## Standing follow-ups
 
 - **TS 7.1 + typescript-eslint** → lift ADR-010's pin (owner: whoever runs

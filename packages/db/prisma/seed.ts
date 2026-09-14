@@ -4099,7 +4099,6 @@ export async function seed(db: PrismaClient) {
   }
   console.log(`  tools: ${TOOL_SEEDS.length} (all enabled)`);
 
-
   // ─────────────────────────────────────────────────────────────
   // AI platform (Module 18, ADR-097/098/099/100)
   // ─────────────────────────────────────────────────────────────

@@ -234,7 +234,10 @@ export const summarizationPayloadSchema = z.object({
   title: z.string().max(300),
   content: contentSchema,
   /** `excerpt` alone, `takeaways` alone, or both in one call. */
-  want: z.array(z.enum(["excerpt", "takeaways"])).min(1).max(2),
+  want: z
+    .array(z.enum(["excerpt", "takeaways"]))
+    .min(1)
+    .max(2),
   locale: z.string().max(10).optional(),
 });
 
@@ -342,9 +345,7 @@ export type GeneratedQuizQuestion = z.infer<typeof generatedQuizQuestionSchema>;
 export const aiRunSchema = z.object({
   feature: z.enum(AI_FEATURE_KEYS as readonly [AiFeatureKey, ...AiFeatureKey[]]),
   payload: z.unknown(),
-  entity: z
-    .object({ type: z.string().min(1).max(40), id: z.string().min(1).max(40) })
-    .optional(),
+  entity: z.object({ type: z.string().min(1).max(40), id: z.string().min(1).max(40) }).optional(),
   stream: z.boolean().optional(),
 });
 
