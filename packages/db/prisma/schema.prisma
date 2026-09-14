@@ -720,6 +720,21 @@ enum TranslationStatus {
   TRANSLATED
   NEEDS_REVIEW
   OUTDATED // source changed after this translation was written
+  /// Written by a machine, not yet read by a human (ADR-097 / changes-29 B3).
+  ///
+  /// An enum member rather than a boolean on twelve translation tables,
+  /// because it is genuinely a STATUS — and twelve columns saying one thing is
+  /// the alternative. The AI path can write ONLY this value; a human opening
+  /// the translation and pressing Save writes TRANSLATED through the existing
+  /// action, so the review IS the promotion and no separate "approve" step is
+  /// invented.
+  ///
+  /// Public reads do not filter on `translationStatus` (verified across
+  /// `packages/core/src/*` when this landed), so the member is
+  /// admin-workflow-visible and reader-invisible. If a public filter is ever
+  /// added it must exclude this member — ADR-097's consequences say so, and
+  /// this comment is where the next person will look.
+  MACHINE_TRANSLATED
 }
 
 // ADR-019: design-only — no service or UI code reads or writes this yet.

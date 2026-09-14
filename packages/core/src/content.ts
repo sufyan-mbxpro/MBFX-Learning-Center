@@ -720,16 +720,34 @@ async function currentGlossarySourceHash(
   return computeSourceHash(glossarySourceMaterial(source));
 }
 
-/** The admin's translation work queue: everything flipped OUTDATED by a source edit. */
-export async function listOutdatedGlossaryTranslations(): Promise<
-  { termId: string; locale: string; term: string }[]
-> {
+/**
+ * The admin's translation work queue.
+ *
+ * Two questions, one query: everything a source edit flipped OUTDATED, and —
+ * since changes-29 B3 — everything a machine wrote that nobody has read. The
+ * second is the whole point of `MACHINE_TRANSLATED` being a status rather than
+ * a boolean on twelve tables: "what has a machine written that nobody has
+ * reviewed" is one filter here, not a column scan.
+ */
+export async function listOutdatedGlossaryTranslations(options?: {
+  status?: "OUTDATED" | "MACHINE_TRANSLATED";
+}): Promise<{ termId: string; locale: string; term: string; status: TranslationStatus }[]> {
+  const status =
+    options?.status === "MACHINE_TRANSLATED"
+      ? TranslationStatus.MACHINE_TRANSLATED
+      : TranslationStatus.OUTDATED;
+
   const rows = await db.glossaryTermTranslation.findMany({
-    where: { translationStatus: TranslationStatus.OUTDATED },
-    select: { termId: true, locale: true, term: true },
+    where: { translationStatus: status },
+    select: { termId: true, locale: true, term: true, translationStatus: true },
     orderBy: { updatedAt: "asc" },
   });
-  return rows;
+  return rows.map((row) => ({
+    termId: row.termId,
+    locale: row.locale,
+    term: row.term,
+    status: row.translationStatus,
+  }));
 }
 
 // ─── Duplicate ───────────────────────────────────────────────

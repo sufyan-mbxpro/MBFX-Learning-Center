@@ -11,6 +11,7 @@ import type { AiAssistantAction, AiTone } from "@repo/contracts";
 
 import type { AiAssistantLabels } from "./ai-assistant.tsx";
 import type { AiSeoLabels } from "./ai-seo-dialog.tsx";
+import type { AiTranslateLabels } from "./ai-translate-button.tsx";
 
 /** Resolves a key under the `admin.ai` namespace. */
 type Translate = (key: string) => string;
@@ -87,5 +88,30 @@ export function aiSeoLabels(t: Translate, common: Translate): AiSeoLabels {
       ogDescription: t("seoFields.ogDescription"),
       focusKeywords: t("seoFields.focusKeywords"),
     },
+  };
+}
+
+/**
+ * B3's labels.
+ *
+ * `sourceLocale` is interpolated HERE rather than in the component, because the
+ * component receives a locale CODE and the sentence wants whatever the page
+ * calls that locale.
+ */
+export function aiTranslateLabels(
+  t: (key: string, values?: Record<string, string>) => string,
+  common: Translate,
+  sourceLocale: string,
+): AiTranslateLabels {
+  return {
+    action: t("translateAction", { source: sourceLocale }),
+    confirmTitle: t("translateConfirmTitle"),
+    confirmDescription: t("translateConfirmDescription"),
+    confirm: t("translateConfirm"),
+    cancel: common("cancel"),
+    generating: t("assistantGenerating"),
+    failed: t("assistantFailed"),
+    done: t("translateDone"),
+    reasons: aiReasonLabels((key) => t(key)),
   };
 }

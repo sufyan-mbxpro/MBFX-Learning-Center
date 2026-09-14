@@ -233,6 +233,54 @@ describe("B2 — auto-SEO reviews before it applies", () => {
   });
 });
 
+describe("B3 — a machine translation says so until a human reads it", () => {
+  const button = stripped(
+    join(APP_ROOT, "(admin)", "admin", "_components", "ai-translate-button.tsx"),
+  );
+  const editor = readFileSync(
+    join(APP_ROOT, "(admin)", "admin", "articles", "[id]", "article-editor.tsx"),
+    "utf8",
+  );
+  const types = readFileSync(
+    join(APP_ROOT, "(admin)", "admin", "articles", "[id]", "editor-types.ts"),
+    "utf8",
+  );
+
+  it("never offers `slug` for translation", () => {
+    // A slug change writes a Redirect and is an SEO act, so it stays a human
+    // decision — and the prompt builder drops it even if a caller passes it.
+    expect(types).toContain("TRANSLATABLE_FIELDS");
+    const list = /TRANSLATABLE_FIELDS = \[([\s\S]*?)\]/.exec(types)?.[1] ?? "";
+    expect(list).not.toContain("slug");
+    expect(list).toContain("title");
+  });
+
+  it("applies only the fields it asked about", () => {
+    // A model that invents a key must not reach a form field nobody offered it.
+    expect(button).toContain("for (const name of Object.keys(fields))");
+  });
+
+  it("confirms before overwriting text a human wrote", () => {
+    expect(button).toContain("ConfirmDialog");
+    expect(editor).toContain("wouldOverwrite=");
+  });
+
+  it("clears the machine flag on any edit to a translatable field", () => {
+    // What makes "has not been edited since" a fact rather than a hope — and
+    // what makes a human's Save write TRANSLATED.
+    expect(editor).toContain("TRANSLATABLE_FIELDS.some((field) => field in patch)");
+  });
+
+  it("writes no status itself — the flag rides with the SAVE", () => {
+    expect(button).not.toContain("Action(");
+    expect(editor).toContain("{ machineTranslated: true }");
+  });
+
+  it("is absent on the source locale, which has nothing to translate from", () => {
+    expect(editor).toContain("locale !== defaultLocale");
+  });
+});
+
 describe("the sealed key reaches no screen", () => {
   it("names apiKey only as a write-only form field, never as a rendered value", () => {
     for (const file of AI_SCREENS) {

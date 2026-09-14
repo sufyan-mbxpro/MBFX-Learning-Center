@@ -356,7 +356,13 @@ async function prepareArticleTranslation(
       twitterImageUrl: input.twitterImageUrl ?? null,
       twitterImageAssetId: input.twitterImageAssetId ?? null,
       sourceHash,
-      translationStatus: TranslationStatus.TRANSLATED,
+      // changes-29 B3. `MACHINE_TRANSLATED` only when the editor says this text
+      // came from AI and has not been touched since; every other save — a human
+      // opening it and pressing Save included — writes `TRANSLATED`. That is
+      // why there is no "approve" action: the review is the promotion.
+      translationStatus: input.machineTranslated
+        ? TranslationStatus.MACHINE_TRANSLATED
+        : TranslationStatus.TRANSLATED,
       translatedBy: actor.id,
     },
   };

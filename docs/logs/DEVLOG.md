@@ -18415,3 +18415,57 @@ typecheck, catalog completeness and `governance:check` green.
 ### Owed
 
 B3 (translation) → B4 (summarization) → B5 (alt text) → B6 (quiz generation).
+
+## 2026-09-14 — B3: a machine translation says so, until a human reads it
+
+**Module 18** — changes-29 PR B3. `TranslationStatus` gains one member,
+`MACHINE_TRANSLATED`, and a **Translate from en** button joins the article
+editor's locale row.
+
+### Why a status and not a boolean
+
+Twelve translation tables would need twelve columns to say one thing, and the
+thing being said is genuinely a STATUS: written by a machine, not yet read by a
+human. Verified before landing it — **no public read filters on
+`translationStatus`** (the only `where` on it in `packages/core/src/*` is the
+admin's OUTDATED queue), so the member is admin-workflow-visible and
+reader-invisible. The schema comment says so, and says that a future public
+filter must exclude it.
+
+### The promotion is the review
+
+`saveArticleTranslation` hard-wrote `TRANSLATED` on every save. It now writes
+`MACHINE_TRANSLATED` when — and only when — the payload carries
+`machineTranslated: true`, which the editor sets after applying an AI
+translation and **clears on any edit to a translatable field**. So a human who
+opens the translation and presses Save writes `TRANSLATED` by doing nothing
+special, and no separate "approve" step is invented. AI still writes nothing:
+the human presses Save (ADR-097 #4).
+
+### Three smaller decisions
+
+- **`slug` is never translated.** `TRANSLATABLE_FIELDS` is prose only; a slug
+  change writes a `Redirect` and is an SEO act. The prompt builder drops it
+  even if a caller passes it, so the rule holds in two places.
+- **Only the fields we asked about are applied.** A model that invents a key
+  must not reach a form field nobody offered it.
+- **The glossary's work queue answers two questions now**, in two bands rather
+  than one mixed list: "the source moved under this translation" (warning) and
+  "a machine wrote this and nobody has read it" (info). They are different jobs
+  for different people, and the second is not yet a problem.
+
+The badge tone is `info`, not `success`: a machine translation is finished text
+nobody has read, which is a different claim from a reviewed one and must not
+look the same.
+
+### Tests
+
+A new integration case pins the round trip — a save with the flag writes
+`MACHINE_TRANSLATED`, the next save without it writes `TRANSLATED`. Six new
+source guards in `ai-degradation.test.ts`. apps/web **2007 passing across 44
+files**; @repo/contracts 375; catalog completeness and `governance:check`
+green.
+
+### Owed
+
+B4 (summarization) → B5 (alt text) → B6 (quiz generation).

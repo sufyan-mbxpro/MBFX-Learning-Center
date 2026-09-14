@@ -44,6 +44,43 @@ export interface TranslationDraft {
   twitterImageAssetId: string | null;
   faqItems: FaqDraft[];
   translationStatus: string;
+  /**
+   * This draft's text came from AI and has not been edited since
+   * (changes-29 B3).
+   *
+   * It rides with the SAVE and decides one thing there: `MACHINE_TRANSLATED`
+   * rather than `TRANSLATED`. `setTr` clears it whenever a translatable field
+   * changes, which is what makes "has not been edited since" a fact rather than
+   * a hope — and what makes a human's Save the promotion.
+   */
+  machineTranslated?: boolean;
+}
+
+/**
+ * The fields B3 translates: prose only.
+ *
+ * `slug` is deliberately absent — a slug change writes a `Redirect` and is an
+ * SEO act — and so is every image, URL and boolean. A model is asked for the
+ * words and nothing else.
+ */
+export const TRANSLATABLE_FIELDS = [
+  "title",
+  "excerpt",
+  "body",
+  "seoTitle",
+  "seoDescription",
+  "ogTitle",
+  "ogDescription",
+] as const satisfies readonly (keyof TranslationDraft)[];
+
+export function translatableFields(draft: TranslationDraft | undefined): Record<string, string> {
+  if (!draft) return {};
+  const fields: Record<string, string> = {};
+  for (const name of TRANSLATABLE_FIELDS) {
+    const value = draft[name];
+    if (typeof value === "string" && value.trim()) fields[name] = value;
+  }
+  return fields;
 }
 
 export interface ArticleData {

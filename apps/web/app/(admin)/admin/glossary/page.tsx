@@ -15,10 +15,14 @@ import { GlossaryTable, type GlossaryRow } from "./glossary-table.tsx";
 // `glossary-table.tsx` for why. Editing is `/admin/glossary/[id]`.
 export default async function GlossaryAdminPage() {
   const subject = await requirePermission("glossary.view");
-  const [t, terms, outdated, topics] = await Promise.all([
+  const [t, terms, outdated, machineTranslated, topics] = await Promise.all([
     getTranslations("admin"),
     loadGlossaryAdminList(),
     listOutdatedGlossaryTranslations(),
+    // changes-29 B3 — "what has a machine written that nobody has read" is the
+    // second question this queue answers, and it is one filter rather than a
+    // column scan because `MACHINE_TRANSLATED` is a STATUS.
+    listOutdatedGlossaryTranslations({ status: "MACHINE_TRANSLATED" }),
     listGlossaryTopics(),
   ]);
 
@@ -97,6 +101,23 @@ export default async function GlossaryAdminPage() {
           <h2 className="text-sm font-semibold">{t("outdatedQueue")}</h2>
           <ul className="flex flex-col gap-1 text-sm text-muted-foreground">
             {outdated.map((row) => (
+              <li key={`${row.termId}:${row.locale}`}>
+                {row.term} — <span className="text-muted-foreground">{row.locale}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {/* A second band rather than a mixed list: "the source moved under this
+          translation" and "a machine wrote this and nobody has read it" are
+          different jobs for different people, and an info border rather than a
+          warning one says the second is not yet a problem. */}
+      {machineTranslated.length > 0 && (
+        <section className="flex flex-col gap-2 rounded-lg border border-info-interactive/40 bg-card p-4">
+          <h2 className="text-sm font-semibold">{t("machineTranslatedQueue")}</h2>
+          <ul className="flex flex-col gap-1 text-sm text-muted-foreground">
+            {machineTranslated.map((row) => (
               <li key={`${row.termId}:${row.locale}`}>
                 {row.term} — <span className="text-muted-foreground">{row.locale}</span>
               </li>

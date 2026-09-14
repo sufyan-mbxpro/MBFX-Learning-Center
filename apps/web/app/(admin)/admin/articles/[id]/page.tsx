@@ -11,7 +11,7 @@ import { can, requireAnyPermission } from "@repo/rbac";
 import { routing } from "@repo/i18n/routing";
 import { getAiAvailability } from "@repo/ai";
 import { AdminPage } from "../../_components/admin-page.tsx";
-import { aiAssistantLabels, aiSeoLabels } from "../../_components/ai-labels.ts";
+import { aiAssistantLabels, aiSeoLabels, aiTranslateLabels } from "../../_components/ai-labels.ts";
 import { richTextLabels } from "../../_components/editor-labels.ts";
 import { ArticlesSubnav } from "../_components/articles-subnav.tsx";
 import { articlesSubnavItems } from "../_components/subnav-items.ts";
@@ -59,8 +59,24 @@ export default async function ArticleEditPage({ params }: PageProps<"/admin/arti
     canUseAi && availability.features.seo_generation
       ? { labels: aiSeoLabels(tAiKey, (key) => t(key as "cancel")) }
       : undefined;
+  const translate =
+    canUseAi && availability.features.translation
+      ? {
+          labels: aiTranslateLabels(
+            (key, values) => tAi(key as "translateAction", values),
+            (key) => t(key as "cancel"),
+            routing.defaultLocale,
+          ),
+        }
+      : undefined;
   const ai =
-    assistant || seo ? { ...(assistant ? { assistant } : {}), ...(seo ? { seo } : {}) } : undefined;
+    assistant || seo || translate
+      ? {
+          ...(assistant ? { assistant } : {}),
+          ...(seo ? { seo } : {}),
+          ...(translate ? { translate } : {}),
+        }
+      : undefined;
 
   const canPublish = can(subject, articleKindPermission(detail.kind, "publish"));
   const canDelete = can(subject, articleKindPermission(detail.kind, "delete"));

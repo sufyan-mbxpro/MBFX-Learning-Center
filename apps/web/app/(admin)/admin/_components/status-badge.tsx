@@ -81,6 +81,10 @@ export const TRANSLATION_STATUS_TONE: Record<string, StatusTone> = {
   IN_REVIEW: "info",
   PUBLISHED: "success",
   OUTDATED: "warning",
+  // changes-29 B3. `info`, not `success`: a machine translation is finished
+  // text that nobody has read, which is a different claim from a reviewed one
+  // and must not look the same as `TRANSLATED`.
+  MACHINE_TRANSLATED: "info",
 };
 
 export function statusTone(map: Record<string, StatusTone>, status: string): StatusTone {

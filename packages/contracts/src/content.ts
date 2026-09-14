@@ -101,6 +101,20 @@ export const saveArticleTranslationSchema = z.object({
   twitterImageAssetId: z.string().min(1).max(64).nullable().optional(),
   /** Full replacement set — the service diffs it against the stored rows. */
   faqItems: z.array(articleFaqItemSchema).max(20).optional(),
+
+  /**
+   * This locale's text came from AI and has not been edited since
+   * (changes-29 B3).
+   *
+   * It decides ONE thing: whether the save writes `MACHINE_TRANSLATED` instead
+   * of `TRANSLATED`. The AI path cannot write `TRANSLATED` at all, and a human
+   * who opens the translation and presses Save writes it by NOT setting this —
+   * the review IS the promotion, so no separate "approve" step is invented.
+   *
+   * Editing any translatable field in the editor clears it, which is what makes
+   * "has not been edited since" true rather than aspirational.
+   */
+  machineTranslated: z.boolean().optional(),
 });
 export type SaveArticleTranslationInput = z.infer<typeof saveArticleTranslationSchema>;
 

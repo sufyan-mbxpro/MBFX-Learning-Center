@@ -64,6 +64,10 @@ import { RichTextEditor } from "../../_components/rich-text-editor.tsx";
 import type { AiAssistantConfig, AiAssistantLabels } from "../../_components/ai-assistant.tsx";
 import { AiSeoButton, type AiSeoLabels } from "../../_components/ai-seo-dialog.tsx";
 import {
+  AiTranslateButton,
+  type AiTranslateLabels,
+} from "../../_components/ai-translate-button.tsx";
+import {
   duplicateArticleAction,
   saveArticleAction,
   setArticleDeletedAction,
@@ -84,7 +88,14 @@ import { FaqPanel } from "../../_components/editor/faq-panel.tsx";
 import { RelatedPanel } from "./_panels/related-panel.tsx";
 import { PublishPanel } from "./_panels/publish-panel.tsx";
 import { TaxonomyPanel } from "./_panels/taxonomy-panel.tsx";
-import type { ArticleData, EditorLabels, FaqDraft, TranslationDraft } from "./editor-types.ts";
+import {
+  TRANSLATABLE_FIELDS,
+  translatableFields,
+  type ArticleData,
+  type EditorLabels,
+  type FaqDraft,
+  type TranslationDraft,
+} from "./editor-types.ts";
 
 // The over-limit ink is `-interactive` (audit F-03); past the limit the
 // field's own inline error says so in words as well.
@@ -172,6 +183,7 @@ export function ArticleEditor({
   ai?: {
     assistant?: { config: AiAssistantConfig; labels: AiAssistantLabels };
     seo?: { labels: AiSeoLabels };
+    translate?: { labels: AiTranslateLabels };
   };
 }) {
   const router = useRouter();
@@ -186,10 +198,21 @@ export function ArticleEditor({
   );
   const tr = drafts[locale] ?? blankTranslation(locale);
   const setTr = (patch: Partial<TranslationDraft>) =>
-    setDrafts((d) => ({
-      ...d,
-      [locale]: { ...(d[locale] ?? blankTranslation(locale)), ...patch },
-    }));
+    setDrafts((d) => {
+      const current = d[locale] ?? blankTranslation(locale);
+      // changes-29 B3. Any edit to a TRANSLATABLE field clears the
+      // machine-written flag, unless the patch is itself setting it — which is
+      // what makes a human's Save write `TRANSLATED` rather than
+      // `MACHINE_TRANSLATED`. The review is the promotion.
+      const touchesProse = TRANSLATABLE_FIELDS.some((field) => field in patch);
+      const machineTranslated =
+        "machineTranslated" in patch
+          ? patch.machineTranslated
+          : touchesProse
+            ? false
+            : current.machineTranslated;
+      return { ...d, [locale]: { ...current, ...patch, machineTranslated } };
+    });
 
   // Per-ARTICLE state — unchanged by the locale switcher.
   const [kind, setKind] = useState(article.kind);
@@ -265,6 +288,11 @@ export function ArticleEditor({
           question: f.question,
           answer: f.answer,
         })),
+        // changes-29 B3. Sent only when the text came from AI and nothing has
+        // been edited since; the service reads it as
+        // `MACHINE_TRANSLATED` instead of `TRANSLATED`, and the AI path has no
+        // other way to write a status at all.
+        ...(tr.machineTranslated ? { machineTranslated: true } : {}),
       },
     }) satisfies SaveArticleInput;
 
@@ -423,6 +451,31 @@ export function ArticleEditor({
                 <StatusBadge tone={statusTone(TRANSLATION_STATUS_TONE, tr.translationStatus)}>
                   {labels.statusLabels[tr.translationStatus] ?? tr.translationStatus}
                 </StatusBadge>
+                {/* changes-29 B3. Absent on the SOURCE locale — there is
+                    nothing to translate from — and absent entirely when the
+                    feature is off. */}
+                {ai?.translate && locale !== defaultLocale && (
+                  <AiTranslateButton
+                    labels={ai.translate.labels}
+                    sourceLocale={defaultLocale}
+                    targetLocale={locale}
+                    entity={{ type: "article", id: article.id }}
+                    // Named fields from the SOURCE draft. Never a Prisma row,
+                    // and never `slug`: a slug change writes a Redirect and is
+                    // an SEO act, so it stays a human decision.
+                    fields={translatableFields(drafts[defaultLocale])}
+                    wouldOverwrite={
+                      tr.translationStatus !== "MACHINE_TRANSLATED" &&
+                      [tr.title, tr.excerpt, tr.body].some((value) => value.trim().length > 0)
+                    }
+                    onApply={(translated) =>
+                      // `machineTranslated` rides with the patch: the SAVE is
+                      // what writes the status, and any later edit to a
+                      // translatable field clears the flag below.
+                      setTr({ ...translated, machineTranslated: true })
+                    }
+                  />
+                )}
               </div>
             }
             // The stats strip belongs WITH the body it measures, but below a

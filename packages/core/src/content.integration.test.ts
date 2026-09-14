@@ -205,6 +205,9 @@ describe("glossary translation lifecycle — sourceHash OUTDATED flip on real ro
       termId,
       locale: "es",
       term: "Pip",
+      // changes-29 B3 — the queue now says WHICH of the two questions a row
+      // answers, because it answers both.
+      status: "OUTDATED",
     });
 
     // Retranslate → up to date again.

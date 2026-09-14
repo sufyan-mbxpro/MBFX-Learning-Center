@@ -2271,8 +2271,15 @@
         "ogTitle": "Social title",
         "ogDescription": "Social description",
         "focusKeywords": "Focus keywords"
-      }
-    }
+      },
+      "translateAction": "Translate from {source}",
+      "translateConfirmTitle": "Replace this translation?",
+      "translateConfirmDescription": "The text in this locale is replaced by a machine translation. Nothing is saved until you save the article, so you can still discard it by leaving without saving.",
+      "translateConfirm": "Translate",
+      "translateDone": "Translated — review it before saving"
+    },
+    "machineTranslatedQueue": "Machine-translated, not yet reviewed",
+    "statusMACHINE_TRANSLATED": "Machine translated"
   },
   "glossary": {
     "title": "Glossary",

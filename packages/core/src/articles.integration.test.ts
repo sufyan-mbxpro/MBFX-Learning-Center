@@ -795,6 +795,42 @@ describe("saveArticle — one transaction, one audit, one revalidation", () => {
     });
   });
 
+  // changes-29 B3 — the one behaviour the machine-translation flag exists for.
+  it("writes MACHINE_TRANSLATED only when the save says the text came from AI", async () => {
+    const id = await draft();
+    await articles.saveArticle(editor, {
+      articleId: id,
+      meta: {},
+      translation: {
+        articleId: id,
+        locale: "en",
+        title: "Escrito por una máquina",
+        body: "<p>cuerpo</p>",
+        machineTranslated: true,
+      },
+    });
+
+    const row = await db.articleTranslation.findFirstOrThrow({ where: { articleId: id } });
+    expect(row.translationStatus).toBe("MACHINE_TRANSLATED");
+
+    // A human opening it and pressing Save is the promotion — there is no
+    // separate "approve" action, and the AI path cannot write TRANSLATED at
+    // all.
+    await articles.saveArticle(editor, {
+      articleId: id,
+      meta: {},
+      translation: {
+        articleId: id,
+        locale: "en",
+        title: "Escrito por una máquina, revisado",
+        body: "<p>cuerpo</p>",
+      },
+    });
+
+    const reviewed = await db.articleTranslation.findFirstOrThrow({ where: { articleId: id } });
+    expect(reviewed.translationStatus).toBe("TRANSLATED");
+  });
+
   it("writes exactly ONE audit row for the whole save", async () => {
     const id = await draft();
     const before = await db.auditLog.count({ where: { entityId: id } });
