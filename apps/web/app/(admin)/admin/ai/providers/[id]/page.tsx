@@ -1,0 +1,93 @@
+import { notFound } from "next/navigation";
+import { getTranslations } from "next-intl/server";
+import { listAiModels, loadAiProvider } from "@repo/core";
+import { requirePermission } from "@repo/rbac";
+import { AdminPage } from "../../../_components/admin-page.tsx";
+import { providerFormLabels } from "../_labels.ts";
+import { ModelsTable, type ModelsTableLabels } from "../models-table.tsx";
+import { AiProviderForm } from "../provider-form.tsx";
+
+// One provider, and the models behind it.
+export default async function AiProviderPage({
+  params,
+}: PageProps<"/admin/ai/providers/[id]">) {
+  await requirePermission("ai.providers.manage");
+  const { id } = await params;
+  const t = await getTranslations("admin");
+  const tAi = await getTranslations("admin.ai");
+
+  const [provider, models] = await Promise.all([loadAiProvider(id), listAiModels(id)]);
+  if (!provider) notFound();
+
+  const dateFormat = new Intl.DateTimeFormat("en", { dateStyle: "medium" });
+  // Formatted server-side so the client component renders no locale logic of
+  // its own — and so the dates match every other date on the surface.
+  const pricedDates = Object.fromEntries(
+    models.map((model) => [model.id, dateFormat.format(model.pricedAt)]),
+  );
+
+  const modelLabels: ModelsTableLabels = {
+    title: tAi("modelsTitle"),
+    description: tAi("modelsDescription"),
+    add: tAi("modelNew"),
+    editTitle: tAi("modelEditTitle"),
+    editDescription: tAi("modelEditDescription"),
+    modelId: tAi("modelId"),
+    modelIdHint: tAi("modelIdHint"),
+    label: tAi("modelLabel"),
+    inputPrice: tAi("modelInputPrice"),
+    outputPrice: tAi("modelOutputPrice"),
+    cachedPrice: tAi("modelCachedPrice"),
+    cachedPriceHint: tAi("modelCachedPriceHint"),
+    maxTokens: tAi("modelMaxTokens"),
+    vision: tAi("modelVision"),
+    stream: tAi("modelStream"),
+    enabled: tAi("modelEnabled"),
+    sortOrder: tAi("modelSortOrder"),
+    pricedAt: (date: string) => tAi("modelPricedAt", { date }),
+    save: t("save"),
+    saved: t("saved"),
+    cancel: t("cancel"),
+    edit: t("edit"),
+    deleteLabel: t("delete"),
+    deleteTitle: tAi("modelDeleteTitle"),
+    deleteDescription: tAi("modelDeleteDescription"),
+    deleteDone: t("deleted"),
+    empty: tAi("modelsEmpty"),
+  };
+
+  return (
+    <AdminPage
+      title={provider.label}
+      description={tAi("providerEditDescription")}
+      backHref="/admin/ai/providers"
+      backLabel={tAi("providersTitle")}
+    >
+      <AiProviderForm
+        provider={{
+          id: provider.id,
+          kind: provider.kind,
+          label: provider.label,
+          baseUrl: provider.baseUrl,
+          hasApiKey: provider.hasApiKey,
+          isEnabled: provider.isEnabled,
+          isDefault: provider.isDefault,
+          hasSecretKey: provider.hasSecretKey,
+        }}
+        labels={providerFormLabels(t, tAi)}
+      />
+
+      {/* ECHO reaches no provider and has one placeholder "model" for the
+          resolver to land on; a price table over it would invite editing a
+          number that can never be billed. */}
+      {provider.kind !== "ECHO" && (
+        <ModelsTable
+          providerId={provider.id}
+          models={models}
+          labels={modelLabels}
+          dateFormatter={pricedDates}
+        />
+      )}
+    </AdminPage>
+  );
+}

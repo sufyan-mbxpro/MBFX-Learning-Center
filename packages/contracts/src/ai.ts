@@ -351,6 +351,22 @@ export const aiRunSchema = z.object({
 
 export type AiRunInput = z.infer<typeof aiRunSchema>;
 
+/**
+ * How a STREAMED failure is signalled.
+ *
+ * A stream that has already started cannot change its status code, so the
+ * taxonomy reason is appended to the body behind a control character (0x1F,
+ * unit separator) that no model emits in prose. The client splits on it and
+ * renders an error rather than showing the reason as if it were the
+ * suggestion.
+ *
+ * Built with `fromCharCode` rather than written as an escape so no source file
+ * in this repo contains a raw control byte — one did, briefly, and `grep`
+ * called the file binary.
+ */
+export const AI_STREAM_ERROR_MARKER = String.fromCharCode(31);
+export const AI_STREAM_ERROR_PREFIX = `${AI_STREAM_ERROR_MARKER}AI_ERROR:`;
+
 // ─── Admin forms ─────────────────────────────────────────────
 
 export const aiProviderSchema = z.object({

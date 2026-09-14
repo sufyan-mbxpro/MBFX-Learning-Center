@@ -10,6 +10,7 @@ import { usePathname } from "next/navigation";
 import {
   Calculator,
   CandlestickChart,
+  Sparkles,
   Tags,
   ChartLine,
   CircleHelp,
@@ -57,6 +58,7 @@ const ICONS: Record<string, LucideIcon> = {
   website: Globe,
   market: CandlestickChart,
   tools: Calculator,
+  ai: Sparkles,
   settings: Settings,
   features: Flag,
   navigation: ListTree,

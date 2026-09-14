@@ -46,6 +46,7 @@ interface NavEntryDef {
     | "website"
     | "market"
     | "tools"
+    | "ai"
     | "settings"
     | "features"
     | "navigation"
@@ -216,6 +217,19 @@ const ADMIN_NAV_GROUPS: {
   {
     labelKey: "navSystem",
     entries: [
+      // AI (Module 18, ADR-097). Above Settings, and its own destination
+      // rather than a settings card, for the reason Market has one: a spend
+      // meter and a sealed credential are not a card in a grid. The entry is
+      // shown to anyone holding ANY of the three read-or-write keys, and each
+      // screen re-checks its own — `ai.providers.manage` is super_admin-only
+      // (ADR-098), so an `admin` sees Usage, Features and Limits and no
+      // Providers tab at all.
+      {
+        href: "/admin/ai",
+        labelKey: "ai",
+        icon: "ai",
+        permission: ["ai.usage.view", "ai.settings.manage", "ai.providers.manage"],
+      },
       // Settings is the ONLY system entry in the main sidebar (changes-05):
       // Features, Navigation, Homepage and Theme are all settings-shaped
       // screens the hub already fronts as cards, each reachable from any
