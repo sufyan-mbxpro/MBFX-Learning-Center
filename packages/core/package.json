@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@repo/ai": "workspace:*",
     "@repo/blocks": "workspace:*",
     "@repo/contracts": "workspace:*",
     "@repo/db": "workspace:*",
