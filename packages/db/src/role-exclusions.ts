@@ -26,6 +26,18 @@ export const SUPER_ADMIN_ONLY_PERMISSIONS = [
   // with `admin`, which is why the email settings screen splits by permission
   // instead of hiding whole.
   "email.settings.manage",
+  // ADR-098: the AI provider key, gated tighter than the market key rather
+  // than by resemblance to it. Two properties put it here. A stolen key spends
+  // real money with no ceiling the victim controls; and an attacker-controlled
+  // `baseUrl` receives EVERY prompt the platform sends — the site's
+  // unpublished articles, lessons and drafts, continuously, without touching
+  // the database or leaving an audit trail. It is a KEY rather than a
+  // hardcoded `userType` test so that a later organisation can grant it to a
+  // non-super_admin deliberately, with its own ADR, instead of by editing a
+  // condition. Its three siblings (`ai.settings.manage`, `ai.usage.view`,
+  // `ai.use`) stay with `admin`, which is why the AI screens split by
+  // permission instead of hiding whole.
+  "ai.providers.manage",
 ] as const;
 
 export type SuperAdminOnlyPermission = (typeof SUPER_ADMIN_ONLY_PERMISSIONS)[number];

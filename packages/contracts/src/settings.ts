@@ -6,6 +6,8 @@
 // completeness test in @repo/settings checks this both ways.
 import { z } from "zod";
 
+import { AI_CAP_BEHAVIORS } from "./ai.ts";
+
 /**
  * Which layout variants each homepage section accepts (changes-03-plan.md
  * §5.1, ADR-018). This is the VOCABULARY only — the key → component map
@@ -260,6 +262,26 @@ export const SETTINGS_SCHEMAS = {
   "newsletter.placements.news": z.boolean(),
   "newsletter.placements.analysis": z.boolean(),
 
+  // AI platform (Module 18, ADR-097/099/100). Every one of these is
+  // `isPublic: false` — security.md #12 forbids a non-public setting from
+  // serialising into a public RSC payload, and Module 05's leak test covers
+  // the group. The provider key is not here at all: it lives sealed in
+  // `AiProvider.apiKeyCipher` (ADR-098).
+  "ai.enabled": z.boolean(),
+  "ai.maxTokensPerRequest": z.int().min(1).max(200_000),
+  /** `0` means unlimited, and the limits screen says so in words. */
+  "ai.monthlyBudgetUsd": z.number().min(0).max(1_000_000),
+  "ai.budgetWarnPercent": z.int().min(1).max(100),
+  "ai.capBehavior": z.enum(AI_CAP_BEHAVIORS),
+  "ai.rateLimitPerUserHour": z.int().min(1).max(100_000),
+  // The three tiers hold a model ID STRING, not an `AiModel` row id, so a tier
+  // keeps its meaning when a provider row is deleted and re-created. A tier
+  // naming a retired model degrades — `config.ts` falls through to the default
+  // provider's first enabled model — rather than throwing.
+  "ai.model.light": z.string().min(1).max(80),
+  "ai.model.standard": z.string().min(1).max(80),
+  "ai.model.heavy": z.string().min(1).max(80),
+
   "cms.dataBudget": dataBudgetSchema,
 } as const satisfies Record<string, z.ZodType>;
 
@@ -329,6 +351,16 @@ export const SETTING_GROUPS: Record<SettingKey, string> = {
   "newsletter.placements.home": "email",
   "newsletter.placements.news": "email",
   "newsletter.placements.analysis": "email",
+
+  "ai.enabled": "ai",
+  "ai.maxTokensPerRequest": "ai",
+  "ai.monthlyBudgetUsd": "ai",
+  "ai.budgetWarnPercent": "ai",
+  "ai.capBehavior": "ai",
+  "ai.rateLimitPerUserHour": "ai",
+  "ai.model.light": "ai",
+  "ai.model.standard": "ai",
+  "ai.model.heavy": "ai",
 
   "cms.dataBudget": "cms",
 };

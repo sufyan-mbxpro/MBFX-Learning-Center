@@ -18082,3 +18082,111 @@ having made no provider request.
 **Not run:** a real sweep. It would spend the owner's entire free-tier daily
 quota (28 attempts against a 25/day cap), so it is theirs to trigger. E2E for
 the new button is owed to Module 14 with every other admin spec.
+
+## 2026-09-14 — A0: the AI platform is decided, and nothing is built yet
+
+**Module 18** (new) — ADR-097/098/099/100, plan
+[changes-29](../changes/changes-29-ai-platform.md), PR A0 of A0–A9 + B1–B6.
+Docs only: four ADRs, a skill, a CLAUDE.md row, three rules-file amendments.
+**No package, no schema, no screen, no dependency.**
+
+### Why the ADRs came first
+
+`plan.md` names no AI module, so the whole platform is a deviation under Part
+F #10 — an ADR before the code, not beside it. Three of the four were named by
+the owner in the brief; the fourth was compulsory for a different reason:
+ADR-087 #5 closed itself with "this is the second and last sealed database
+secret without a further ADR", and set a three-part bar. ADR-098 is that
+further ADR and answers (a) why not env, (b) the single reader, (c) the blast
+radius, in order.
+
+### The one decision that is not a copy of an existing one
+
+`ai.providers.manage` is **super_admin-only**, where ADR-087 gated the market
+key on an ordinary admin key. The reasoning had to be written out rather than
+inherited, because "sealed secret" spreading by resemblance is exactly what
+ADR-087 warned against. The market key "buys read-only quotes and nothing is
+delivered TO a user"; this one spends real money with no ceiling the victim
+controls, and a repointed `baseUrl` receives **every prompt the platform
+sends** — the unpublished articles, lessons and drafts — continuously, without
+touching the database or leaving an audit trail. Tighter harm, tighter gate.
+Its three siblings stay ordinary `admin` keys.
+
+### What the review changed
+
+The plan went to the owner recommending `claude-opus-5` as the default for
+every feature, calling a cheaper choice theirs to make. Overruled, correctly:
+at a $50 cap, Opus on alt-text and grammar burns the month on work where the
+quality difference is invisible.
+
+It was **not** the pure seed change the plan promised, which is the finding
+worth recording. `fix_grammar` is an **action inside** `writing_assistant`,
+not a feature — one feature, one row, one model column — so "grammar on Haiku,
+drafting on Opus" could not be expressed at all. Splitting it into its own
+feature key would give an admin two switches for one tool; a second model
+column would exist for one case. ADR-099 #4 resolves it with a `modelRole` on
+the registry entry plus three tier settings
+(`ai.model.light|standard|heavy` → Haiku/Sonnet/Opus), resolved **after** the
+per-feature override so the brief's "model selection per feature" survives
+intact. One extra concept, no schema change, and the cost dial now lives in
+one place instead of six dropdowns.
+
+Also from the review: quiz generation moved out of the spec-only section into
+PR B6 — it shares none of the four properties that make the tutor chatbot a
+module (staff-triggered, admin-surface, bounded, reviewed) — and two
+behaviours were recorded as designed rather than defective: the last few
+dollars of a budget period are unusable because the pre-flight check uses
+worst-case output tokens, and a capped platform still writes `REFUSED` rows.
+
+### Decided, and binding on A1+
+
+1. **AI never writes to the database** (ADR-097 #4). Every result lands in a
+   form field a human saves through the existing action, schema and permission
+   check. This is the security property, not a UX preference: a model that
+   cannot commit cannot be prompt-injected into committing.
+2. **One door, and metering in its `finally`** (ADR-097 #2, #8) — a feature
+   cannot forget to log because a feature never logs.
+3. **The set of features is code; what they say is data** — ADR-042's split a
+   third time, after email templates (ADR-078 #5) and tools (ADR-086 #1).
+4. **Absent, not disabled** (ADR-097 #6), guarded the way
+   `newsletter-signup.test.ts` guards the newsletter form.
+5. **The usage log holds no prompt and no completion** (ADR-078 #10, one
+   domain over); raw rows purge at 90 days, rollups are kept.
+6. **Cost is frozen at write time** (ADR-100), every figure says "estimated",
+   and the price table is dated on screen — ADR-088's discipline in a new
+   domain, with ADR-096's "a control that looks live and is not" as the
+   failure being avoided.
+
+### Rules amended
+
+- **architecture.md #8** — `core → ai` and `ai → secrets`; why `ai` sits
+  beside `email` rather than below it (nothing in `auth` may ever call AI),
+  and why it is not in `core` (two provider SDKs in the graph every public
+  page imports).
+- **security.md #10** — "Two exceptions, and only two" is now "Three
+  exceptions, and a higher bar for a fourth": a fourth must also say why it is
+  not satisfied by one of the three seals that exist.
+- **code-style.md #29** (new) — a section's catalog namespace is an OBJECT and
+  its nav label is `admin.nav.<section>`. Third instance of a collision
+  nothing static catches, after `admin.glossary` (ADR-069) and `admin.tools`
+  (ADR-086).
+
+### Tests run
+
+None, and none exist to run — this branch adds no code. `prettier --check` is
+clean on every file touched, and `pnpm governance:check` passes (no
+`packages/*` change; no existing ADR modified — the four are additions, and
+ADR-087 was deliberately left untouched, since ADR-098 satisfies its bar
+rather than superseding it).
+
+### Deliberately deferred
+
+`.env.example` does **not** yet gain `AI_SECRET_KEY`. Nothing reads it, and a
+documented variable with no reader is the shape code-style.md #28 exists to
+refuse. It lands in A2 with `secret.ts`, its only reader.
+
+### Owed
+
+Everything: A1 (schema, registry, permissions, settings, seed) through A9,
+then B1–B6. E2E for all five admin screens and every Phase 2 affordance goes
+to Module 14 with every other admin spec.

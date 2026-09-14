@@ -64,6 +64,11 @@ describe("the group registry", () => {
       "translations",
       "seo",
       "email",
+      // ADR-097 — the fifteenth group. changes-29 §7.2 said "between tools and
+      // translations"; §10 puts the AI screen under System, above Settings,
+      // and ADR-083's rule is that this array mirrors the sidebar. The rule
+      // wins, so the card sits where its screen does.
+      "ai",
       "settings",
       "system",
     ]);

@@ -48,6 +48,12 @@ export const PERMISSION_GROUPS = [
   "seo",
   // System
   "email",
+  // ADR-097 — the FIFTEENTH group. changes-29 §7.2 wrote "between tools and
+  // translations"; §10 puts the sidebar entry under System, above Settings,
+  // and ADR-083's rule (code-style.md #11b) is that this array MIRRORS the
+  // sidebar. The two halves of the plan disagreed, so the binding rule decides
+  // and the group sits where its screen does.
+  "ai",
   "settings",
   "system",
 ] as const;

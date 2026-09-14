@@ -46,7 +46,7 @@ Non-negotiable. A PR violating any numbered rule here does not merge.
     `NEXT_PUBLIC_*`, never committed. `.env.example` carries names only.
     `SEED_ADMIN_PASSWORD` is dev-only; omit in production and force reset.
 
-    **Two exceptions, and only two.**
+    **Three exceptions, and a higher bar for a fourth.**
 
     **ADR-078: the SMTP password.** Stored in
     `EmailTransport.passwordCipher`, AES-256-GCM-sealed under
@@ -65,9 +65,25 @@ Non-negotiable. A PR violating any numbered rule here does not merge.
     so the narrower harm gets the narrower gate. Both packages seal through
     `@repo/secrets`; neither owns a copy of the primitive.
 
+    **ADR-098: the AI provider key.** Stored in `AiProvider.apiKeyCipher`,
+    sealed under `AI_SECRET_KEY`, write-only, with `loadProviderDriver()` its
+    only reader and no key property on `AiProviderView`. Gated on
+    **`ai.providers.manage`, seeded to super_admin only** — a key, not a
+    hardcoded role test, so a later deliberate grant is an ADR rather than a
+    code edit. It is gated tighter than the market key because it is not that
+    key's harm: it spends real money with no ceiling the victim controls, and
+    an attacker-controlled `baseUrl` receives **every prompt the platform
+    sends** — the site's unpublished articles, lessons and drafts,
+    continuously, without touching the database or leaving an audit trail.
+    Its three siblings (`ai.settings.manage`, `ai.usage.view`, `ai.use`) are
+    ordinary `admin` keys; the screen splits by permission rather than hiding
+    whole.
+
     Nothing else may follow this path without its own ADR, which must state
-    why the secret cannot live in env, name its single reader, and justify
-    its gate by blast radius (ADR-087 #5).
+    why the secret cannot live in env, name its single reader, justify its
+    gate by blast radius (ADR-087 #5), and — since ADR-098 — say why it is
+    not satisfied by one of the three seals that already exist. Three is
+    where a pattern starts looking like a default.
 
 11. Sessions are database-backed (revocable). httpOnly cookies on web; tokens
     never in localStorage. Argon2id for password hashing.

@@ -147,6 +147,21 @@ const PERMISSIONS = [
   ["email", "email.templates.test", "Send test emails"],
   ["email", "email.log.view", "View email delivery log"],
 
+  // AI platform (Module 18, ADR-097/098). Four keys, and this repo counts
+  // them: `ai.use` answers "may this person spend money on generation",
+  // `ai.settings.manage` "may they change the switches and the budget",
+  // `ai.providers.manage` "may they hold the key and repoint the host"
+  // (super_admin only — ADR-098), and `ai.usage.view` "may they see what was
+  // spent and by whom". The last is separate on purpose: the usage screen
+  // names WHICH member of staff spent what, which is closer to the audit log
+  // than to a settings form. There is deliberately NO key per feature — the
+  // feature toggle gates existence and the content key the admin already holds
+  // gates the save (ADR-097 #10).
+  ["ai", "ai.use", "Use AI features"],
+  ["ai", "ai.settings.manage", "Configure AI switches, budget, and limits"],
+  ["ai", "ai.providers.manage", "Manage AI providers, keys, and models"],
+  ["ai", "ai.usage.view", "View AI usage and spend"],
+
   // Settings & branding — /admin/settings and the screens its sub-nav fronts
   // (theme, navigation, features, social, integrations).
   ["settings", "settings.view", "View settings"],
@@ -223,6 +238,10 @@ const ROLES: Array<{
       // stays with admin, exactly as a header publish does two lines down.
       "tools.view",
       "tools.update",
+      // ADR-097 #10. `ai.use` is the spend gate, nothing more: what a
+      // suggestion may be saved INTO is still decided by the content key
+      // beside it, so this grant widens nobody's reach over content.
+      "ai.use",
       // Pages, not parts: a header publish stays with admin and above.
       "cms.pages.view",
       "cms.pages.create",
@@ -260,6 +279,7 @@ const ROLES: Array<{
       "seo.update",
       "translations.view",
       "translations.update",
+      "ai.use",
       "cms.pages.view",
       "cms.pages.update",
     ],
@@ -282,6 +302,7 @@ const ROLES: Array<{
       "analysis.update",
       "media.view",
       "media.upload",
+      "ai.use",
     ],
   },
   {
@@ -298,6 +319,7 @@ const ROLES: Array<{
       "redirects.manage",
       "sitemaps.manage",
       "analytics.view",
+      "ai.use",
       "cms.pages.view",
     ],
   },
@@ -682,6 +704,29 @@ const SETTINGS = [
   ["email", "newsletter.placements.home", true, "BOOLEAN", "Newsletter on the homepage", false],
   ["email", "newsletter.placements.news", true, "BOOLEAN", "Newsletter on /news", false],
   ["email", "newsletter.placements.analysis", true, "BOOLEAN", "Newsletter on /analysis", false],
+
+  // ─── AI platform (Module 18, ADR-097/099/100) ──────────────
+  //
+  // Every key here is `isPublic: false` and that is load-bearing: security.md
+  // #12 forbids a non-public setting from serialising into a public RSC
+  // payload, and Module 05's leak test covers the group. The provider key is
+  // not a setting at all — it lives sealed in AiProvider, super_admin-only.
+  //
+  // `ai.enabled` is seeded OFF: a platform that can spend money does not
+  // arrive spending it.
+  ["ai", "ai.enabled", false, "BOOLEAN", "Enable AI features", false],
+  ["ai", "ai.maxTokensPerRequest", 2000, "NUMBER", "Max output tokens per request", false],
+  ["ai", "ai.monthlyBudgetUsd", 50, "NUMBER", "Monthly budget (USD, 0 = unlimited)", false],
+  ["ai", "ai.budgetWarnPercent", 80, "NUMBER", "Warn at this percent of budget", false],
+  ["ai", "ai.capBehavior", "DISABLE", "STRING", "Behaviour when the budget is reached", false],
+  ["ai", "ai.rateLimitPerUserHour", 120, "NUMBER", "Max AI calls per user per hour", false],
+  // The three tiers (ADR-099). A tier holds a model ID string, not a row id,
+  // so it keeps meaning across a provider being deleted and re-created. The
+  // cost dial is ONE place: when a cheaper model lands, an admin moves the
+  // light tier once rather than editing six dropdowns.
+  ["ai", "ai.model.light", "claude-haiku-4-5", "STRING", "Light tier model", false],
+  ["ai", "ai.model.standard", "claude-sonnet-5", "STRING", "Standard tier model", false],
+  ["ai", "ai.model.heavy", "claude-opus-5", "STRING", "Heavy tier model", false],
 ] as const;
 
 // ─────────────────────────────────────────────────────────────
@@ -4053,6 +4098,203 @@ export async function seed(db: PrismaClient) {
     });
   }
   console.log(`  tools: ${TOOL_SEEDS.length} (all enabled)`);
+
+
+  // ─────────────────────────────────────────────────────────────
+  // AI platform (Module 18, ADR-097/098/099/100)
+  // ─────────────────────────────────────────────────────────────
+  //
+  // A fresh clone gets a working AI screen, a usage dashboard that renders
+  // with zero rows, and every feature visibly off. Nothing here can spend a
+  // cent: `ai.enabled` is false, the default provider is ECHO, and the two
+  // real providers arrive disabled with no key.
+
+  const echoProvider = await db.aiProvider.upsert({
+    where: { id: "echo" },
+    update: {},
+    create: {
+      id: "echo",
+      kind: "ECHO",
+      label: "Echo (no provider)",
+      isEnabled: true,
+      isDefault: true,
+    },
+  });
+
+  const anthropicProvider = await db.aiProvider.upsert({
+    where: { id: "anthropic" },
+    update: {},
+    create: {
+      id: "anthropic",
+      kind: "ANTHROPIC",
+      label: "Anthropic",
+      isEnabled: false,
+      isDefault: false,
+    },
+  });
+
+  const openaiProvider = await db.aiProvider.upsert({
+    where: { id: "openai" },
+    update: {},
+    create: {
+      id: "openai",
+      kind: "OPENAI",
+      label: "OpenAI",
+      isEnabled: false,
+      isDefault: false,
+    },
+  });
+
+  // Prices are DATA, not constants (ADR-100 #2): these are the published rates
+  // on the seed date, and the models screen shows each row's "as of" so a
+  // stale number is visible rather than assumed. A price correction is a form
+  // edit, never a deploy — which is also the answer to model-id drift (R7).
+  //
+  // USD per 1M tokens. The three Anthropic rows are what the three tier
+  // settings name, and `check:ai-model-tiers` fails the build if a seeded tier
+  // names a model this list does not create.
+  const AI_MODEL_SEEDS: Array<{
+    providerId: string;
+    modelId: string;
+    label: string;
+    input: number;
+    output: number;
+    cached: number | null;
+    maxOutputTokens: number;
+    vision: boolean;
+    stream: boolean;
+    sortOrder: number;
+  }> = [
+    {
+      providerId: anthropicProvider.id,
+      modelId: "claude-opus-5",
+      label: "Claude Opus 5",
+      input: 5,
+      output: 25,
+      cached: 0.5,
+      maxOutputTokens: 64_000,
+      vision: true,
+      stream: true,
+      sortOrder: 10,
+    },
+    {
+      providerId: anthropicProvider.id,
+      modelId: "claude-sonnet-5",
+      label: "Claude Sonnet 5",
+      input: 2,
+      output: 10,
+      cached: 0.2,
+      maxOutputTokens: 64_000,
+      vision: true,
+      stream: true,
+      sortOrder: 20,
+    },
+    {
+      providerId: anthropicProvider.id,
+      modelId: "claude-haiku-4-5",
+      label: "Claude Haiku 4.5",
+      input: 1,
+      output: 5,
+      cached: 0.1,
+      maxOutputTokens: 8_192,
+      vision: true,
+      stream: true,
+      sortOrder: 30,
+    },
+    // The OpenAI rows exist so the provider screen has something to show and
+    // the driver has something to select. Their prices are the published rates
+    // on the seed date and carry the same "as of" caption as every other row.
+    {
+      providerId: openaiProvider.id,
+      modelId: "gpt-5.1",
+      label: "GPT-5.1",
+      input: 1.25,
+      output: 10,
+      cached: 0.125,
+      maxOutputTokens: 32_000,
+      vision: true,
+      stream: true,
+      sortOrder: 10,
+    },
+    {
+      providerId: openaiProvider.id,
+      modelId: "gpt-5.1-mini",
+      label: "GPT-5.1 mini",
+      input: 0.25,
+      output: 2,
+      cached: 0.025,
+      maxOutputTokens: 32_000,
+      vision: true,
+      stream: true,
+      sortOrder: 20,
+    },
+    // ECHO bills nothing, by construction. It still gets a row so that the
+    // model resolver has something to land on before any key exists, and so
+    // the pricing path is exercised end to end on a fresh install.
+    {
+      providerId: echoProvider.id,
+      modelId: "echo",
+      label: "Echo (placeholder output)",
+      input: 0,
+      output: 0,
+      cached: 0,
+      maxOutputTokens: 4_096,
+      vision: true,
+      stream: true,
+      sortOrder: 10,
+    },
+  ];
+
+  for (const model of AI_MODEL_SEEDS) {
+    await db.aiModel.upsert({
+      where: {
+        providerId_modelId: { providerId: model.providerId, modelId: model.modelId },
+      },
+      update: {},
+      create: {
+        providerId: model.providerId,
+        modelId: model.modelId,
+        label: model.label,
+        inputPricePerMTok: model.input,
+        outputPricePerMTok: model.output,
+        cachedInputPricePerMTok: model.cached,
+        maxOutputTokens: model.maxOutputTokens,
+        supportsVision: model.vision,
+        supportsStream: model.stream,
+        isEnabled: true,
+        sortOrder: model.sortOrder,
+      },
+    });
+  }
+
+  // One row per AI_FEATURES key, all OFF and all with `modelId: null`, so every
+  // feature resolves through its tier until an admin deliberately pins one.
+  //
+  // The list is literal rather than imported from @repo/contracts: `@repo/db`
+  // declares no dependency on it, and adding one for a seed would put a new
+  // edge in the graph to save six strings. `contracts/src/ai.test.ts` is what
+  // keeps the two in step — it reads this file and fails on a key with no seed
+  // row, or a seed row with no key.
+  const AI_FEATURE_KEYS_SEED = [
+    "writing_assistant",
+    "seo_generation",
+    "translation",
+    "summarization",
+    "alt_text",
+    "quiz_generation",
+  ];
+
+  for (const key of AI_FEATURE_KEYS_SEED) {
+    await db.aiFeature.upsert({
+      where: { key },
+      update: {},
+      create: { key, isEnabled: false },
+    });
+  }
+
+  console.log(
+    `  ai: ${AI_MODEL_SEEDS.length} models, ${AI_FEATURE_KEYS_SEED.length} features (all off), ECHO default`,
+  );
 
   console.log("Done.");
 }

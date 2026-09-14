@@ -251,3 +251,16 @@ group with no keys.
     changed. Either wire it or leave it out of the seed. This is what put
     `seo.robotsIndex` and `seo.googleSiteVerification` in the admin for two
     modules without effect (ADR-090).
+
+## Catalogs
+
+29. **A section's namespace is an OBJECT, and its nav label lives beside it.**
+    `admin.<section>` holding a string is a collision waiting for the first
+    screen key: `admin.glossary` was the sidebar label, so the glossary
+    editor's keys had to move to `admin.glossaryEditor` (ADR-069), and
+    ADR-086 restated it for `admin.tools`. Third instance, ADR-097's
+    `admin.ai`. The convention that avoids it: the label is
+    `admin.nav.<section>` and every screen string lives under
+    `admin.<section>.*`. **Nothing static catches this** — `t()` resolves a
+    string namespace to a runtime error, so the first person to notice is a
+    user.

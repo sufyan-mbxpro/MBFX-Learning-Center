@@ -28,15 +28,28 @@ function roleArrayLiterals(source: string): string[] {
 }
 
 describe("the exclusion list", () => {
-  it("holds exactly the four keys the ADRs name", () => {
-    // A fifth entry is a privilege decision and needs its own ADR — this
-    // failing is the prompt to write one, not to update the expectation.
+  it("holds exactly the five keys the ADRs name", () => {
+    // A sixth entry is a privilege decision and needs its own ADR — this
+    // failing is the prompt to write one, not to update the expectation. The
+    // fifth arrived that way: ADR-098 argued `ai.providers.manage` here from
+    // blast radius rather than resemblance, and this line moved after it.
     expect([...SUPER_ADMIN_ONLY_PERMISSIONS]).toEqual([
       "roles.manage",
       "permissions.assign",
       "users.impersonate",
       "email.settings.manage",
+      "ai.providers.manage",
     ]);
+  });
+
+  it("excludes ai.providers.manage but none of its three siblings (ADR-098)", () => {
+    // The AI screens split by permission rather than hiding whole: an `admin`
+    // configures the switches, the budget and the tiers, and reads the usage
+    // log. What they cannot do is hold the key or repoint the host.
+    expect(isSuperAdminOnlyPermission("ai.providers.manage")).toBe(true);
+    for (const key of ["ai.use", "ai.settings.manage", "ai.usage.view"]) {
+      expect(isSuperAdminOnlyPermission(key)).toBe(false);
+    }
   });
 
   it("includes email.settings.manage (ADR-078 #4)", () => {

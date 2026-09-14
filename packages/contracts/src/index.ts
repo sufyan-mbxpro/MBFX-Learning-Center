@@ -14,4 +14,5 @@ export * from "./market.ts";
 export * from "./field-issues.ts";
 export * from "./email.ts";
 export * from "./newsletter.ts";
+export * from "./ai.ts";
 export * from "./cms/index.ts";

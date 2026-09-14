@@ -46,6 +46,15 @@ rules named below.
    sealed-secret owners use. It sits at the bottom for the same reason
    `email` sits below its senders — two packages need it, so neither may own
    it, and a duplicated crypto primitive drifts in the copy nobody reads.
+   ADR-097 adds `core → ai` and `ai → secrets`: `@repo/ai` is a domain
+   package owning its own tables (`settings`/`theme`/`email` are the
+   precedent) and depending on `db / contracts / settings / secrets`. It sits
+   BESIDE `email`, not below it: email is below its senders because `auth` and
+   `core` both send, whereas **nothing in `auth` may ever call AI** — the
+   session path every request touches must not acquire a dependency that can
+   take two seconds and spend money. It is also the reason AI is not in
+   `core`: two provider SDKs in the graph every public server component
+   imports is weight and surface on the path #5 exists to protect.
 9. Every package declares every dependency it imports (no phantom deps —
    `pnpm check:phantom-deps` enforces). Granular exports in `@repo/ui` so one
    component doesn't drag the whole tree.

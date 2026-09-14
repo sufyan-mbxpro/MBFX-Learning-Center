@@ -110,6 +110,10 @@ model User {
   // consent is given independently of the account, so a hard erase nulls the
   // link and keeps the subscription (`onDelete: SetNull` on the other side).
   subscriptions  NewsletterSubscriber[]
+  // ADR-097 — the AI meter. `SetNull` on the other side for the same reason
+  // the newsletter link is: a deleted staff account must not delete the spend
+  // record it caused, and spend history outlives the person who spent it.
+  aiUsage        AiUsage[]
 
   @@unique([email])
   @@index([userType, status])
@@ -2355,4 +2359,241 @@ model ToolTranslation {
 
   @@unique([toolId, locale])
   @@map("tool_translations")
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Module 18 — the AI platform (ADR-097/098/099/100, changes-29 A1)
+// ═══════════════════════════════════════════════════════════════
+//
+// Six tables and two enums. The shapes copy `MarketProvider` and
+// `EmailDelivery` deliberately: a sealed key with one reader, a log that holds
+// no bodies, and a rollup that outlives the rows it was built from.
+
+enum AiProviderKind {
+  ANTHROPIC
+  OPENAI
+  /// No provider at all: a deterministic local driver that returns a labelled
+  /// placeholder and records a zero-cost usage row. ADR-087 #11's MANUAL,
+  /// applied here — it is what makes the platform demonstrable, seedable and
+  /// testable with no key, and what an instance with no AI_SECRET_KEY falls
+  /// back to instead of throwing.
+  ECHO
+}
+
+enum AiCallStatus {
+  OK
+  FAILED
+  /// Client went away mid-stream. Tokens observed so far are still recorded:
+  /// the provider bills them, so a row that pretends otherwise under-reports
+  /// spend.
+  ABORTED
+  /// Refused by us before the provider was called — budget cap, global
+  /// switch, feature switch, or the per-user rate window. Zero cost, and
+  /// deliberately a ROW: "why did nothing happen" is the question the usage
+  /// screen has to answer.
+  REFUSED
+}
+
+/// One configured provider. A SET, not a singleton — unlike MarketProvider
+/// and EmailTransport — because the owner asked for several, and because
+/// "which provider does this feature use" is a per-feature answer.
+model AiProvider {
+  id   String         @id @default(cuid())
+  kind AiProviderKind
+
+  label   String  @db.VarChar(80)
+  /// Overrides the SDK default. Normalised at the point of USE, not on save
+  /// (the trailing-slash lesson, DEVLOG 2026-09-14).
+  baseUrl String? @db.VarChar(255)
+
+  /// ADR-098: AES-256-GCM under AI_SECRET_KEY. Write-only in the UI;
+  /// loadProviderDriver() is the ONE reader; AiProviderView has no key
+  /// property at all.
+  apiKeyCipher String? @db.Text
+
+  isEnabled Boolean @default(false)
+  /// Exactly one row may be true. Enforced in the service inside a
+  /// transaction, not by a constraint: MySQL/MariaDB has no partial unique
+  /// index, and a nullable-unique trick would encode "default" as "not null",
+  /// which is a second meaning for a column that already has one.
+  isDefault Boolean @default(false)
+
+  lastTestAt    DateTime?
+  lastTestError String?   @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  models   AiModel[]
+  features AiFeature[]
+
+  @@index([isEnabled])
+  @@map("ai_providers")
+}
+
+/// A model the admin may select, and the price it is billed at (ADR-100 #2).
+model AiModel {
+  id         String @id @default(cuid())
+  providerId String
+  /// The provider's own id, e.g. "claude-opus-5". Never parsed, never
+  /// pattern-matched — a model id is an opaque string and every attempt to
+  /// derive meaning from its shape ages badly.
+  modelId    String @db.VarChar(80)
+  label      String @db.VarChar(80)
+
+  /// USD per 1M tokens. Decimal, not Float: ADR-087 #3's rule — a number a
+  /// human reconciles against an invoice does not live in binary floating
+  /// point.
+  inputPricePerMTok       Decimal  @db.Decimal(12, 6)
+  outputPricePerMTok      Decimal  @db.Decimal(12, 6)
+  /// Cache reads are ~0.1x input and cache writes ~1.25x; null means "price
+  /// them as input", which is the honest answer for a provider that does not
+  /// report them separately.
+  cachedInputPricePerMTok Decimal? @db.Decimal(12, 6)
+
+  /// The provider's own output ceiling. The effective ceiling is the MINIMUM
+  /// of this, the feature's, and the admin's ai.maxTokensPerRequest.
+  maxOutputTokens Int     @default(4096)
+  supportsVision  Boolean @default(false)
+  supportsStream  Boolean @default(true)
+
+  isEnabled Boolean  @default(true)
+  /// "Prices as of" — shown beside every spend figure (ADR-100 #2).
+  pricedAt  DateTime @default(now())
+  sortOrder Int      @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  provider AiProvider  @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  features AiFeature[]
+
+  @@unique([providerId, modelId])
+  @@index([isEnabled, sortOrder])
+  @@map("ai_models")
+}
+
+/// One AI_FEATURES key. The row holds policy; the registry holds behaviour
+/// (ADR-097 #3). A row for an unknown key is ignored by every reader, the way
+/// an unknown Tool key is (ADR-086 #1).
+model AiFeature {
+  key String @id @db.VarChar(40)
+
+  isEnabled Boolean @default(false)
+
+  /// Null = use the default provider / that provider's default model.
+  providerId String?
+  modelId    String?
+
+  /// Null = the feature's registry ceiling.
+  maxOutputTokens Int?
+
+  /// Appended to the system prompt, escaped, hard-capped at 1000 chars, and
+  /// validated by the same schema the form and the action use. It is for
+  /// house style ("British spelling, never use the word delve"), NOT for
+  /// replacing the instruction: an admin who can rewrite the whole prompt is
+  /// an admin who can turn the summariser into a general chatbot billed to
+  /// the company, which is behaviour, and behaviour is code (ADR-042).
+  extraInstructions String? @db.VarChar(1000)
+
+  updatedAt DateTime @updatedAt
+
+  provider AiProvider? @relation(fields: [providerId], references: [id], onDelete: SetNull)
+  model    AiModel?    @relation(fields: [modelId], references: [id], onDelete: SetNull)
+
+  @@map("ai_features")
+}
+
+/// One call. Holds NO prompt and NO completion (ADR-097 #7). Purged at 90 days
+/// by the housekeeping sweep; the rollups survive it.
+model AiUsage {
+  id String @id @default(cuid())
+
+  feature  String         @db.VarChar(40)
+  provider AiProviderKind
+  /// Denormalised strings, not FKs: this row must still read correctly after
+  /// a provider or model row is deleted. EmailDelivery makes the same call
+  /// for the same reason.
+  modelId  String         @db.VarChar(80)
+
+  status AiCallStatus
+  /// Machine-readable taxonomy — "rate_limited", "provider_timeout",
+  /// "budget_exceeded", "provider_error", … Never a raw provider message,
+  /// which can quote the prompt back.
+  reason String? @db.VarChar(80)
+
+  inputTokens       Int @default(0)
+  outputTokens      Int @default(0)
+  cachedInputTokens Int @default(0)
+
+  /// Frozen at write time (ADR-100 #3).
+  costUsd    Decimal @default(0) @db.Decimal(12, 6)
+  durationMs Int     @default(0)
+
+  /// The admin who triggered it. SetNull: a deleted staff account must not
+  /// delete the spend record it caused.
+  userId String?
+  /// What it was about — "article" / "media" / "lesson" + the id. Optional
+  /// because "draft me an intro" is about nothing yet.
+  entityType String? @db.VarChar(40)
+  entityId   String? @db.VarChar(40)
+
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([feature, createdAt])
+  @@index([userId, createdAt])
+  @@map("ai_usage")
+}
+
+/// The dashboard's source, and the reason retention does not erase spend
+/// history (ADR-097 #7). Written in the same transaction as the AiUsage row.
+model AiUsageDaily {
+  id   String   @id @default(cuid())
+  /// UTC day. Every window in this platform is UTC, including the budget
+  /// month — a spend cap that moves with a viewer's timezone is two caps.
+  date DateTime @db.Date
+
+  feature  String         @db.VarChar(40)
+  provider AiProviderKind
+  modelId  String         @db.VarChar(80)
+
+  calls             Int @default(0)
+  failures          Int @default(0)
+  inputTokens       Int @default(0)
+  outputTokens      Int @default(0)
+  cachedInputTokens Int @default(0)
+
+  costUsd Decimal @default(0) @db.Decimal(14, 6)
+
+  @@unique([date, feature, provider, modelId])
+  @@index([date])
+  @@map("ai_usage_daily")
+}
+
+/// The budget month: one row, read on EVERY call before the provider is
+/// touched, so the check is a single indexed row read rather than a sum.
+model AiBudgetPeriod {
+  /// "YYYY-MM", UTC.
+  period String @id @db.VarChar(7)
+
+  costUsd Decimal @default(0) @db.Decimal(14, 6)
+  calls   Int     @default(0)
+
+  /// The cap in force when the period started — copied, not read live, so
+  /// raising the cap mid-month is an explicit act (it rewrites this column
+  /// through the settings screen) rather than a silent retroactive one.
+  budgetUsd Decimal @default(0) @db.Decimal(14, 6)
+
+  warnedAt     DateTime?
+  capReachedAt DateTime?
+  /// Dedupe for the admin notice: notified once per period, not once per
+  /// blocked call. Without it a capped platform sends a notification storm.
+  notifiedAt   DateTime?
+
+  updatedAt DateTime @updatedAt
+
+  @@map("ai_budget_periods")
 }
