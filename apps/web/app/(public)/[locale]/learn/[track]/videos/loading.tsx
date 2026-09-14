@@ -15,6 +15,7 @@
 import { Container } from "@repo/ui/components/container";
 import { Section } from "@repo/ui/components/section";
 import { Skeleton } from "@repo/ui/components/skeleton";
+import { VideoCardSkeleton } from "@repo/ui/components/video-card";
 
 export default function VideoIndexLoading() {
   return (
@@ -31,21 +32,6 @@ export default function VideoIndexLoading() {
         </Container>
       </Section>
 
-      {/* The counted-figures strip. */}
-      <Section spacing="sm" tone="muted">
-        <Container>
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
-            {Array.from({ length: 3 }, (_, index) => (
-              <div key={index} className="flex flex-col items-center gap-2">
-                <Skeleton className="shimmer size-10 rounded-full" />
-                <Skeleton className="shimmer h-8 w-16" />
-                <Skeleton className="shimmer h-4 w-24" />
-              </div>
-            ))}
-          </div>
-        </Container>
-      </Section>
-
       {/* The category chip row, then the grid. */}
       <Section spacing="md">
         <Container className="flex flex-col gap-6">
@@ -54,29 +40,13 @@ export default function VideoIndexLoading() {
               <Skeleton key={index} className="shimmer h-8 w-32 rounded-full" />
             ))}
           </div>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 6 }, (_, index) => (
               <VideoCardSkeleton key={index} />
             ))}
           </div>
         </Container>
       </Section>
-    </div>
-  );
-}
-
-/** The card's anatomy: a 16:9 thumbnail over a short copy column. Shorter than
- * the quiz card's because there is no meter and no CTA row under it — the play
- * control lives ON the thumbnail (ADR-068 §7), not below it. */
-function VideoCardSkeleton() {
-  return (
-    <div className="flex flex-col rounded-2xl bg-card ring-1 ring-foreground/10">
-      <Skeleton className="shimmer aspect-video w-full rounded-t-2xl" />
-      <div className="flex flex-col gap-2.5 p-5">
-        <Skeleton className="shimmer h-5 w-44" />
-        <Skeleton className="shimmer h-4 w-full" />
-        <Skeleton className="shimmer h-4 w-2/3" />
-      </div>
     </div>
   );
 }

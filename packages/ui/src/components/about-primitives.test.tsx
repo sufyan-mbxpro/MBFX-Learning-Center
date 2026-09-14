@@ -220,3 +220,26 @@ describe("SplitCallout", () => {
     expect(container.innerHTML).not.toContain("flex-row-reverse");
   });
 });
+
+// Both densities in one assertion, because the claim is comparative: the
+// point of `compact` is that it is SHORTER, and a test that only checked it
+// renders `section-sm` would still pass if the default ever moved down to
+// meet it. Container queries only — two renders are two containers, and a
+// `screen` query by role would match both.
+describe("PageHero — density", () => {
+  it("has two vertical densities, and changes only the height between them", () => {
+    const tall = render(<PageHero title="About MBX" lead="Who we are." />).container;
+    const thin = render(<PageHero size="compact" title="About MBX" lead="Who we are." />).container;
+
+    const band = (c: HTMLElement) => c.querySelector("[data-slot=page-hero]")?.className ?? "";
+    expect(band(tall)).toContain("section-lg");
+    expect(band(thin)).toContain("section-sm");
+    expect(band(thin)).not.toContain("section-lg");
+
+    // ADR-072: a band that is too tall gets its SPACING fixed, never a
+    // private font size. Both densities keep the same headline step.
+    for (const container of [tall, thin]) {
+      expect(container.querySelector("h1")?.className).toContain("text-display-md");
+    }
+  });
+});

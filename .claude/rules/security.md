@@ -45,12 +45,40 @@ Non-negotiable. A PR violating any numbered rule here does not merge.
 10. Secrets live in environment variables, never in the database, never in
     `NEXT_PUBLIC_*`, never committed. `.env.example` carries names only.
     `SEED_ADMIN_PASSWORD` is dev-only; omit in production and force reset.
+
+    **Two exceptions, and only two.**
+
+    **ADR-078: the SMTP password.** Stored in
+    `EmailTransport.passwordCipher`, AES-256-GCM-sealed under
+    `EMAIL_SECRET_KEY` — which is itself env-only. It is write-only in the
+    UI, `loadTransportDriver()` is its only reader, and `EmailTransportView`
+    has no password property. Editing the transport is **super_admin-only**,
+    because the _host_ is an escalation path: repointing delivery captures
+    the next password-reset link.
+
+    **ADR-087: the market data provider key.** Stored in
+    `MarketProvider.apiKeyCipher`, sealed the same way under
+    `MARKET_SECRET_KEY`, write-only, with `loadProviderDriver()` its only
+    reader and no key property on `MarketProviderView`. It is gated on
+    **`market.providers.manage`, not super_admin** — a read-only quote key
+    captures nothing and nothing is delivered TO a user through this host,
+    so the narrower harm gets the narrower gate. Both packages seal through
+    `@repo/secrets`; neither owns a copy of the primitive.
+
+    Nothing else may follow this path without its own ADR, which must state
+    why the secret cannot live in env, name its single reader, and justify
+    its gate by blast radius (ADR-087 #5).
+
 11. Sessions are database-backed (revocable). httpOnly cookies on web; tokens
     never in localStorage. Argon2id for password hashing.
 12. Non-public settings (`isPublic: false`) must never serialize into RSC
     payloads of public pages (leak test in Module 05).
 13. Rate limiting on sign-in/up/reset per IP and per account; lockout uses
-    exponential backoff, never a hard lock (self-DoS).
+    exponential backoff, never a hard lock (self-DoS). **Both limits, not
+    one** (ADR-079): per-IP stops one attacker, per-account stops a
+    distributed mail-bomb aimed at one address. This covers
+    `/request-password-reset`, `/send-verification-email` and newsletter
+    signup, whose per-email limit is the same idea without an account.
 
 ## Headers & supply chain
 

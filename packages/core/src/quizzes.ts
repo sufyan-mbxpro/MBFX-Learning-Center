@@ -20,10 +20,10 @@ import { revalidateTag } from "next/cache";
 import { cacheLife, cacheTag } from "next/cache";
 import {
   ContentStatus,
-  FeatureVisibility,
   LessonProgressStatus,
   TranslationStatus,
   db,
+  type FeatureVisibility,
   type Prisma,
   type QuestionType,
 } from "@repo/db";
@@ -48,10 +48,13 @@ import { answerValueSchema, isLearnTrack } from "@repo/contracts";
 import {
   CONTENT_TRANSITIONS,
   createSlugRedirect,
-  scheduledVisibilityOr,
   slugify,
   transitionContentStatus,
 } from "./content.ts";
+import { publicLessonWhere } from "./public-courses.ts";
+// `publicQuizWhere` lives in a leaf module so the content loaders can read it
+// without closing a cycle back through this file (ADR-084 #1).
+import { publicQuizWhere } from "./quiz-links.ts";
 import { recomputeCourseCompletion } from "./progress.ts";
 import { recordAudit } from "./index.ts";
 
@@ -171,15 +174,6 @@ async function localeContext(): Promise<LocaleContext> {
   return {
     locales: locales.map((l) => ({ code: l.code, fallbackCode: l.fallbackCode })),
     defaultLocale: locales.find((l) => l.isDefault)?.code ?? "en",
-  };
-}
-
-/** The public rule, identical in shape to `publicCourseWhere()`. */
-export function publicQuizWhere(now: Date = new Date()) {
-  return {
-    deletedAt: null,
-    OR: scheduledVisibilityOr(now),
-    visibility: FeatureVisibility.PUBLIC,
   };
 }
 
@@ -1127,9 +1121,12 @@ async function applyQuizPass(userId: string, quizId: string): Promise<void> {
     where: {
       quizId,
       completionRule: "QUIZ_PASS",
-      deletedAt: null,
-      status: ContentStatus.PUBLISHED,
-      visibility: FeatureVisibility.PUBLIC,
+      // `publicLessonWhere()`, not a bare `status: PUBLISHED` (changes-22's
+      // scheduling audit): ADR-071 made a due SCHEDULED lesson live, and the
+      // learner reading one is looking at a page that is on the site. Passing
+      // its quiz has to credit it, or completion depends on whether the
+      // optional sweep has run — which ADR-071 is explicit it must not.
+      ...publicLessonWhere(),
       section: { isPublished: true },
     },
     select: { id: true, section: { select: { courseId: true } } },

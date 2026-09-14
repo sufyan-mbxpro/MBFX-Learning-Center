@@ -24,7 +24,7 @@ import { Empty, EmptyDescription, EmptyMedia, EmptyTitle } from "@repo/ui/compon
 import { ResetPasswordDialog } from "../_components/reset-password-dialog.tsx";
 import { setUserStatusAction } from "../_actions/user-actions.ts";
 import { AdminCombobox } from "../_components/combobox.tsx";
-import { FilterBar } from "../_components/filter-bar.tsx";
+import { FilterBarRow } from "@repo/ui/components/filter-bar";
 import { StatusBadge, USER_STATUS_TONE, statusTone } from "../_components/status-badge.tsx";
 import { useServerAction } from "../_hooks/use-server-action.ts";
 import { useUrlFilters } from "../_hooks/use-url-filters.ts";
@@ -264,7 +264,7 @@ export function UsersTable({
         data={rows}
         labels={tableLabels}
         filters={
-          <FilterBar>
+          <FilterBarRow>
             <AdminCombobox
               aria-label={labels.type}
               className="w-40"
@@ -285,7 +285,7 @@ export function UsersTable({
                 ...Object.entries(labels.statusLabels).map(([value, label]) => ({ value, label })),
               ]}
             />
-          </FilterBar>
+          </FilterBarRow>
         }
         pageCount={pageCount}
         pagination={pagination}

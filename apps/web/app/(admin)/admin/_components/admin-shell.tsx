@@ -32,6 +32,7 @@ interface NavEntryDef {
     | "users"
     | "roles"
     | "employees"
+    | "newsletter"
     | "glossary"
     | "glossaryTopics"
     | "learnCourses"
@@ -43,6 +44,8 @@ interface NavEntryDef {
     | "articles"
     | "websiteMedia"
     | "website"
+    | "market"
+    | "tools"
     | "settings"
     | "features"
     | "navigation"
@@ -74,6 +77,15 @@ const ADMIN_NAV_GROUPS: {
         labelKey: "employees",
         icon: "employees",
         permission: "employees.view",
+      },
+      // Subscribers (ADR-080 #7). Under People rather than System: a
+      // newsletter list is an AUDIENCE, and the person who curates it is the
+      // one who manages users — not the one who can repoint the SMTP host.
+      {
+        href: "/admin/newsletter",
+        labelKey: "newsletter",
+        icon: "newsletter",
+        permission: "newsletter.view",
       },
     ],
   },
@@ -171,6 +183,24 @@ const ADMIN_NAV_GROUPS: {
         icon: "articles",
         permission: ["analysis.view", "news.manage"],
       },
+      // Trading tools (Module 13, ADR-086). Its OWN permission group, the
+      // fourteenth, because this screen governs nothing market.* does: the
+      // words on a tool page and whether the site offers it at all.
+      {
+        href: "/admin/tools",
+        labelKey: "tools",
+        icon: "tools",
+        permission: "tools.view",
+      },
+      // Market data (Module 13, ADR-087). Its own destination rather than a
+      // settings card: instruments are content an editor curates, and the
+      // provider behind them is a credential, which a card grid buries.
+      {
+        href: "/admin/market",
+        labelKey: "market",
+        icon: "market",
+        permission: "market.view",
+      },
       // Website builder (Module 16) — paused, ADR-037. Kept in the array
       // (rather than deleted) so re-enabling is a one-line flip of
       // WEBSITE_BUILDER_ADMIN_UI_ENABLED above.
@@ -193,11 +223,14 @@ const ADMIN_NAV_GROUPS: {
       // duplicating them here just re-lists the same destinations twice.
       // The settings hub also fronts social links (social.manage) — anyone
       // holding either key gets the entry; each sub-page re-checks its own.
+      // `email.log.view` is here for the same reason: `support` holds it and
+      // nothing else under settings (ADR-078 #4), so without it the one key
+      // that role was granted would have no route to reach.
       {
         href: "/admin/settings",
         labelKey: "settings",
         icon: "settings",
-        permission: ["settings.view", "social.manage"],
+        permission: ["settings.view", "social.manage", "email.log.view"],
       },
     ],
   },
@@ -309,7 +342,7 @@ export async function AdminShell({
         }}
       />
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex h-[var(--height-header)] items-center gap-3 border-b bg-background/95 px-4 backdrop-blur md:gap-4 md:px-6">
+        <header className="sticky top-0 z-30 flex h-(--height-header) items-center gap-3 border-b bg-background/95 px-4 backdrop-blur md:gap-4 md:px-6">
           <AdminMobileNav
             groups={groups}
             visitSite={visitSite}
@@ -362,7 +395,7 @@ export async function AdminShell({
         <div className="border-b px-4 py-2 md:px-6">
           <AdminBreadcrumbs />
         </div>
-        <main className="flex-1 p-4 md:p-6">{children}</main>
+        <main className="flex-1 p-4 md:p-6 lg:p-8">{children}</main>
       </div>
     </div>
   );

@@ -14,6 +14,12 @@
 // for, and the same six tones are used by the stat tiles and the intent
 // buttons so one vocabulary runs through the whole screen.
 import type { ComponentType } from "react";
+import {
+  Field as FieldRoot,
+  FieldDescription,
+  FieldError,
+  FieldLabel,
+} from "@repo/ui/components/field";
 import { cn } from "@repo/ui/lib/utils";
 
 export type SectionAccent = "primary" | "success" | "warning" | "info" | "danger" | "neutral";
@@ -45,7 +51,9 @@ const ACCENT_MEDIA: Record<SectionAccent, string> = {
   success: "bg-success/15 text-success-interactive ring-1 ring-success/25",
   warning: "bg-warning/15 text-warning-interactive ring-1 ring-warning/25",
   info: "bg-info/15 text-info-interactive ring-1 ring-info/25",
-  danger: "bg-destructive/15 text-destructive ring-1 ring-destructive/25",
+  // The danger tile takes ADR-073's destructive tint (/10 + the -interactive
+  // ink): raw --destructive fails 4.5:1 on the dark ground (audit F-03).
+  danger: "bg-destructive/10 text-destructive-interactive ring-1 ring-destructive/25",
   neutral: "bg-background text-muted-foreground ring-1 ring-border",
 };
 
@@ -125,33 +133,41 @@ export function EditorSection({
  * A field group inside a section — a label row plus its control, with the
  * optional end-aligned adornment (character counts, hints) the editor uses
  * in a dozen places.
+ *
+ * ADR-077: a thin shape over @repo/ui's Field, so the editors keep their
+ * one-line call sites and still get the wiring — the label names the
+ * control, `required` draws the asterisk and marks the control, `error`
+ * turns it invalid and joins the message to its aria-describedby, and the
+ * hint joins it too. `id` only matters when something else needs the
+ * control's id; the control itself no longer has to repeat it.
  */
 export function Field({
   id,
   label,
   hint,
   adornment,
+  required,
+  error,
   children,
 }: {
   id?: string;
   label: string;
   hint?: string;
   adornment?: React.ReactNode;
+  required?: boolean;
+  /** The inline message, from the editor's `useFieldErrors`. */
+  error?: string;
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex min-w-0 flex-col gap-1.5">
+    <FieldRoot controlId={id} invalid={Boolean(error)} required={required} className="min-w-0">
       <div className="flex items-center justify-between gap-2">
-        <label
-          className="text-sm leading-none font-medium select-none"
-          {...(id ? { htmlFor: id } : {})}
-        >
-          {label}
-        </label>
+        <FieldLabel>{label}</FieldLabel>
         {adornment}
       </div>
       {children}
-      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
-    </div>
+      {hint && <FieldDescription className="text-xs">{hint}</FieldDescription>}
+      <FieldError>{error}</FieldError>
+    </FieldRoot>
   );
 }

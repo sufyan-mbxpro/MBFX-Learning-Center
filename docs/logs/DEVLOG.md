@@ -14272,3 +14272,3813 @@ reference. Per the owner's Q13 decision it is admin-only, English-only and
   No committed code references them yet, so committing this page alone
   would leave `main` failing to build until those are committed. The commit
   waits on the owner's choice.
+
+## 2026-09-11 — changes-20 Phase 5: the screens adopt the design system (Modules 07/09/12, no new ADR)
+
+The owner committed the outstanding work (`2c0feda`, which also carries
+Phase 4), and the two remaining blockers were cleared:
+
+- **The database is reseeded.** `pnpm db:seed` rewrote the default `Theme`
+  row. A read-only query confirms the ADR-072 values (input border `#7F8FA5`,
+  dark background `#020817`, 6px radius). The page kept serving the old
+  tokens for a while because the theme read is `"use cache"` with a one-hour
+  life, and the seed writes the database without invalidating the `theme`
+  tag. It is live now (`--input:#7F8FA5`, `--radius:6px` on `/glossary`).
+  Expect the same lag after any future reseed: restart `pnpm dev` or save
+  the theme once.
+- **The kitchen sink is deleted** (`admin/%5Fdev`). `/admin/design-system`
+  replaced it in Phase 4; the UI skill's two references are updated.
+
+The brief lists no phases, so Phase 5's scope was written down first as a
+PR checklist: `docs/changes/changes-20-phase-5-plan.md`. It collects every
+"Found, not fixed here (Phase 5)" hand-off from the Phase 2–4 entries and
+every local component that duplicated a Phase 3 one.
+
+### 5.1 The admin frame is `@repo/ui`
+
+Each change is made once, in a wrapper, and every screen follows:
+
+- **`AdminPage` / `AdminPageHeading` compose `PageHeader`** (34 screens): the
+  30px bold title and 16px description, with status chips (`meta`) beside
+  the description as the reference places them. `PageHeader` gains
+  `titleRender` so a screen whose h1 lives elsewhere can render an h2.
+- **`AdminSection` is a `Card`** (12 files): the 24px rhythm replaces the
+  hand-typed `p-5`, and the title is `SectionTitle`, CardTitle's recipe as a
+  real `<h2>`. A new `cardClassName` separates card sizing (`lg:w-72`) from
+  content layout, and profile and role detail are updated for it.
+- **Breadcrumbs** are `Breadcrumb*`: chevron separators mirrored in RTL.
+  Unmapped segments now go through `humanizeKey` instead of rendering raw
+  (ADR-044 #5), and the learn, media, video and design-system segments are
+  labelled.
+- **The sidebar** uses `NavItem` (40px rows, the `nav` step, `--accent`
+  states). The collapsed rail stays icon-only with `aria-label`, and group
+  headings are `MicroHeading`. The shell follows §3.1: a 64px logo band, a
+  `px-3` scroll area, a `p-4` footer with a full-width outline sign-out, and
+  main at `lg:p-8`.
+- **Stat tiles are `MetricCard`.** Icons use each hue's `-interactive` ink,
+  since a raw hue on a thin glyph broke ADR-018 rule 5. The trend moved into
+  the meta line.
+- **The local `FilterBar` is deleted.** All eight DataTable screens now use
+  `FilterBarRow`.
+- **Token references use the `(--x)` form, never `[var(--x)]`**, in the
+  shell, the mobile nav, the article editor and the public header.
+
+**ADR-075's card-title calls, made:**
+
+| Screen           | Cards                        | Title                                             |
+| ---------------- | ---------------------------- | ------------------------------------------------- |
+| Dashboard        | growth chart, article status | `SectionTitleCompact` with an icon                |
+| Dashboard        | recent activity              | full title (the reference's "Live Activity Feed") |
+| Learn → Progress | the four analytics cards     | `SectionTitleCompact`                             |
+| Settings hub     | category tiles               | `Card size="sm"`                                  |
+
+The dashboard's ring-drawn link tiles are now `Card size="sm"`. Learn →
+Progress's hand-built `<table>` is now `@repo/ui`'s `Table`, edge to edge in
+its card (§3.2).
+
+### 5.2 Admin screens
+
+- The media library and media picker searches are `SearchInput`. The
+  library's field also gained the `aria-label` it was missing.
+- The bell's hand-built red badge with `text-[0.625rem]` is `CountBadge`,
+  capped at 999+ as in the reference.
+
+### 5.3 Public call sites
+
+- **Mobile nav sheet:**
+  - The Sheet's own width and padding apply; the sheet no longer sets
+    `w-[min(22rem,90vw)]` or a second `p-4`.
+  - The "Open menu" title is `sr-only`. It still names the dialog but no
+    longer repeats the trigger as a heading.
+  - Accordion rows and plain links start at the same inset.
+- **The lesson contents sheet** likewise uses the Sheet's own width and
+  padding.
+- **`ArticleCards`, the homepage news rails and /news:** the call-site
+  `gap-0 py-0` / `p-5` / `p-3` padding is gone.
+  - `Card` now drops its top padding for a `data-slot="card-media"` first
+    child, not only a bare `<img>`.
+  - A standard card is cover plus `CardContent`; a compact row is a
+    `size="sm"` card.
+  - The hover sweep moved after the body, so the cover stays the first
+    child.
+- **CourseCard level chips** sit on an opaque `bg-background` ground. The
+  /10 tint composited over artwork (3.9–4.1:1 in dark mode, Phase 3); on the
+  page background it composites onto the surface ADR-073 derives against.
+- The glossary and course-shelf searches are `SearchInput`; their clear
+  buttons are unchanged.
+
+### Verified
+
+- `@repo/ui`: **330/330**. New assertions: `PageHeader`'s `titleRender`
+  swaps the tag and keeps the recipe, `Card`'s `card-media` rule, and the
+  CourseCard chip ground.
+- `@repo/web`: **464/464**, including the new
+  `admin-page-conventions.test.ts` (172 cases):
+  - every live admin screen passes a title AND a description. The paused
+    and cancelled surfaces are excluded, as in ADR-044;
+  - the wrappers compose `PageHeader`, `Card`, `NavItem`, `Breadcrumb` and
+    `MetricCard`;
+  - no local `filter-bar.tsx`;
+  - no `[var(--x)]` token references. On its first run it caught the
+    article editor's sticky bar, which is fixed rather than excluded.
+- `typecheck` clean (`@repo/web`, `@repo/ui`); `lint` clean on every touched
+  file.
+- **Live:**
+  - `/`, `/news`, `/glossary`, `/learn` and `/learn/forex` all answer 200.
+  - `/news` renders 4 `card-media` covers, and the compiled CSS carries
+    `:has(> [data-slot="card-media"]:first-child)`.
+  - `/glossary` renders the `SearchInput`.
+  - `/admin` answers with the STAFF-gate redirect.
+  - The admin screens need a staff session, so their visual check is the
+    owner's, as in Phase 4.
+
+### Found, not fixed here
+
+- **The Accordion was never restyled in Phase 3.** It still carries
+  base-nova's `ring-3 ring-ring/50` focus and `hover:underline`, where
+  §6.14 specifies the 2px offset ring. That is a component-group fix.
+- **The media picker's header band** (`bg-primary/8`) is a tint step
+  ADR-073 retired (/10 rest, /15 hover) and a band ADR-075 removed from
+  cards. It is the dialog's own chrome, so it is left for a conscious
+  decision rather than changed silently.
+- **The remaining arbitrary values** are grid templates
+  (`lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]`, 7 admin editors),
+  transition lists and viewport heights (`min-h-[50vh]`). None has a token
+  equivalent, so Phase 6 has to allow-list or name them before its lint can
+  ban `-[…]`.
+
+### Owed
+
+- The owner's visual pass on the admin screens (staff session).
+- The post-Phase-5 public spacing pass (ADR-072 §7), then Phase 6 (lint).
+
+## 2026-09-11 — changes-20 Phase 6: the design system is enforced; the Phase 5 leftovers are fixed; phones stop scrolling sideways (Modules 07/09/12, no new ADR)
+
+The owner asked for Phase 5's three "found, not fixed" items first, then the
+next phase. All three are fixed, and Phase 6 (enforcement) followed.
+ADR-072 §10 had already decided the ban and the allowed `(--token)` form, so
+no new ADR was needed; the conventions are code-style #21–#23.
+
+### The Phase 5 leftovers
+
+- **Accordion.** Its recipe was fetched from shadcn's registry, the
+  capture-2 method (ADR-074), and it corrects the earlier note:
+  `hover:underline` **is** the reference's, not a leftover. The real
+  differences were a divider under _every_ item, a `py-4` centred trigger,
+  one chevron turning 180° (it had swapped two icons), `pb-4` content, and
+  the focus ring: base-nova's `ring-3 ring-ring/50` becomes our 2px offset
+  ring. The mobile nav opts out of the divider (`border-b-0`), because each
+  of its sections is its own one-item accordion and a rule under some rows
+  would split one list into two.
+- **The media picker's header band** goes. A dialog's header in §6.14 has no
+  band, and this was the one modal that borrowed `EditorSection`'s. The
+  editor's own section bands stay: they are a separate changes-10 decision,
+  and they carry foreground text rather than tonal ink on a Card, so neither
+  ADR-073 nor ADR-075 retires them. One real ADR-073 miss was fixed on the
+  way: a warning note used `-interactive` ink on `bg-warning/8`, below the
+  /10 step the ink is derived against.
+- **Arbitrary values: 113 → 0.** The inventory used the lint's own rule, so
+  the two cannot disagree: a class whose bracket CLOSES it is a value, and a
+  bracket followed by `:` or `/` is a variant (see the lint below). The
+  replacements, in order of preference:
+  - **The scale:** `aspect-4/3`, `opacity-14`, `hover:scale-103`, `z-2`,
+    `h-180`/`h-208`/`h-232`/`h-18`, `w-43/50`, `before:-top-2.5`.
+  - **Design-system steps:** `text-3xs`, a new `text-display-numeral` (the
+    SplitCallout step figure, set as artwork), and `tracking-caps`, which
+    unifies the footer's 0.12em and 0.14em.
+  - **The plain `transition` utility** for every colour/shadow/transform
+    list; `transition-shadow` for `[box-shadow]`.
+  - **Named layout tokens** in `globals.css` `:root`, read as `(--name)`:
+    `--grid-main-aside`/`-wide`, `--grid-2-1`, `--grid-3-2` (which also
+    absorbs `1.55fr_1fr` and `3fr_2fr`), `--grid-intro-main`,
+    `--grid-rail-main`, `--grid-menu-main`, `--grid-label-value`, the card
+    header's `--grid-fill-auto`/`--grid-auto-auto`,
+    `--width-panel`/`-compact`, `--width-slide-2`/`-3`,
+    `--height-half-screen`, `--height-scroll-panel`,
+    `--safe-area-bottom`/`-3`, and `--transition-size`/`-geometry`. They
+    live in `:root`, not `@theme`, for the namespace-collision reason the
+    file already documents.
+  - **The empty-content classes on `before:`/`after:` are deleted**
+    outright: Tailwind v4's pseudo-element variants supply `content`
+    themselves. Verified in the browser: the course and quiz cards'
+    stretched links still render `content: ""` over the whole card.
+  - **`content-placeholder`** is the one real `@utility`, because `attr()`
+    cannot travel through a custom property.
+
+### Phase 6: the lint
+
+- **`noArbitraryValueRule`** (react-internal config, so `@repo/ui`,
+  `@repo/blocks` and `apps/web`) flags a `Literal` or `TemplateElement`
+  holding a class whose bracket closes it. It deliberately does not flag
+  arbitrary variants (`data-[side=top]:`, `has-[>img:first-child]:`,
+  `group-data-[size=sm]/card:`), which shadcn's own recipes are built from,
+  nor `(--token)` references or `[--x:…]` custom-property definitions.
+  - Tests are exempt, because a guard has to name the class it forbids.
+  - The Website Builder and homepage composer are exempt
+    (`retainedSurfacesRule`), the same scope as ADR-057's rule.
+  - A probe file confirmed it flags `w-[150px]`, `lg:grid-cols-[…]` and a
+    template literal, and passes every variant form.
+- **`noOtherIconLibraries`** (base config): `react-icons`, heroicons, Radix,
+  Tabler, Phosphor, Feather, FontAwesome, MUI and Iconify imports fail.
+  - `adminComboboxRule` replaces `no-restricted-imports` wholesale, so it
+    re-lists the ban.
+  - A probe in `app/(admin)` confirmed both rules fire through that
+    override.
+
+### The phone-width browser pass, and the bug it kept finding
+
+Chrome DevTools, then Playwright when this session had no DevTools, probed
+16 public routes at 390 and 1440px. Each check measured whether the page
+scrolls sideways and which element, outside any clipping ancestor, causes
+it.
+
+- **The same bug, three times.** The homepage's news rail was a 1307px
+  track in a 460px list; the /news spotlight overflowed by 85px; the /news
+  page grid by 8px. All three are `grid lg:grid-cols-…` with no base
+  columns. Below the breakpoint that is one implicit `auto` track sized to
+  its items' min-content, and Chrome reports a `line-clamp` excerpt's
+  min-content as its unwrapped width. None of it was from this work: the
+  excerpts and grids were untouched.
+  - **Fix everywhere, not per file.** All 90 grids of that shape now state
+    `grid-cols-1` (`minmax(0, 1fr)` in v4: the same column, but it cannot
+    outgrow its container). The footer's runtime-picked link grid was left
+    alone.
+  - **`grid-base.test.ts` guards it** (code-style #23), including a test
+    that the detector itself fires.
+- **The Reveal wobble.** A `Reveal variant="end"` rests 1.5rem toward the
+  inline end until it scrolls in (ADR-018), so /about/\* and
+  /economic-calendar scrolled 8px sideways on a phone.
+  - The public layout's content wrapper now has `overflow-x-clip`.
+  - `clip`, not `hidden`, keeps it from being a scroll container, and the
+    browser confirmed it: the glossary letter bar pins at 64px and the learn
+    section bar at 65px after a 1600px scroll. The /news sidebar stops where
+    its column ends, bottom 858 = parent 858, which is correct.
+- **A clipped headline.** The /news "Latest posts" row had no `min-w-0`, so
+  a long headline ran past the card (row 270px, content 332px) and
+  `overflow-hidden` cut it mid-word. ADR-075's 24px card rhythm, which
+  narrowed that card, exposed it. Fixed, with `article-sidebar.test.ts` as
+  the regression test.
+- **Result:** every route is at 0px overflow at both widths.
+  `/economic-calendar` cannot be framed (its third-party embed), so it was
+  checked by direct navigation.
+
+### Verified
+
+- `@repo/ui` **334/334**, run in batches (the full run crashes Node on this
+  machine). `accordion` anatomy is new, and `type-scale.test.ts` passes
+  with the new display step.
+- `@repo/web` **469/469**: `grid-base.test.ts` and `article-sidebar.test.ts`
+  are new.
+- `typecheck` clean (`@repo/web`, `@repo/ui`, `@repo/blocks`); `eslint .`
+  clean in all three with both new rules on; Prettier clean on every touched
+  file.
+- **Live:** the named utilities resolve in the browser. The `lg:` grids
+  compute to 777.6/518.4px (3:2) and 960/320px (20rem). `tracking-caps` is
+  2.24px at 16px, `h-180` is 720px, the numeral is 160px, and both
+  transition lists apply. A cover card has 0 top padding with its cover
+  flush to the border.
+
+### Note for the owner
+
+The dev server exited mid-pass: a sweep compiled 15 routes back to back. It
+was restarted in the background from the Claude session to finish the
+check. If you run `pnpm dev` in your own terminal, stop that one first or
+the ports will collide.
+
+### Owed
+
+- The admin screens still need a visual check with a staff session.
+- Commit (not done; awaiting the owner).
+
+## 2026-09-11 — changes-20: the admin visual pass, and the Sign out button that never signed anyone out (Modules 07/09/04, no new ADR)
+
+Phase 6 owed an admin visual check "with a staff session". It is done: every
+admin screen at 1440px and the shell, lists, detail pages and editors at 390px
+(device emulation), in the running app. The session came from the seeded dev
+account, signed in from the shell so the password never entered the
+transcript; every session this pass created was revoked afterwards (see
+below).
+
+### What the pass confirmed
+
+At 1440px, all 21 sidebar screens, 4 editors and the detail pages had 0px
+overflow, exactly one h1, a description, and a sensible breadcrumb. The new
+frame renders as specified: the 30/16px header, `MetricCard`s, compact chart
+titles, 40px `NavItem` rows, the chevron breadcrumb and the compact
+`DataTable`. `/admin/roles/super_admin` reads "Super Admin" (ADR-044 #5). The
+named grid tokens resolve in the editors: 2:1 at 731/366px, and the article
+editor's wide aside at 352px.
+
+### Found and fixed (each with its regression test)
+
+- **Sign out did not sign out. Security, and it predates changes-20.**
+  - Four call sites POSTed `/api/auth/sign-out` with no body: the sidebar
+    button, the profile menu, the **ADR-041 idle timeout**, and
+    `signOutSilently` (ADR-052's wrong-surface turn-away).
+  - Better Auth answers that with **415** and leaves the session valid. This
+    was reproduced against the running handler: 415, then `get-session`
+    still returned the session.
+  - So every sign-out navigated away from a live session. The database shows
+    the footprint: **about 110 unexpired sessions** accumulated since
+    2026-09-07.
+  - Fix: one `signOut()` in `app/_lib/credentials.ts` that sends
+    `content-type: application/json` with `{}` and reports `response.ok`.
+    `signOutSilently` and all three admin call sites use it; the two whose
+    local handler is also named `signOut` import it as `endSession`.
+  - Verified end to end: clicking the real button revoked the session
+    (`get-session` returned none, and `/admin` with the old cookie redirected
+    with 307 to sign-in).
+  - `credentials.test.ts` pins the request and fails if any other file
+    hand-writes the sign-out call.
+- **Toolbar dropdowns were 40px beside a 36px search** (Users, and every
+  `DataTable` filter).
+  - New `@repo/ui` `ControlSizeProvider` / `useControlSize`
+    (`control-size.tsx`). `DataTable` wraps its `filters` slot in `sm`, and
+    `Combobox` reads the context; an explicit `size` still wins.
+  - No call site changed. The media library's hand-built toolbar now uses
+    `FilterBarRow` plus the provider.
+- **Every dropdown clipped a long value mid-letter** ("Pending
+  verificatior").
+  - The value slot was `flex` plus `line-clamp-1`. `line-clamp` needs a
+    `-webkit-box`, `flex` replaced it, and the clamp was inert.
+  - `SelectValue` and the Combobox value are now truncating blocks, and
+    option content is inline.
+  - The user-detail status, role and permission pickers also dropped their
+    fixed `w-44/48/56` (code-style #10: a form field flexes; only a toolbar
+    filter declares a width).
+- **The breadcrumb printed record ids** ("zwV2IP9bE6Ff…", against ADR-044
+  #5) and **linked "Learning" to `/admin/learn`**, which 404s.
+  - An id segment now reads `admin.breadcrumbDetail` ("Details").
+  - Page-less segments are listed in `GROUP_SEGMENTS` and render as text. A
+    test walks the admin tree and fails on any page-less folder missing from
+    the list.
+- **`/admin/design-system` rendered three h1s.** Its `PageHeader` specimens
+  now pass `titleRender={<h2 />}`.
+  - It also logged "runtime data in `generateMetadata()`" on every load. It
+    was the one admin page that reads nothing, so it was never
+    request-scoped. It now `await connection()`s, the dashboard's pattern,
+    and the console is clean.
+- **At 390px:**
+  - The top bar was 74px too wide. `Button`'s `shrink-0` held the ⌘K
+    trigger at 256px and pushed the theme toggle and avatar off-screen; it is
+    now `shrink`.
+  - The article editor's four SEO tabs made a 414px tray. `TabsList` now
+    scrolls within itself (`max-w-full overflow-x-auto`, start-justified).
+  - The media toolbar did not wrap: 116px of overflow.
+  - All three are now at 0px, as are the dashboard, the course editor, the
+    theme, the role detail, the progress page, the design-system board and
+    the user list.
+
+### Session hygiene
+
+- The browser session was signed out through the fixed request.
+- The two script-created sessions (user agent `node`, created today) were
+  deleted by exactly that filter.
+- **The ~110 older sessions are left alone.** They are yours, from before
+  the fix: `pnpm db:reset` or a targeted delete clears them if you want a
+  clean table.
+
+### Verified
+
+- `@repo/web` **480/480**. New tests cover the sign-out request and its
+  single call site, the breadcrumb id and group segments, the design-system
+  h1 and connection guard, and the top-bar shrink.
+- `@repo/ui` **337/337** (18 files, run in batches). New tests cover the
+  toolbar control size, the ellipsis value slot and the scrolling tab tray.
+- `typecheck` and `eslint .` clean on `@repo/web` and `@repo/ui`; Prettier
+  clean on every touched file; `governance:check` OK.
+
+### Owed
+
+- Commit (awaiting the owner).
+- Unchanged from before: axe, Lighthouse and E2E belong to Module 14.
+
+## 2026-09-11 — changes-20: the public spacing pass ADR-072 §7 owed, and the redesign closes (Modules 07/12, no new ADR)
+
+Phases 5, 6 and the admin visual pass are committed (`c0c309d`, branch
+`changes-20-phase-5-6`). What remained was the pass Q7 made the condition of
+the one type scale: public text grew (`text-sm` 12 → 14px, body 14 → 16px), and
+a visual pass afterwards fixes spacing, never a private font size. Phase 6's
+browser pass measured sideways scroll only, so this is that pass.
+
+### Method
+
+- Full-page and viewport screenshots of `/`, `/news`, `/learn/forex`,
+  `/glossary`, a lesson and `/economic-calendar` at 1440 and 390px, with the
+  `Reveal` animations forced visible (a full-page capture never scrolls them
+  in, so those bands read as empty otherwise).
+- A sweep of 26 routes, every public template with real slugs, at both widths
+  in same-origin frames. It flags sideways scroll, a single-line control that
+  wraps, and text clipped without an ellipsis. `/economic-calendar` cannot be
+  framed (its embed), so it was checked directly.
+
+### Found and fixed (regression test: `_components/stat-strip.test.ts`)
+
+- **"Sign in" broke onto two lines in the phone header.** At 14px the five
+  header items only just fit 390px. The link is now `whitespace-nowrap`, and
+  the auth pair's gap is 8px below `sm` (12px above). Measured: the link is
+  20px tall (was 40), and the header group ends at 374px, exactly the 16px
+  gutter. Without the tighter gap it ran 4px into the gutter.
+- **The masthead figure strip stacked on phones.** Three figures took 370px of
+  a 390px screen. The strip was copied, with its `StatItem`, into four
+  mastheads (learn, quizzes, videos, glossary). It is now one
+  `StatStrip`/`StatStripItem` in `app/(public)/[locale]/_components/`, and it
+  stays a single row at every width: 127px, three 119px columns, and a long
+  label ("Hours of material") wraps inside its column.
+  - `grid-flow-col auto-cols-fr` rather than `grid-cols-3`: a strip that drops
+    a zero figure (the glossary without topics, videos without recordings)
+    narrows to two equal columns. Before, it left an empty third column at
+    `sm` and up.
+  - Each masthead still chooses its own figures. The quiz and video headers'
+    reason for separate mastheads is about the figures, not the layout, and
+    stands.
+
+### Checked and fine at the new scale
+
+- 23 of 26 routes clean at both widths: no sideways scroll, no wrapped
+  controls, no clipping.
+- The three the sweep flagged are intended:
+  - an article's FAQ question wrapping in its accordion trigger
+  - `/about/security`'s two-line city/role buttons
+  - a 1px screen-reader label in a course progress bar
+- The lesson and course outline rows are title plus subtitle by design.
+  Desktop section rhythm (112/80/48px bands) and 24px card padding hold with
+  the larger text, so no band spacing changed.
+
+### Found, not fixed (content, not spacing)
+
+- **The "Forex-2" course summary is stored with `&nbsp;` between every
+  word**, so its excerpt cannot wrap and is clipped mid-letter on the course
+  card at every width. It is a data problem, most likely a paste into the
+  editor. Re-saving the summary with ordinary spaces fixes this instance. A
+  durable fix would normalise U+00A0 when rich text is flattened to an
+  excerpt. That is a Module 11 decision, so it is left for the owner.
+
+### Verified
+
+- `@repo/web` **486/486** (6 new). `typecheck` and `eslint` clean on
+  `@repo/web`; Prettier clean on every touched file. `@repo/ui` is untouched.
+- Live at 390px: header and strip as measured above, `overflow` 0 on every
+  swept route.
+
+### Status
+
+changes-20 is complete: Phases 1–6, the admin visual pass and this public
+pass. Still owed to Module 14, as before: axe, Lighthouse and E2E.
+
+## 2026-09-11 — One section bar, About-shaped track panels, no counted figures on public pages (Modules 08/12, ADR-076)
+
+The owner asked for three changes after changes-20. Learn Forex and Learn
+Crypto should navigate like About. The stat cards (totals) are admin numbers
+and should come off the public site. The second menu bar should look clearly
+different from the header.
+
+### Shipped
+
+- **One `SectionNav`** (`app/(public)/[locale]/_components/section-nav.tsx`)
+  now serves About and every `/learn/<track>/**` page.
+  - The two hand copies are deleted: `about/_components/section-nav.tsx` and
+    `learn/_components/learn-section-nav.tsx`.
+  - `activeSectionHref` moved to `_nav/active-section.ts` and serves both
+    sections unchanged.
+  - **New look:** a `bg-primary/10` tint over an opaque ground, a
+    `border-primary/20` rule, and a solid `bg-primary` pill for the active
+    entry. The tint is inside `TONAL_TINT_CONTRACT` (ADR-073), so glyph ink
+    stays legible, and colours stay admin-dynamic.
+  - About's bar is now pinned below the header, like Learn's.
+- **The track mega panels take About's shape.** Each has three headed columns
+  and a "view all" footer on the school's own index; the umbrella `/learn`
+  stays a labelled row:
+
+  | Column             | Rows              |
+  | ------------------ | ----------------- |
+  | Study              | Courses, Videos   |
+  | Practise & look up | Quizzes, Glossary |
+  | More learning      | All learning      |
+
+  They are built by `trackPanel()` from `LEARN_TRACK_ROUTE_KEYS`. The mobile
+  sheet shows the same three column headings.
+
+- **No counted-figures strip.** `StatStrip` is deleted.
+  - The learn, quiz, video and glossary mastheads take no `stats`, and their
+    skeletons no longer reserve the band.
+  - `learnStats` and the `*.stat*` catalog keys are removed, and
+    `nav.mega.learn.surfaces` is replaced by `study`, `practise` and `more`.
+  - About's facts band is untouched: its figures are owner-supplied facts,
+    not row counts, and it is empty today.
+- ADR-076 records all three changes. It supersedes ADR-065 §4 (the panel
+  shape) and the look of the §5 bar, plus ADR-069's stat strip.
+  Only the header lines of ADR-065 and ADR-069 changed.
+
+### Verified
+
+- `@repo/web`: typecheck clean, eslint on `app/(public)` clean, and
+  **491/491** tests.
+  - New guard: `_components/public-chrome.test.ts` (no stat strip, one bar,
+    plus the header auth-slot check from the deleted `stat-strip.test.ts`).
+  - Updated for the new panel shape: `mega-menu.test.ts` and
+    `learn-sections.test.ts`.
+- `@repo/i18n`: 22/22 tests. `check:catalog-completeness` OK (the `ar`
+  warnings are for an inactive locale). Prettier clean on touched files.
+- Live on the dev server: `/learn/forex` shows the tinted bar with the solid
+  active pill, and no strip under the masthead.
+
+### Owed
+
+- Commit (awaiting the owner). axe, Lighthouse and E2E still belong to
+  Module 14.
+
+## 2026-09-12 — changes-21 Phase A: one loader system; every async view gets a deliberate pending, empty and error state (Modules 07/09/12, no new ADR)
+
+The brief asked for an inventory of every loading and feedback pattern, then
+one system in `@repo/ui`, then every ad-hoc one replaced. Every value traces to
+`docs/design-system/tokens.md` §5/§6 (ADR-072). §6 had no loader spec, so its
+build-status list now records one (§6, "changes-21 Phase A").
+
+### Inventory (before)
+
+- **28 route files**:
+  - 13 admin `loading.tsx`: 12 app-local skeletons plus the generic spinner.
+  - 13 public skeletons.
+  - Bare-text public `error.tsx` and `not-found.tsx`, and no `global-error.tsx`.
+- **About 40 action buttons in 36 files only greyed out** while their work
+  ran. Three sign-in submits and `ConfirmDialog` hand-placed a Spinner.
+- **Two skeleton looks.** Half pulsed; half pulsed and swept (`shimmer`).
+- **Admin skeletons at pre-redesign heights:** a 28px title against
+  PageHeader's 36px, 32px controls against 40px. **Public card skeletons**
+  used a copied card anatomy, and the news ones used a shell ArticleCards
+  dropped in changes-20 Phase 5.
+- **Other one-offs:**
+  - Sonner used lucide's `Loader2`.
+  - The header auth slot was a hand-rolled pulsing span.
+  - The media library and picker showed a lone spinner, then red text with
+    no retry.
+  - Six "nothing here" messages were muted `<p>`s.
+
+### The system (`@repo/ui`)
+
+- **`Button loading`** — disabled plus `aria-busy`; the Spinner takes the icon
+  slot and the label stays. `inherit` size (the button's icon rule sizes it),
+  `current` tone.
+- **`Spinner` sizes** — `inherit`/xs/sm/default/lg (tokens §5) plus
+  `section`/`page`/`overlay`; `brand` or `current` tone.
+- **`Skeleton` primitives** — `SkeletonText`, `SkeletonHeading`,
+  `SkeletonAvatar`, `SkeletonImage`, `SkeletonButton`, `SkeletonField`,
+  `SkeletonCard` (Card's ADR-075 shell) and `SkeletonTable` (DataTable's 48px
+  muted header, compact rows, the §6.10 pager).
+- **Page archetypes** in `page-skeletons.tsx` — table, form, editor, detail,
+  dashboard, header, metric card.
+- **Card skeletons beside their cards** — `CourseCardSkeleton`,
+  `QuizCardSkeleton`, `VideoCardSkeleton`.
+- **`EmptyState` / `ErrorState`** — compose `Empty` (§6.9) in sm / default /
+  lg. The error tile is `bg-destructive/10` behind `-interactive` ink
+  (ADR-073), with `role="alert"`.
+- **`PageLoader`'s label is optional** — without one it is a decorative,
+  `aria-hidden` mark.
+- **Announcement rule:** a loader announces once (`label` → one
+  `role="status"`) or not at all; never per block.
+
+### Replaced (after)
+
+- **Buttons: 44 `loading` props in 36 files**, plus `ConfirmDialog`.
+  - A background agent converted 33 files. Its diff was reviewed line by
+    line: pending moved out of `disabled`, every validation term kept, and
+    Cancel / stepper / row-action buttons left `disabled`.
+  - The publish panel, the content-status panel and lesson feedback share
+    one `pending` across several buttons. They now track the clicked target,
+    so only that button spins.
+- **Routes:**
+  - Admin: 27 `loading.tsx`. 12 rewired to `@repo/ui` archetypes, 14 new,
+    and the generic spinner kept as the fallback. The app-local
+    `skeletons.tsx` is deleted.
+  - Public: 17 `loading.tsx`, 6 of them new.
+  - The five error/404 pages use `ErrorState`/`EmptyState` at `lg`, and
+    there is a new `global-error.tsx`.
+- **In-component:**
+  - The media library and picker show tile skeletons in the grid's own
+    columns, and `ErrorState` with a working retry (`browser.refresh` had
+    existed, unused).
+  - The auth slot reserves the anonymous pair's own shape.
+  - Toasts use the brand Spinner.
+  - 20 `EmptyState`/`ErrorState` call sites.
+- **The dashboard moved into an `admin/(dashboard)` route group**, so it owns
+  a dashboard skeleton while `admin/loading.tsx` stays the generic fallback.
+  The URL is unchanged.
+
+### Views that had no loading state and now do
+
+- **Public routes with no boundary at all:**
+  - `/glossary` and `/glossary/[term]` now have shaped skeletons.
+  - `/`, `/economic-calendar`, `/analysis`, `/sign-in`, `/sign-up` and the
+    CMS path fall to the new textless `[locale]/loading.tsx`.
+- **Admin routes on the generic spinner only:** `/admin`, learn videos
+  (index, categories, record), `/admin/media` and `/admin/features`.
+- **Actions:** about 40 buttons that greyed out with no sign of work.
+
+### Found and fixed
+
+- **The three sign-in spinners were invisible.** Primary-filled mark on a
+  primary button: bronze on bronze. `tone="current"` fixes it.
+- **Nine admin record routes drew their list's table skeleton** over an
+  editor or detail page: articles, employees, glossary term, topic, course,
+  lesson, quiz, role and user.
+- **Three public routes drew another route's shape:**
+  - `/learn/[track]/quizzes/[quiz]` drew a card grid.
+  - `/learn/[track]/glossary` drew a course shelf.
+  - `/news/preview/[id]` drew a listing.
+- **`/news` reserved a stat band** that the 2026-09-07 second pass removed: a
+  guaranteed jump.
+- **A root-layout error rendered Next's unstyled page.** There was no
+  `global-error.tsx`.
+
+### Decided without asking (reversible; flagged for the owner)
+
+1. **Shimmer is part of `Skeleton`, everywhere.** It was the later, documented
+   choice (learn design pass), and it is covered by reduced motion.
+2. **Public loaders are textless and read no translations**, so a fallback
+   cannot pull request data into the cached shell. Admin loaders announce
+   once.
+3. **A loading button keeps its label** (no "Saving…" swap), so no new
+   catalog keys and no width jump.
+4. **`global-error.tsx` is literal English**, the exception
+   `global-not-found.tsx` already documents: no intl context exists there.
+
+### Verified
+
+- `@repo/ui` **366/366**, run in batches. The new
+  `feedback-states.test.tsx` has 29 cases.
+- `@repo/web` **524/524**. The new `loading-states.test.ts` (20 cases) fails
+  on:
+  - a record route inheriting its list's skeleton
+  - an app-local skeleton copy
+  - `animate-spin`/`Loader2`
+  - a hand-placed `{pending && <Spinner}`
+  - a hand-rolled pulse
+  - a translating public loader
+  - an error/404 page off the shared states
+  - a missing public boundary
+- `typecheck` clean (`@repo/ui`, `@repo/web`, after `next typegen` for the
+  moved dashboard). `eslint` clean on all 129 changed files; Prettier clean;
+  `check:catalog-completeness` OK (only the inactive `ar`/`es`/`ur` warn).
+- `/admin/design-system`'s Feedback section shows every new piece: spinner
+  sizes, loading buttons, skeleton primitives, a metric-card skeleton,
+  `SectionLoader`, and `EmptyState`/`ErrorState` in two sizes. Its keys are
+  in `en.json`, and `admin-design-system.test.ts` passes.
+- **Not verified live.** The running dev server (the owner's terminal, PID 12892) answers 500 on every route, `/glossary` included: its Turbopack
+  PostCSS worker crashed ("Node.js subprocess crashed while evaluating
+  loaders [postcss]").
+  - The same `globals.css` compiled standalone through `@tailwindcss/postcss`
+    in 0.5s, with every new class present. So the failure is the process,
+    not the source.
+  - It needs a restart; this session did not kill a process it did not
+    start.
+
+### Owed
+
+- The live pass (loaders, 404/error pages, media states) once the dev server
+  is restarted.
+- **Commit.** The tree also holds the owner's uncommitted ADR-076 work.
+  Phase A edits four of the same files: three learn skeletons and `en.json`.
+  So the two cannot be split into clean commits without the owner's call on
+  order.
+
+## 2026-09-12 — changes-21 Phase B: the UI audit closes; admin forms become wired Fields (Modules 07/09/12, ADR-077)
+
+The audit is `docs/design-system/audit-changes-21.md`. The owner answered its
+two questions:
+
+- **Q-1, answer (a).** Not-found routes keep the soft 404 plus `noindex`, and
+  `proxy.ts` gets no content-existence check.
+- **Q-3, answer (a).** Every admin form gets `Field`, `FieldLabel`,
+  `FieldError`, `aria-invalid`, `aria-describedby`, `required` and inline
+  messages. Required fields show `*`; optional fields show no "(optional)".
+  The toast is kept for global, server and submission errors, but is never
+  the only sign of a field error.
+
+### Shipped
+
+- **Forms (F-07), per ADR-077:**
+  - **`@repo/ui`:**
+    - **`Field` is context-aware.** `FieldLabel` supplies `htmlFor` and the
+      asterisk; `FieldDescription` and `FieldError` join `aria-describedby`.
+    - **Every control wires itself** through `useFieldControl`: Input,
+      Textarea, Switch, Checkbox, RadioGroup, SelectTrigger and Combobox.
+    - Input and Textarea became `"use client"`.
+    - `FieldError` uses `-interactive` ink and no live region.
+  - **`@repo/contracts`:** `validateFields` maps Zod issues to eleven codes by
+    dotted path; `admin.validation.*` holds the words.
+  - **The admin app:**
+    - **`useFieldErrors`** runs the action's own schema, shows nothing until
+      the first submit, and focuses the first invalid control within the
+      dialog or form whose Save was pressed.
+    - **Save is no longer disabled for validation.** Validation terms were
+      removed from roughly 40 Save buttons.
+    - **The composites are Field-aware**: `editor-section`'s Field
+      (`required`/`error`), `SlugField`, `ScheduleField`, `ImageUploadField`
+      (its Upload button is the control) and `RichTextEditor` (its editable
+      area is named by the label id).
+    - **The publish panel takes `validate`**, so the six editors no longer
+      throw a "fields need attention" error from `save`.
+  - **Migrated:** about 50 files, split across five background agents by
+    feature area, plus `create-role-dialog` as the worked example. The lead
+    reviewed the reports and diffs, and made the shared-component decisions
+    mid-run.
+- **F-03:** every destructive TEXT usage, in both surfaces and `@repo/ui`, is
+  `text-destructive-interactive`. So are the icon-only delete buttons (D-7).
+  The editor section's `danger` tile is `/10` with `-interactive` ink.
+- **Smaller fixes**, done by one background agent:
+  - **F-01:** the public desktop nav shows from `xl`.
+  - **F-02:** below `sm` the theme toggle lives in the mobile sheet, under a
+    new `nav.appearance` key.
+  - **F-05:** the bell is `size-5`.
+  - **F-06:** the three error boundaries take `retry` (verified against the
+    installed Next 16.3.3 docs).
+  - **F-11:** the play glyphs are `size-6`.
+- **F-04:** the rich-text frame uses the Textarea recipe, with no `dark:`
+  class.
+- **Catalog:** the admin catalog no longer contains "(optional)"
+  (`seoOptional`, `optionExplanation`, `slugOptional`). The curriculum had
+  been showing "SEO (optional)" as its optional-lesson badge; it now has its
+  own `optionalLessonBadge`.
+- **Lesson editor:** the "Course" row is a `FieldTitle`, because a label would
+  have named a link.
+
+### Decided
+
+- ADR-077.
+- The owner's two answers (D-3, D-4).
+- Audit §7, D-5 to D-8:
+  - the editor-section wrapper;
+  - the publish panel's `validate`;
+  - one destructive ink everywhere;
+  - the "(optional)" strings.
+- The react-hook-form bridge `form.tsx` was not adopted: it would have
+  rewritten every form's state.
+
+### Found by the crawl (§4–§5, all open for Phase C)
+
+The crawl covered 27 public templates and 35 admin routes at 360, 768, 1024
+and 1440, in light and dark, with axe.
+
+- **F-01/F-02 are confirmed in the browser:** no public page overflows at any
+  width.
+- **No admin form field failed axe's labelling or ARIA checks.**
+- **New findings:**
+  - **F-12, F-13, F-20, F-22:** contrast failures on tinted surfaces.
+  - **F-14:** carousel dots.
+  - **F-15:** carousel list semantics.
+  - **F-16:** an image with no alt, on a crypto course page.
+  - **F-17:** a link told apart only by colour in the dark article body.
+  - **F-18:** a guest's progress 401.
+  - **F-19:** off-scale news buttons.
+  - **F-21:** `aria-sort` on a button in `DataTable` (critical).
+  - **F-23:** editor overflow at 1024 and 360.
+  - **F-24:** unnamed progress bars.
+  - **F-25:** small targets in the article editor.
+  - **F-26:** an unfocusable scroll region.
+  - **F-27:** "Remove" inside an inverted role chip, at 2.55:1. The
+    destructive ink cannot pass on that surface.
+  - **F-28:** dev-console Cache Components diagnostics.
+
+### Verified
+
+- `@repo/web` typecheck: clean.
+- `@repo/web` tests: **1014/1014** (25 files). The new
+  `admin-form-conventions.test.ts` fails:
+  - a `Label`, a raw `<label>` or an `htmlFor` in an admin file;
+  - a form that never calls `validate()`;
+  - "(optional)" in the admin catalog;
+  - raw destructive text anywhere in the app or `@repo/ui`.
+- `@repo/ui` tests: **378/378**. The new `field.test.tsx` has 12 cases.
+- `@repo/contracts` tests: **269/269**. The new `field-issues.test.ts` has 8
+  cases.
+- ESLint, `--max-warnings=0`: clean on all 68 changed web files and 10 ui
+  files. An earlier run skipped `[id]` paths, because PowerShell's `Test-Path`
+  treats brackets as a wildcard; this run uses `-LiteralPath`.
+- Prettier, `check:catalog-completeness` and `check:phantom-deps`: OK.
+- The dev server had exited mid-session and was restarted with `pnpm dev`.
+
+**Addendum, at commit time (same day).** The pre-commit gate was re-run over
+the whole tree and found two defects the per-file runs above had missed. Both
+are fixed in this commit, so the "clean" claims hold for the code that ships,
+not for the code the entry was written against:
+
+- **`@repo/contracts` lint was red.** In `field-issues.ts`, the comment sitting
+  BETWEEN the shared `invalid_type` / `invalid_value` case labels reads as a
+  fall-through to `no-fallthrough`. The two labels share one return by design,
+  so the comment moved above the pair. No behaviour change.
+- **`@repo/ui` typecheck was red.** `field.test.tsx` read `.required` off the
+  `HTMLElement` that `getByRole` returns; the query is now cast to
+  `HTMLInputElement`.
+- **Re-verified after both fixes:** contracts lint clean · contracts
+  **269/269** · ui typecheck clean · ui **378/378** · web **1014/1014** ·
+  i18n **22/22** · `governance:check`, `check:phantom-deps`,
+  `check:permission-keys` OK · `check:catalog-completeness` OK (only the
+  inactive `ar`/`es`/`ur` warn).
+- **Also learned:** running lint and typecheck workspace-wide in parallel on
+  this machine aborts with exit 134 (OOM). Run them per package, one at a
+  time — the same rule the root `pnpm test`/`build` already follow.
+
+### Owed
+
+- The open crawl findings F-12 to F-28 and F-09, for Phase C. F-16 and F-21
+  are the two critical ones.
+- An E2E pass over a real submit (errors shown, focus moved, the fix clears
+  the message). The guard and the unit tests prove the wiring; nothing drives
+  a browser through a failed save yet.
+- **Commit.** Nothing is committed. The tree still holds the owner's
+  uncommitted ADR-076 and Phase A work alongside this phase.
+
+## 2026-09-12 — changes-21 F0+F1: the email ADRs land, and every password field becomes one component (Modules 17/07/04/09/12, ADR-078/079/080)
+
+The changes-21 feature brief (`docs/changes/changes-21-featuer-improvments.md`)
+asks for seven things; `docs/changes/changes-21-feature-plan.md` turns them into
+PRs **F0–F9**, lettered so they never collide with the A/B/C UI phases. F0 and
+F1 are done.
+
+### F0 — the ADRs, before the code (plan.md Part F #10)
+
+- **ADR-078 (email platform).** `@repo/email` is a domain package owning its
+  own tables — `core` already imports `auth`, and auth is what sends, so email
+  in core would be a cycle. The transport is a driver seam (`smtpDriver` /
+  `logDriver`). **The SMTP password is security.md #10's single exception:**
+  AES-256-GCM under `EMAIL_SECRET_KEY`, write-only, one reader, and
+  `EmailTransportView` has no password property. Templates are a code registry
+  with data content; `{{dotted.path}}` variables carry no logic; the delivery
+  log holds no body and no variables; there is no queue.
+- **ADR-079 (password recovery).** The reset link is routed by
+  `user.userType`, never by the screen that asked, so ADR-052's line holds and
+  a learner is never handed an `/admin` URL. Plus the proxy allowlist, two
+  rate limits, session revocation, a cleared lockout and a
+  "password changed" notice. Verification is sent and never blocks sign-in.
+- **ADR-080 (newsletter).** Double opt-in, hashed tokens, GET never mutates
+  (mail scanners prefetch links), RFC 8058 one-click unsubscribe, flag =
+  feature and setting = placement, and consent that outlives the account
+  (`onDelete: SetNull`).
+- Owner decisions recorded in the plan: SMTP admin-editable and encrypted;
+  verification sent but not blocking; newsletter signup without campaigns.
+  Then, against the draft defaults: **the transport is super_admin-only**
+  (the host is the escalation path — repointing delivery captures the next
+  reset link, around `canAssignRole`'s strict `<`), a 90-day delivery log,
+  and subscriptions that link at confirm time.
+- security.md #10 and #13, architecture.md #8, a new Module 17 skill and the
+  CLAUDE.md row record all of it.
+
+### F1 — `PasswordInput`
+
+- **`@repo/ui/components/password-input`.** The toggle flips the SAME input's
+  `type`, so focus and caret survive; the button is real and focusable
+  (revealing a password is functionality, and functionality is keyboard
+  reachable); `aria-label` says what the next press does while `aria-pressed`
+  says what the field is now. Sizes mirror `SearchInput`'s table so the button
+  and the field's end padding cannot drift. Edge's native `::-ms-reveal` is
+  hidden — it would reveal the value without updating `aria-pressed`.
+- **Six fields, four files:** both sign-in forms, sign-up, and the three in
+  the profile password form. The admin's generated-password dialog keeps its
+  deliberately visible field (code-style #6).
+- **Catalog:** `auth.showPassword` / `auth.hidePassword` in all four locales
+  (public, ADR-043 #1); `admin.showPassword` / `admin.hidePassword` in `en`
+  only, used by both admin surfaces.
+- `/admin/design-system` shows all three sizes, reusing those admin strings
+  rather than minting showcase words.
+
+### Found while building
+
+- **An explicit `id` inside a `Field` breaks the label association**, exactly
+  as ADR-077 warns: `FieldLabel`'s `htmlFor` keeps pointing at the Field's own
+  id. My first test asserted the opposite and failed — the component was
+  right. It now pins both real shapes instead: inside a Field the id comes
+  from `controlId`, and the three hand-labelled sign-in forms (which predate
+  Field) pass their own id from the call site.
+- **The pre-commit gate on the Phase B tree found two more defects**, fixed
+  in that commit and recorded in its addendum: a `no-fallthrough` lint error
+  in `field-issues.ts` and a typecheck error in `field.test.tsx`.
+- **Running lint and typecheck workspace-wide in parallel aborts with exit
+  134 (OOM) on this machine.** Per package, one at a time — the same rule the
+  root `pnpm test`/`build` already follow.
+
+### Verified
+
+- `@repo/ui`: typecheck clean, lint clean, **387/387** (the new
+  `password-input.test.tsx` has 9 cases).
+- `@repo/web`: typecheck clean, lint clean, **1337/1337**. The new
+  `password-fields.test.ts` fails on a raw `type="password"` anywhere under
+  `app/`, and on any of the four known forms losing its `PasswordInput`
+  import — a deleted field is as much a regression as a raw one.
+- `check:catalog-completeness` OK (only the inactive `ar`/`es`/`ur` warn, and
+  the new keys are not among their gaps); `governance:check`,
+  `check:phantom-deps`, `check:permission-keys` OK; Prettier clean.
+- Not verified live: no dev-server pass yet on the six screens.
+
+### Owed
+
+- F2 next: the schema, the `@repo/email` skeleton, the sealed transport and
+  Mailpit in `docker-compose.yml`.
+- E2E for the reset screens belongs to Module 14, with the rest of auth.
+
+## 2026-09-12 — changes-21 F2: the email schema, `@repo/email`, and the one sealed secret (Modules 17/01, ADR-078)
+
+The plan's F2: four tables, the package skeleton, the transport seam, the
+sealed SMTP password, and a mail catcher for development.
+
+### Shipped
+
+- **Schema** (`20260912055701_email_platform_adr078`, additive):
+  `EmailTransport` (singleton, `id = "default"`), `EmailTemplate`,
+  `EmailTemplateTranslation` (the `GlossaryTermTranslation` shape —
+  `translationStatus` + `sourceHash`) and `EmailDelivery`, plus four enums.
+  The delivery table has no body and no variables column, by design
+  (ADR-078 #10).
+- **`@repo/email`**, a domain package owning those tables:
+  - **`secret.ts`** — `sealSecret`/`openSecret`, AES-256-GCM under
+    `EMAIL_SECRET_KEY`, `v1:<iv>:<tag>:<ciphertext>`. A fresh IV per seal; no
+    padding or derivation fallback for a short key; one error message for
+    every failure, because distinguishing "wrong key" from "tampered row"
+    tells an attacker which half they got right.
+  - **`transport.ts`** — `EmailTransportDriver` with `smtpDriver`
+    (nodemailer) and `logDriver` (Module 04's `logEmail`, kept as the
+    unconfigured default). `loadTransportDriver()` is the ONE reader of
+    `passwordCipher`.
+  - **`testing.ts`** — `memoryDriver()`, deliberately not exported from `.`.
+- **Mailpit** in `docker-compose.yml` (SMTP 1025, UI 8025), and
+  `EMAIL_SECRET_KEY` in `.env.example` with the command that generates one.
+
+### Decided while building
+
+1. **`smtpTransportOptions` is exported as a pure function** so the security-
+   relevant half of the driver is unit-testable. `secure` is TLS-on-connect;
+   STARTTLS is `requireTLS`, which makes the upgrade mandatory — without it
+   nodemailer continues in the clear when a server declines, and that failure
+   is invisible at runtime.
+2. **A half-filled SMTP row falls back to the log driver** rather than
+   throwing. A form saved without a host must not take sign-up down.
+3. **nodemailer is pinned at 10.0.3, not 10.0.8.** `minimumReleaseAge` (24h,
+   security.md #15) refused 10.0.8 — published 18 hours earlier. 10.0.3 is
+   the newest release past the cutoff. Worth noting for the next bump: the
+   project published **eight** versions in four days.
+
+### Found
+
+- **An empty value could not be unsealed.** The structural guard rejected an
+  empty ciphertext segment by truthiness, so `sealSecret("")` round-tripped
+  to an error. Only the STRUCTURE is checked now; the test that caught it is
+  in the same commit.
+- **Two bad test fixtures of my own**, both caught by the suite: a 34-byte
+  `OTHER_KEY` that hit the key-length error instead of the tampered-seal
+  error, and the empty-value case above.
+
+### Verified
+
+- `@repo/email`: typecheck clean, lint clean, **29/29** across four files,
+  coverage thresholds met (80% package floor, 90% on `secret.ts`).
+  - `transport.integration.test.ts` sends through a **real Mailpit
+    container** and asserts the message arrived — testing.md reserves mocks
+    for the network edge we do not own, and this transport is ours.
+  - `transport-db.integration.test.ts` drives `loadTransportDriver` against a
+    **real MariaDB**: every fallback, and the proof that the seal is actually
+    opened (swap the key, loading fails rather than sending garbage).
+- `@repo/db`: **14/14** after the migration. `check:phantom-deps` OK.
+  Prettier clean (`.env.example` and `schema.prisma` have no parser, as
+  always).
+
+### Owed
+
+- F3 next: the template registry in `@repo/contracts`, the renderer and the
+  email sanitiser.
+- `EmailTemplate` and `EmailDelivery` have no reader or writer yet — F4
+  brings `sendTemplatedEmail`, the `email` settings group and the auth
+  wiring.
+
+## 2026-09-12 — changes-21 F3: the template registry, the renderer, and an email allowlist of its own (Modules 17/07/02, ADR-078)
+
+The half of the email platform that decides what a message says. No sending
+yet — F4 wires `sendTemplatedEmail` and auth.
+
+### Shipped
+
+- **`@repo/contracts/email.ts`** — the registry (`EMAIL_TEMPLATES`: five keys,
+  each with an audience, a `critical` flag, its variables, the ones it
+  requires, and sample values), the `{{dotted.path}}` vocabulary
+  (`findTemplateVariables` / `replaceTemplateVariables` — one pattern, so what
+  a save validates and what a render replaces cannot drift), and the three
+  Zod schemas (`emailTemplateSaveSchema`, `emailTransportSaveSchema`,
+  `emailTestSendSchema`).
+- **`@repo/email`:**
+  - `sanitize.ts` — the email allowlist. Wider than `sanitizeRichText` in
+    exactly two ways (presentational table attributes, and a `style`
+    attribute with a property allowlist), and wider in no way that executes.
+    `<style>` survives in HTML mode only.
+  - `layout.ts` — the 600px table shell, and `editorialStyle`, which maps
+    every `ed-*` class to an inline style because email clients drop class
+    CSS. Colours come from the palette, so a re-brand reaches email and no
+    hex literal enters the package (code-style #1).
+  - `render.ts` — `renderEmail`: sanitise → assemble → substitute, with every
+    value escaped and every URL-typed variable parsed first.
+
+### Decided while building
+
+1. **`EDITORIAL_CLASSES` moved to `@repo/contracts`.** Two sanitisers need it
+   now, and `@repo/email` cannot import `@repo/core` (core imports auth —
+   ADR-078 #1's cycle). Core imports it back; nothing else referenced it.
+2. **`loadActiveThemeTokens` is new in `@repo/theme`**, and `loadActiveTheme`
+   is now built on it. The loader already computed the structured tokens and
+   returned only CSS; email needs the values, because no email client
+   resolves a custom property. One copy of the fallbacks, not two.
+3. **HTML mode is not wrapped in the shell.** A hand-built document is the
+   designer's whole document; wrapping it would put two `<body>` elements in
+   one message.
+4. **`ed-embed` is deliberately unmapped.** A video figure has no meaning in
+   email, so it keeps its markup rather than gaining a style that implies
+   one — and `layout.test.ts` asserts it is the ONLY unmapped class, so a new
+   `ed-*` class cannot be added without deciding what email does with it.
+5. **The unsubscribe link takes its URL and label together.** A package may
+   not invent the word "Unsubscribe" (code-style #2).
+
+### Found
+
+- **The property test's first two assertions were wrong, not the code.** It
+  failed on `class="javascript:alert(1)"` — inert — and then on a relative
+  `src="x"`, which is ordinary. The assertion is now a scheme denylist
+  applied per URL attribute, which is the property that actually matters.
+- **Three pre-existing failures in `@repo/core`**, found by running its suite
+  and fixed in their own commit (844e7e5): `mediaSourceTypeSchema` had never
+  gained `VIDEO_TOPIC` after ADR-068, so the drift guard written to catch
+  exactly that had been red; and two CMS tests still called `/about` an
+  ordinary path, which ADR-047 reserved.
+
+### Verified
+
+- `@repo/email` **82/82** (7 files), coverage thresholds met; typecheck and
+  lint clean. The sanitiser has an 18-case XSS corpus plus two fast-check
+  properties (600 runs).
+- `@repo/contracts` **303/303** — the new `email.test.ts` pins the registry
+  against its samples, and the save schema against unknown and missing
+  variables.
+- `@repo/core` **488/488**, `@repo/theme` **68/68**, both typecheck and lint
+  clean.
+
+### Owed
+
+- F4: `sendTemplatedEmail`, the `email` settings group, the seeded default
+  templates, and the auth wiring (reset, verification, notices, limits).
+- Nothing renders an email yet in the app — there is no caller until F4.
+
+## 2026-09-12 — changes-21 F4: email actually sends, and auth stops logging tokens into the void (Modules 17/04/05/01, ADR-078/079)
+
+`logEmail()` is gone. Password reset and email verification now render a real
+template and reach a real transport, and every attempt is recorded.
+
+### Shipped
+
+- **`sendTemplatedEmail`** (`@repo/email/send.ts`) — the switches in order
+  (global, then the template's own), locale then default locale, render, send,
+  and a delivery row **in every outcome**. A delivery failure is RETURNED,
+  never thrown: a dead mail server must not fail the sign-up that triggered
+  it. `verifyTransport()` backs the admin's "Test connection" and records what
+  it learned.
+- **The `email` settings group** — `email.enabled`, sender identity, logo,
+  footer, postal address, and the four `newsletter.placements.*` toggles that
+  ADR-080 #5 moved out of the paused `layout` group. All `isPublic: false`.
+- **Five seeded templates**, create-only on content so an edited template
+  survives a re-seed. `scripts/check-email-templates.mjs`
+  (`pnpm check:email-templates`) fails when the code registry and the seed
+  disagree — they live in packages that cannot import each other, so the
+  check is a source scan, like `check-permission-keys.mjs`.
+- **`@repo/auth`:** the reset link is built by us and routed by
+  `user.userType`; a per-account limit (3/hour) sits in front of the send;
+  `rateLimit.customRules` covers the three endpoints per IP;
+  `revokeSessionsOnPasswordReset`; and `onPasswordReset` clears the lockout,
+  writes an audit row and sends the notice. `changeOwnPassword` and
+  `@repo/core`'s admin reset send the same notice.
+- **`advanced.backgroundTasks`** sends after the response via `after()`,
+  which also closes the enumeration timing channel (ADR-079 #4).
+
+### Corrected — ADR-078's stated reason was wrong
+
+**`@repo/core` does not import `@repo/auth`.** The claim that it did — and
+that email in core would therefore be a cycle — came from a `grep -rl` that
+matched a COMMENT, which I did not verify before writing it into ADR-078,
+architecture.md #8, the CLAUDE.md row, the skill and three commit messages.
+
+The decision survives; the reason is different and now stated accurately:
+**email sits below both senders because both layers send.** Putting it in
+`core` would force `auth → core` — an edge that does not exist — dragging
+`rbac`, `settings`, `theme`, `i18n` and `blocks` onto the session path the
+proxy and every server component touch. All five places are corrected, and
+ADR-078's "Alternatives rejected" says plainly what the earlier draft claimed.
+The ADR is new in this branch (`A` in the branch diff), so correcting it is
+not an edit to accepted history.
+
+Caught by a typecheck error, not by review: `@repo/core` had no `@repo/auth`
+dependency to import, because the edge never existed. Core now calls
+`@repo/email` directly, which is the edge the ADR declares.
+
+### Found
+
+- **The log driver had stopped printing the link.** Removing `logEmail()` took
+  the dev affordance with it — the reason that function existed was so a
+  developer with no SMTP server could follow a reset link. `logDriver` now
+  prints the plain-text alternative, where `htmlToText` spells every URL out.
+  The auth integration tests read the token from that real rendered message
+  rather than from a mock.
+- **`EmailDelivery.triggeredBy` vs `triggeredById`** — the service wrote the
+  wrong field name; nine integration tests failed identically until it was
+  fixed.
+- **The reset test was racing the send.** Outside a request scope there is no
+  `after()` to attach to, so the send runs detached; the test now waits for
+  the delivery instead of assuming it is synchronous.
+
+### Verified
+
+- `@repo/email` **93/93** (8 files) with coverage thresholds met. The new
+  `send.integration.test.ts` runs against **real MariaDB and real Mailpit**:
+  both switches, the test-send exemption, locale fallback, a missing template
+  row, an unreachable server, a missing required variable — and the assertion
+  that **the reset token never appears in the delivery row**.
+- `@repo/auth` **16/16**, including the restored verification and
+  single-use-reset round trips, plus a new `reset-url.test.ts` (6 cases)
+  pinning ADR-079 #2: staff get `/admin`, and a learner's link never contains
+  it — for an unknown or missing `userType` too.
+- `@repo/core` **488/488** · `@repo/contracts` **303/303** · `@repo/db`
+  **14/14**. Typecheck and lint clean on all six touched packages.
+- `pnpm db:seed` applied on the dev database: 48 settings, 5 email templates.
+- `check:email-templates`, `check:phantom-deps`, `check:permission-keys` and
+  `governance:check` all OK.
+
+### Owed
+
+- F5 (the admin screens), F6 (the reset/forgot UI), F7 (newsletter), F8
+  (dashboard). Nothing in the app calls `sendTemplatedEmail` yet except auth:
+  there is still no screen to configure SMTP, so delivery runs on the log
+  driver until F5 lands.
+
+## 2026-09-12 — changes-21 F5: the email admin, split at the line where the host becomes an escalation (Modules 17/09/05/03, ADR-078)
+
+Four screens, two permission levels. An admin writes the templates; only a
+super_admin can move where mail leaves from.
+
+### Shipped
+
+- **`@repo/core/email-admin.ts`** — the admin's only door to the email tables.
+  `loadEmailTransportView` / `saveEmailTransport` / `testEmailTransport`,
+  `listEmailTemplates` / `loadEmailTemplate` / `saveEmailTemplate` /
+  `setEmailTemplateActive` / `resetEmailTemplate`, `renderEmailPreview`,
+  `sendTestEmail`, `listEmailDeliveries` / `countEmailDeliveries`.
+- **Five permissions** in a new `email` group. `email.settings.manage` is
+  **super_admin-only**; templates, tests and the log stay with `admin`;
+  `support` gains `email.log.view`, which is the only settings key that role
+  holds — so the sidebar entry and the settings hub now accept it, or the key
+  would have had no route to reach.
+- **`/admin/settings/email`** — a static route that wins over `[group]`, like
+  `social/`. **Sending** and **Newsletter placement** are ordinary settings
+  forms; **Delivery** renders the transport form only with
+  `email.settings.manage` and is **absent, not disabled**, without it. In its
+  place a read-only summary: knowing where mail leaves from is what makes a
+  missing reset email diagnosable; being able to move it is the escalation.
+- **`/admin/settings/email/templates`** and **`/…/[key]`** — the list (audience,
+  critical badge, per-locale state, an active `Switch` that confirms and names
+  what breaks when the template is critical) and the editor (Rich/HTML mode,
+  variables panel with sample values, sender overrides, locale tabs for a
+  translated audience only, live preview at 600px / 375px, test send, reset).
+- **`/admin/settings/email/log`** — keyset-paged, filters in the toolbar as URL
+  state, counts by status. No body column, because there is none to show.
+- **`POST /admin/api/email/preview`** under its own
+  `sandbox; default-src 'none'` CSP, framed in `sandbox=""`. `proxy.ts` gains
+  `ADMIN_FRAMABLE_PATHS` — one entry; every other `/admin` path stays `DENY`.
+
+### Decided here
+
+- **The preview is a form POST at a named frame, not `fetch` + a blob URL.** A
+  blob URL would put the author's markup back on the ADMIN origin, which is the
+  one thing the isolated route exists to prevent. `srcDoc` is out for the
+  reason ADR-078 #8 already gives.
+- **`EMAIL_TEMPLATE_DEFAULTS` moved from `seed.ts` to `packages/db/src/`.**
+  "Reset to default" needs the same five bodies the seed writes, and a second
+  copy of them is exactly the drift `check:email-templates` exists to catch.
+  The check now scans that file; the key list is unchanged.
+- **The `admin` exclusion list became `SUPER_ADMIN_ONLY_PERMISSIONS`**
+  (`packages/db/src/role-exclusions.ts`), a named constant with a reason per
+  entry. It was a filter expression three levels inside a role literal, which
+  is a poor home for the sharpest privilege rule in the repo.
+- **Resetting a NON-default locale deletes the row** rather than writing the
+  English words under it. A copy of the source filed as `es` is an untranslated
+  template that REPORTS as translated — the one outcome the locale badges exist
+  to prevent.
+- **A test send gets the template's OWN variables, not the whole sample.** The
+  sample also carries `recipient.email` and `site.name`; letting those through
+  would mail a real address greeting `alex@example.com` from whatever the
+  fixture calls the site. The globals come from live settings.
+- **One Save, in the header action row** — the shape the topic editor already
+  uses. The three sections are one form, and a Save under "Content" would look
+  like it left the sender overrides behind.
+
+### Found
+
+- **`EmailTemplate.updatedBy`, not `updatedById`.** Three services wrote the
+  wrong column name. Typecheck passed — the `data` object is built as a
+  variable, so excess-property checking never ran — and ten integration tests
+  failed identically the first time they touched a real database.
+- **A literal NUL byte** reached `email-admin.ts` through the hash separator,
+  which made the file read as binary to `grep`. The separator is
+  `JSON.stringify([...])` now, which cannot collide either.
+- **`media` was rendering as a lowercase identifier** in the settings sub-nav
+  (ADR-044 #5), because no `settingsGroups.media` label existed and
+  `groupLabel` fell back to the raw key. It has a label now, and the fallback
+  is `humanizeKey()` — the next group added without one will not repeat it.
+- **Two comments still carried ADR-078's corrected-away reason** ("core imports
+  auth, that would be a cycle") in `@repo/email`'s header and
+  `@repo/contracts/content.ts`. The 2026-09-12 correction pass missed both.
+
+### Verified
+
+- `@repo/core` **email-admin.integration.test.ts 18/18** against real MariaDB:
+  the transport view carries no password at runtime **and** at the type level
+  (`expectTypeOf(...).not.toHaveProperty`), an empty password keeps the stored
+  cipher, `clearPassword` removes it, the audit row holds the host and
+  `passwordChanged` but never the value, a new host drops the verification, the
+  body is sanitised on save, a preheader-only edit flips siblings OUTDATED,
+  reset restores the seeded words, the log pages by cursor without repeats, and
+  the delivery row's key set has no body or variables.
+- `@repo/db` **role-exclusions.test.ts 10/10** — the list is exactly the four
+  keys the ADRs name, and no role's permissions array lists any of them.
+- `apps/web` **1428/1428** (27 files), including the new
+  `email-admin-conventions.test.ts` (22): every action gates on its first
+  statement with the right key, the screen splits by permission, the preview
+  route carries its own sandbox CSP. `proxy.test.ts` gained the behavioural
+  half — the preview path is `SAMEORIGIN`, every sibling stays `DENY`.
+- `@repo/email` **93/93**, `@repo/contracts` **303/303**, `@repo/db` **24/24**.
+  Typecheck and lint clean on every touched package.
+- `pnpm db:seed` applied: **75 permissions** (up 5), 5 templates. Confirmed in
+  the database: `email.settings.manage` is held by `super_admin` alone;
+  `email.log.view` by `admin`, `read_only`, `super_admin` and `support`.
+- `check:email-templates`, `check:permission-keys`, `check:phantom-deps`,
+  `check:catalog-completeness`, `check-reserved-paths` and `governance:check`
+  all OK.
+- **Dev server, signed in as super_admin:** all four screens render; the
+  preview frame shows the real branded email with live globals over sample
+  values; a test send on `newsletter.welcome` wrote a delivery row that the log
+  shows as Sent, with its Test badge.
+
+### Owed
+
+- F6 (reset/forgot UI), F7 (newsletter), F8 (dashboard), F9 (gate + docs).
+- E2E and axe for the four new screens, to Module 14.
+- `@repo/core`'s full suite still OOMs on this machine; it was run in batches
+  (`index`, `media`, `market`, `sanitize-tiptap`, `term-of-the-day`,
+  `content.integration`, `settings-audit.integration`, plus the new file).
+
+## 2026-09-12 — changes-22: the owner's review of the running site (Modules 11/12/15/08/09, ADR-081)
+
+Eighteen items from `docs/changes/changes-22-design-fixes.md`, worked end to
+end. Five of them were rules rather than fixes and are recorded in **ADR-081**;
+the rest are below.
+
+### Shipped — public site
+
+- **The learn CTA band stopped sharing an edge with the footer.** `/learn` and
+  `/learn/[track]` rendered `CtaBand` bare; every other band on the site is
+  already inside a `Section`. These two were the exceptions.
+- **The /news lead block's runners-up size to their content.** They were
+  `flex-1` inside a rail stretched to the lead card's height, so both cards
+  were mostly empty — a card padded to twice its content reads as a card that
+  failed to load, not as breathing room.
+- **The month archive is gone** from the sidebar, from `ArticleFacets` and from
+  the four catalogs. It rendered as unlinked text (there is no archive route)
+  and was the only facet that scanned every published row.
+- **"More in this category" is one band again.** `VideoRelated` wrapped a muted
+  `Section` around `VideoShelf`, which brings its own — so the inner default
+  tone painted `bg-background` straight over the outer tint, and the heading
+  sat on grey while the cards it introduced sat on white. `VideoShelf` takes
+  `tone`, `anchorId` and a `header` slot now; the heading is centred and its
+  "More videos" link became a button.
+- **`/tools` and `/markets` exist** (ADR-081 #1), rendering the new
+  `ComingSoon`. Both were in the header, the footer and the carousel, and both
+  fell through `[...slug]` onto the 404.
+- **The glossary joins the one section bar** (ADR-081 #4) and its topic cards
+  got the design system's full hover vocabulary — `sheen`, `hover-lift`,
+  `card-hover`, `hover-arrow`, a tinted mark that fills on hover — the same
+  four `CourseCard` and `QuizCard` already use.
+- **The glossary term banner is `spacing="sm"`.** `PageHero` is built for a
+  section front; on a leaf the `section-lg` band pushed the definition below
+  the fold.
+- **The /learn toolbar stopped floating.** New `.section-flush-end` (ADR-081
+  #6) on the toolbar and the continue rail.
+- **The article FAQ is its own surface** (`bg-muted/40` + ring), and tags and
+  share are two rows with a rule between them. They had been one stack of
+  identically-styled chips, half of which navigated and half of which opened a
+  share window.
+- **`ShareRow` uses `SocialGlyph`** (ADR-045, code-style.md #22) — round tinted
+  icon buttons that fill on hover. Its comment claiming lucide has no brand
+  icons predated the house glyph set; the footer has used it since.
+
+### Shipped — admin
+
+- **Video categories are a table with a modal** (`categories-table.tsx` +
+  `category-dialog.tsx`), replacing the manager that rendered every category as
+  an expanded four-field form with its own Save. One dialog serves create and
+  edit, because `saveVideoCategory` is one action.
+- **The media picker's Upload button is reachable again.** Three `min-w-0`s:
+  the recently-used strip is a row of 80px tiles that never wraps, so with a
+  dozen assets its min-content ran to ~1,140px inside a 5xl dialog and grew the
+  flex/grid items containing it. The dialog scrolled sideways; the button went
+  off the edge.
+- **The quiz editor's status updates without a reload.** `QuizEditor` read
+  `state.status` from `useState(initial)`, so `router.refresh()` re-rendered it
+  with a fresh `initial` that nothing looked at. The other four editors on
+  `ContentStatusPanel` already read these five facts from props.
+- **The glossary term's slug previews itself** — `slugify(term)` as the
+  placeholder and in the URL line, the same derivation `saveGlossaryTerm` runs
+  when the field is blank.
+- **The article editor's Excerpt sits above the Body**, not past thousands of
+  words of it.
+- **A section that is not published says so** in the curriculum tree, and a
+  glossary topic with no published terms says "Not on the public index" in the
+  topics table (ADR-081 #2, #5).
+
+### Found
+
+- **`Course.lessonCount` and the curriculum answered different questions**
+  (ADR-081 #2) — the "2 lessons over an empty curriculum" the owner reported.
+  The same mismatch made 100% course completion unreachable whenever a lesson
+  was gated or its section unpublished, because `progress.ts` already used the
+  reachable set as its numerator against this denominator.
+- **The reported "published topic is not listed"** was not a bug and not
+  pagination: the topic had zero terms, and the term the owner published was
+  filed as Unfiled. Confirmed against the dev database. Both behaviours are
+  correct and neither was visible — hence ADR-081 #5.
+- **The reported "Trade Ideas count is 0"** was ADR-015 #11 working: the
+  article is `kind: TRADE_IDEA` and belongs to `/analysis`. What was wrong was
+  the /news sidebar listing the category at zero while linking to an archive
+  that spans all three kinds (ADR-081 #3).
+- **Scheduling audit** (the owner asked): schema, editor panel, action,
+  service, public query and the `publishDueContent` sweep are wired for all
+  five entities. One gap — `applyQuizPass` selected lessons on a bare
+  `status: PUBLISHED`, so passing a quiz on a due-but-unswept SCHEDULED lesson
+  credited nothing. It uses `publicLessonWhere()` now, which is the rule
+  everywhere else.
+
+### Verified
+
+- `@repo/core` **learn.integration 48/48** against real MariaDB, including the
+  two new cases: the header count and the curriculum agree when a section is
+  hidden and again when it is shown, and `createSection` creates a visible one.
+  **articles.integration 53/53** including the new "a category with nothing in
+  this feed is omitted, not listed at zero". **progress.integration +
+  quizzes.integration 56/56.** Core unit suites 105/105.
+- `apps/web` **1449/1449** (27 files) before the two new guards, then the
+  guards themselves: `quiz-editor.test.ts` (5 — every server-owned prop comes
+  from `initial`, none from `state`) and the picker's new min-w-0 case.
+  `explore-destinations.test.ts` rewritten for ADR-081 #1 and passing (19).
+- `@repo/ui` **387/387**. Typecheck clean on `apps/web` and `@repo/core`; lint
+  clean on every file touched. `next typegen` re-run for the two new routes.
+- Not run: the full root `pnpm test`/`pnpm build`, which still exhaust memory
+  on this machine — suites were run per package.
+
+### Owed
+
+- E2E and axe for `/tools`, `/markets`, the rebuilt video-categories screen and
+  the reworked article footer, to Module 14.
+- The `public.comingSoon*` and `public.tools*`/`public.markets*` keys are
+  English-only, like every public key added since ADR-043 #3. Enforced only for
+  active locales, and `en` is the only one.
+- Six files from the in-flight changes-21 F5 commit are not prettier-clean
+  (`admin/api/email/preview/route.ts`, four `admin/settings/email/**` screens,
+  `@repo/core`'s `email-admin.ts`). A formatting pass over them was reverted to
+  keep this change set out of that workstream; `pnpm format` will pick them up.
+
+## 2026-09-12 — changes-21 F6: password recovery has screens, and the staff link stops pointing at /admin/admin (Modules 04/12/09, ADR-079)
+
+Better Auth has minted reset tokens since Module 04 and F4 gave them a real
+email. This gives them somewhere to land.
+
+### Shipped
+
+- **`_lib/credentials.ts`** gains `requestPasswordReset`, `resetPassword` and
+  `resendVerification`, all posting to Better Auth's own handlers — where the
+  per-IP `rateLimit.customRules`, the lockout hooks and `onPasswordReset` live.
+  `signUpWithPassword` gains `callbackURL`.
+- **Public:** `/[locale]/forgot-password` and `/[locale]/reset-password`, both
+  `noindex, nofollow`. A "Forgot your password?" link and `?reset=1` /
+  `?verified=1` notices on `/[locale]/sign-in`.
+- **Staff:** `/admin/forgot-password` and `/admin/reset-password` in the
+  `(admin-auth)` shell, plus the same link and notice on `/admin/sign-in`.
+- **`proxy.ts`:** `ADMIN_SIGN_IN_PATH` becomes `ADMIN_PUBLIC_PATHS`, a set of
+  three. Membership is exact, never a prefix.
+- **The verification nudge** (ADR-079 #7): an unverified learner gets a "Verify
+  email" button in the header, which resends and flips to "Check your inbox".
+- `RESERVED_PATHS` gains `forgot-password` and `reset-password`, in the same PR
+  as the routes (the ADR-047 rule).
+
+### Fixed — the staff reset link was `/admin/admin/reset-password`
+
+`NEXT_PUBLIC_ADMIN_URL` is documented in `.env.example` as
+`http://localhost:3000/admin` — it already ends in `/admin` — and
+`resetPasswordPath` appended another. Every staff reset email since F4 carried
+a dead link.
+
+`reset-url.test.ts` passed the whole time, because its fixture used a bare
+origin (`https://admin.mbx.example`) while the real value does not. The fixture
+was the bug's hiding place, so the regression test now drives all three real
+shapes through `adminPortalBase`: the documented value, the same with a
+trailing slash, and the bare-origin fallback when the variable is unset.
+
+The other candidate fix — dropping the append — would have been worse: with the
+variable unset it sends staff to the LEARNER screen, and the public surface
+names no portal (ADR-052). Normalising to exactly one `/admin` handles both.
+
+### Decided here
+
+- **`useSyncExternalStore`, not `useEffect` + `setState`, to read a query
+  param.** `?reset=1`, `?verified=1` and `?token=` all arrive on the URL of a
+  STATIC shell, so `useSearchParams()` is out (architecture.md #6 — it forces a
+  Suspense boundary and opts the route out of prerendering). The effect version
+  trips `react-hooks/set-state-in-effect`, correctly: it renders once with the
+  wrong value and again with the right one. `app/_lib/use-search-param.ts` gives
+  React an honest server snapshot instead.
+- **The reset screens are NOT anti-enumerating, and the request screens are.**
+  Someone holding a token has already proved something, so naming an expired
+  link costs nothing and withholding it strands them. The request screens say
+  the same sentence whatever the server knows — `requestPasswordReset` cannot
+  even report a network failure, because a visible error on a real address and
+  silence on an unknown one is the same leak in a different coat.
+- **A full page load after a reset, not `router.push`.** The reset revoked every
+  session, so the client router's cached RSC payloads belong to a session that
+  no longer exists. The lint rule's suggestion is wrong here and the disable
+  says why.
+- **The nudge renders beside the name chip, not in an account menu.** ADR-079 #7
+  asked for a menu; there is no account menu until Module 12 builds one, and a
+  nudge deferred to a later module is a verification email nobody ever acts on.
+- **Two small shells extracted** — `AuthScreen` (public) and `AdminAuthScreen`
+  (staff). Four and three screens respectively would otherwise each carry their
+  own copy. Converting the existing sign-in/sign-up pair is mechanical and
+  deliberately left out of a PR about recovery.
+
+### Verified
+
+- `@repo/auth` **20/20** (`reset-url.test.ts` 10, including the four new
+  normalisation cases); `apps/web` **1487/1487** across 28 files, with 14 new
+  `credentials.test.ts` cases and 9 new `proxy.test.ts` cases.
+- **Dev server, full journey.** Staff: request → the emitted link is now
+  `http://localhost:3000/admin/reset-password?token=…` (one `/admin`) → the
+  screen renders anonymously → mismatched passwords are caught with both fields
+  marked invalid → saving redirects to `/admin/sign-in?reset=1` with the notice
+  → signing in with the new password works → **reusing the consumed token shows
+  "expired" with "Request a new link"**.
+- **Anti-enumeration, both channels.** `/request-password-reset` answers
+  identically for `admin@mbxpro.com` and an unknown address, the public screen
+  shows one message for both, and the database has **zero delivery rows** for
+  the unknown address. The completed reset sent `auth.password_changed`
+  (ADR-079 #6).
+- **The nudge**, on a throwaway learner: "Verify email" appears in the header,
+  the click resends (two `auth.verify_email` sends in the log — sign-up's and
+  the resend's) and it flips to "Check your inbox". The probe account and its
+  delivery rows were removed afterwards; the seed admin's password was reset to
+  the value `.env` already documents, so the dev database is unchanged.
+- Typecheck and lint clean on every file this PR touches. No console errors on
+  any of the four new screens.
+
+### Owed
+
+- F7 (newsletter), F8 (dashboard), F9 (gate + docs).
+- E2E and axe for the four new screens, to Module 14.
+- OAuth still has no UI — the last remaining half of the Module 04 CLAUDE.md
+  row, which F9 updates.
+- `check:reserved-paths` currently FAILS on `markets` and `tools`, two route
+  directories that belong to a different, uncommitted changeset in this working
+  tree. Not this PR's to reserve — the check is doing its job.
+
+## 2026-09-12 — changes-24: the lesson pager, the contents rail, and a course outline that reads as a sequence (Modules 07/12, ADR-082)
+
+Three items from `docs/changes/changes-24-fixes.md`, each with a screenshot.
+All three are recorded as rules in **ADR-082** rather than only as edits,
+because each will be wrong again the next time somebody adds a learning
+surface.
+
+### Shipped — the "Next" pager was a slab with an unreadable label
+
+`LessonNav` rendered two `flex-1` `Button`s. A Button is `whitespace-nowrap`
+at a fixed height, so the lesson title had to `truncate` on one line and the
+pair came out as two wide, flat, half-height blocks — and the word that says
+which way the reader is going was `text-xs opacity-80` on the brand ground.
+
+It is two cards now: back is an outline card on `bg-card` with a muted disc,
+forward is filled `bg-primary` with a `--primary-foreground` disc, two lines of
+title in flow and one in the pinned mobile bar. **The eyebrow separates from
+the title by SIZE, not by opacity** — `text-2xs` caps against `text-base`
+semibold, every string at full strength.
+
+Nothing in CI could see the old version. It types, it lints, and axe does not
+compute contrast through an `opacity` set on an ancestor of the text, so
+`lesson-nav.test.tsx` asserts it structurally instead: the component contains
+no `opacity-*` at all, and the eyebrow is `text-2xs uppercase`.
+
+### Shipped — the contents rail was the course page's layout in a 16rem column
+
+`CurriculumList`'s `full` variant lays a row out as
+`[marker] [title …] [duration]`. Subtract the panel's `px-4`, the row's `px-3`,
+a 20px marker, two gaps and a `shrink-0` "42-min read" from 256px and the title
+has about **78px** left — which is why `price-action-candlesticks` came out one
+word per line and a two-lesson section stood taller than the article beside it.
+
+- **A new `rail` variant** (ADR-082 #2), used by the lesson sidebar AND its
+  mobile Sheet. The reading time and the badges drop to their own line under
+  the title, the section count sits under the section title, and the
+  Accordion's `hover:underline` is turned off — at rail width it underlined
+  four wrapped lines of a section title at once.
+- **`rail` renders no card of its own.** It is used bare inside a Sheet, where
+  a second border would be a panel inside a panel; the lesson page supplies the
+  header band and the rule that were the missing separation.
+- `--grid-rail-main` 16rem → **18rem**. Read by the lesson page and its
+  skeleton and nothing else, so it is a one-line change.
+- `CurriculumLesson` gains `isCurrent`, which is **not** `state`: the island
+  can mark several lessons `in-progress` and exactly one row is the page the
+  reader is on. It drives `aria-current="page"` plus a tint AND an
+  inline-start edge bar.
+
+### Shipped — the course outline is a timeline of play marks
+
+The owner's reference (image-41) is a vertical timeline: a circled play mark
+per lesson, joined by a connector, the whole row a target. The `full` variant
+draws that now — an `<ol>`, a `size-9` marker per lesson, a `w-px` connector
+below every node but the last.
+
+- **`LessonStateIcon`'s `not-started` glyph is `Play`, filled.** It was the one
+  state whose glyph said nothing: an empty ring is the ABSENCE of a mark, so
+  three states carried meaning and the fourth carried a hole. Check / dot /
+  triangle / padlock stay mutually distinct in greyscale and the `aria-label`
+  is unchanged, so plan §10's never-colour-alone rule is untouched.
+- **The marker is outside the anchor and clickable anyway** — the
+  stretched-link construction `CourseCard` and `QuizCard` already document,
+  which is the only shape that keeps the play mark in the click target without
+  nesting anchors or adding a second entry to the accessibility tree. The trap
+  it brings is that nothing between the anchor and the `<li>` may be
+  positioned; `curriculum-list.test.tsx` asserts the `<li>` is the nearest
+  positioned ancestor rather than trusting the row to look right.
+- Only the `not-started` marker takes the hover tint. Tinting every node would
+  erase the state it is there to report.
+
+### Decided here
+
+- **A layout that only works above some width is a VARIANT, not a
+  breakpoint.** The alternative was `md:` overrides inside `full` — but the
+  component cannot see which column it was dropped into, and the rail and the
+  Sheet are different widths at the same viewport. The caller names the
+  surface and the component stops guessing.
+- **`isCurrent` is a separate flag from `state`.** Reusing `in-progress` for
+  "this page" worked only because the server has no session; the moment the
+  island answers, several rows are in progress and the highlight would land on
+  all of them.
+- **`<ol>`, not `<ul>`, in the timeline.** The curriculum was always ordered
+  and the accordion only implied it; drawing a sequence and announcing an
+  unordered list would be the markup disagreeing with the picture.
+- **The pager labels changed value, not key.** `learn.lesson.previous` / `.next`
+  read "Previous lesson" / "Next lesson". They are eyebrows now, and "Next"
+  alone above a lesson title read as a heading for it. `en.json` only —
+  `learn.*` is absent from the three inactive catalogs (ADR-043 #3).
+
+### Verified
+
+- `@repo/ui` **406/406** across 23 files, including the two new guard files
+  (`curriculum-list.test.tsx` 12, `lesson-nav.test.tsx` 7); `apps/web`
+  **1487/1487** across 28 files — `grid-base`, `loading-states` and the
+  public-chrome guards all still green over the changed files.
+- Typecheck and lint clean on `@repo/ui` and `apps/web`.
+- **Dev server, rendered HTML.** `/learn/forex/forex-foundations-how-currency-markets-work`
+  serves the `<ol>` timeline with two `size-9` markers, one connector, two
+  filled play glyphs and two stretched links; the lesson page serves the rail
+  panel's header band, one `before:bg-primary` current-row bar, the
+  `aria-current="page"` it belongs to, and the filled forward card. Both 200.
+- **Not verified visually.** The devtools browser profile was held by two
+  Chrome windows already open on the site, and killing the owner's own windows
+  to take a screenshot was the wrong trade. The structure is asserted in the
+  guards and in the served HTML; the look is the owner's call on the next pass.
+
+### Owed
+
+- axe and Lighthouse over `/learn/**`, still Module 14's.
+- The RTL smoke pass that would prove the timeline connector and the pager's
+  flipped chevrons in `ar` — the pager's arrows are one of the three surfaces
+  plan §10 names as highest-risk, and the guard only asserts the class is
+  present.
+- `changes-23-livestream.md` is untracked in this tree and not started.
+
+## 2026-09-12 — changes-22 round two: one FAQ panel for both detail pages, and related terms become a destination card (Modules 07/12/15)
+
+The owner's changes-22 review had ended with "in the details page the
+frequently asked question color should be different from the above details".
+That was read as a /news fix and shipped as one. The same message came back
+pointed at `/glossary/yield` — the glossary term page carried the identical
+block and had never been touched. Fixing it in place would have left a third
+detail page free to invent a fourth shape, so the treatment became a component.
+
+### Shipped — `@repo/ui/components/faq-panel`
+
+`FaqPanel` is the surface changes-22 gave /news, now the ONE FAQ treatment on
+a public detail page: a `bg-muted/40` panel with `ring-1 ring-foreground/10`, a
+tinted `MessageCircleQuestionMark` disc, an optional lead, and the accordion
+under it. The tint is the page's existing second surface (`Section
+tone="muted"`), not a new one.
+
+The icon disc is `bg-primary/10`, **not `--primary-subtle`** — the fixed
+near-white tint Lighthouse measured at 1.65:1 against `--primary-interactive`
+in dark mode on 2026-09-04. `badge.tsx`, `card.tsx` and `icon-card.tsx` each
+carry a test for that pairing; `faq-panel.test.tsx` now carries the fourth, and
+the glossary page's Related-terms disc took the same fix in the same pass.
+
+- **`format` is the only thing the two call sites disagree about.** An
+  article's answers are sanitized rich text from the editor; a glossary term's
+  are plain textarea text stored unparsed (`format="text"`, rendered
+  `whitespace-pre-wrap`). Both render inside the component, so the answer's
+  prose styling has one home. It selects a renderer — sanitization is still the
+  save path's job (ADR-009 / security.md #8).
+- **The first answer is open.** Base UI unmounts a closed panel, so an
+  all-closed accordion is a stack of triggers and nothing else: the block would
+  say "there are questions here" without showing that it answers any of them,
+  which is half of what was asked for. `defaultValue={["faq-0"]}`; the rest stay
+  collapsed so a long FAQ cannot push the page's own ending out of reach.
+- **Absent, not empty-headed,** when a page has no questions.
+- `/news/[slug]` was retrofitted in the same pass and dropped its four
+  `Accordion*` imports.
+
+### Shipped — the glossary term page
+
+- **The FAQ leaves the prose stack.** It had been a fifth `h2` over a `<dl>`
+  inside the same `flex-col gap-8` as the four explanations, on the same
+  background: nothing told a reader the page had stopped explaining the term
+  and started answering questions about it. It is now a sibling of the prose
+  block with its own `Reveal`.
+- **Related terms became a card, not a rule over chips.** A `border-t` is how a
+  page separates two parts of the SAME thing; these are exits to other terms,
+  so they take the `border bg-card shadow-sm` surface the glossary gives a
+  destination everywhere else, with a `Waypoints` disc, a lead, and pill chips
+  that lift on hover. A card against the FAQ's tinted panel is what keeps the
+  two blocks telling apart at a glance — one shared surface would not.
+
+Two catalog keys added to the public `glossary` namespace (`faqLead`,
+`relatedLead`) and one to `news` (`faqLead`). English only, per ADR-043 #3 —
+`check:catalog-completeness` exits 0 (the other three locales warn, as they
+already did for every glossary key).
+
+### Tests
+
+`packages/ui/src/components/faq-panel.test.tsx` — absent when empty, the tint
+and the ring present (a silent loss of them is the bug returning), every
+question a disclosure with the first answer rendered and the second not, both
+formats, and the lead only when a caller passes one.
+
+`pnpm lint` and `pnpm typecheck` clean in `packages/ui` and `apps/web`;
+`packages/ui` 412 tests pass, `apps/web` 1487 pass; `/glossary/yield` and
+`/news/[slug]` verified rendering against the dev server.
+
+No ADR: this is changes-22's own rule ("a FAQ on a detail page is its own
+surface") applied to the page that had been missed, plus the component that
+makes it unrepresentable to miss the next one.
+
+## 2026-09-12 — Module 03/10: permission cards are page-shaped (ADR-083)
+
+The owner asked that permissions be listed the way the admin's own pages are
+grouped — courses and lessons in a card of their own, the way News & Analysis
+has one.
+
+They weren't. `Permission.groupName` held nine values and one of them,
+`content`, held 26 of the 75 keys: every course, lesson, glossary, media,
+article and comment capability in a single scrolling column. The role editor
+ordered the cards alphabetically, so `cms` — a module cancelled by ADR-042 —
+drew first and `users` ninth, and it rendered the raw group id under a
+`capitalize` class, which is how `seo` had been reading as "Seo".
+
+### Shipped
+
+- **Thirteen page-shaped groups.** `content` splits into `learning` (courses
+  and lessons, and so quizzes and videos, which are gated on the lesson keys by
+  ADR-058 #8 and ADR-068 §3), `glossary`, `media` and `articles` — which takes
+  `comments.moderate`, since a comment hangs off an article and is moderated
+  nowhere else. `cms` is renamed `website` to match the screen it governs.
+- **`packages/db/src/permission-groups.ts`** — `PERMISSION_GROUPS` as an ordered
+  array mirroring the admin sidebar (People → Learning → Content → data and
+  reach → System), plus `permissionGroupOrder()`, which returns the array length
+  for a name it does not know: a group seeded before a rename sorts last rather
+  than vanishing, because a card that disappears hides granted permissions. It
+  lives in `@repo/db` for the reason `role-exclusions.ts` does — the seed reads
+  it, `@repo/core` reads it, and `db` is the only package below both.
+- **`loadRoleMatrix()` orders groups by the registry index** and permissions by
+  `sortOrder`, which the seed now writes from the registry index. A card reads
+  view → create → update → delete → publish; alphabetically `create` came first
+  and the key that grants access at all was fourth.
+- **Labels are catalog keys.** `admin.permissionGroups.*` and
+  `admin.permissionGroupDesc.*`, resolved through `t.has` with a `humanizeKey()`
+  fallback — the two-step `settings-shared.ts` already uses for settings groups
+  (ADR-044 #5). New shared helper
+  `app/(admin)/admin/_components/permission-groups.ts`. The `capitalize` class
+  is gone: a catalog string is never re-cased.
+- **Each card carries a one-line description naming the screens it governs** —
+  ADR-044 #8 one level down.
+- **The count left the heading.** It had been a `<span className="ms-2">` INSIDE
+  the `<h3>`, so the accessible name concatenated to "Users & roles0of9" — a
+  margin is not a space. It is a sibling now, which is also better semantics: a
+  heading should not name a number that changes as you click.
+- **The per-user override dropdown takes the same order and the same labels.**
+  It had been rendering 75 raw dotted identifiers in one alphabetical list
+  (ADR-044 #5 again, and unusable besides). Options are now
+  `"<group> · <permission label>"` in card order, which is what makes the
+  combobox's search input useful: "courses" narrows to all ten course and
+  lesson keys.
+
+### What did not change
+
+No permission key was added, removed or renamed, so every `requirePermission()`
+string in the repo is untouched and `check:permission-keys` reads the same
+registry — the tuple shape its regex parses is unchanged. `content_manager` was
+seeded by filtering for the `content` group; it filters for
+`CONTENT_LIFECYCLE_GROUPS` now, whose union is exactly the old group, and the
+test pins the resulting 26 keys. No migration and no reset: `groupName` is a
+value, and the seed's permission upsert already updated it.
+
+### Tests
+
+`packages/db/src/permission-groups.test.ts` — 8 tests. The registry and the
+seed's group column agree in BOTH directions (a seeded group the registry does
+not list; a listed group with no keys), no duplicates, the order spelled out
+rather than derived, an unregistered group sorting last, the content split
+covering exactly the old group's 26 keys, and two source guards on the seed
+itself.
+
+`pnpm lint` and `pnpm typecheck` clean across `packages/db`, `packages/core` and
+`apps/web` — the six `admin-reads.ts` `groupBy` errors are from separate
+in-progress work in the tree, not this change. `packages/db` 19 pass,
+`packages/core` 105 pass (unit), `apps/web` 1487 pass.
+`check:permission-keys` OK; `check:catalog-completeness` exits 0 (the admin
+namespace is English-only by ADR-043 #2).
+
+Verified against the dev server on `/admin/roles/content_manager`: thirteen
+cards in sidebar order, "Courses & lessons 10 of 10" and "News & Analysis 7 of
+7" as separate cards, every card described, and the override combobox on
+`/admin/users/[id]` listing "Users & roles · View users" and on down.
+
+## 2026-09-12 — changes-26: the dashboard stops being about articles (Modules 09/11/03, ADR-085)
+
+The owner asked for "stats & graphs presentations of other features like
+courses, glossary, video, analysis etc on the admin dashboard as well".
+
+`/admin` showed four platform stat cards, a growth curve of users + articles,
+a donut of **article** statuses and an activity feed. Courses, lessons,
+quizzes, glossary terms and video topics — five content types with their own
+admin sections, their own workflow and their own public surfaces — appeared
+nowhere. An editor with six draft lessons and a quiz stuck in review had to
+open four screens to learn that.
+
+### Shipped — `@repo/core`
+
+`admin-reads.ts` gained a content section built on ONE registry,
+`CONTENT_MODELS`: per entity, the permission key that gates it and three
+closures (status breakdown, published-in-window count, published dates).
+`DASHBOARD_CONTENT_ENTITIES`, `DASHBOARD_CONTENT_PERMISSIONS`,
+`loadAdminContentStats(range, entities)` and
+`loadAdminContentSeries(range, entities)` all derive from it, so a seventh
+content type is one entry.
+
+Two Prisma details are recorded in the code because both cost time:
+
+- **Explicit closures, not a delegate lookup.** The six model delegates are
+  differently generic, so a `Record<string, delegate>` collapses to a union
+  that neither `groupBy` nor `count` survives.
+- **`groupBy` infers its generic from its ARGUMENT.** A contextual return
+  type — the interface field's `Promise<{status, _count}[]>` — hijacks that
+  inference and then reports the _argument_ as the type error, six times over.
+  Assigning the call to an un-annotated local inside the closure is the fix.
+
+**`DASHBOARD_CONTENT_STATUSES` is `Object.values(ContentStatus)`.** The
+schema's declaration order already is pipeline order, and deriving it means an
+eighth workflow state arrives here on its own and fails the bucket guard until
+somebody says which bar it belongs in. A retyped list would have dropped it
+silently and the bars would have stopped summing to their row's total.
+
+`foldContentStatusCounts` is exported for its own test: zero-fill every state,
+sum the total. The zero-fill is what keeps the bars' segment order and the
+legend's length stable as content moves.
+
+### Shipped — `apps/web`
+
+**Content library** — six stat cards (courses · lessons · quizzes · glossary
+terms · video topics · articles), each the live published count with a trend
+against the previous window and the period's own publish count on the meta
+line, each a link to its admin section.
+
+**Content pipeline** — replaces the article donut. Six labelled rows of
+proportional segments over five buckets: draft · in review · scheduled ·
+published · archived. That fold is `CONTENT_STATUS_TONE`'s own grouping
+(`status-badge.tsx` already decided IN_REVIEW, SEO_REVIEW and APPROVED are one
+tone), so a bar cannot tell an editor a different story from a badge on the
+courses table. Colour belongs to the **bucket**: the donut indexed a colour
+array, so a status changed colour whenever a zero-count one dropped out.
+
+**Publishing output** — six small multiples, one per type, each scaled to its
+own peak (the card's description says so). Small multiples rather than a
+six-series stack because the palette forces it: three of this theme's six
+saturated hues are the status colours the pipeline uses two cards away, and
+painting "videos" in the warning hue beside a card where that hue means
+"archived" is the reserved-status-colour mistake.
+
+**Learning engagement** — enrolments, active learners, lessons completed, quiz
+attempts, plus the five most-started courses as started-vs-completed bars on
+one scale, and a link through to `/admin/learn/progress`. Reuses
+`loadLearnAnalyticsSummary` / `loadCourseAnalytics`; no new read.
+
+### Decisions
+
+- **Each new block is permission-scoped, and an unscoped block is not
+  queried.** `/admin` has no page permission (the layout's STAFF gate covers
+  it), which was fine while every number was a platform total and is not fine
+  for draft counts. The page resolves its subject and narrows the content read
+  through `visibleContentEntities()`; the learning block is behind
+  `can(subject, "analytics.view")`, the key `/admin/learn/progress` has used
+  since changes-11 Phase 9. The narrowing is in the READ, not the render — a
+  block a subject may not see costs no round trip and reaches no RSC payload.
+- **No permission key added.** Quizzes and videos gate on `lessons.view`, the
+  keys they publish under (ADR-058 #6, ADR-068). A subject holding only
+  `lessons.view` therefore sees three cards, which is intended.
+- **The donut is deleted, not kept.** `DashboardStatusChart`,
+  `DashboardStatusLegend` and `loadAdminArticleStatusBreakdown` are gone;
+  keeping them would have shown articles twice in two geometries. Recharts'
+  `Pie`/`PieChart`/`Cell` imports went with them.
+- **The three new graphics are server components drawn in CSS.**
+  `dashboard-charts.tsx` stays Recharts for the growth curve — that is what a
+  charting library is for. A proportion bar is a `<div>` with a width, and in
+  a one-third column Recharts' category axis truncates each type to ~70px and
+  hides the counts behind a hover.
+- Registries live in ONE file, `admin/_lib/dashboard-content.ts` (icon, href,
+  label key, pipeline buckets), plain `.ts` with no JSX so the guard imports
+  it rather than reading the page as source.
+
+### Tests
+
+`packages/core/src/admin-dashboard.test.ts` — 13 pass. The status list IS the
+Prisma enum and opens on DRAFT; the fold zero-fills, totals what it breaks
+down, and is all zeroes for an empty type; `visibleContentEntities` returns
+nothing for no keys, everything for all keys, exactly `["lessons","quizzes",
+"videos"]` for the one shared key, and keeps registry order regardless of which
+keys are held; `DASHBOARD_CONTENT_PERMISSIONS` is deduped, covers every entity
+and names only `*.view`.
+
+`apps/web/app/admin-dashboard-registries.test.ts` — 15 pass. Every entity has
+an icon, an `/admin/` destination and a catalog VALUE (ADR-044 #5's real
+failure mode is `t()` missing and the identifier rendering); destinations are
+distinct; the buckets claim every workflow status exactly once; every bucket is
+labelled, filled from a `var(--color-*)` token, and has its own fill; every
+gate key is in the seed registry — testing.md #5's silent-403 check in its read
+form, where a typo hides a block from everyone forever.
+
+`pnpm lint`, `pnpm --filter web typecheck` and `pnpm --filter @repo/core
+typecheck` clean.
+
+### Owed
+
+- Integration coverage for `loadAdminContentStats` / `loadAdminContentSeries`
+  against real MariaDB. Docker was not running on this machine, so the
+  Testcontainers suites could not be executed here at all — the queries are
+  unverified against a live database.
+- Not verified visually: no dev-server pass was taken over `/admin`.
+- axe over the new blocks, still Module 14's.
+
+---
+
+## 2026-09-12 — changes-26 round two: the dashboard's windows land on days, and the content reads meet a real database (Modules 09/11, ADR-085)
+
+Reviewing the blocks ADR-085 shipped, against the two items its Consequences
+left owed. The coverage landed; the review found two defects in the window
+arithmetic underneath every number on the screen, and both are fixed here with
+their regression tests (testing.md #2).
+
+### The bug: a bucket labelled with a day did not contain that day
+
+`dashboardWindow()` anchored the period at `now` — `now − 30 days`, to the
+millisecond — while `loadAdminDashboardSeries` and `loadAdminContentSeries`
+label each bucket `bucketStart.toISOString().slice(0, 10)`. So on a render at
+14:37, the bucket labelled `2026-09-09` actually ran 09-09 14:37 → 09-10 14:37,
+and **everything published before 14:37 on its own day was plotted, and
+hovered, under the previous day's date.** The growth chart has had this since
+Module 09; the publishing-output panels inherited it, and they state the date
+in a `title` on every bar, which is where it becomes something an editor reads
+rather than something an axis blurs.
+
+`dashboardWindow` now floors to the start of a UTC day and spans `days - 1`
+back from it, so a range is that many **calendar** days ending today, and a
+bucket contains its label. Both series and every stat-card window read the one
+function, so the card and the panel beside it still agree — which is the reason
+the fix belongs in the shared helper rather than in the two series.
+
+Second defect in the same arithmetic: `bucketSize` hand-wrote `{ unitDays: 30,
+buckets: 12 }` for the 1y range. 12 × 30 = 360 < 365, so everything published
+in the most recent five days was clamped into a bucket labelled a month
+earlier. The count is now derived — `ceil(days / unitDays)` — which is the
+value that cannot be wrong: 7d → 7, 30d → 30, 90d → 13, 1y → 13.
+
+`dashboardWindow` and `bucketSize` are exported for their tests, the way
+`foldContentStatusCounts` already is.
+
+### Shipped — tests
+
+`packages/core/src/admin-dashboard.integration.test.ts` — NEW, 12 pass against
+MariaDB 11.4 via Testcontainers. `CONTENT_MODELS` is six entries of three
+hand-written closures, each repeating the same three clauses (the right
+delegate, `deletedAt: null`, `status: PUBLISHED` inside a `publishedAt`
+window), and a closure that reads its neighbour's table type-checks and passes
+every unit test in the file next door. So each type is seeded with a different
+shape, and the assertions fail in pairs if one strays:
+
+- each type reports from its own table (six distinct totals);
+- a soft-deleted PUBLISHED row dated inside the window reaches no number —
+  not the total, not `published`, not the status fold, not the period count;
+- the bars sum to their row, and `published` equals the PUBLISHED bucket, for
+  every type;
+- the period and the previous period are disjoint, and 7d reaches neither the
+  40-day-old row nor its own previous window;
+- a PUBLISHED row with a null `publishedAt` counts as live and belongs to no
+  window — it must not be bucketed into one;
+- `entities` narrows the read and returns registry order, and an empty list
+  returns nothing at all;
+- the series sums to `publishedInPeriod` for every type (the two numbers sit
+  on screen together);
+- a row lands in the bucket for the day it was published — **the regression
+  test for the alignment bug**, which fails on the old anchoring;
+- every entity key is a finite number even for a type that was never read (a
+  missing key plots as NaN and takes the panel with it);
+- a 90d fold keeps both rows across 13 weekly buckets, and a row published
+  before the window opened does not clamp into the first one.
+
+`packages/core/src/admin-dashboard.test.ts` — 19 pass (was 13). Six added for
+the window arithmetic: `periodStart` is a UTC midnight; each range spans its
+own number of calendar days, today included; the previous window is the same
+length, immediately before, non-overlapping; `buckets × unitDays` covers the
+window for every range; 1y reaches 365; 7d and 30d stay daily.
+
+`apps/web/app/admin-dashboard-registries.test.ts` — 15 pass, unchanged.
+
+### Two lint fixes on the way through
+
+`apps/web/app/(admin)/admin/_lib/dashboard-content.ts` imported
+`DASHBOARD_CONTENT_STATUSES` as a value and used it only inside a `typeof`
+query; `packages/core/src/quizzes.ts` did the same with `FeatureVisibility`.
+Both are now `import type` (code-style.md #13). The previous entry recorded
+lint clean; it was not.
+
+### Tests run
+
+`pnpm --filter @repo/core exec vitest run src/admin-dashboard.test.ts` — 19
+pass. `… src/admin-dashboard.integration.test.ts` — 12 pass.
+`pnpm --filter web exec vitest run app/admin-dashboard-registries.test.ts` —
+15 pass. `pnpm --filter @repo/core lint` clean; `pnpm --filter @repo/core
+typecheck` clean.
+
+### The dev-server pass, and the bug only it could find
+
+Docker came back, so `/admin` was finally opened in a browser — the item the
+previous entry had owed twice. Everything ADR-085 shipped renders: the pipeline
+bars and their legend, the six content cards, the six output panels, the
+learning block, and the growth curve (whose 8-article spike now sits on
+2026-09-07, where it happened). The 1y range was checked in the running app for
+the bucket fix above: 13 buckets, the last one starting 2026-09-08 and holding
+today's rows, where before there were 12 and today's rows were folded into a
+bucket labelled a month earlier.
+
+**What it found: the content cards rendered no meta line at all.**
+`DashboardStatCard` builds its meta only when a PERCENTAGE can be computed,
+and a previous period of 0 makes the percentage undefined — so on a platform
+whose content all arrived this month, every one of the six cards showed a
+number and nothing else. The line it dropped is the one ADR-085 added them
+for: "12 published this period", which is what stops the figure (a live total)
+from being read against the trend's denominator (a window's publishes).
+
+The fix separates the two kinds of caption, because they are not the same kind
+of sentence. `trendLabel` ("vs previous period") is a SUFFIX to a percentage
+and reads as nothing without one, so it stays inside the branch that prints a
+number. The new `note` is a statement in its own right and renders whether or
+not a trend exists. The content cards pass `note`; the platform tiles keep
+`trendLabel`. Verified in the browser: the cards now read "5 published this
+period", "16 published this period", and so on.
+
+`apps/web/app/(admin)/admin/_components/dashboard-stat-card.test.ts` — NEW, 3
+pass. A source guard, the idiom apps/web already uses (`top-bar-icons.test.ts`)
+since it has no jsdom: the note has a branch of its own, `trendLabel` stays
+inside the percentage branch, and the page passes the period sentence as
+`note` rather than `trendLabel`.
+
+One observation, not acted on: `--color-success` in this theme is `#2D72C7`
+and `--color-info` is `#004284` — ADR-072 §3's AA-safe siblings of the
+reference's palette, so "published" and "in review" are two blues. They are
+never adjacent in a bar (scheduled sits between them) and the legend prints
+every count, so the card stays readable, but the palette has less separation
+than ADR-085 §4 assumed when it reasoned about six hues. Colour is
+admin-dynamic (ADR-072), so this is a note for whoever next touches the
+default palette, not a code change.
+
+### Owed, and what is not this work's
+
+- axe over the new blocks — Module 14's.
+- **Blocking the repo-wide gate, and NOT from this work:** `pnpm lint` and
+  `pnpm build` fail at the turbo graph with a cyclic package dependency —
+  `@repo/rbac → @repo/auth → @repo/email → @repo/settings → @repo/rbac`. The
+  last edge is `@repo/settings`'s **devDependency** on `@repo/rbac`, which
+  exists for one import in `settings.integration.test.ts`; the cycle closed
+  when changes-21 (ADR-078) added `auth → email → settings`. architecture.md
+  #8 permits every edge individually — nothing here has to move — but turbo
+  refuses the cycle, so lint and build can only be run per package until that
+  dev-only edge is broken.
+- Also failing and not this work's: `apps/web/app/(public)/[locale]/newsletter/
+_components/token-action.tsx` (`react-hooks/set-state-in-effect`, plus two
+  `useActionState` overload errors) and `app/(admin)/admin/newsletter/
+subscribers-table.tsx` (`asChild` is not a `Button` prop). Left to the
+  changes-21 surface that owns them.
+
+## 2026-09-12 — changes-25 T0–T1: the tools registry, and three ADRs before it
+
+**Module:** 13 (market layer), 12 (public site) · **PRs:** T0, T1
+
+### T0 — the ADRs are 086/087/088, not 084/085/086
+
+The plan asked for ADR-084, ADR-085 and ADR-086. Both 084 (the assessment is
+part of the course) and 085 (the dashboard covers every content type) already
+exist, so the three new ones are **ADR-086** (the tools platform), **ADR-087**
+(the market data platform) and **ADR-088** (what our market numbers mean).
+Every later PR in this track cites those numbers.
+
+security.md #10 now carries two exceptions instead of one, and says why the
+second is gated more loosely: ADR-078's SMTP host captures the next
+password-reset link, where ADR-087's quote key buys read-only prices. The
+narrower harm gets the narrower gate, and writing that down is what stops
+"sealed secret" from spreading by resemblance. architecture.md #8 gains
+`core → secrets` and `email → secrets`; #12's frozen tag list gains `market`,
+deliberately not `content` — market data churns on a daily sweep and content
+on editorial action, so sharing a tag would have every article publish drop
+the rate cache.
+
+`.claude/skills/market/SKILL.md` is rewritten: Module 13 is the market
+platform now, not a seam with nothing behind it.
+
+### T1 — one registry, and a derived binding rather than a second copy
+
+`packages/contracts/src/tools.ts` holds `TOOL_KEYS`, `TOOLS`,
+`TOOL_CONFIG_SCHEMAS` and the admin input schemas; `ROUTE_PATHS` gains eight
+literal `tool-*` entries, spelled out for the reason the learn tracks are — a
+computed key widens `RouteKey` to `string` and takes the menu row's
+compile-time check with it.
+
+**One deviation from the plan, deliberate.** The plan put `TOOL_ROUTE_KEYS` in
+`navigation.ts` as a hand-written second copy of the binding.
+`ToolSpec.routeKey` already states it, so `TOOL_ROUTE_KEYS` is DERIVED from
+`TOOLS` in `tools.ts` instead. The literals that must stay literal are the
+`ROUTE_PATHS` entries themselves, which is what keeps `RouteKey` a union;
+nothing here widens it, and there is now one place to be wrong rather than two.
+
+`riskSentimentConfigSchema` refuses weights summing to zero and bands that
+cross — at the contract, not at render (ADR-088 #6). `pivotPointsConfigSchema`
+offers 1D/1W/1M/1Y and nothing intraday, because the store is daily bars.
+
+### Tests run
+
+`pnpm --filter @repo/contracts exec vitest run` — 19 files, 326 pass
+(`tools.test.ts` is 21 of them). `typecheck` and `lint` clean.
+`node scripts/check-reserved-paths.mjs` — OK; `tools` was already reserved and
+covers the children. `pnpm governance:check` — OK.
+
+## 2026-09-12 — changes-25 T2: the maths, and three things the properties caught
+
+**Module:** 13 (market layer) · **PR:** T2
+
+`packages/utils/src/calculators.ts` gains `gainLoss`, `pivotPoints` (the five
+methods), `crossRate`, `convertAmount` and `accountPipValue`. Two new files:
+`market-hours.ts` (session clock) and `statistics.ts` (ADR-088's numbers). All
+pure, no I/O, no rate fetching — the file header's existing contract.
+
+### Design calls worth recording
+
+**`gainLoss` takes a tagged union, not three optional numbers.** The reference
+widget is "tell us one of these and we will tell you the other two"; three
+optionals make "all of them" and "none of them" representable, and both are
+states nobody would have written a branch for.
+
+**Pivot levels are `null`, not omitted and not zero.** DeMark has one level a
+side and Camarilla has four; one table renders a row per level without
+branching on method, and a null renders as a dash where a zero would render as
+a price of zero.
+
+**`crossRate` returns `null` rather than throwing or `NaN`.** A converter whose
+provider is down has to render a labelled empty state, and a `NaN` reaching a
+`toFixed` is exactly the bug that return type prevents. `accountPipValue`
+follows it: the quote-currency figure needs no rate and is always there, and
+only the account leg can be null.
+
+**DST is derived per instant, never stored.** `zoneOffsetMinutes` reads the
+offset out of `Intl.DateTimeFormat` at the instant being asked about, so the
+tests can pin London at +0 in January and +1 in July, and Sydney the other way
+round because the southern hemisphere's DST runs opposite.
+
+### What the property tests found
+
+1. **A real bug.** `riskSentimentScore` returned `100.00000000000001` — a
+   weighted mean of values each at most 100 can float past it, and a gauge
+   drawing the score as a width would overflow its own track. Clamped, for
+   `pearson`'s existing reason.
+2. **A wrong expectation of mine, which is ADR-088 #1 in miniature.** I
+   asserted that a rising series and a linearly FALLING one correlate
+   negatively. They do not: both have monotonically shrinking log returns, so
+   they correlate at nearly +1 while their prices diverge. The maths was right
+   and the test was wrong. Both cases are now pinned — a return-mirrored series
+   at −1, and the linear faller above 0 — because that pair IS the argument for
+   correlating returns instead of prices.
+3. **A domain the property should not have claimed.** `fc.double` reaches
+   denormals (1e-101), where a variance underflows to zero and
+   `sqrt(varA * varB)` stops being computable. The generators now quantise to
+   six decimals — finer than any price or return this repo stores — and the
+   test says why. That is a fact about IEEE 754, not about correlation.
+
+A third expectation was wrong too: "shut all day Saturday" is UTC-centric.
+Sydney is UTC+11 in January, so 23:00 UTC on Saturday is already Sunday morning
+there and the week has restarted. The gap is bounded by two LOCAL edges and
+neither is a UTC midnight, which is the entire reason `isMarketOpen` exists.
+
+### Tests run
+
+`pnpm --filter @repo/utils exec vitest run` — 12 files, 259 pass
+(`statistics.test.ts` 34, `calculators.test.ts` 45, `market-hours.test.ts` 29).
+Coverage on the three files: statements 97.17%, branches 92.98%, functions
+100%, lines 99.16% — above testing.md #1's 90% pure-logic floor.
+`typecheck` and `lint` clean. `fast-check ^4.9.0` added to `@repo/utils`
+devDependencies; it was already pinned for `@repo/theme` and `@repo/email`, so
+no new version enters the lockfile.
+
+## 2026-09-12 — changes-21 F7+F8+F9: the newsletter is real, the dashboard stops leaking, and the root gate runs again (Modules 17/12/09/05/03/01, ADR-080/078/085)
+
+changes-21's feature track closes. F0–F6 shipped over the preceding commits;
+this lands **F7 (newsletter)**, **F8's two open items** and **F9 (the gate)** —
+and F9 turned out to be the most valuable of the three, because running the
+gate properly for the first time in a while found four real breaks, one of
+them mine.
+
+### F7 — the newsletter (B6, ADR-080)
+
+`newsletter-form.tsx` had shipped hard-`disabled` since changes-03 under
+"Newsletter signup is coming soon", carrying a `TODO(newsletter)` that named
+its own two conditions: a `NewsletterSubscriber` model and an ADR. Both now
+exist, so the placeholder is **deleted, not retired**.
+
+- **Schema** (`20260912123638_newsletter_subscribers_adr080`):
+  `SubscriberStatus` + `NewsletterSubscriber`. Both tokens are stored as
+  SHA-256 hex and never in plaintext — an admin with `newsletter.view` can
+  read this table, and a plaintext unsubscribe token there is a way to
+  unsubscribe anyone from the admin screen. `userId` is `SetNull`, the one
+  relation on `User` that does not cascade: the consent was given
+  independently of the account, so a hard erase nulls the link and **keeps**
+  the subscription.
+- **`@repo/core/newsletter.ts`.** `subscribe()` returns `void` for a new,
+  pending, active and previously-unsubscribed address alike — the
+  anti-enumeration story is that the caller cannot tell them apart, and an
+  ACTIVE row is additionally left untouched (no new token, no second welcome,
+  original `source` preserved). Confirm is single-use and 48h; unsubscribe is
+  long-lived on purpose, because it has to keep working in a message sent
+  months ago. A re-subscribe after unsubscribing goes back through PENDING,
+  never straight to ACTIVE.
+- **Two limits plus a third.** The action holds a per-IP and a per-email Redis
+  budget (security.md #13 wants both: one attacker vs. a distributed
+  mail-bomb aimed at one inbox). `subscribe()` then holds a 10-minute
+  cooldown **on the row**, which is the one that survives a Redis outage —
+  `rateLimit` fails OPEN, and this endpoint sends email.
+- **The one anonymous mutation.** `requirePermission()` cannot be the first
+  line because there is no subject, so it is _swapped_, not skipped: flag +
+  honeypot + schema + per-IP + per-email. `_actions/newsletter.test.ts`
+  asserts each of the five separately, so removing any one turns exactly one
+  test red.
+- **A GET never mutates** (ADR-080 #4). `/newsletter/confirm` and
+  `/newsletter/unsubscribe` are `noindex` static shells whose island POSTs,
+  and `/api/newsletter/unsubscribe` (RFC 8058 one-click) exports no GET at
+  all — verified live: a GET answers **405**.
+- **Admin.** `/admin/newsletter` under People, with counts, toolbar filters,
+  keyset paging, `ConfirmDialog` on both row actions, and a **streamed** CSV
+  export at `GET /admin/api/newsletter/export` (a route, not an action,
+  because an action would have to buffer the whole file into a return value).
+  Formula cells are tab-prefixed, and the export audits **before** it yields a
+  byte, so a cancelled download is still recorded.
+- **`footer.newsletterEnabled` is DELETED.** It meant both "does signup exist"
+  and "is it in the footer", and it sat in the `layout` group ADR-038 paused —
+  so nobody could reach it. The `newsletter` FLAG now answers the first
+  question and `newsletter.placements.*` (group `email`) the second; all four
+  render sites read BOTH and pass their own `source`.
+- A new permission group, `newsletter`, placed with People because the
+  sidebar entry is. `/api/cron/housekeeping` purges pending rows at 7 days and
+  deliveries at 90 — one constant each, never raised (plan Q2).
+
+### F8 — the two items ADR-085 left open
+
+changes-26 had already delivered F8's substance (the content grid) under
+ADR-085. Its scope left F8's §2.2 #9 untouched, and that was the more
+important half:
+
+- **Every platform tile is now gated.** Until today any STAFF member opening
+  `/admin` saw the total user count, the active-employee headcount, the
+  published-article count, the signup growth curve **and the audit-log
+  activity feed**. A dashboard is not a lesser surface — an aggregate over
+  rows someone may not read is still a read of those rows. `OVERVIEW_TILES`
+  is the registry; a hidden tile runs no query and arrives **absent, not
+  zero**, because a zero is a claim about the data and it would be a false
+  one.
+- The growth chart gates **per series** (`showUsers`/`showArticles`): someone
+  may hold `users.view` and not `analysis.view`, and plotting an unread series
+  flat at zero would read as "no signups".
+- **"Active menu items" is gone.** It counted rows for `/admin/navigation`, a
+  screen ADR-038 hid — an unactionable number pointing at a dead end.
+  **Email deliveries** replaced it.
+- `loadAdminDashboardCounts()` — four ungated totals, exported and called by
+  nothing — is deleted rather than left as a convenience, because what it was
+  convenient for is the leak this fixes.
+
+### F9 — the gate, and what running it found
+
+Four breaks, none of which any per-package check would have caught:
+
+1. **The turbo package cycle** the previous entry recorded as blocking root
+   `pnpm lint` and `pnpm build`: `rbac → auth → email → settings → rbac`. The
+   last edge was `@repo/settings`'s **devDependency** on `@repo/rbac`, held
+   for one test. That test moved to `@repo/core`'s
+   `settings-audit.integration.test.ts` — which is where the file's own header
+   already said such a test belongs, core being the one package allowed to
+   depend on both (architecture.md #8). **Root `pnpm lint` and
+   `pnpm typecheck` now pass, 14/14.**
+2. **`export const dynamic = "force-dynamic"` in three route handlers.** It is
+   incompatible with `cacheComponents` (ADR-004) and Next refuses to _compile_
+   the file, so the route answers 500 to every caller. I had copied it from
+   `/api/cron/publish-due` — **which has been 500ing since ADR-071**,
+   silently, because nothing calls it in development. Removed from all three;
+   the sweeps now answer 503 when `CRON_SECRET` is unset, as designed. The
+   regression note lives in the file (testing.md #2).
+3. **My own caching bug**, and the one worth reading twice.
+   `isNewsletterPlacementEnabled` called `loadSetting` (raw) where the footer
+   had previously called `getSetting` (cached). The footer draws on every
+   public page, so that single uncached read took
+   `/[locale]/learn/[track]/[course]` out of prerendering entirely — Prisma
+   reaches for `Date.now()` while timing a query and Cache Components rejects
+   an unstable value. It is the _same_ trap `resolveRecommendations` documents
+   in `public-courses.ts`, and the reason it was worth finding here rather
+   than in production is that the previous symptom was silent: a 200 with a
+   database round trip per view. **This is why the gate includes a build.**
+4. **Missing catalog values in the inactive locales.** The build PRERENDERS
+   every seeded locale, active or not, so a missing key is a hard
+   `MISSING_MESSAGE` there while `check:catalog-completeness` only _warns_
+   (ADR-043 #3 and its `ENFORCED_LOCALES` list). Eight `nav.mega.*` /
+   `nav.appearance` keys from ADR-076 and ADR-064 were `en`-only and failed
+   the build. Filled for `es`/`ar`/`ur` — **not this work's**, done here
+   because without them the F9 gate is unrunnable. The newsletter's own public
+   keys were translated for all four locales in the same pass, so this change
+   adds nothing to that pile.
+
+**`pnpm build` now passes end to end**, and `/newsletter/confirm` and
+`/newsletter/unsubscribe` prerender as `Static` — correct, since the token is
+read client-side at press time.
+
+### A deviation from ADR-080's Enforcement list, recorded rather than hidden
+
+ADR-080 names `newsletter-form.test.tsx` and expects `loading-states.test.ts`
+to fail on a `disabled` newsletter control. Neither is what shipped, and the
+ADR is left unedited (ADRs are append-only):
+
+- `apps/web/app/newsletter-signup.test.ts` does that job instead, as a SOURCE
+  guard. The web app has no jsdom runner — component tests live in
+  `packages/ui` — so the repo's idiom here is `password-fields.test.ts`, not
+  an RTL render. It fails on a `disabled` control, an `unavailableLabel` prop,
+  a lingering TODO, a placement that reads only one of the two switches, and
+  any file still naming the deleted setting.
+- `newsletter-action.test.ts` shipped as `_actions/newsletter.test.ts`,
+  colocated with the action. Same content, different path.
+- One thing that guard taught: every "this must not appear" assertion reads
+  the file with comments STRIPPED, because the forbidden strings are exactly
+  the ones the surrounding comments must name to explain why they are gone. A
+  guard that trips on its own explanation teaches the next reader to delete
+  the explanation.
+
+### Test results
+
+| Package     | Result                                                                                         |
+| ----------- | ---------------------------------------------------------------------------------------------- |
+| `contracts` | 19 files, 326 tests — pass                                                                     |
+| `db`        | 4 files, 32 tests — pass (group order guard updated)                                           |
+| `utils`     | 11 files, 230 tests — pass                                                                     |
+| `rbac`      | 2 files, 28 tests — pass                                                                       |
+| `theme`     | 3 files, 68 tests — pass                                                                       |
+| `settings`  | 2 files, 33 tests — pass (rbac edge gone)                                                      |
+| `i18n`      | 4 files, 22 tests — pass                                                                       |
+| `email`     | 8 files, 93 tests — pass                                                                       |
+| `auth`      | 3 files, 20 tests — pass                                                                       |
+| `core`      | `newsletter.integration.test.ts` **22/22**; `email-admin` + `settings-audit` 20/20; units pass |
+| `web`       | 32 files, **1583 tests** — pass                                                                |
+
+`governance:check`, `check:phantom-deps`, `check:permission-keys`,
+`check:reserved-paths`, `check:email-templates`, `check:home-sections`,
+`check:block-fixtures` and `check:catalog-completeness` all green. Root
+`pnpm lint`, `pnpm typecheck` and `pnpm build` all green.
+
+Also fixed while gating: two type errors in
+`packages/auth/src/auth.integration.test.ts` (a hand-written
+`{ upsert: (args: unknown) => … }` cannot accept Prisma's generic method under
+`strictFunctionTypes`; the imported `db` type can, and typechecks the payload
+too).
+
+### Owed, and what is not this work's
+
+- **Module 14:** E2E for the four new screens, axe on the two new public
+  routes, and a Mailpit-backed journey (signup → confirm → unsubscribe).
+- **Root `pnpm test` still exits 134** (ENOMEM) on this machine, and so does
+  `@repo/core`'s full suite when its 14 Testcontainers files run in parallel.
+  Per-package and per-file runs are the gate here; every suite named above was
+  run and passed.
+- **Not this work's, still red:**
+  `packages/ui/src/components/assessment-card.test.tsx` (3 failures — the
+  component and its test are both untracked, belonging to the in-flight
+  ADR-084 changeset).
+- **A mismatch worth its own decision:** `check:catalog-completeness` treats an
+  inactive locale's gap as a WARNING, but `next build` prerenders that locale
+  and fails hard on it. The check therefore cannot certify a build. Either the
+  build should skip inactive locales or the check should enforce every seeded
+  one — that is an ADR, not a patch, and item 4 above is the third time it has
+  cost someone an afternoon.
+
+## 2026-09-12 — changes-25 T3: `@repo/secrets`, the market store, and the sweep
+
+**Module:** 13 (market layer), 01 (db) · **PR:** T3 · **ADRs:** 086, 087
+
+### `@repo/secrets` — and the proof the move is behaviour-preserving
+
+A new leaf package with no dependencies at all, holding the AES-256-GCM seal
+that lived in `packages/email/src/secret.ts`, parameterised by env-var name.
+`@repo/email`'s `secret.ts` is now a delegation that keeps
+`EMAIL_SECRET_KEY_ENV` and its own two error types, translating the shared
+package's errors at the boundary — callers catch `EmailSecretKeyMissingError`
+by name, and the admin screen renders a warning on it.
+
+**`packages/email/src/secret.test.ts` is unchanged — zero diff — and its 13
+tests still pass.** That is the whole argument the extraction is safe, and it
+is why the file was not touched.
+
+`@repo/secrets`' own suite adds the assertion the single-key version could not
+make: a value sealed under `EMAIL_SECRET_KEY` does **not** open under
+`MARKET_SECRET_KEY`, and the error names the var it was reading. An attacker
+holding one env var gets one secret.
+
+One scaffolding note: the package needs `"types": ["node"]` in its tsconfig,
+which no other package does. It has no runtime dependencies, so nothing else
+drags node's globals in, and `node:crypto` plus `Buffer` are the whole of its
+surface.
+
+### Schema
+
+`MarketProvider` (singleton), `MarketInstrument` (ONE table with a `kind`),
+`MarketDailyBar`, `Tool`, `ToolTranslation`. Migration
+`20260912140807_changes_25_market_platform_and_tools`, applied and seeded.
+
+`Decimal`, not `Float`, for every price: a close is money-shaped and gets
+subtracted from its neighbour to make a return. **Bars, not closes** — a high
+cannot be derived from closing prices, so a week assembled out of closes
+understates its own range and every pivot level computed from it is wrong by
+the same amount.
+
+### The platform
+
+`packages/core/src/market.ts` grows below the original seam, which is
+untouched. `loadProviderDriver()` is the ONE reader of `apiKeyCipher` and
+returns `null` — never throws — for every unconfigured state, because a
+configuration fault on a public page must degrade rather than 500.
+`getRateSnapshot()`, `getDailySeries()`, `getOhlc()` and `foldBars()` carry the
+`market` tag. `market-admin.ts` is the admin's door; `MarketProviderView` has
+no key property, which the integration test asserts at the TYPE level with
+`expectTypeOf` and again at runtime.
+
+`/api/cron/market-sync` is `publish-due`'s twin, and deliberately so — same
+`CRON_SECRET`, same digest comparison, same fail-closed 503, same `userId: null`
+audit, and the same absence of `export const dynamic` (which stops the file
+compiling under `cacheComponents`, as changes-21 F9 found the hard way).
+
+### Three decisions worth recording
+
+1. **A cross with no USD leg is EXCLUDED from the snapshot, not triangulated.**
+   A EUR/GBP bar says nothing about either currency against the dollar.
+   Triangulating would put a derived number in the same map as measured ones,
+   and nothing downstream could tell them apart.
+2. **A malformed bar is DROPPED, never zero-filled.** A zero close reads as a
+   100% crash to every consumer: a log return of −Infinity, a correlation of
+   nothing, a converted amount of zero. The parser drops the day, and a series
+   whose every bar was unusable is an error rather than a silent success that
+   would mark the instrument fresh.
+3. **The cron route evicts the cache only when bars were written.** A sweep
+   that wrote nothing — the provider was down, or everything was current — has
+   no reason to drop a snapshot that is still the best available answer.
+
+### Seed
+
+28 instruments (8 majors as `CURRENCY`, 12 pairs, gold, silver, BTC, ETH, two
+indices, WTI, DXY), a `MANUAL` **disabled** provider, and all eight tools with
+English copy. Create-only, so an admin's words survive the next run. A fresh
+clone reaches for no network on first boot.
+
+`PERMISSION_GROUPS` gains `"tools"` after `"market"` — the fourteenth group and
+the first use of ADR-083's escape hatch. `permission-groups.test.ts` failed on
+the pinned order list, which is the guard working; the list is updated in the
+same commit. Instruments got **no** new keys (ADR-086 #7, this repo's fourth
+such refusal). `tools.view` + `tools.update` go to `content_manager`;
+`tools.publish` stays with admin, because which tools the site offers is not a
+copy decision.
+
+### Tests run
+
+`@repo/secrets` — 21 pass (new). `@repo/email` — 8 files, 93 pass, unchanged.
+`@repo/core` `market.test.ts` — 22 pass (12 new, MSW-mocked, covering the
+"200 + Note means rate-limited" trap on the history path too).
+`market.integration.test.ts` — 26 pass, NEW, Testcontainers: stalest-first
+ordering, budget stop, idempotency within a day, full-then-tail, the fold, the
+snapshot's exclusions, and the key's absence from the view.
+`apps/web/.../market-sync/route.test.ts` — 10 pass, NEW.
+`@repo/db` — 4 files, 32 pass. `pnpm db:seed` runs clean.
+
+`typecheck` and `lint` clean on `@repo/secrets`, `@repo/contracts`,
+`@repo/core`, `@repo/db`, `@repo/email` and `web`.
+`check:phantom-deps` — OK. `check:permission-keys` — OK.
+
+## 2026-09-12 — changes-25 T4: the market admin, and the collision CLAUDE.md predicted
+
+**Module:** 13 (market), 09 (admin shell) · **PR:** T4 · **ADR:** 087
+
+`/admin/market` (instruments: DataTable, toolbar kind + status filters, search,
+keyboard reorder, activate/deactivate, delete) and `/admin/market/provider`
+(driver, base URL, write-only API key, intervals, enabled, a connection test
+and the last-sync panel). ADR-044 / ADR-057 / ADR-077 conventions throughout;
+`admin-dialog-conventions` and `admin-form-conventions` pick both up without
+being edited.
+
+**Two keys, not one.** Instruments are `market.instruments.manage`; the
+provider is `market.providers.manage`. No new keys — both have been seeded
+since Module 01 (ADR-086 #7).
+
+### What the dev-server pass found, and what it cost
+
+Four bugs, none of which any test, typecheck or lint caught. Three were mine.
+
+1. **`admin.market` collided with the sidebar's own label key** — the exact
+   `admin.glossary` collision ADR-069 hit, which CLAUDE.md records with the
+   words "nothing static catches that collision". `admin-shell.tsx` renders
+   `t(entry.labelKey)` and next-intl throws `INSUFFICIENT_PATH` when the path
+   holds an object, so **the entire admin shell went down**, not just the new
+   screen. Fixed the documented way: `admin.market` is the nav label STRING and
+   the screen's keys live under `admin.marketData`, as
+   `admin.glossary`/`admin.glossaryEditor` already do.
+
+   **Now something static DOES catch it.** `apps/web/app/admin-nav-labels.test.ts`
+   is new: every `labelKey` in `admin-shell.tsx` must resolve to a string in
+   `en.json`, and the two known collisions are pinned by name. Verified the way
+   a guard should be — by reintroducing the bug and watching it fail, then
+   restoring. It also asserts each nav GROUP has a distinct label key, which
+   caught bug 2.
+
+2. **A duplicate React key in the sidebar.** I added a second group with
+   `labelKey: "navContent"` when a Content group already existed, so React
+   reported two children with the same key. Market now sits in the existing
+   group, which is where it belonged anyway.
+
+3. **Every field HINT rendered in destructive red.** I had put them in
+   `FieldError`, which paints destructive ink by design (ADR-077) — so the
+   provider form opened looking permanently invalid. They are
+   `FieldDescription` now, and the error slot holds only errors.
+
+4. **"Never synced" was destructive-toned on a fresh install.** The provider
+   ships MANUAL and disabled (ADR-087 #11), so a correct first run showed
+   twenty-eight red badges. It is neutral now: a fault has a screen of its own
+   — `lastSyncError` on the provider page, which is also the screen that can
+   fix it.
+
+Two lint rules also refused code I had written and were right both times:
+`Date.now()` in a server component render is impure (the staleness derivation
+moved into `listInstruments`, where it belongs), and syncing nine pieces of
+dialog state in an effect is a cascading render (the dialog is mounted only
+while open, so it seeds from props once).
+
+The dev server had to be restarted before any of this was visible: it was
+holding a Prisma client generated before T3's migration, so `db.marketInstrument`
+was `undefined`.
+
+### Tests run
+
+`market-actions.test.ts` — 17 pass, NEW. The assertion shape matters: it is not
+enough that a denied call rejects, it must reject WITHOUT reaching `@repo/core`,
+because the service trusts the subject it is handed.
+`admin-nav-labels.test.ts` — 25 pass, NEW.
+`admin-dialog-conventions` + `admin-form-conventions` + `admin-page-conventions`
+— 825 pass, unchanged, and they cover the new screens automatically.
+`pnpm --filter web typecheck` and `lint` clean.
+
+Both screens opened in a browser and confirmed: the table, its filters, the
+freshness column, the two alerts, the write-only key field showing "No key
+saved", and the last-sync panel. The one console error on `/admin/market`
+("Next.js encountered uncached data during prerendering") appears identically
+on the pre-existing `/admin/newsletter`, so it is ambient dev-mode noise rather
+than anything this PR introduced.
+
+## 2026-09-12 — changes-25 T5: the tools service and its admin
+
+**Module:** 13 (market), 11 (content), 09 (admin shell) · **PR:** T5 · **ADR:** 086
+
+`packages/core/src/tools.ts` (`listTools`, `loadTool`, `saveTool`,
+`setToolEnabled`, `reorderTools`, `getEnabledTools`, `getToolPage`,
+`listRelatedCandidates`), the two mixed-relation helpers, `/admin/tools` and
+`/admin/tools/[key]` with its eight config panels.
+
+### Three decisions the code had to make
+
+**`replaceMixedRelations` exists because order runs ACROSS types.** Running the
+existing per-type helper once per type restarts `sortOrder` at zero for each,
+so a curated list of [lesson, article, lesson] would come back as
+[lesson, lesson, article]. `ContentRelation` already stores `targetType` per
+ROW, so the only change is taking the index across the whole list. It also
+deduplicates on the PAIR rather than on the id: a lesson and an article may
+genuinely share an id across tables, and collapsing on id alone would silently
+drop one.
+
+**The source hash covers `faq` — question AND answer.** ADR-069's rule, applied
+in advance this time rather than after the bug: the glossary's hash covered two
+of its four prose fields, so an example-only edit shipped while translations
+claimed to be current. Three integration tests pin it — a body edit, an
+answer-only edit and a question-only edit each flip a sibling OUTDATED, and a
+`sortOrder` change flips nothing.
+
+**A row whose key the registry does not know is DROPPED from every read.** It
+has no route, no config schema and no island, so listing it would hand an
+editor a link into a 404 from inside the admin. The SET is code; a row is only
+ever what a tool SAYS.
+
+**There is no `ContentStatusPanel` on the editor** (ADR-086 #8). A tool is on or
+off. The rail carries one switch, on its own key: `tools.publish`, not
+`tools.update`, so an editor can write every word on a tool page and still not
+decide what the site offers.
+
+### What the checks caught
+
+**The type checker enforced architecture.md #2.** The editor's loader first read
+the related-picker candidates straight from Prisma; `@repo/db` is not resolvable
+from `apps/web`, and it said so before a reviewer had to. That read is now
+`listRelatedCandidates()` in `@repo/core`.
+
+**`admin-form-conventions.test.ts` caught two ADR-077 violations**: raw `<label>`
+elements in the config panel and the enable switch (now `Field` +
+`FieldLabel`, the pattern `taxonomy-panel.tsx` already uses), and three
+`text-destructive` icons that should be `text-destructive-interactive` like
+every other call site in the repo. It also flagged the words inside a comment,
+which is the guard being blunt rather than wrong — the comment is reworded.
+
+**`admin-nav-labels.test.ts`, added in T4, did its job.** `admin.tools` is the
+sidebar's label key, so the screen's keys went to `admin.toolsAdmin` from the
+start instead of taking the shell down a second time.
+
+### Browser pass
+
+`/admin/tools` lists the eight with their needs badge and live switch;
+`/admin/tools/risk-sentiment` renders every section, the seven-row basket
+editor with per-row instrument, weight and direction, and the rail.
+
+One flaw fixed there: the Settings rail said "Live" twice — a badge row and the
+switch's own label — where a switch already shows its state.
+
+The save was exercised end to end: changing `riskOffBelow` from 35 to 30 in the
+browser wrote `config.riskOffBelow = 30`, computed a `sourceHash`, and left a
+`tool.update` audit row.
+
+### Tests run
+
+`tools.integration.test.ts` — 20 pass, NEW (Testcontainers). One transaction; a
+mismatched config writes NOTHING; sanitising on save, FAQ answers included; the
+empty-array-not-undefined rule; the three source-hash cases; mixed order across
+types; PAIR-wise dedup; the dropped unregistered key.
+`admin-form-conventions` + `admin-dialog-conventions` + `admin-page-conventions`
+
+- `admin-nav-labels` — 878 pass.
+  `pnpm --filter @repo/core typecheck` / `lint` clean;
+  `pnpm --filter web typecheck` / `lint` clean.
+
+## 2026-09-12 — changes-25 T6: the public tools area, and five working tools
+
+**Module:** 12 (public site), 13 (market) · **PR:** T6 · **ADR:** 086, 088
+
+`/tools` replaces ADR-081 #1's `ComingSoon` placeholder; `/tools/[tool]`
+renders the six-band flow for all eight, with working islands for the five
+that need no market data. The area gets the ONE `SectionNav` (ADR-076 §1),
+the public `tools` namespace, and its own source guard.
+
+### Calls worth recording
+
+**One island per page, never eight.** `tool-widget.tsx` is a SERVER component
+whose switch runs on the server, so a reader on `/tools/gain-loss` downloads
+the gain/loss island and nothing else. That is the mitigation ADR-086's risk #4
+names, and `tools-area.test.ts` fails if a `"use client"` ever appears at the
+top of that file.
+
+**The band order lives in `tool-shell.tsx`.** The page supplies slots; the
+shell orders them. Eight pages that each compose their own bands become eight
+layouts within a year — the same reason the learn sections come from a registry.
+
+**`useSyncExternalStore`, not an effect, for the viewer's clock and zone.**
+Both are facts about the browser that a server render cannot know. The
+effect-plus-setState version is a cascading render the lint rules refuse, and
+they are right: this is subscribing to an external source, which is the case
+the hook exists for. `use-client-clock.ts` also gives an explicit server
+snapshot, so the server markup and the hydrated markup agree by construction.
+The minute is TRUNCATED in `getSnapshot` because that function must return the
+same value until something actually changed.
+
+**Every rate-derived surface renders `RateFootnote`.** One component rather
+than a line per island, precisely so "we forgot the as-of on the converter"
+cannot happen. A stale snapshot says so in words, and `tools-area.test.ts`
+fails on the words "real-time", "realtime", "live rates" or "live data"
+anywhere in the `tools` namespace (ADR-088 #7) — a copy rule nothing enforced
+before.
+
+**Both halves of an answer, separately.** Position size prints the amount at
+risk (which needs no market data and is exact) even when it cannot print the
+size (which needs a rate). Pip value prints the quote-currency figure always
+and the account-currency one only when the leg resolves — a dash, never a zero
+and never a NaN.
+
+**The catalog went into all four locales**, not just `en`: `next build`
+prerenders every SEEDED locale, so a key missing from an inactive one is a hard
+`MISSING_MESSAGE` at build time while the completeness check only warns. That
+is code-style.md #2's note, followed rather than rediscovered.
+
+### What the existing guards caught
+
+Four, all real, and none of them mine to have noticed unaided:
+
+1. **`password-fields.test.ts`** — the provider's API key field was a bare
+   masked input rather than `PasswordInput`. A credential you cannot reveal is
+   one you cannot check before saving.
+2. **`loading-states.test.ts`** — all four new admin screens inherited the
+   generic spinner, and the tool editor would have inherited a table skeleton
+   it does not look like. Four `loading.tsx` files, each on the archetype that
+   matches: table, form, detail (the tools list is a card grid), editor.
+3. **`explore-destinations.test.ts`** — `tools` still claimed `status: "soon"`
+   while its route had stopped rendering `ComingSoon`. The guard reads the
+   route file for exactly this, so the carousel could not keep advertising a
+   page that no longer says "coming soon". `tools` is `live` now and leaves
+   `COMING_SOON_SECTIONS`, which brings T9's first item forward.
+4. **My own test, twice.** A source guard that reads COMMENTS fails on its own
+   explanation: the sentence recording that the `noindex` line went away read
+   as the line still being there. `tools-area.test.ts` strips comments now, and
+   the band-order assertion reads the return block rather than the prop list
+   above it.
+
+The sitemap gains the index plus every ENABLED tool — a disabled one 404s, and
+listing a 404 is a crawl hint pointing at an error page.
+
+### Browser pass
+
+`/tools` renders the eight cards under a pinned eight-tab section bar.
+`/tools/market-hours` detects the viewer's real zone (Asia/Karachi), draws the
+four session bands across a 24-hour axis with a now-marker, correctly reports
+the market shut on a Saturday, and its related strip auto-tops-up with
+published articles — the curated-then-filled rule working with an empty
+curated list.
+
+### Tests run
+
+`tools-area.test.ts` — 23 pass, NEW.
+`pnpm --filter web exec vitest run` — 36 files, 1763 pass.
+`typecheck` and `lint` clean. `check:catalog-completeness` exits 0 with no
+`tools.*` gap in any locale.
+
+## 2026-09-12 — changes-25 T7: the rate-backed tools
+
+**Module:** 12 (public site), 13 (market) · **PR:** T7 · **ADR:** 087
+
+The currency converter ships; pivot points gains autofill; position size and
+pip value get their account-currency legs. One `getRateSnapshot()` per page,
+cached and tagged `market` (ADR-087 #7) — the island does the arithmetic, and
+there is no endpoint per keystroke.
+
+### The markup arithmetic moved to `@repo/utils`
+
+`quoteWithMarkup` is a pure function under the 90% floor rather than six lines
+inside an island. It is the one piece of MONEY maths on the public side, and
+the thing worth a test rather than a comment is the SIGN: a markup makes the
+rate you get worse, so it comes OFF the mid rate. `mid * (1 + markup)` reads as
+"the bank gives you more" and would present a cost as a bonus.
+
+It returns the mid-market figure ALONGSIDE the marked-up one, never instead of
+it. The comparison is the whole point of the control, and a tool that swapped
+one number for the other would hide exactly what it exists to show. Seven
+tests plus a property (the cost rises with the markup and never exceeds the
+whole amount).
+
+### A pair's price comes off the snapshot
+
+`priceFor` assembles it from the snapshot's USD-based rates: EUR/GBP is
+(GBP per USD) ÷ (EUR per USD). `crossRate` returns `null` when either leg is
+missing, which every widget already renders as a labelled empty state.
+
+`getOhlc` is read on the SERVER for the pivot calculator's autofill — once per
+cached page, for each interval the tool offers — rather than in the island.
+
+### What the checks caught
+
+**ADR-072 §10.** `sm:grid-cols-[1fr_auto_1fr]` for the from/swap/to row is an
+arbitrary value and fails lint. It is a named token now —
+`--grid-field-swap-field` in `@repo/ui` `globals.css`, next to the other grid
+templates — which is what §10 asks for: a new layout value is added there once,
+not inlined.
+
+**A widget-local type that ADDED a field.** `PivotOhlc` carried a `symbol`
+`getOhlc` does not return, and the type checker said so at the one call site
+that wires them together. The shape is structurally identical now, on purpose.
+
+### Verified in the browser, end to end
+
+With 40 days of demo bars loaded, `/tools/currency-converter` converts $100 to
+91.98 EUR at 0.919819 — which is exactly `1 / (1.085 × 1.002)`, the seeded
+close — and prints "Rates as of Sep 12, 2026". Before the bars existed it said
+"No rate is stored for this currency pair", which is the honest empty state
+ADR-087 #11 asks for rather than a zero or a NaN.
+
+### Tests run
+
+`@repo/utils calculators.test.ts` — 52 pass (7 new for `quoteWithMarkup`).
+Coverage across the three maths files: statements 97.24%, branches 93.15%,
+functions 100% — above the 90% floor.
+`pnpm --filter web exec vitest run` — 36 files, 1764 pass.
+`typecheck` and `lint` clean on `web`, `@repo/ui` and `@repo/utils`.
+
+**Not this work's, and pre-existing:** `packages/ui`'s
+`assessment-card.test.tsx` fails 3 of its assertions. Confirmed by stashing
+this PR's only `@repo/ui` change (one CSS custom property) and watching it fail
+identically — it belongs to whatever last touched that component.
+
+## 2026-09-12 — changes-25 T8: correlation and the risk meter
+
+**Module:** 13 (market), 12 (public site) · **PR:** T8 · **ADR:** 088
+
+`packages/core/src/market-analytics.ts` plus the two islands and the
+methodology panel. Both read `MarketDailyBar.close` and nothing else; there is
+no derived table and no stored score.
+
+### Four decisions
+
+**Every correlation window is computed from ONE read.** A `?window=` search
+param would make the page dynamic and take `/tools/correlation` out of ISR for
+a control that changes nothing a crawler sees. `getCorrelationMatrices` reads
+the longest window's bars once and runs seven passes of pure arithmetic over
+what came back — cheaper than one extra request, and the switch is instant.
+The integration test pins the trap: handing every window the whole history
+would make a 5d window quietly read 120 days of it, and all seven would agree.
+
+**The risk history is recomputed, not stored.** The score is a function of bars
+AND of the current basket, so a stored series would be a record of whatever the
+basket used to be — and would not move when an admin edited the weights, which
+is the one time a reader most needs it to.
+
+**A silent component is named by SYMBOL.** "We could not read XAU/USD" is a
+sentence a reader can act on; a cuid is not. Same for correlation's excluded
+row: an instrument that vanishes from a grid is a question nobody can answer.
+
+**The sparkline is hand-drawn SVG.** Sixty points on one path is not worth
+40kB of a charting library, and ADR-086's risk #4 puts a blocking Lighthouse
+budget on these routes. Its y-axis is fixed at 0–100 rather than fitted,
+because a fitted axis makes a flat week look like a rollercoaster.
+
+### A test of mine that asserted the wrong thing
+
+`expect(history.every(p => p.score > 0))` conflated a COMPUTED zero with a
+zero-FILL. A score of exactly 0 is a legitimate reading — the latest move was
+the lowest in its own history, which is maximally risk-off. What actually
+matters is that a point which could not be computed is ABSENT, so the
+assertion is now that the series is shorter than the sixty requested and that
+every point it does carry has a real date from a real bar; a zero-filled point
+would have to invent one.
+
+An earlier version of the same test also picked the wrong series length: with
+70 closes against a 60-day lookback every point still computes. 62 is where the
+oldest points genuinely run out of lookback.
+
+### Copy
+
+"**Rates** as of" is right for a converter and wrong for a correlation grid or
+a sentiment score — neither is a rate. Those two use `common.dataAsOf`
+("Worked out from data up to …"). And nothing in the new copy says "real-time"
+or "live"; `tools-area.test.ts` checks all four words across the whole
+namespace.
+
+### Browser pass, with demo bars loaded
+
+`/tools/risk-sentiment` reads **64 · Neutral**, with "3 of 7 markets in the
+basket reported. No recent history for SPX/USD, NDX/USD, WTI/USD, USD/CHF." —
+ADR-088 #5 working end to end: the four without bars are excluded, counted and
+named rather than dragging the score toward zero. Below it: a 37-point
+sparkline, three per-component gauges with their direction, and the
+methodology panel.
+
+`/tools/correlation` renders the 4×4 grid of instruments that have history and
+names the eight that do not. Every cell prints its coefficient as well as
+tinting — colour is never the only channel.
+
+### Tests run
+
+`market-analytics.integration.test.ts` — 17 pass, NEW (Testcontainers).
+`pnpm --filter web exec vitest run` — 36 files, 1768 pass.
+`typecheck` and `lint` clean on `@repo/core` and `web`.
+`check:catalog-completeness` exits 0.
+
+## 2026-09-12 — changes-25 T9: the header, the sitemap and the homepage
+
+**Module:** 08 (navigation), 12 (public site), 01 (db) · **PR:** T9 · **ADR:** 086
+
+`tools` becomes a menu TREE with eight children, gets a mega panel in the
+About/track shape (ADR-076 §2), lights up the homepage's `popular_tools` band,
+and joins the sitemap (which landed with T6, alongside the `explore-destinations`
+flip an existing guard demanded early).
+
+### Two calls
+
+**The seeded tool rows are spelled out, not imported.** `@repo/db` does not
+depend on `@repo/contracts` and does not acquire the dependency for a list of
+eight labels — the `HOME_PAGE_LAYOUT` note at the top of `seed.ts` is the same
+call, made for the same reason. `contracts/tools.test.ts` and the new nav guard
+are what keep the two honest.
+
+**`tools` LEAVES the flat `NAV` rows when it becomes a tree.** `upsertNavTree`
+matches a root on `[menuId, routeKey, parentId: null]`, so a leftover flat row
+is adopted as the tree's root — which is in fact what happened in the running
+database, correctly, and is why a reset was not needed for the header. Leaving
+the flat row in the SOURCE would have been a second declaration of the same
+root, so the guard asserts it is gone.
+
+**The panel groups by what a reader is trying to DO**, not by what each tool
+reads: Position & risk / Market timing / Rates & relationships. Someone opening
+this menu knows they want to size a trade; they do not know, and should not
+need to know, that two of these need a rate.
+
+### The drift guard
+
+`tools-area.test.ts` grows a header section in `learn.test.ts`'s shape. Three
+registries have to name the same eight destinations — `TOOL_KEYS`, the mega
+panel's columns, and the seeded tree — and adding a ninth means editing all
+three. It fails on whichever half is forgotten, names the tool in the message,
+and also catches a tool listed TWICE and a tool with no header icon
+(`MEGA_MENU_ICONS` is `Partial`, so a missing entry is otherwise silent).
+Verified by deleting one panel entry and watching it fail, then restoring.
+
+### Database
+
+`pnpm db:seed` is enough for the header: `upsertNavTree` upserts, and it
+adopted the existing flat `tools` row and gave it its eight children.
+**`popular_tools` still needs `pnpm db:reset`** to appear in an existing
+database — the homepage rows are create-only, which is the note changes-09
+already carries for its own stubs. Not run here: a reset destroys the dev
+data, and Prisma asks for explicit consent before one.
+
+### Browser pass
+
+The header's Tools entry is a mega-menu button now, and the panel renders all
+eight across its three columns with icons and one-line descriptions.
+
+### Tests run
+
+`pnpm --filter web exec vitest run` — 36 files, 1774 pass (the tools guard is
+28 of them). `@repo/db` — 4 files, 32 pass. `typecheck` and `lint` clean on
+`web` and `@repo/db`. `check:catalog-completeness` exits 0;
+`check:permission-keys` and `check:phantom-deps` OK.
+
+## 2026-09-12 — changes-25 T10: the gate, and an accessibility bug in `@repo/ui`
+
+**Module:** 14 (hardening), 07 (ui), 13 (market) · **PR:** T10
+
+`e2e/public/tools.spec.ts` (23 tests: axe on the index and all eight pages, one
+deep journey, the 404, the RTL overflow check, and the never-"real-time" copy
+rule), `e2e/public/tools-budget.spec.ts`, `e2e/admin/tools.spec.ts`, and
+`@axe-core/playwright` — the tool testing.md has named since Module 00 and
+which had never been installed.
+
+### The first axe run found a real bug, and it was NOT in this PR's code
+
+**`aria-toggle-field-name` on every Switch, Checkbox and Radio in the app.**
+
+Base UI renders these as a `<span role="switch">` (or `radio`/`checkbox`) plus
+a visually-hidden native input, and it puts the `id` it is handed on the
+**input**. `useFieldControl` passes the Field's `controlId` down, so
+`FieldLabel`'s `htmlFor` landed on an `aria-hidden` node and the element a
+screen reader actually reaches had no accessible name at all.
+
+It is invisible in a rendered page and in a source review alike: the label
+reads correctly, the control works, Playwright's own a11y snapshot even prints
+`switch "12-hour clock"`. Only axe's name computation disagreed.
+
+Fixed in `@repo/ui`: `useFieldControl` gains a `labelledBy` option that points
+`aria-labelledby` at the label's own id, and `Switch` and `Checkbox` pass it.
+It does not override a call site that set its own `aria-label` — that would be
+the same bug one level up. `RadioGroup` already named the GROUP; individual
+radio items are named at the call site, because a wrapping `<label>`'s labeled
+control is the hidden input, not the span.
+
+**This affects every Switch and Checkbox in the admin too**, and the fix is
+theirs as much as the tools'.
+
+### What was deleted rather than shipped green
+
+An assertion that `/tools/gain-loss` pulls in no other island. Turbopack's dev
+chunk names are hashed and carry no source filename, so it passed even when
+`tool-widget.tsx` was turned into a client component by hand — verified
+deliberately. **A green check that cannot fail is worse than no check**, so it
+is gone, and the comment says why. The same fact IS guarded, in
+`tools-area.test.ts`, where the file's own `"use client"` can be seen — and
+that guard was verified by breaking it.
+
+### The budget is a weight ratio, not Lighthouse
+
+The plan asked for a Lighthouse budget. This repo has never had a Lighthouse
+harness and standing one up is its own infrastructure — so what shipped
+measures the thing ADR-086's risk #4 actually names: the JavaScript a tool page
+transfers, relative to the homepage, which carries the same header, footer and
+theme runtime. Relative rather than absolute because `next dev` ships
+unminified bundles and an absolute kB figure would say nothing about
+production. **LCP, CLS and a real Lighthouse run remain owed to Module 14.**
+
+### One more E2E lesson
+
+The journey test's first version filled the balance field mid-hydration; React
+took over and overwrote it, and the page then showed arithmetic that was
+correct over the wrong inputs — 200.00 where 400.00 was expected, with no
+error anywhere. It now asserts the seeded default first (proving the island has
+mounted) and asserts each value stuck after filling.
+
+### Tests run
+
+`e2e/public` — 41 pass, 1 fail. The failure is `about-section.spec.ts`'s
+mega-menu hover test, and it is **NOT this work's**: confirmed by stashing
+every nav, seed and `@repo/ui` change in this PR and watching it fail
+identically.
+`e2e/admin` — 12 skipped, the documented `fixme` state every admin spec is in
+until `auth.setup.ts` is resolved.
+`apps/web` unit — 36 files, 1774 pass. `@repo/contracts` 326, `@repo/utils`
+266, `@repo/secrets` 21, `@repo/core` and `@repo/db` green.
+`typecheck` and `lint` clean across `web`, `@repo/ui`, `@repo/core`,
+`@repo/db`, `@repo/contracts`, `@repo/utils`, `@repo/secrets`, `@repo/email`.
+`governance:check`, `check:catalog-completeness`, `check:permission-keys`,
+`check:phantom-deps` all OK.
+
+**Also not this work's, and pre-existing:** `@repo/ui`'s
+`assessment-card.test.tsx` fails 3 assertions, unchanged by this PR's
+`field.tsx` / `switch.tsx` / `checkbox.tsx` edits (confirmed by stashing them).
+
+### Still owed to Module 14
+
+A real Lighthouse run on `/tools/**`; the admin E2E, blocked with every other
+admin spec; and `popular_tools` needs `pnpm db:reset` to appear in an existing
+database.
+
+## 2026-09-13 — changes-25 follow-up: the compact masthead, the two failures, and the first real Lighthouse run
+
+**Module:** 12 (public site), 07 (ui), 14 (hardening) · **PR:** none (follow-up
+to T10)
+
+Everything T10's DEVLOG listed as still owed, plus the owner's ask for a
+shorter banner over the tools area. No ADR: nothing here deviates from a plan,
+and every change either follows an existing documented pattern or fixes a
+defect.
+
+### `PageHero size="compact"` — a named density, not a spacing prop
+
+The owner asked for the tools masthead to be "the small (vertically) top
+banner". `PageHero` had no notion of density, so `/glossary/[term]` and
+`ComingSoon` had each reached for `spacing="sm"` on their own — the same shape,
+arrived at twice, named nowhere.
+
+So `compact` is now a variant (`section-sm` plus a `gap-3` copy stack, against
+`section-lg` plus `gap-5`), `spacing` is **omitted from `PageHero`'s props** so
+density can only come from the variant, and both existing call sites are
+retrofitted onto it. `/tools` and all eight tool pages opt in.
+
+**Height only — the TYPE scale is untouched.** ADR-072's rule is that a band
+which looks wrong gets its spacing fixed, never a private font size, and a
+density that also moved the headline would have silently re-sized the glossary
+term page. Measured at 1366px: the tool masthead goes from ~360px to **232px**,
+which puts the widget's first input above the fold on a laptop.
+
+`about-primitives.test.tsx` asserts the two densities COMPARATIVELY — that
+`compact` is the shorter band, not merely that it renders `section-sm`, because
+the latter would still pass if the default ever moved down to meet it — and
+that both keep `text-display-md`.
+
+### The two "pre-existing failures" T10 recorded, both root-caused
+
+**1. `@repo/ui`'s `assessment-card.test.tsx` (3 assertions).** Two of them
+asked for the `link` ROLE from a `Button render={<a>}`, which Base UI announces
+as a button — a position `course-card.test.tsx` already documents deliberately
+("the CTA is a control, not a destination, in the accessibility tree"). The
+test was written against the opposite assumption. Rather than re-litigate the
+convention in a new component, the assertions now count **`[href]`**: that
+tests navigability, which is the actual claim ADR-084 #3 makes, and it survives
+the convention being revisited either way.
+
+The third was a blanket `[class*="opacity-"]` guard, and it matched `Button`'s
+own base class list — `disabled:opacity-50` — in **every** state, including the
+two where nothing is disabled. Narrowed to opacity that can actually fade ink a
+reader is meant to read: a bare `opacity-*` counts, so does a `hover:` one, and
+`disabled:opacity-*` is the single exemption, because WCAG 1.4.3 drops the
+contrast requirement for an inactive control. **Verified in both directions** —
+adding `opacity-70` to the state line fails it, removing it passes.
+
+**2. `about-section.spec.ts`'s mega-menu hover tests — two of them, not one;
+T10 undercounted.** Not a product bug; the panel opens correctly. The nav is a
+client component, so a pointer event that lands before React hydrates is lost —
+which the file's own keyboard test already documents and works around with
+`toPass`. The hover tests did not.
+
+But **wrapping the hover in `toPass` alone does not fix it**, and this is the
+part worth keeping: the pointer is already on the trigger, so Playwright moves
+it to the same coordinates and Chromium fires `mousemove` with no fresh
+`pointerenter` — and `pointerenter` is the event the menu opens on. Measured
+with a throwaway spec: **twelve retries over six seconds never open it; one
+leave-and-return does.** Both tests now `page.mouse.move(0, 0)` before each
+attempt.
+
+Two text assertions were also scoped to `[data-slot=mega-menu-panel]`. Unscoped
+`getByText("COMPANY")` could be satisfied by the footer's own sitemap column
+whether the menu opened or not, and `getByText("HELP")` by any support link.
+
+### The E2E database was frozen in the past
+
+`global-setup.ts` said `CREATE DATABASE IF NOT EXISTS`, and the seed upserts
+create-only. Together those meant a database first created weeks ago kept its
+**original** value for every setting the seed will not overwrite — so the suite
+was asserting against a one-column footer months after the footer became a
+three-column sitemap, and against a homepage with none of the sections added
+since. The comment claimed this "keeps the suite's starting state honest"; it
+did the opposite.
+
+It now DROPs and re-creates, one statement per `db execute` call (MySQL rejects
+two semicolon-separated statements there). Cost: one `migrate deploy` per run.
+The guard rail that refuses to run against the dev database is what makes this
+safe, and it was already there.
+
+**This immediately exposed three real gaps in `tools.spec.ts`:**
+
+- The never-"live" rule (ADR-088 #7) scanned `body`, and the restored footer
+  carries a seeded **"Live Rates"** row pointing at `/markets`. Scoped to
+  `main` — the rule governs what the TOOL says about its own data. Whether
+  "Live Rates" is the right label for a section still being built is a
+  question for the footer, not for this rule.
+- Scoping to `main` found that **the tools area had no `<main>` at all** —
+  eight pages and the index with their whole content outside any landmark.
+  axe reports a missing region as MODERATE, so the serious/critical gate the
+  suite runs could never see it. The layout now owns it, with the section bar
+  inside, exactly as `about/layout.tsx` and `learn/layout.tsx` do; guarded in
+  `tools-area.test.ts` in both directions (the layout opens one, no page opens
+  a second).
+- The deep journey's hydration guard was **vacuous**. It asserted that
+  `balance` still held the seeded `10000` as "proof the island has mounted",
+  but the server-rendered HTML already carries that value, so it passed before
+  React mounted and the fills were then overwritten — 200.00 where 400.00 was
+  expected, correct arithmetic over the wrong inputs. Nothing marks an island
+  hydrated, so the gate is now the OUTPUT: the amount at risk is computed on
+  the client, so it can only read 400.00 once the inputs reached React, and the
+  whole input sequence retries until it does. (T10's DEVLOG describes writing
+  the guard that does not work — it is corrected here, not re-learned.)
+
+### `popular_tools` is live
+
+`pnpm db:reset` run against the dev database with the owner's explicit consent
+(Prisma 7 refuses this for an AI agent without it, and will not accept an
+earlier message as consent). The homepage band renders as "Do the arithmetic
+first" with its four cards.
+
+**Worth knowing: a dev server running across a `db:reset` serves stale
+everything.** The seed writes straight to the database and invalidates no cache
+tag, and Next's dev cache is on disk. The first symptom here was a header with
+**no navigation at all** — the nav had been cached while the tables were
+mid-reset. Restarting `next dev` fixes it; nothing in the app is wrong.
+
+### The first real Lighthouse run in this repo
+
+T10 shipped a JS weight ratio and said a real run was owed. It is done, against
+a **production build** (`next build` then `next start`), which is the only way
+the numbers mean anything:
+
+| Route                  | A11y    | Best practices | SEO | LCP    | CLS  |
+| ---------------------- | ------- | -------------- | --- | ------ | ---- |
+| `/tools`               | **100** | 96             | 92  | 238 ms | 0.00 |
+| `/tools/position-size` | **100** | 96             | 92  | 563 ms | 0.00 |
+
+Caveat stated plainly: localhost, 1x CPU, no network throttling, so the timings
+are optimistic and are a floor rather than a field measurement. The a11y, SEO
+and best-practices scores do not depend on throttling.
+
+**It found three things, none of them this work's, none of them fixed here:**
+
+1. **`rel=canonical` is relative on every page that sets one** —
+   `<link rel="canonical" href="/tools/position-size"/>`. Lighthouse's
+   explanation is exact: "Is not an absolute URL". `metadataBase` is unset, so
+   Next leaves the value as authored. Site-wide SEO defect, small fix, blast
+   radius every canonical on the site.
+2. **Any URL whose first segment contains a dot returns HTTP 500.** The proxy
+   matcher is the standard Next idiom, which skips dotted paths — so no locale
+   rewrite happens, `[locale]` receives `llms.txt` **as the locale**, and
+   `public-content.ts`'s `term.localeCompare(b.term, locale)` throws
+   `RangeError: Incorrect locale information provided`. Reproduced: `/llms.txt`,
+   `/anything.txt` and `/foo.json` all 500, while `/zz` correctly soft-404s.
+   Crawlers ask for `/llms.txt`, `/ads.txt` and `/security.txt` as a matter of
+   course. The fix belongs in the `[locale]` layout — validate the segment and
+   `notFound()` — not in the matcher, which would start routing real static
+   files.
+3. One CSP issue logged in Chrome's Issues panel, with no sub-items; not yet
+   attributed.
+
+### Tests run
+
+`e2e/public` — **43 pass, 0 fail**, against a freshly recreated database (was
+41 pass / 1 fail at T10, then 40 pass / 3 fail once the database was honest).
+`packages/ui` — 25 files, **421 pass**. `apps/web` unit — 36 files,
+**1778 pass**, including the two new masthead guards and the two landmark ones.
+`typecheck` and `lint` clean on `apps/web` and `@repo/ui`.
+`next build` — succeeds.
+
+### Still owed to Module 14
+
+The three Lighthouse findings above; a throttled Lighthouse run against a
+deployed origin rather than localhost; and the admin E2E, still `fixme` for the
+`auth.setup.ts` reason every admin spec shares.
+
+## 2026-09-14 — changes-26: four asks about the tools area, and the switch that was a bar
+
+**Module:** 08 (navigation), 12 (public site), 07 (ui), 09 (admin shell) ·
+**PR:** none (fix round, changes-24's shape) · **ADR:** ADR-089
+
+Brief: `docs/changes/changes-26-tools-updates.md` (owner, images 44–46). The
+file arrived empty — the images landed and the text did not — and the four asks
+were dictated afterwards and written into it, so the record matches what was
+asked rather than what was inferred from three screenshots.
+
+### 1. A switched-off tool leaves the menu
+
+`/admin/tools` has an on/off switch per tool. It reached the section bar under
+`/tools`, the tools index and the homepage band — all three read
+`getEnabledTools` — and **not the header**, which is the surface that links to
+the page. So a disabled tool kept a mega-menu row pointing at its own 404.
+
+The header is not a fourth reader of `getEnabledTools`: its rows come from the
+`Menu` tree, and the pruning belongs where every other pruning rule already
+lives. `MenuData` gains `tools: Record<string, boolean>` in exactly the shape
+`flags` has, `loadMenuData` fills it from `Tool.isEnabled` keyed by ROUTE key,
+and `assembleNavigation`'s `visible()` drops a `tool-*` row whose tool is not
+enabled. That reaches the footer too, for free, if a tool row is ever seeded
+there.
+
+**Fail-closed, and that is agreement rather than caution.** An absent `Tool`
+row hides the menu item, because `getToolPage` returns null for "no row" and
+for "switched off" alike — both already 404, so a menu that distinguished them
+would disagree with the page it points at. The same rule the missing-flag case
+has followed since Module 08.
+
+The **parent** row is untouched: it carries `routeKey: "tools"`, so it stands
+on its own link and `/tools` stays reachable with every child pruned. Removing
+the section entirely is the `calculators` flag's job, and it already does it.
+
+`tool-actions.ts` now drops the `navigation` tag alongside `content` — the read
+is cached, so without it the switch would have been correct and invisible.
+Dropped on every tool write rather than only on `setToolEnabled`, since
+`saveTool` writes `isEnabled` too.
+
+### 2. The tool page paid its section rhythm four times
+
+`ToolShell` stacked four `Section`s: intro+widget, explainer, FAQ. Each pays
+`section-md` — `clamp(3rem, 6vw, 5rem)` of `padding-block` — so between the
+calculator and the paragraph explaining it there were **two** of them: 160px of
+nothing at 1366px, which is what image-44 is a picture of.
+
+They are now one band with `gap-10` inside it. Rhythm separates things a reader
+treats separately, and this is one thing: the tool, then what it does. 160px →
+40px, and the band ORDER is untouched (ADR-086 #9) — `tools-area.test.ts` still
+reads it from the same place, and now also asserts there is exactly ONE
+`Section` between the masthead and the related strip. Asserted by count, not by
+class, so retuning the gap does not fail it.
+
+### 3 + 4. ADR-089 — a switch sits on a row, and the switch leads it
+
+Two asks about the same control, and the first is a bug.
+
+**The size.** `fieldVariants`' vertical orientation carries `*:w-full`. That is
+correct for an Input, a Textarea and a Combobox — no intrinsic width, and a
+column of ragged boxes reads as an accident. It is wrong for the one control
+whose fixed 44×24 geometry IS its meaning (ADR-074), and it reached it: the
+tool editor's `Live` toggle rendered as a 288px bar across the settings rail.
+Nothing caught it because nothing was wrong at the call site — the screen asked
+for a Field and a Switch, both correctly, and the stretch happened a layer down.
+
+**The order.** Eleven labelled switch rows existed in two shapes. Eight read
+label-then-switch, which the horizontal variant renders with the label taking
+the slack and the control pinned to the far end — on the instrument dialog the
+word `Active` and the thing it names sat ~500px apart. Three read
+switch-then-label. `social-links-manager.tsx` had **both**: a label-first switch
+directly above two control-first checkbox rows. There was no convention to
+break, only a coin flip made eleven times.
+
+So: a Switch is always `orientation="horizontal"` and always first, with the
+label (or a `FieldContent` holding label plus hint) after it. Seven files
+changed. `fieldVariants` also exempts `[data-slot=switch]` from the stretch
+regardless, because a rule that holds only while every author remembers it had
+already been forgotten in the newest screen in the repo.
+
+A table cell's switch is out of scope — it is named by its column header and
+has no Field at all.
+
+**Guards, both verified in both directions.**
+`admin-form-conventions.test.ts` fails on a Switch in a non-horizontal Field
+(checked by making one vertical: it named `tool-editor.tsx:313`) and on a
+`FieldLabel`/`FieldContent` preceding one (checked by flipping the instrument
+dialog back). It also asserts it found more than eight rows, because a regex
+that quietly matches nothing passes everything else forever.
+`field.test.tsx` pins BOTH halves of the CSS — `*:w-full` still present, the
+switch exemption alongside it — since asserting only the second would pass with
+the stretch dropped altogether, which would resize every Input in the admin.
+
+### Tests run
+
+`apps/web` unit — 620 pass across the two guard files, full suite green.
+`@repo/ui` — 25 files, 421 pass, plus 3 new Field assertions (15 in
+`field.test.tsx`). `@repo/core` `assembleNavigation` truth table — 15 pass, 4
+new. `lint` clean on `web`, `@repo/ui`, `@repo/core`; `typecheck` clean on all
+three.
+
+### Found, reported, NOT fixed — neither is in the brief
+
+- **Every pair in a tool's instrument dropdown reads "EUR/USD — EUR/USD".**
+  `tool-widget.tsx` builds `` `${symbol} — ${displayName}` `` and the seed
+  writes `displayName: symbol` for all 28 `PAIRS`. Currencies are fine
+  ("EUR — Euro"). Visible in image-44 and named to the owner before the brief
+  was written.
+- **The instrument dialog shows Chrome's native "Please fill out this field."**
+  (image-46). On its face an ADR-077 violation, but the dialog source is
+  correct — `useFieldErrors`, no `reportValidity()`, and the popup is portalled
+  so there is no ancestor `<form>`. `<Field required>` does put a native
+  `required` on the Input, which alone should not bubble. Not explicable from
+  source; needs reproducing in a browser.
+
+## 2026-09-14 — changes-27: three silent SEO failures, and the merge rule that hid one of them
+
+**Module:** 12 (public site), 05 (settings), 14 (hardening) · **ADR-090**
+
+A walk through the whole SEO path, then a review of the walk. The design came
+out clean and is untouched: SEO fields on the translation rows, hreflang only
+for locales that really have one, unpublished content ABSENT from the sitemap
+rather than listed and noindexed, 301 rows on every slug or track change. What
+the walk found instead were three wirings that were never connected, each of
+which fails without a sound.
+
+### 1. `metadataBase` was never set
+
+Two JSON-LD components carried a comment saying Next resolves their relative
+`url` against `metadataBase`. No layout exported one. So `/og-default.png`,
+every uploaded `/uploads/…` OG image and every JSON-LD `url` resolved against
+Next's own fallback origin — localhost in dev, host-supplied in production. It
+neither throws nor warns; the failure is only visible in an unfurled share card
+on someone else's timeline.
+
+Fixed on the public root layout, which covers every public route because
+metadata inherits. The origin comes from a new `siteUrl()` — four files had
+their own copy of `process.env.BETTER_AUTH_URL ?? "http://localhost:3000"`
+(sitemap, robots, RSS, and now the layout), and the newest copy is the one that
+fails silently.
+
+### 2. Two settings were stored, seeded, editable and read by nothing
+
+`seo.robotsIndex` and `seo.googleSiteVerification` have schemas in
+`@repo/contracts`, rows in the seed and a form at `/admin/settings/seo`. No
+code read either one. An admin could turn "Allow search indexing" off, watch it
+save, and change nothing a crawler saw. That is worse than the control not
+existing — a missing control sends you to a developer, a dead one sends you
+away satisfied. Hence code-style.md #28.
+
+Indexing is now a **two-part** switch and both halves are required:
+`robots.ts` returns `Disallow: /` with no sitemap pointer, and the root layout
+adds `index: false, follow: false`. A `Disallow` alone stops the crawl without
+removing anything already indexed, because the crawler never fetches the page
+whose `noindex` would have told it to drop the URL. Only an explicit `false`
+closes the site; a `null` row is an unseeded database. The verification token
+renders through Next's `verification.google`, and an empty string stays ABSENT
+— an empty verification meta is a failed verification, not a neutral one.
+
+### 3. …and the merge rule that would have eaten half of it
+
+Next 16.3.3's `mergeMetadata` iterates the child's keys with `for…in` —
+**presence**, not definedness — and `resolveRobots(undefined)` returns `null`.
+So `robots: cond ? {…} : undefined` does not inherit the parent's directive, it
+ERASES it. Two routes were written exactly that way (`news/[slug]`, the CMS
+catch-all), and both are article-shaped pages the new site-wide switch most
+needs to reach. Both are conditional spreads now, and the rule is
+code-style.md #26.
+
+### 4. The sitemap was the only public surface reading uncached
+
+Seven `load*SitemapEntries` per request, while every other public read is
+`"use cache"` + `cacheTag("content")`. The cost was the smaller half — the real
+defect was that the sitemap's freshness had nothing to do with the publish that
+changed it. `@repo/core`'s new `getSitemapEntries()` is one cached aggregate
+tagged `content`. The cache sits on the aggregate, not on the seven loaders,
+because `load*` is the pure read an integration test calls without Next's
+transform and `get*` is the cached entry point (the `@repo/settings`
+precedent).
+
+### The guard, and the direction it first failed in
+
+`apps/web/app/seo-metadata.test.ts` reads source, like `grid-base.test.ts`.
+Worth recording how it went wrong: the `robots` check was first a regex,
+`/robots:[^,;\n]*\bundefined\b/`, and `[^,;\n]` cannot cross the comma inside
+`{ index: false, follow: false }` — so it could never reach the `: undefined`
+after it. It matched only the PROSE in the comments explaining the fix, which
+is why its first run "failed" on the two files that carry the fix, and why it
+then passed cleanly with the bug deliberately reinstated in
+`[...slug]/page.tsx`. It is now a brace-depth scan of the property's value,
+re-checked against that same reinstated offender (it named the file) and
+restored after. The origin check asserts the fallback appears nowhere but
+`site-url.ts` **and** that it still appears there.
+
+### Named, not done
+
+The 39 `generateMetadata` exports remain 39 copies of one fallback chain. A
+shared `buildMetadata(translationRow)` would make them provably identical, and
+the `robots` bug above is exactly the drift it would have prevented once rather
+than by guard. It is a refactor across every public route and does not belong
+in a fix for three silent failures. The reviewer also asked why only 36 of the
+39 read `seo.titleTemplate`: the three are the public root layout, the admin
+root layout and the admin design-system page — all intentional, the first
+because it IS the fallback title and the other two because admin is noindexed.
+
+### Tests run
+
+`apps/web` unit — 38 files, **1796 pass**, including 14 new across
+`seo-metadata.test.ts` (10) and `_lib/site-url.test.ts` (4). `lint` and
+`typecheck` clean on `apps/web` and `@repo/core`. `check:phantom-deps` OK.
+Not run: `@repo/core`'s Testcontainers integration suite (unchanged queries —
+the new file only composes existing loaders), and no E2E; a Playwright check
+that `/robots.txt` flips with the setting is owed to Module 14 alongside the
+rest of the deferred public E2E.
+
+## 2026-09-14 — the build, and the locale it had been failing over
+
+**Module:** 06 (`@repo/i18n`), 12 (public site), 11/14 (two test defects) ·
+**PR:** none (merge of `changes-20-phase-5-6` to `main`)
+
+Asked for a green build and a merge. The build turned out to have been failing
+for months, and the gate surfaced four separate defects on the way there. One
+needed an ADR; three were plain fixes.
+
+### ADR-091 — only an active locale is served
+
+`routing.locales` is the STATIC superset next-intl needs to recognise a prefix.
+`Locale.isActive` is what decides whether we publish one. Three callers read
+the first as though it were the second: `generateStaticParams`, the public root
+layout's guard, and `sitemap.ts`.
+
+ADR-007 activates `en` alone, so the build was prerendering `es`, `ar` and `ur`
+— and each is missing **573 public keys**, with `about.*` (230), `learn.*`
+(197) and `economicCalendar.*` (50) absent in their entirety since the modules
+that introduced them shipped. next-intl throws `MISSING_MESSAGE` on a missing
+key, so every one of those gaps was a hard build error; thrown across three
+locales and 180 pages, they then exhausted the build worker's heap. `pnpm
+build` had been dying on `FATAL ERROR: Zone Allocation failed` downstream of
+the first one.
+
+The two halves of the repo had never agreed. `check:catalog-completeness` is
+built on the premise that an inactive locale is allowed to be incomplete — a
+gap warns, `ENFORCED_LOCALES` makes it fail, and activating a locale means
+adding it to that list in the same PR so CI refuses the activation until the
+catalog is filled. The build treated the same locale as shipping. All three
+call sites now read one new function, `getServableLocales()` (active ∩
+routable), because three copies of the rule is how they came to disagree.
+
+**The layout's 404 is the boundary, not `generateStaticParams`.** Dropping a
+locale from the prerender list alone would have moved the missing-key error to
+the first request for `/es` — the same defect, served later instead of built.
+And `routing.locales` keeps its existing guard and its existing job: it is what
+makes `/es/about` a recognised locale prefix that can 404 cleanly, rather than
+a content slug falling through `[...slug]`.
+
+**Multilingual is untouched** — ADR-043 #1 stands in full. No machinery and no
+locale was removed. What changed is that a locale nobody has translated is no
+longer published half-English. The alternative was machine-translating 1,719
+strings across three languages, two of them RTL, with no reviewer; that ships a
+worse thing than a 404 and fixes nothing, since the next `en`-only key breaks
+the build again the same way.
+
+### Three defects the gate found
+
+**`popular_tools` was built and still registered as a stub.** changes-25 T9
+added it to `SECTION_COMPONENTS` but not to `HOME_SECTION_BUILT_KEYS`, so
+`check:home-sections` failed. Moved; `settings.test.ts`'s "declares variants but
+isn't built" pin moves to `forex_rates`, the third key to hold that role (after
+`learning_paths` and now `popular_tools`), which is the test working as its own
+comment predicts.
+
+**`pages.integration.test.ts` used `tools` as a fixture slug.** ADR-081 #1
+reserved that segment. The claim under test is path derivation, not the word —
+renamed to `resources`.
+
+**`progress.integration.test.ts` asserted the opposite of its own name.**
+"summarises without counting an abandoned attempt as activity" asserted
+`quizAttempts === 0` under a comment claiming no quizzes exist in the file. Two
+are created 260 lines above it, both COMPLETED, so the number was 2 and the
+abandoned-attempt claim was never tested at all. It now creates an attempt with
+a null `completedAt` and asserts the count does not move. Verified in both
+directions: dropping the `completedAt` filter from `loadLearnAnalyticsSummary`
+fails it (3 vs 2), restoring it passes.
+
+### Tests run
+
+Full gate, all green. `lint` and `typecheck` workspace-wide. Per package:
+utils 266 · contracts 326 · theme 68 · rbac 28 · i18n 26 (+4 new, ADR-091) ·
+settings 33 · secrets 21 · email 93 · blocks 33 · db 32 · auth 20 · ui 424 ·
+core 653 · web 1801 (+5 new in `locale-serving.test.ts`). All eight `check:*`
+scripts pass, `governance:check` included. `pnpm build` succeeds — 180 static
+pages, `en` only, zero `es`/`ar`/`ur` paths emitted.
+
+`locale-serving.test.ts` reads source, like `seo-metadata.test.ts`: the defect
+is "read the wrong list", and no type can catch it — `routing.locales` and the
+served list are both `AppLocale[]`. Confirmed in the failing direction by
+reinstating `routing.locales` in `generateStaticParams`.
+
+**Not run:** E2E (needs the dev server stopped and is deferred to Module 14
+regardless). Note for this machine: 11 render workers do not fit alongside a
+running `next dev` in 15.7 GB — the dev server has to be stopped for `pnpm
+build`, which is a local resource limit, not a config one.
+
+### Owed
+
+The 1,719 missing translations are now scoped work rather than a build blocker:
+`es` goes live the day `es.json` is complete and its code joins
+`ENFORCED_LOCALES`. Nothing else changed about what Module 14 is owed.
+
+## 2026-09-14 — the market key that could not be written, and the seconds box
+
+**Module 13** (`@repo/contracts`, `@repo/utils`, the provider screen).
+Two owner reports against `/admin/market/provider`, one an environment fault
+and one a control that asked the wrong question.
+
+### `MARKET_SECRET_KEY is not set`
+
+Not a bug. `SecretKeyMissingError` is `@repo/secrets` refusing to seal a value
+it could never open again, and the local `.env` predates ADR-087 — it still
+carried the pre-seal `MARKET_DATA_API_KEY` pair and neither of the two sealed-
+secret keys. Both are now generated into it (`EMAIL_SECRET_KEY` as well: it was
+missing for the same reason and fails identically the first time an SMTP
+password is saved). `.env` is gitignored; nothing was committed.
+
+Worth recording because the screen was already right about this. The
+`hasSecretKey` banner ADR-087 #5 put above the form says exactly what happened,
+before the save rather than after it — the error the owner saw is what you get
+by saving anyway. No code changed here.
+
+**The dev server has to be restarted.** Next reads `.env` at boot, so the
+banner and the save both keep failing until it is.
+
+### The interval fields
+
+`refreshSeconds` and `staleSeconds` were `type="number"` boxes labelled
+"(seconds)". The stored unit is seconds because the arithmetic is in seconds;
+that is not a reason to ask an admin to know that a day is 86400 in order to
+choose a day. Both are now `AdminCombobox` (ADR-044 #10 — refresh has nine
+options so it lands on the searchable branch, stale has seven so it stays a
+Select; both are the rule working). Labels dropped their "(seconds)" suffix.
+
+- `MARKET_REFRESH_CHOICES` / `MARKET_STALE_CHOICES` live in
+  `packages/contracts/src/market.ts`, beside the schema whose `min`/`max` they
+  have to satisfy. `market.test.ts` is new and parses every choice through
+  `marketProviderSchema`, so a value added to one and out of range in the other
+  fails rather than reaching an admin as a save that will not go through.
+- `formatDurationSeconds()` (`@repo/utils`) is the label. It uses
+  `Intl.NumberFormat`'s `unit` style, so "1 minute"/"2 minutes" is not a
+  hardcoded string and needs no catalog entry per value (code-style.md #2). It
+  picks the largest unit the value divides into EXACTLY — 5400 stays "90
+  minutes" rather than becoming "1.5 hours", because an option has to read back
+  as the quantity that was chosen. 86400 is deliberately "24 hours", not "1
+  day": days start above it.
+- **A stored value outside the list is folded in as its own option.** A picker
+  that silently drops the current value turns "I came here to change the base
+  URL" into "I also changed the refresh interval to whatever was first in the
+  list".
+
+### Not done
+
+`staleSeconds < refreshSeconds` is still accepted — a sensible refinement, and
+a validation change nobody asked for. Noted, not shipped. The duplicated
+`MARKET_DATA_PROVIDER`/`MARKET_DATA_API_KEY` block in `.env.example` is dead
+since ADR-087 moved the key into the sealed row; left alone for the same reason.
+
+### Tests run
+
+`lint` and `typecheck` on `@repo/utils`, `@repo/contracts`, `@repo/web` — green.
+utils 270 (+4, `duration.test.ts`) · contracts 344 (+18, `market.test.ts`) ·
+web's `admin-form-conventions` + `admin-dialog-conventions` 638.
+`check:catalog-completeness` and `check:phantom-deps` both exit 0.
+**Not run:** E2E, and the admin provider spec is `fixme` for the usual
+auth-setup reason.
+
+## 2026-09-14 — changes-28: the homepage, and the placeholder that outlived its reason
+
+**Module 12** (public site), with reads in **11** and one refactor in **08**.
+Six asks in `changes-28-public-site-ui.md`, delivered as the PRs in
+`changes-28-plan.md`. Four ADRs: **092** (the video rail is published content),
+**093** (two new bands), **094** (one public session read), **095** (the page
+streams band by band).
+
+### The rail had been reading the wrong source for a month (ADR-092)
+
+The homepage opened on six "Recording soon" tiles. The brief read that as a
+content gap — "add a seeder for these, with real data and media" — and it is
+not one. `_content/home-videos.ts` shipped every `url` null on purpose, and its
+argument was correct: a video URL asserts "this recording exists and teaches
+this", and an invented eleven-character id resolves to whatever happens to
+occupy it.
+
+What had changed underneath it is that **changes-16 shipped `VideoTopic`**
+(ADR-068) — translations, categories, covers, a seven-state machine, an admin
+editor, public routes, and eight seeded rows, two of them playable. The
+placeholder was honest; the source was wrong. The rail now reads
+`getFeaturedVideoTopics`, a new cross-track reader in `@repo/core`, and the
+registry plus its 18 catalog keys are deleted.
+
+Ordered `publishedAt desc`, **not** `sortOrder`: `sortOrder` is a per-track
+editorial ordering, and interleaving two of them by it produces an order
+neither editor chose. The reader takes the first video it can make SAFE rather
+than the first row, so one unrecognised URL cannot mute a topic with a good
+recording behind it, and `resolveVideoSource` stays the single place a stored
+string becomes an embed URL (security.md #9).
+
+**Two defects fell out of the same change.** The rail's heading was the literal
+"Start with the six that matter" — a count in a catalog string that nothing
+kept true. And `/learn`'s masthead decided whether to offer its "watch" jump
+from `LEARNING_VIDEOS.length > 0`: the length of a hardcoded array, which is
+`true` on a database with no videos in it at all. It now asks the database,
+with the same arguments as the rail, so the two share one cache entry.
+
+**"Recording soon" is gone**, and only because a third state became available.
+Under the registry a null URL meant a recording that did not exist. A
+`VideoTopic` with no video is a page that can be read today — the shape
+`videoTopicInputSchema` explicitly allows and most seeded topics take — so the
+tile links to it, badged "Read the guide".
+
+**Covers seed no `MediaAsset`.** An asset row means bytes, and a row whose file
+does not exist 404s in every picker and every `next/image` request — the
+failure the videos seed already refuses for uploaded sources.
+`videoTopicCoverUrl(slug)` hashes into the six committed panels instead, the
+fourth use of the ADR-047 §3 pattern.
+
+### The tile grew a second target
+
+Once every tile stands for a real page, playing and navigating are different
+destinations — the distinction ADR-068 §7 already draws on the videos shelf. A
+playable tile is now an `<article>` holding a full-bleed play `<button>` and a
+title `<a>` as **siblings**. Not nested: an anchor inside a button is invalid
+HTML, and an overlay that swallows the title is the exact bug §7 was written
+about. `home-composition.test.ts` fails the nesting in both directions.
+
+### Two new bands (ADR-093)
+
+`quotes` closes the page above the risk disclaimer; `connect` sits before the
+newsletter ask.
+
+The quote text is a catalog key and **the attribution is not** — a person's
+name is not translated, and routing it through a catalog invites a translator
+to render "Albert Einstein" phonetically in Arabic, which is a claim about a
+different person. The dash before it IS a key: punctuation around a name is
+typographic, and not the same mark in every script. The day's quote is the UTC
+day number modulo the list (the `term-of-the-day` technique, D29) — a random
+pick would differ between the server render and any later revalidation of the
+same cached page, so "quote of the day" would become quote of the request.
+
+`connect` reads real `SocialLink` rows and renders **nothing** when none is
+active. The reference it is modelled on embeds a named analyst's livestream and
+offers "view all interactive livestreams"; changes-23 is unbuilt, so neither is
+copied. The panel is the newest published video topic and the button points at
+`/analysis`, which is what the heading actually promises.
+
+`SocialLinkIcon` moved out of `footer.tsx` into its own file rather than being
+copied into the second call site — a fallback rule that exists twice is a
+fallback rule that gets fixed once. It is the rule ADR-045 wrote after the
+footer rendered five empty circles.
+
+**One test caught a real mistake.** `connect` was registered with an empty
+variant list, and `settings.test.ts` has pinned since changes-03 that an empty
+list "rejects EVERY variant while looking like it configures something". It is
+now absent from `HOME_SECTION_VARIANTS` entirely, which is what
+`risk_disclaimer` already does.
+
+### Glossary and tools stopped looking like the same band twice
+
+The glossary spotlight's default was `chips`: a wrapped row of eight term pills
+under a two-line heading — a band whose heading was three times the height of
+its content, which is what the brief's image 50 caught. A chip also says
+nothing: "Arbitrage" is only useful to a reader who already knows what
+arbitrage is, and the band exists for the reader who does not. The new default
+`cards` shows the term with the plain-language line `GlossaryListEntry` has
+carried all along. `chips` and `grid` are kept.
+
+The tools band picked up the design system's own `.card-hover .hover-lift
+.sheen` trio in place of a bespoke `hover:shadow-md`, a larger ringed icon
+tile, and an "Open the calculator" affordance. That affordance is **always
+visible and brightens on hover**, never `opacity-0` revealed on hover: a
+pointer is not the only way onto the page, and it is also what keeps axe able
+to measure its contrast — the reason `lesson-nav.test.tsx` forbids an ancestor
+opacity outright.
+
+### One session read for the public surface (ADR-094)
+
+The visitor band needed the same answer the header's auth chip already fetches.
+Two islands each calling `/api/auth/get-session` is two round trips for one
+question and two chances for the header and the footer to disagree, so
+`PublicSessionProvider` now does it once and `AuthSlot` consumes it. The
+STAFF-reads-as-anonymous rule (ADR-052) moved to the provider, so every
+consumer inherits it rather than each remembering to.
+
+The band sits **above the footer, in flow, never pinned**. A fixed bar covers
+content on exactly the screens with least of it, and competes with the sticky
+header for a phone's vertical budget. It renders for `anonymous` alone — one
+condition, so a fourth session state cannot fall through to showing it — and is
+absent while loading, because otherwise it appears and then vanishes for every
+signed-in learner, a layout shift at the bottom of every page.
+
+### The page streams (ADR-095)
+
+`page.tsx` rendered twelve bands as siblings with no boundary, so the document
+was exactly as slow as its slowest section. Every band below the first two now
+has its own `<Suspense>` with a tone-matched skeleton. The tone is the point:
+a muted band whose placeholder is white flashes a stripe that then disappears,
+which reads as a bug rather than as loading — so `SECTION_PENDING` lives beside
+`SECTION_COMPONENTS`, and a key with no entry falls back to a default band
+exactly as a key with no component falls back to the stub.
+
+The eager bands are wrapped in a `Fragment`, not a `<div>`: `main` is a flex
+column, and an element between it and a full-bleed `Section` becomes the flex
+item and collapses the band's background to content width.
+
+### Tests run
+
+`lint` and `typecheck` workspace-wide, both green. Per package: contracts 326 ·
+web 1808 + 31 new (`home-composition.test.ts` 14, `public-session.test.ts` 11,
+`home-quotes.test.ts` 6) · ui 424 · core `videos.integration.test.ts` 25 (19
+before — six new against a real MariaDB, covering the cross-track span, the
+draft/soft-delete exclusion, the skip-to-the-first-safe-source loop, the
+null-source guide, the de-registered track, and the over-fetch before the
+limit). All eight `check:*` scripts pass; `check:catalog-completeness` warns
+only for the three inactive locales, which ADR-091 makes correct.
+
+**Not run:** `pnpm build` and E2E. Both need the dev server stopped on this
+machine, and E2E for the public site is owed to Module 14 regardless.
+
+### Owed
+
+axe on the two new bands and on the visitor band, a Lighthouse pass to confirm
+ADR-095 actually moved the number rather than only the architecture, and an
+E2E asserting the band is absent for a signed-in learner. All to Module 14.
+
+## 2026-09-14 — the base URL with a slash on the end
+
+**Module 13** (`@repo/core`). Follow-up to the entry above, from the owner
+re-testing the provider save.
+
+### The key error was the dev server, not the file
+
+`.env` was written at 16:07:35; the running `next dev` started at 16:00:52.
+[next.config.ts](../../apps/web/next.config.ts) loads the root `.env` with
+`dotenv.config()` ONCE at startup — Next auto-loads `apps/web/.env`, which does
+not exist, so the root file reaches the process through that one call and
+nothing re-reads it. An edited `.env` therefore does nothing until the server
+is restarted, and the error message is identical before and after the fix,
+which is what made it look unfixed. No code changed; recorded because the next
+person to hit it will read the same message and reach the same wrong
+conclusion.
+
+### `resolveBaseUrl()`
+
+The owner entered `https://www.alphavantage.co/`. Both drivers build
+`${baseUrl}/query?…`, so the trailing slash asks the provider for `//query` —
+and a provider error at that point reads exactly like a rejected API key, which
+is the second reason one problem looked like the other.
+
+Normalised in `market.ts` at the point of USE, not on save, so a row already
+holding the slash starts working without being re-entered. Only-slashes falls
+back to the default: `"/"` is not an origin, and stripping it to `""` would
+fetch `/query` against whatever host the process resolved. The default
+`https://www.alphavantage.co` is now the named `ALPHAVANTAGE_BASE_URL` instead
+of the same literal written twice.
+
+### Tests run
+
+Three new cases in `market.test.ts`, on both the rate and the history provider.
+They work because MSW runs `onUnhandledRequest: "error"`: a request to `//query`
+fails the suite rather than quietly 404ing, which is the same reason the real
+failure was hard to read. Confirmed in the failing direction — reverting
+`resolveBaseUrl` to `baseUrl || DEFAULT` fails all three.
+
+core `market.test.ts` 25 (+3) · `eslint` and `tsc --noEmit` clean on the
+package. **Not run:** the full `@repo/core` lint task, which exits 134 (OOM) on
+this machine — a local resource limit, noted before against `pnpm test`.
+
+## 2026-09-14 — the sweep gets a button, an interval that means something, and a runbook
+
+**Module 13 / 09 — ADR-096.** Three owner asks in one: a manual sync, a cron
+that honours the admin's setting, and instructions for running it. They are one
+change because the second is what makes the first honest — a button that syncs
+and a setting that does not is worse than neither.
+
+### The scheduler ticks; the provider row decides
+
+`/api/cron/market-sync` now asks `getSyncDueState()` before spending
+anything, and answers **200** `{ swept: false, reason: "not_due", nextDueAt }`
+inside the interval. 200 and not 429: the call succeeded and the system is in
+the asked-for state, and a scheduler alerting on non-2xx must not page anyone
+for "not yet".
+
+The point is what it buys. **The external schedule stops being the cadence.**
+Point any scheduler at the route every 15 minutes and the admin's dropdown
+governs how often the provider is actually called. Changing the cadence is a
+dropdown, not a redeploy — which is what "admin-managed interval" was always
+supposed to mean, and never was.
+
+`?force=1` skips the check for an operator with the secret, and is not a
+bypass of anything else: a forced call with a wrong token is still 401.
+
+### `refreshSeconds` was read by nothing
+
+Stored, seeded, typed, admin-editable, rendered as a control, and consumed
+nowhere — its only reader, `createMarketService()`'s `ttlSeconds`, is called
+by no code in the app, because ADR-087 #7 had tools read a cached snapshot of
+stored bars instead. An admin could change it, get a success toast, and change
+nothing. That is code-style.md #28 exactly, in the module that shipped after
+the rule.
+
+Wired rather than removed, which is the direction #28 prefers. No new column: a
+second `syncIntervalSeconds` would be two sources of truth about one cadence
+and the unread one is the one that drifts. Label is now **"Sync interval"**.
+Found while answering "how does sync happen now" — the honest answer was "it
+does not, and one of the settings on that screen is decorative".
+
+### Sync now
+
+`runMarketSync()` (core) + `syncMarketDataAction()`, gated on
+`market.providers.manage` — the key that owns the request budget. It does NOT
+go through the cron route: that route's job is authenticating an unattended
+caller with a shared secret, and having an admin screen present a bearer token
+to its own app would be a second authorization scheme for one action. The audit
+row is the visible difference — `market.sync.manual` with the admin's id
+against the route's `market.sync` with `userId: null`.
+
+**A run with failures reports "finished with failures", not "failed."** A free
+tier running out mid-sweep is the expected case; ADR-087 #9's staleness
+rotation puts what was missed at the front of the next run, which is only
+reassuring if the numbers are on screen. The button renders attempted / synced
+/ bars / skipped and names the failing symbols.
+
+The due check is deliberately skipped for the button. The interval governs a
+SCHEDULER, not a person who pressed a thing. A forced run still writes
+`lastSyncAt`, so the next scheduled tick is measured from it — that column
+means "when we last called the provider", and nothing else.
+
+### `docs/ops/cron.md`
+
+All three cron routes, local and production, one page because they share one
+secret and one shape. Windows Task Scheduler, crontab, Vercel, GitHub Actions,
+systemd. Two things in it are findings, not instructions:
+
+- **Vercel Cron issues GET and these routes export only POST.** A cron that
+  405s is silent. Flagged rather than fixed — adding a GET export is a decision
+  about the deployment, which does not exist yet.
+- **The free Alpha Vantage plan is 25 requests/day and the sweep spends one per
+  active instrument.** 28 are seeded active, so a first run cannot complete on a
+  free key. Worse, the driver only speaks `FX_DAILY`, which is forex-only: the
+  two metals, two crypto, three indices and one commodity will fail every run
+  until it learns the other endpoints. They are seeded ACTIVE, which is the
+  part worth knowing before reading a failure list.
+
+`.env.example` lost its two dead market blocks — `MARKET_DATA_PROVIDER` and
+`ALPHAVANTAGE_API_KEY` have been read by nothing since ADR-087 moved the key
+into the sealed row, and the owner had filled them in. Its `CRON_SECRET` entry
+now names all three routes.
+
+### Tests run
+
+core `market.integration.test.ts` **30** (+4, real MariaDB via Testcontainers)
+· `market.test.ts` 25 · web cron routes + admin convention guards **658**
+(+5 in `market-sync/route.test.ts`). `eslint` and `tsc --noEmit` clean on
+every changed package. `governance:check`, `check:permission-keys`,
+`check:phantom-deps`, `check:catalog-completeness` all OK.
+
+Confirmed in the failing direction: relaxing `getSyncDueState`'s boundary from
+`<=` to `<` fails "is due exactly ON the boundary", which is the case a
+scheduler ticking on the hour against an hourly interval hits every time.
+
+**Verified against the running app, not only in tests.** With the real
+`CRON_SECRET`: no token 401, wrong token 401, and — with `lastSyncAt` staged
+to now and rolled back to null afterwards — a correct token inside the interval
+returned exactly `{"swept":false,"reason":"not_due","nextDueAt":…}` at 200,
+having made no provider request.
+
+**Not run:** a real sweep. It would spend the owner's entire free-tier daily
+quota (28 attempts against a 25/day cap), so it is theirs to trigger. E2E for
+the new button is owed to Module 14 with every other admin spec.

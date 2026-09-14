@@ -57,11 +57,14 @@ export default async function SignUpPage({ params }: PageProps<"/[locale]/sign-u
           </div>
           <SignUpForm
             homeHref={getPathname({ href: "/", locale })}
+            verifiedHref={`${getPathname({ href: "/sign-in", locale })}?verified=1`}
             minPasswordLength={MIN_PASSWORD_LENGTH}
             labels={{
               name: t("name"),
               email: t("email"),
               password: t("password"),
+              showPassword: t("showPassword"),
+              hidePassword: t("hidePassword"),
               passwordHint: t("passwordHint", { count: MIN_PASSWORD_LENGTH }),
               submit: t("signUpSubmit"),
               failed: t("signUpFailed"),

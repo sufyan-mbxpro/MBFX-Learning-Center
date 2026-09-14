@@ -20,6 +20,14 @@
 // dropped: `resolveMegaMenuPanel` appends it to the last column, so adding a
 // page to the seed can never make it invisible in the header.
 import {
+  ArrowLeftRight,
+  Calculator,
+  Clock,
+  Coins,
+  Gauge,
+  GitFork,
+  Grid3x3,
+  Percent,
   BadgeCheck,
   BookA,
   Building2,
@@ -32,7 +40,12 @@ import {
   Video,
   type LucideIcon,
 } from "lucide-react";
-import { ROUTE_PATHS, type RouteKey } from "@repo/contracts";
+import {
+  LEARN_TRACK_ROUTE_KEYS,
+  ROUTE_PATHS,
+  type LearnTrackKey,
+  type RouteKey,
+} from "@repo/contracts";
 import type { MessageKey } from "@repo/i18n";
 
 /** A column heading, and the children that belong under it. */
@@ -72,7 +85,45 @@ export const MEGA_MENU_ICONS: Partial<Record<RouteKey, LucideIcon>> = {
   "about-transparency": Scale,
   "about-security": ShieldCheck,
   "about-support": Headset,
+  // The eight tools (ADR-086). One glyph per tool rather than one for the
+  // section: the section bar under /tools lists all eight side by side, and a
+  // row of identical icons is a row of no icons.
+  "tool-position-size": Calculator,
+  "tool-pip-value": Coins,
+  "tool-gain-loss": Percent,
+  "tool-pivot-points": GitFork,
+  "tool-market-hours": Clock,
+  "tool-currency-converter": ArrowLeftRight,
+  "tool-correlation": Grid3x3,
+  "tool-risk-sentiment": Gauge,
 };
+
+/**
+ * One school's panel, in the About panel's shape (ADR-076 §2): three headed
+ * columns and a "view all" footer, so every mega panel in the header is the
+ * same kind of object. Built per track from `LEARN_TRACK_ROUTE_KEYS` rather
+ * than typed twice, so "Learn Crypto" cannot be left pointing at forex rows.
+ *
+ * The footer lands on the school's OWN index, which is what "Learn Forex ·
+ * View all" promises. ADR-065 §4 refused a footer because it would have
+ * pointed at the umbrella `/learn`; the umbrella stays a labelled row in the
+ * last column instead, carrying its own seeded label.
+ */
+function trackPanel(track: LearnTrackKey): MegaPanelSpec {
+  const keys = LEARN_TRACK_ROUTE_KEYS[track];
+  return {
+    columns: [
+      { key: "study", titleKey: "mega.learn.study", routeKeys: [keys.index, keys.videos] },
+      {
+        key: "practise",
+        titleKey: "mega.learn.practise",
+        routeKeys: [keys.quizzes, keys.glossary],
+      },
+      { key: "more", titleKey: "mega.learn.more", routeKeys: ["learn"] },
+    ],
+    viewAll: keys.index,
+  };
+}
 
 /**
  * Panels, keyed by the TOP-LEVEL item's route key. An item with no entry
@@ -80,47 +131,9 @@ export const MEGA_MENU_ICONS: Partial<Record<RouteKey, LucideIcon>> = {
  * as those sections are built, which is the ADR-042 cadence.
  */
 export const MEGA_MENU_PANELS = {
-  // The two schools (ADR-065 §4). One column, five rows since changes-16
-  // added Videos: this panel exists to answer "what can I do in this school",
-  // and splitting five destinations across columns would be a grid pretending
-  // to be a taxonomy.
-  //
-  // `/learn` is the LAST ROW rather than a "view all" footer, and the
-  // difference is not cosmetic. The footer resolves its href from a child of
-  // the panel's own item and reads as "<item> — view all"; here that would
-  // say "Learn Forex · View all" and land on the umbrella page covering both
-  // schools, which is a different place than the label promises. As a row it
-  // carries its own label from the seed and says what it is.
-  "learn-forex": {
-    columns: [
-      {
-        key: "surfaces",
-        titleKey: "mega.learn.surfaces",
-        routeKeys: [
-          "learn-forex",
-          "learn-forex-videos",
-          "learn-forex-quizzes",
-          "learn-forex-glossary",
-          "learn",
-        ],
-      },
-    ],
-  },
-  "learn-crypto": {
-    columns: [
-      {
-        key: "surfaces",
-        titleKey: "mega.learn.surfaces",
-        routeKeys: [
-          "learn-crypto",
-          "learn-crypto-videos",
-          "learn-crypto-quizzes",
-          "learn-crypto-glossary",
-          "learn",
-        ],
-      },
-    ],
-  },
+  // The two schools (ADR-065 §4, reshaped by ADR-076 §2).
+  "learn-forex": trackPanel("forex"),
+  "learn-crypto": trackPanel("crypto"),
 
   // Three columns and a footer row, no feature rail: the rail's only
   // candidate here is the overview page, which the first column already
@@ -146,6 +159,31 @@ export const MEGA_MENU_PANELS = {
       },
     ],
     viewAll: "about",
+  },
+
+  // The eight tools (ADR-086 §9), in About's shape (ADR-076 §2): three headed
+  // columns grouped by what a reader is trying to DO, not by what each tool
+  // reads. Someone opening this menu knows they want to size a trade; they do
+  // not know, and should not need to know, that two of these need a rate.
+  tools: {
+    columns: [
+      {
+        key: "position",
+        titleKey: "mega.tools.position",
+        routeKeys: ["tool-position-size", "tool-pip-value", "tool-gain-loss"],
+      },
+      {
+        key: "timing",
+        titleKey: "mega.tools.timing",
+        routeKeys: ["tool-market-hours", "tool-pivot-points"],
+      },
+      {
+        key: "rates",
+        titleKey: "mega.tools.rates",
+        routeKeys: ["tool-currency-converter", "tool-correlation", "tool-risk-sentiment"],
+      },
+    ],
+    viewAll: "tools",
   },
 } as const satisfies Partial<Record<RouteKey, MegaPanelSpec>>;
 

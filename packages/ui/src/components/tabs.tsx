@@ -22,8 +22,16 @@ function Tabs({ className, orientation = "horizontal", ...props }: TabsPrimitive
   );
 }
 
+// `max-w-full overflow-x-auto no-scrollbar`: a tray with more tabs than the
+// screen has room for SCROLLS instead of widening the page — the reference
+// does the same at its call sites. Found in the admin phone-width pass: the
+// article editor's four SEO tabs made a 414px tray on a 390px screen.
+// `justify-start`, not `-center`: centred content that overflows spills off
+// BOTH ends and its start becomes unreachable. While the tray fits, the two
+// are identical (`w-fit` list, `flex-1` triggers). `p-1` leaves room for a
+// trigger's focus ring inside the scroll container.
 const tabsListVariants = cva(
-  "group/tabs-list inline-flex w-fit items-center justify-center rounded-md bg-muted p-1 text-muted-foreground group-data-horizontal/tabs:h-10 group-data-vertical/tabs:h-fit group-data-vertical/tabs:flex-col",
+  "group/tabs-list no-scrollbar inline-flex w-fit max-w-full items-center justify-start overflow-x-auto rounded-md bg-muted p-1 text-muted-foreground group-data-horizontal/tabs:h-10 group-data-vertical/tabs:h-fit group-data-vertical/tabs:flex-col",
   {
     variants: {
       variant: {

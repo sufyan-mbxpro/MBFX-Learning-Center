@@ -34,6 +34,32 @@ export const noUnstableCacheImport = {
 };
 
 /**
+ * changes-20 Phase 6 (tokens.md §5, task constraint 6): lucide-react is the
+ * one icon library. It already was — this makes it impossible to add a
+ * second by accident. Exported for the same reason as the rules above: a
+ * config that sets its own `no-restricted-imports` must re-include it.
+ */
+export const noOtherIconLibraries = {
+  group: [
+    "react-icons",
+    "react-icons/*",
+    "@heroicons/*",
+    "@radix-ui/react-icons",
+    "@tabler/icons-react",
+    "@phosphor-icons/*",
+    "phosphor-react",
+    "react-feather",
+    "@fortawesome/*",
+    "@mui/icons-material",
+    "@mui/icons-material/*",
+    "@iconify/*",
+    "lucide",
+  ],
+  message:
+    "lucide-react is the only icon library (tokens.md §5). Import the glyph from lucide-react; brand marks go through @repo/ui's SocialGlyph (ADR-045).",
+};
+
+/**
  * Shared flat-config base for every package and app. Anything workspace-wide
  * (no color literals outside theme, import hygiene) lives here so it can't
  * be silently opted out of per-app. The physical-property ban lives in
@@ -61,7 +87,10 @@ export const baseConfig = [
       ],
       "import-x/no-cycle": "error",
       "no-restricted-syntax": ["error", noColorLiteralRule],
-      "no-restricted-imports": ["error", { paths: [noUnstableCacheImport] }],
+      "no-restricted-imports": [
+        "error",
+        { paths: [noUnstableCacheImport], patterns: [noOtherIconLibraries] },
+      ],
     },
   },
   {

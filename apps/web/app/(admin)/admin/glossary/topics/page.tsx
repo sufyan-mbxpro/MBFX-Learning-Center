@@ -29,6 +29,8 @@ export default async function GlossaryTopicsAdminPage() {
     nameCol: t("topics.columnName"),
     statusCol: t("topics.columnStatus"),
     termsCol: t("topics.columnTerms"),
+    notPublic: t("topics.notPublic"),
+    notPublicHint: t("topics.notPublicHint"),
     updatedCol: t("topics.columnUpdated"),
     actionsCol: t("actionsCol"),
     untitled: t("untitled"),
@@ -80,6 +82,7 @@ export default async function GlossaryTopicsAdminPage() {
           description: row.description,
           isActive: row.isActive,
           termCount: row.termCount,
+          publishedTermCount: row.publishedTermCount,
           updatedAtLabel: dateFormat.format(row.updatedAt),
           updatedAtSort: row.updatedAt.getTime(),
         }))}

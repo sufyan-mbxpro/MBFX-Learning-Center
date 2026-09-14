@@ -30,12 +30,26 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@repo/ui/components/dialog";
+import { articleFaqItemSchema } from "@repo/contracts";
 import { Empty, EmptyDescription, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+} from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
-import { Label } from "@repo/ui/components/label";
 import { Textarea } from "@repo/ui/components/textarea";
 import { cn } from "@repo/ui/lib/utils";
+import { useFieldErrors } from "../../_hooks/use-field-errors.ts";
 import { EditorSection } from "./editor-section.tsx";
+
+// ADR-077 — the row as the save actions parse it. Both hosts' row schemas
+// (`articleFaqItemSchema`, glossary's `glossaryFaqItemSchema`) require the
+// same two fields with the same bounds, so one pick serves the dialog; the
+// host's `id` is not the dialog's to validate.
+const faqItemFieldsSchema = articleFaqItemSchema.pick({ question: true, answer: true });
 
 /** The minimum a FAQ row is. Hosts may carry more (the article’s `id`). */
 export interface FaqItemLike {
@@ -93,9 +107,12 @@ function FaqDialog<T extends FaqItemLike>({
 }) {
   const [question, setQuestion] = useState(initial?.question ?? "");
   const [answer, setAnswer] = useState(initial?.answer ?? "");
+  // The dialog is remounted per target (the host keys it), so closing it
+  // discards the attempt with everything else — no reset needed.
+  const form = useFieldErrors(faqItemFieldsSchema, { question, answer });
 
   const submit = () => {
-    if (question.trim() === "") return;
+    if (!form.validate()) return;
     onSubmit(makeItem({ question: question.trim(), answer }, initial));
     onOpenChange(false);
   };
@@ -107,11 +124,10 @@ function FaqDialog<T extends FaqItemLike>({
           <DialogTitle>{initial ? labels.edit : labels.add}</DialogTitle>
           <DialogDescription>{labels.dialogDescription}</DialogDescription>
         </DialogHeader>
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="faq-dialog-question">{labels.question}</Label>
+        <FieldGroup>
+          <Field invalid={form.invalid("question")} required>
+            <FieldLabel>{labels.question}</FieldLabel>
             <Input
-              id="faq-dialog-question"
               value={question}
               autoFocus
               onChange={(e) => setQuestion(e.target.value)}
@@ -122,25 +138,20 @@ function FaqDialog<T extends FaqItemLike>({
                 }
               }}
             />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="faq-dialog-answer">{labels.answer}</Label>
-            <Textarea
-              id="faq-dialog-answer"
-              rows={6}
-              value={answer}
-              onChange={(e) => setAnswer(e.target.value)}
-            />
-            <p className="text-xs text-muted-foreground">{labels.answerHint}</p>
-          </div>
-        </div>
+            <FieldError>{form.error("question")}</FieldError>
+          </Field>
+          <Field invalid={form.invalid("answer")} required>
+            <FieldLabel>{labels.answer}</FieldLabel>
+            <Textarea rows={6} value={answer} onChange={(e) => setAnswer(e.target.value)} />
+            <FieldDescription className="text-xs">{labels.answerHint}</FieldDescription>
+            <FieldError>{form.error("answer")}</FieldError>
+          </Field>
+        </FieldGroup>
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             {labels.cancel}
           </Button>
-          <Button disabled={question.trim() === ""} onClick={submit}>
-            {labels.saveItem}
-          </Button>
+          <Button onClick={submit}>{labels.saveItem}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -263,7 +274,7 @@ export function FaqPanel<T extends FaqItemLike>({
                     aria-label={labels.remove}
                     onClick={() => setRemoveIndex(index)}
                   >
-                    <Trash2 aria-hidden className="text-destructive" />
+                    <Trash2 aria-hidden className="text-destructive-interactive" />
                   </Button>
                 </div>
                 <div id={panelId} hidden={!isOpen} className="border-t px-3 py-2.5">

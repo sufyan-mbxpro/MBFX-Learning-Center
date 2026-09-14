@@ -5,8 +5,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   isAdminPath,
+  requestPasswordReset,
+  resendVerification,
+  resetPassword,
   resolveRedirect,
   signInWithPassword,
+  signOut,
+  signOutSilently,
   signUpWithPassword,
 } from "./credentials.ts";
 
@@ -169,4 +174,161 @@ describe("isAdminPath", () => {
       expect(isAdminPath(path)).toBe(false);
     },
   );
+});
+
+describe("signOut — the one sign-out request", () => {
+  // Regression (changes-20 admin visual pass): every call site POSTed with no
+  // body, Better Auth answered 415 and the session stayed valid, so Sign out,
+  // the profile menu and the ADR-041 idle timeout all left a live session.
+  it("sends a JSON body, which is what Better Auth actually honours", async () => {
+    const fetchMock = mockFetch(jsonResponse(true, { success: true }));
+    await expect(signOut()).resolves.toBe(true);
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("/api/auth/sign-out");
+    expect(init.method).toBe("POST");
+    expect(new Headers(init.headers).get("content-type")).toBe("application/json");
+    expect(init.body).toBe("{}");
+  });
+
+  it("reports a refused sign-out instead of pretending it landed", async () => {
+    mockFetch(jsonResponse(false, {}));
+    await expect(signOut()).resolves.toBe(false);
+  });
+
+  it("signOutSilently goes through the same request and swallows a network failure", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Promise.reject(new Error("offline"))),
+    );
+    await expect(signOutSilently()).resolves.toBeUndefined();
+  });
+
+  it("no other file hand-writes the sign-out request", async () => {
+    const { readFileSync, readdirSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const walk = (dir: string): string[] =>
+      readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+        const p = resolve(dir, e.name);
+        if (e.isDirectory()) return e.name === "node_modules" ? [] : walk(p);
+        return /\.(tsx?)$/.test(e.name) && !/\.test\./.test(e.name) ? [p] : [];
+      });
+    const offenders = walk(resolve(process.cwd(), "app"))
+      .filter((p) => !p.endsWith("credentials.ts"))
+      .filter((p) => readFileSync(p, "utf8").includes('"/api/auth/sign-out"'));
+    expect(offenders).toEqual([]);
+  });
+});
+
+// ─── Password recovery and verification (changes-21 F6, ADR-079) ───
+
+describe("requestPasswordReset — the anti-enumeration half (ADR-079 #4)", () => {
+  it("posts to Better Auth's own endpoint, where the per-IP limiter lives", async () => {
+    const fetchMock = mockFetch(jsonResponse(true, { status: true }));
+    await requestPasswordReset("a@b.c");
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("/api/auth/request-password-reset");
+    expect(JSON.parse(String(init.body))).toEqual({ email: "a@b.c" });
+  });
+
+  it("sends NO redirectTo — the link is routed by who the user is, not by the screen (ADR-079 #2)", () => {
+    const fetchMock = mockFetch(jsonResponse(true, { status: true }));
+    return requestPasswordReset("a@b.c").then(() => {
+      const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+      expect(JSON.parse(String(init.body))).not.toHaveProperty("redirectTo");
+    });
+  });
+
+  it("resolves the same way for a refused request — the caller must not be able to tell", async () => {
+    mockFetch(jsonResponse(false, { code: "ANYTHING" }));
+    await expect(requestPasswordReset("a@b.c")).resolves.toBeUndefined();
+  });
+
+  it("resolves the same way when the network fails outright", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Promise.reject(new Error("offline"))),
+    );
+    // A visible error on a real address and silence on an unknown one is the
+    // same leak in a different coat.
+    await expect(requestPasswordReset("a@b.c")).resolves.toBeUndefined();
+  });
+});
+
+describe("resetPassword — three outcomes, because they need three screens", () => {
+  it("a 200 is done", async () => {
+    mockFetch(jsonResponse(true, { status: true }));
+    await expect(resetPassword("tok", "ValidPassw0rd!")).resolves.toEqual({ status: "ok" });
+  });
+
+  // The codes are measured against the running handler, not read off a
+  // constant — the same discipline signUpWithPassword's prefix match records.
+  // Verified live: POST /api/auth/reset-password with a bad token answers
+  // 400 {"message":"Invalid token","code":"INVALID_TOKEN"}.
+  it("INVALID_TOKEN is its own outcome, so the screen can offer a fresh link", async () => {
+    mockFetch(jsonResponse(false, { code: "INVALID_TOKEN" }));
+    await expect(resetPassword("stale", "ValidPassw0rd!")).resolves.toEqual({
+      status: "invalidToken",
+    });
+  });
+
+  it("PASSWORD_TOO_SHORT points at the field rather than the link", async () => {
+    mockFetch(jsonResponse(false, { code: "PASSWORD_TOO_SHORT" }));
+    await expect(resetPassword("tok", "short")).resolves.toEqual({ status: "tooShort" });
+  });
+
+  it("anything else is the generic failure", async () => {
+    mockFetch(jsonResponse(false, { code: "SOMETHING_NEW" }));
+    await expect(resetPassword("tok", "ValidPassw0rd!")).resolves.toEqual({ status: "failed" });
+  });
+
+  it("an unparseable error body is still the generic failure, not a crash", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: false,
+        json: async () => {
+          throw new Error("not json");
+        },
+      })),
+    );
+    await expect(resetPassword("tok", "ValidPassw0rd!")).resolves.toEqual({ status: "failed" });
+  });
+
+  it("posts the token in the BODY, never the query — a URL is logged, a body is not", async () => {
+    const fetchMock = mockFetch(jsonResponse(true, {}));
+    await resetPassword("secret-token", "ValidPassw0rd!");
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("/api/auth/reset-password");
+    expect(url).not.toContain("secret-token");
+    expect(JSON.parse(String(init.body))).toEqual({
+      token: "secret-token",
+      newPassword: "ValidPassw0rd!",
+    });
+  });
+});
+
+describe("resendVerification", () => {
+  it("carries the callbackURL the verification link returns to (ADR-079 #7)", async () => {
+    const fetchMock = mockFetch(jsonResponse(true, { status: true }));
+    await expect(resendVerification("a@b.c", "/sign-in?verified=1")).resolves.toBe(true);
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("/api/auth/send-verification-email");
+    expect(JSON.parse(String(init.body))).toEqual({
+      email: "a@b.c",
+      callbackURL: "/sign-in?verified=1",
+    });
+  });
+
+  it("reports a refusal rather than claiming it sent", async () => {
+    mockFetch(jsonResponse(false, {}));
+    await expect(resendVerification("a@b.c", "/x")).resolves.toBe(false);
+  });
+
+  it("a network failure is false, not a throw — the nudge must not break the header", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Promise.reject(new Error("offline"))),
+    );
+    await expect(resendVerification("a@b.c", "/x")).resolves.toBe(false);
+  });
 });

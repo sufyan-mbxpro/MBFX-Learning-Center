@@ -5,18 +5,24 @@ import { RadioGroup as RadioGroupPrimitive } from "@base-ui/react/radio-group";
 import { CircleIcon } from "lucide-react";
 
 import { cn } from "@repo/ui/lib/utils";
+import { useFieldContext, useFieldControl } from "@repo/ui/components/field";
 
 // changes-20 / ADR-074 — the reference's radio group (tokens.md §6.14), on
 // Base UI's RadioGroup + Radio (the repo's one primitive library). Same
 // accessible deviation as Checkbox: the ring and the dot are
 // --primary-interactive, because raw bronze on white (2.9:1) is under the 3:1
 // a control's boundary needs.
+// The GROUP is the Field's control: the label names the group, and the
+// group carries required / aria-invalid / aria-describedby (ADR-077).
 function RadioGroup({ className, ...props }: RadioGroupPrimitive.Props) {
+  const field = useFieldContext();
+  const wired = useFieldControl(props);
   return (
     <RadioGroupPrimitive
       data-slot="radio-group"
+      aria-labelledby={field?.labelId}
       className={cn("grid gap-2", className)}
-      {...props}
+      {...wired}
     />
   );
 }

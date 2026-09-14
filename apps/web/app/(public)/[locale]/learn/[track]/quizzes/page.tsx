@@ -7,7 +7,7 @@ import { getSetting, isFeatureVisible } from "@repo/settings";
 import { Container } from "@repo/ui/components/container";
 import { Empty, EmptyDescription, EmptyTitle } from "@repo/ui/components/empty";
 import { Section } from "@repo/ui/components/section";
-import { QuizMasthead, quizStats } from "../../_components/quiz-masthead.tsx";
+import { QuizMasthead } from "../../_components/quiz-masthead.tsx";
 import { QuizShelf } from "../../_components/quiz-shelf.tsx";
 import { QuizSignInPrompt } from "../../_components/quiz-sign-in-prompt.tsx";
 
@@ -71,7 +71,6 @@ export default async function QuizIndexPage({
           the header offers "Learn Crypto → Quizzes", and a banner that only
           said "Quizzes" would drop the half the reader navigated by. */}
       <QuizMasthead
-        stats={quizStats(quizzes)}
         heading={{
           eyebrow: t(LEARN_TRACKS[track].titleKey),
           title: t("quizzes.title"),
@@ -80,7 +79,7 @@ export default async function QuizIndexPage({
       />
 
       {/* ADR-058 #7: a guest reads every question and saves no score. The
-          prompt is the offer, not a wall. It sits under the stat strip rather
+          prompt is the offer, not a wall. It sits under the masthead rather
           than inside the hero because it is a client island that renders
           nothing until it knows, and a hero that reflows once the answer
           arrives is worse than a band that appears below the fold. It brings

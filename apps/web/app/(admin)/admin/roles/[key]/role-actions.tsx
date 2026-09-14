@@ -10,6 +10,8 @@ import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { toast } from "sonner";
 import { Copy, Pencil, Trash2 } from "lucide-react";
+import { z } from "zod";
+import { updateRoleSchema } from "@repo/contracts";
 import { Button } from "@repo/ui/components/button";
 import { ConfirmDialog } from "@repo/ui/components/confirm-dialog";
 import {
@@ -20,14 +22,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@repo/ui/components/dialog";
+import { Field, FieldError, FieldGroup, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
-import { Label } from "@repo/ui/components/label";
 import { Textarea } from "@repo/ui/components/textarea";
 import {
   cloneRoleAction,
   deleteRoleAction,
   updateRoleMetaAction,
 } from "../../_actions/user-actions.ts";
+import { useFieldErrors } from "../../_hooks/use-field-errors.ts";
 
 export function RoleActions({
   roleKey,
@@ -64,9 +67,34 @@ export function RoleActions({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [editOpen, setEditOpen] = React.useState(false);
-  const [form, setForm] = React.useState({ name, level, description: description ?? "" });
+  const [draft, setDraft] = React.useState({ name, level, description: description ?? "" });
+
+  // The action's own schema, with the actor's ceiling (strict <) in place of
+  // the seed's 99 — the server enforces the same bound through the level
+  // guard in updateRoleMeta. Same shape as CreateRoleDialog.
+  const schema = React.useMemo(
+    () =>
+      updateRoleSchema.extend({
+        level: z
+          .int()
+          .min(0)
+          .max(Math.max(0, maxLevel - 1)),
+      }),
+    [maxLevel],
+  );
+  const values = {
+    name: draft.name,
+    level: draft.level,
+    description: draft.description || null,
+  };
+  const form = useFieldErrors(schema, values);
 
   if (!canEdit) return null;
+
+  const closeEdit = () => {
+    setEditOpen(false);
+    form.reset();
+  };
 
   const clone = () =>
     startTransition(async () => {
@@ -81,20 +109,18 @@ export function RoleActions({
       }
     });
 
-  const saveMeta = () =>
+  const saveMeta = () => {
+    if (!form.validate()) return;
     startTransition(async () => {
       try {
-        await updateRoleMetaAction(roleKey, {
-          name: form.name,
-          level: form.level,
-          description: form.description || null,
-        });
-        setEditOpen(false);
+        await updateRoleMetaAction(roleKey, values);
+        closeEdit();
         router.refresh();
       } catch (error) {
         toast.error(error instanceof Error ? error.message : String(error));
       }
     });
+  };
 
   return (
     <div className="flex items-center gap-2">
@@ -125,53 +151,53 @@ export function RoleActions({
         />
       )}
 
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+      <Dialog open={editOpen} onOpenChange={(next) => (next ? setEditOpen(true) : closeEdit())}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{labels.edit}</DialogTitle>
             <DialogDescription>{labels.editDescription}</DialogDescription>
           </DialogHeader>
-          <div className="flex flex-col gap-3">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="role-edit-name">{labels.name}</Label>
+          <FieldGroup>
+            <Field invalid={form.invalid("name")} required>
+              <FieldLabel>{labels.name}</FieldLabel>
               <Input
-                id="role-edit-name"
-                value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                value={draft.name}
+                onChange={(e) => setDraft((f) => ({ ...f, name: e.target.value }))}
               />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="role-edit-level">{labels.level}</Label>
+              <FieldError>{form.error("name")}</FieldError>
+            </Field>
+            {/* ADR-016: a system role's level is locked (delete/lockout
+                guard) — name/description/permissions are not. A locked
+                field is not one the admin must fill, so no asterisk. */}
+            <Field invalid={form.invalid("level")} required={!isSystem}>
+              <FieldLabel>{labels.level}</FieldLabel>
               <Input
-                id="role-edit-level"
                 type="number"
                 min={0}
                 max={Math.max(0, maxLevel - 1)}
-                value={form.level}
-                // ADR-016: a system role's level is locked (delete/lockout
-                // guard) — name/description/permissions are not.
+                value={draft.level}
                 disabled={isSystem}
-                onChange={(e) => setForm((f) => ({ ...f, level: Number(e.target.value) }))}
+                onChange={(e) => setDraft((f) => ({ ...f, level: Number(e.target.value) }))}
               />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="role-edit-description">{labels.description}</Label>
+              <FieldError>{form.error("level")}</FieldError>
+            </Field>
+            <Field invalid={form.invalid("description")}>
+              <FieldLabel>{labels.description}</FieldLabel>
               <Textarea
-                id="role-edit-description"
                 rows={3}
-                value={form.description}
-                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                value={draft.description}
+                onChange={(e) => setDraft((f) => ({ ...f, description: e.target.value }))}
               />
-            </div>
-          </div>
+              <FieldError>{form.error("description")}</FieldError>
+            </Field>
+          </FieldGroup>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditOpen(false)} disabled={pending}>
+            <Button variant="outline" onClick={closeEdit} disabled={pending}>
               {labels.cancel}
             </Button>
-            <Button
-              onClick={saveMeta}
-              disabled={pending || !form.name.trim() || form.level < 0 || form.level >= maxLevel}
-            >
+            {/* Enabled while fields are wrong: pressing it names them
+                instead (audit F-07). */}
+            <Button onClick={saveMeta} loading={pending}>
               {labels.save}
             </Button>
           </DialogFooter>

@@ -45,11 +45,11 @@ export function AdminMobileNav({
             </Button>
           }
         />
-        <SheetContent side="start" closeLabel={closeLabel} className="w-[var(--width-sidebar)]">
+        <SheetContent side="start" closeLabel={closeLabel} className="w-(--width-sidebar)">
           {/* SheetTitle is required for the dialog's accessible name even
               when a logo is what's actually shown — so it stays, visually
               hidden, and the mark renders beside it. */}
-          <SheetTitle className="px-2.5">
+          <SheetTitle className="px-4">
             <BrandLogo
               light={logoLight}
               dark={logoDark}

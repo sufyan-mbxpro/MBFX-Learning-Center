@@ -10,7 +10,10 @@ import { cn } from "@repo/ui/lib/utils";
 // padding, the gap between its parts, and each part's inline padding. That
 // reproduces the reference's `p-6` header + `p-6 pt-0` content exactly, so a
 // call site composes Header/Content/Footer and never pads a part by hand.
-// `size="sm"` is the 16px rhythm for compact tiles.
+// `size="sm"` is the 16px rhythm for compact tiles. A full-bleed cover is
+// the card's first child — a bare <img>, or any wrapper marked
+// `data-slot="card-media"` (a linked cover, a figure with a badge) — and the
+// card drops its top padding for it, so a media card never pads by hand.
 //
 // Public design system additions (changes-03-plan.md §4.2). "elevated"'s
 // resting/hover shadow is a data-attribute rule in globals.css, not a
@@ -53,7 +56,7 @@ function Card({
       className={cn(
         // `card-hover` (globals.css) is THE one hover treatment every card-
         // like surface shares (changes-02); ADR-075 §4 keeps it.
-        "group/card card-hover flex flex-col gap-(--card-spacing) overflow-hidden rounded-lg border bg-card py-(--card-spacing) text-sm text-card-foreground shadow-sm [--card-spacing:--spacing(6)] has-[>img:first-child]:pt-0 data-[size=sm]:[--card-spacing:--spacing(4)] *:[img:first-child]:rounded-t-lg *:[img:last-child]:rounded-b-lg",
+        "group/card card-hover flex flex-col gap-(--card-spacing) overflow-hidden rounded-lg border bg-card py-(--card-spacing) text-sm text-card-foreground shadow-sm [--card-spacing:--spacing(6)] has-[>img:first-child]:pt-0 has-[>[data-slot=card-media]:first-child]:pt-0 data-[size=sm]:[--card-spacing:--spacing(4)] *:[img:first-child]:rounded-t-lg *:[img:last-child]:rounded-b-lg",
         CARD_VARIANT_CLASS[variant],
         className,
       )}
@@ -67,7 +70,7 @@ function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-header"
       className={cn(
-        "group/card-header @container/card-header grid auto-rows-min items-start gap-1.5 px-(--card-spacing) has-data-[slot=card-action]:grid-cols-[1fr_auto] has-data-[slot=card-description]:grid-rows-[auto_auto]",
+        "group/card-header @container/card-header grid grid-cols-1 auto-rows-min items-start gap-1.5 px-(--card-spacing) has-data-[slot=card-action]:grid-cols-(--grid-fill-auto) has-data-[slot=card-description]:grid-rows-(--grid-auto-auto)",
         className,
       )}
       {...props}

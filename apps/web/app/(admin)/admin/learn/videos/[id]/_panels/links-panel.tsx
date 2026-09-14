@@ -19,12 +19,14 @@
 // naive "starts with a slash" check and navigates off-site.
 import { useState } from "react";
 import { ChevronDown, ChevronUp, ExternalLink, Link2, Plus, Trash2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import type { VideoTopicLinkInput } from "@repo/contracts";
 import { Button } from "@repo/ui/components/button";
 import { ConfirmDialog } from "@repo/ui/components/confirm-dialog";
 import { Empty, EmptyDescription, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
 import { Input } from "@repo/ui/components/input";
 import { EditorSection, Field } from "../../../../_components/editor/editor-section.tsx";
+import type { PanelIssues } from "./videos-panel.tsx";
 
 export type LinkDraft = VideoTopicLinkInput;
 
@@ -56,12 +58,15 @@ export function LinksPanel({
   onChange,
   disabled,
   labels,
+  issues,
 }: {
   items: LinkDraft[];
   onChange: (next: LinkDraft[]) => void;
   disabled: boolean;
   labels: LinksPanelLabels;
+  issues: PanelIssues;
 }) {
+  const tv = useTranslations("admin.validation");
   const [removing, setRemoving] = useState<number | null>(null);
 
   const patch = (index: number, next: Partial<LinkDraft>) =>
@@ -113,6 +118,16 @@ export function LinksPanel({
         <ul className="flex flex-col gap-3">
           {items.map((item, index) => {
             const isExternal = item.url != null;
+            // The one-href refine reports on `path`. With the shown box empty
+            // that issue means "missing" and reads as required; a non-empty
+            // path's issue is its own format check.
+            const hrefEmpty = ((isExternal ? item.url : item.path) ?? "").trim() === "";
+            const missing = issues.invalid(`${index}.path`) && hrefEmpty;
+            const hrefError = missing
+              ? tv("required")
+              : isExternal
+                ? issues.error(`${index}.url`)
+                : issues.error(`${index}.path`);
             return (
               <li key={index} className="flex flex-col gap-3 rounded-lg border bg-card p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -172,9 +187,13 @@ export function LinksPanel({
                   </div>
                 </div>
 
-                <Field id={`link-${index}-label`} label={labels.labelLabel}>
+                <Field
+                  id={`link-${index}-label`}
+                  label={labels.labelLabel}
+                  required
+                  error={issues.error(`${index}.label`)}
+                >
                   <Input
-                    id={`link-${index}-label`}
                     value={item.label}
                     disabled={disabled}
                     maxLength={200}
@@ -182,10 +201,16 @@ export function LinksPanel({
                   />
                 </Field>
 
+                {/* Required either way: the contract takes exactly one href. */}
                 {isExternal ? (
-                  <Field id={`link-${index}-url`} label={labels.urlLabel} hint={labels.urlHint}>
+                  <Field
+                    id={`link-${index}-url`}
+                    label={labels.urlLabel}
+                    hint={labels.urlHint}
+                    required
+                    error={hrefError}
+                  >
                     <Input
-                      id={`link-${index}-url`}
                       value={item.url ?? ""}
                       disabled={disabled}
                       maxLength={500}
@@ -193,9 +218,14 @@ export function LinksPanel({
                     />
                   </Field>
                 ) : (
-                  <Field id={`link-${index}-path`} label={labels.pathLabel} hint={labels.pathHint}>
+                  <Field
+                    id={`link-${index}-path`}
+                    label={labels.pathLabel}
+                    hint={labels.pathHint}
+                    required
+                    error={hrefError}
+                  >
                     <Input
-                      id={`link-${index}-path`}
                       value={item.path ?? ""}
                       disabled={disabled}
                       maxLength={500}

@@ -36,9 +36,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@repo/ui/components/dialog";
-import { Empty, EmptyTitle } from "@repo/ui/components/empty";
-import { Input } from "@repo/ui/components/input";
-import { Spinner } from "@repo/ui/components/spinner";
+import { EmptyState, ErrorState } from "@repo/ui/components/empty";
+import { SearchInput } from "@repo/ui/components/search-input";
+import { Skeleton } from "@repo/ui/components/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@repo/ui/components/tabs";
 import { cn } from "@repo/ui/lib/utils";
 import { AdminCombobox } from "./combobox.tsx";
@@ -129,16 +129,13 @@ export function MediaPickerDialog({
       {/* Wider than the default dialog, and deliberately: the thumbnails ARE
           the content here, and at `max-w-3xl` with four columns each one was
           about 150px — too small to tell two chart screenshots apart, which
-          is the whole job of the screen. `gap-0 p-0` hands the padding to the
-          two regions below so the header can be a full-bleed band; the
-          popup's own `overflow-y-auto` clips it to the rounded corners. */}
-      <DialogContent className="max-w-5xl gap-0 p-0" closeLabel={t("close")}>
-        {/* The same tinted band `EditorSection` uses, for the same reason it
-            was introduced there: a header that shares its surface with the
-            body reads as more grey rectangle. `primary` is the accent because
-            picking media is the dialog's one purpose — no hex literals, and
-            one accent vocabulary across the admin (code-style.md #1). */}
-        <DialogHeader className="border-b border-b-primary/15 bg-primary/8 px-4 py-3">
+          is the whole job of the screen. Padding and header are the Dialog's
+          own (changes-20, tokens.md §6.14): it used to borrow EditorSection's
+          tinted band, which made it the one modal in the admin that did not
+          look like the others — a dialog header has no band in the
+          reference. */}
+      <DialogContent className="max-w-5xl" closeLabel={t("close")}>
+        <DialogHeader>
           <DialogTitle>{title ?? t("mediaPickerTitle")}</DialogTitle>
           <DialogDescription>{t("dialogDesc.mediaPicker")}</DialogDescription>
         </DialogHeader>
@@ -150,7 +147,7 @@ export function MediaPickerDialog({
             component state. A field whose picker is never opened still
             costs no request. */}
         {open && (
-          <div className="p-4">
+          <div className="min-w-0">
             <MediaPickerBody
               onSelect={onSelect}
               onOpenChange={onOpenChange}
@@ -194,6 +191,7 @@ function MediaPickerBody({
   const sentinelRef = useRef<HTMLLIElement>(null);
 
   const browser = useMediaBrowser({ category, kind, kinds, query, sourceType });
+  const tError = useTranslations("error");
 
   const uploadUrl =
     kinds.length === 1 && kinds[0] === "IMAGE"
@@ -281,7 +279,7 @@ function MediaPickerBody({
   ];
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex min-w-0 flex-col gap-3">
       {/* ADR-067 §5: one row, two sides of the same decision. */}
       <div className="flex flex-wrap items-center gap-2">
         <AdminCombobox
@@ -317,7 +315,7 @@ function MediaPickerBody({
         )}
       </div>
 
-      <Input
+      <SearchInput
         ref={searchRef}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
@@ -325,7 +323,7 @@ function MediaPickerBody({
         aria-label={t("mediaSearchPlaceholder")}
       />
 
-      {sizeError && <p className="text-xs text-destructive">{sizeError}</p>}
+      {sizeError && <p className="text-xs text-destructive-interactive">{sizeError}</p>}
       {upload.status !== "idle" && (
         <UploadProgress
           status={upload.status}
@@ -336,9 +334,17 @@ function MediaPickerBody({
         />
       )}
 
-      {/* Absent, not empty, when this surface has placed nothing yet. */}
+      {/* Absent, not empty, when this surface has placed nothing yet.
+          `min-w-0` is load-bearing (changes-22): this section is a flex item,
+          so its automatic minimum width is its min-content — and the strip
+          below is a row of 80px tiles that never wraps, so twelve recent
+          assets asked for ~1,140px inside a 5xl dialog. The strip scrolled
+          as designed, and the DIALOG scrolled too, which put the Upload
+          button off the right edge of the modal. Zero here lets the section
+          shrink to the dialog and hands the overflow to the strip, which is
+          the element that knows how to carry it. */}
       {browser.recent.length > 0 && !query.trim() && (
-        <section className="flex flex-col gap-1.5">
+        <section className="flex min-w-0 flex-col gap-1.5">
           <h3 className="text-xs font-medium text-muted-foreground">{t("mediaRecentlyUsed")}</h3>
           <ul className="flex gap-2 overflow-x-auto pb-1">
             {browser.recent.map((asset) => (
@@ -350,22 +356,38 @@ function MediaPickerBody({
         </section>
       )}
 
+      {/* changes-21 Phase A: the shared states — tiles in the grid's own
+          columns while a page loads, ErrorState with a working retry (was red
+          text with no way out), EmptyState. */}
       {browser.status === "loading" ? (
-        <div className="flex justify-center py-10">
-          <Spinner aria-label={t("loading")} />
+        <div
+          role="status"
+          aria-live="polite"
+          className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5"
+        >
+          <span className="sr-only">{t("loading")}</span>
+          {Array.from({ length: 10 }, (_, index) => (
+            <Skeleton key={index} className="aspect-square w-full rounded-lg" />
+          ))}
         </div>
       ) : browser.status === "error" ? (
-        <p className="py-8 text-center text-sm text-destructive">{browser.error}</p>
+        <ErrorState
+          title={tError("title")}
+          description={browser.error}
+          action={
+            <Button size="sm" variant="outline" onClick={browser.refresh}>
+              {tError("retry")}
+            </Button>
+          }
+        />
       ) : browser.items.length === 0 ? (
-        <Empty className="py-8">
-          <EmptyTitle>{query.trim() ? t("noResults") : t("mediaCategoryEmpty")}</EmptyTitle>
-        </Empty>
+        <EmptyState title={query.trim() ? t("noResults") : t("mediaCategoryEmpty")} />
       ) : (
         <>
           {/* Taller and one column wider than the dialog used to allow: at
               `max-h-96` the grid showed barely two rows, so paging through a
               category meant scrolling a 24rem window inside a 48rem box. */}
-          <ul className="grid max-h-[60vh] grid-cols-2 gap-3 overflow-y-auto sm:grid-cols-3 lg:grid-cols-5">
+          <ul className="grid max-h-(--height-scroll-panel) grid-cols-2 gap-3 overflow-y-auto sm:grid-cols-3 lg:grid-cols-5">
             {browser.items.map((asset) => (
               <li key={asset.id}>
                 <AssetButton asset={asset} onPick={pick} />

@@ -1,14 +1,27 @@
 import { useTranslations } from "next-intl";
+import { SearchX } from "lucide-react";
 import { Link } from "@repo/i18n/navigation";
+import { Button } from "@repo/ui/components/button";
+import { Container } from "@repo/ui/components/container";
+import { EmptyState } from "@repo/ui/components/empty";
 
+// The public 404 (changes-21 Phase A): the one EmptyState, sized `lg`, with its
+// title as the h1. It owns the <main> landmark: the [locale] layout renders
+// none of its own.
 export default function PublicNotFound() {
   const t = useTranslations("notFound");
   return (
-    <main className="flex min-h-full flex-col items-center justify-center gap-4 p-8">
-      <h1 className="text-lg font-semibold">{t("title")}</h1>
-      <Link href="/" className="text-sm underline underline-offset-4">
-        {t("backHome")}
-      </Link>
+    <main>
+      <Container>
+        <EmptyState
+          size="lg"
+          titleAs="h1"
+          icon={<SearchX aria-hidden />}
+          title={t("title")}
+          description={t("description")}
+          action={<Button render={<Link href="/" />}>{t("backHome")}</Button>}
+        />
+      </Container>
     </main>
   );
 }

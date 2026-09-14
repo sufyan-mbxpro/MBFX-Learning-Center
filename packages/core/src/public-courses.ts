@@ -15,9 +15,10 @@
 import { cacheLife, cacheTag } from "next/cache";
 import { FeatureVisibility, db, type Difficulty } from "@repo/db";
 import { pickTranslation, type LocaleFallbackInfo } from "@repo/i18n";
-import { LEARN_TRACK_KEYS, type LearnTrackKey } from "@repo/contracts";
+import { LEARN_TRACK_KEYS, type LearnTrackKey, type QuizLinkView } from "@repo/contracts";
 import { COURSE, RECOMMENDED, loadRelationTargets } from "./content-relations.ts";
 import { scheduledVisibilityOr } from "./content.ts";
+import { loadQuizLinks } from "./quiz-links.ts";
 
 interface LocaleContext {
   locales: LocaleFallbackInfo[];
@@ -133,6 +134,17 @@ export interface CourseView extends CourseCardView {
   seoDescription: string | null;
   updatedAt: Date;
   alternates: LocaleAlternate[];
+  /**
+   * The course's final assessment (ADR-084 #1), or `null` — which means
+   * either that the course has none or that the one it has is not reachable
+   * by the public (draft, questionless, soft-deleted, untranslated, or filed
+   * under an unregistered track).
+   *
+   * The same `null` that hides the card is the `null` that stops the quiz
+   * blocking completion (ADR-084 #8), so a course can never require an
+   * assessment it does not show.
+   */
+  finalQuiz: QuizLinkView | null;
 }
 
 export interface LessonAttachmentView {
@@ -165,6 +177,21 @@ export interface LessonView {
   heroUrl: string | null;
   completionRule: string;
   isRequired: boolean;
+  /**
+   * The quiz that completes this lesson, for `completionRule: "QUIZ_PASS"`
+   * (ADR-084 #4). Null for every other rule, and null for a `QUIZ_PASS`
+   * lesson whose quiz is unreachable — the same case in which
+   * `recomputeCourseCompletion` already refuses to let the lesson block.
+   */
+  quiz: QuizLinkView | null;
+  /**
+   * The COURSE's final assessment, so the last lesson's forward step can be
+   * it (ADR-084 #5). Resolved for every lesson out of the same batched query
+   * as `quiz` above rather than only for the last one: a view shape that
+   * changed with the reader's position in the curriculum would be a shape
+   * nobody could reason about.
+   */
+  courseFinalQuiz: QuizLinkView | null;
   /**
    * Resolved here rather than in the page: a download needs a URL, a name and
    * a size to render honestly, and the page is cached so it cannot go looking
@@ -373,6 +400,7 @@ export async function loadCourseBySlug(locale: string, slug: string): Promise<Co
       lessonCount: true,
       coverAssetId: true,
       externalUrl: true,
+      finalQuizId: true,
       updatedAt: true,
       translations: {
         select: {
@@ -414,7 +442,10 @@ export async function loadCourseBySlug(locale: string, slug: string): Promise<Co
   const t = pickTranslation(course.translations, locale, defaultLocale, locales);
   if (!t) return null;
 
-  const coverUrls = await resolveAssetUrls([course.coverAssetId]);
+  const [coverUrls, quizLinks] = await Promise.all([
+    resolveAssetUrls([course.coverAssetId]),
+    loadQuizLinks([course.finalQuizId], locale, defaultLocale, locales),
+  ]);
 
   return {
     id: course.id,
@@ -437,6 +468,7 @@ export async function loadCourseBySlug(locale: string, slug: string): Promise<Co
     // missing pair.
     alternates: course.translations.map((tr) => ({ locale: tr.locale, slug: tr.slug })),
     sections: buildSections(course.sections, locale, defaultLocale, locales),
+    finalQuiz: course.finalQuizId ? (quizLinks.get(course.finalQuizId) ?? null) : null,
   };
 }
 
@@ -482,6 +514,7 @@ export async function loadLessonBySlug(
       heroAssetId: true,
       completionRule: true,
       isRequired: true,
+      quizId: true,
       updatedAt: true,
       attachments: {
         orderBy: { sortOrder: "asc" },
@@ -506,6 +539,10 @@ export async function loadLessonBySlug(
           course: {
             select: {
               track: true,
+              // The lesson pager's forward step on the LAST lesson
+              // (ADR-084 #5) — one column, resolved with the lesson's own
+              // quiz in a single `loadQuizLinks` call.
+              finalQuizId: true,
               translations: { select: { locale: true, title: true, slug: true } },
             },
           },
@@ -542,13 +579,17 @@ export async function loadLessonBySlug(
   });
   const assetById = new Map(assets.map((asset) => [asset.id, asset]));
 
-  const { previous, next } = await siblingLessons(
-    lesson.section.courseId,
-    lesson.id,
-    locale,
-    defaultLocale,
-    locales,
-  );
+  const [{ previous, next }, quizLinks] = await Promise.all([
+    siblingLessons(lesson.section.courseId, lesson.id, locale, defaultLocale, locales),
+    // Both quizzes in one query: the lesson's own (the QUIZ_PASS control) and
+    // the course's final one (the pager's forward step past the last lesson).
+    loadQuizLinks(
+      [lesson.quizId, lesson.section.course.finalQuizId],
+      locale,
+      defaultLocale,
+      locales,
+    ),
+  ]);
 
   return {
     id: lesson.id,
@@ -572,6 +613,16 @@ export async function loadLessonBySlug(
     heroUrl: lesson.heroAssetId ? (assetById.get(lesson.heroAssetId)?.url ?? null) : null,
     completionRule: lesson.completionRule,
     isRequired: lesson.isRequired,
+    // The quiz is reported for a QUIZ_PASS lesson only. Any other rule
+    // completes some other way, and a quiz link beside a "Mark complete"
+    // button would offer two answers to one question.
+    quiz:
+      lesson.completionRule === "QUIZ_PASS" && lesson.quizId
+        ? (quizLinks.get(lesson.quizId) ?? null)
+        : null,
+    courseFinalQuiz: lesson.section.course.finalQuizId
+      ? (quizLinks.get(lesson.section.course.finalQuizId) ?? null)
+      : null,
     // An attachment whose asset is gone is dropped rather than rendered as a
     // dead link. `deleteMedia()` refuses an asset that is in use, so this only
     // happens to a row that outlived its asset.

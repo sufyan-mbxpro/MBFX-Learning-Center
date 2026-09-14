@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { SearchX } from "lucide-react";
+import { Button } from "@repo/ui/components/button";
+import { EmptyState } from "@repo/ui/components/empty";
 import "@repo/ui/globals.css";
 
 // Next 16's global-not-found convention (see next.config.ts's
@@ -25,11 +28,19 @@ export default function GlobalNotFound() {
     // attributes on <body> before React hydrates.
     <html lang="en" className="h-full antialiased" suppressHydrationWarning>
       <body className="min-h-full" suppressHydrationWarning>
-        <main className="flex min-h-full flex-col items-center justify-center gap-4 p-8">
-          <h1 className="text-lg font-semibold">Page not found</h1>
-          <Link href="/" className="text-sm underline underline-offset-4">
-            Back to home
-          </Link>
+        {/* The shared EmptyState, so even the layout-less 404 is the design
+            system's (changes-21 Phase A). Still literal English: this file has
+            no intl context, as the header explains. There is no theme row
+            either, so it renders on globals.css's default tokens. */}
+        <main className="px-4">
+          <EmptyState
+            size="lg"
+            titleAs="h1"
+            icon={<SearchX aria-hidden />}
+            title="Page not found"
+            description="The page may have moved, or the address may be mistyped."
+            action={<Button render={<Link href="/" />}>Back to home</Button>}
+          />
         </main>
       </body>
     </html>

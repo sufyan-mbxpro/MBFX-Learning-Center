@@ -8,6 +8,7 @@
 // service writes the same 301 redirect a full save does when the slug changes.
 
 import { useState } from "react";
+import { quickEditArticleSchema } from "@repo/contracts";
 import { Button } from "@repo/ui/components/button";
 import {
   Dialog,
@@ -18,11 +19,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@repo/ui/components/dialog";
+import { Field, FieldError, FieldGroup, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
-import { Label } from "@repo/ui/components/label";
 import { Switch } from "@repo/ui/components/switch";
 import { AdminCombobox } from "../../_components/combobox.tsx";
 import { quickUpdateArticleAction } from "../../_actions/article-actions.ts";
+import { useFieldErrors } from "../../_hooks/use-field-errors.ts";
 import { useServerAction } from "../../_hooks/use-server-action.ts";
 
 export interface QuickEditLabels {
@@ -58,60 +60,74 @@ export function QuickEditDialog({
   const [categoryId, setCategoryId] = useState("");
   const [isFeatured, setIsFeatured] = useState(row.isFeatured);
 
+  const values = {
+    title,
+    slug: slug || undefined,
+    // Only send a category when one was picked — otherwise the shortcut
+    // would clear a field it never showed a value for.
+    ...(categoryId ? { categoryId } : {}),
+    isFeatured,
+  };
+  // The title is optional in the schema only because the action accepts a
+  // partial edit; this dialog always sends it, and `.min(1)` refuses "".
+  const form = useFieldErrors(quickEditArticleSchema, values);
+
+  const changeOpen = (next: boolean) => {
+    if (!next) form.reset();
+    onOpenChange(next);
+  };
+
+  const submit = () => {
+    if (!form.validate()) return;
+    run(
+      async () => {
+        await quickUpdateArticleAction(row.id, values);
+        changeOpen(false);
+        onSaved();
+      },
+      { successMessage: labels.saved },
+    );
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={changeOpen}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{labels.title}</DialogTitle>
           <DialogDescription>{labels.description}</DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="quick-title">{labels.titleLabel}</Label>
-            <Input id="quick-title" value={title} onChange={(e) => setTitle(e.target.value)} />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="quick-slug">{labels.slugLabel}</Label>
-            <Input id="quick-slug" value={slug} onChange={(e) => setSlug(e.target.value)} />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="quick-category">{labels.categoryLabel}</Label>
+        <FieldGroup>
+          <Field invalid={form.invalid("title")} required>
+            <FieldLabel>{labels.titleLabel}</FieldLabel>
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} />
+            <FieldError>{form.error("title")}</FieldError>
+          </Field>
+          <Field invalid={form.invalid("slug")}>
+            <FieldLabel>{labels.slugLabel}</FieldLabel>
+            <Input value={slug} onChange={(e) => setSlug(e.target.value)} />
+            <FieldError>{form.error("slug")}</FieldError>
+          </Field>
+          <Field invalid={form.invalid("categoryId")}>
+            <FieldLabel>{labels.categoryLabel}</FieldLabel>
             <AdminCombobox
-              id="quick-category"
               value={categoryId}
               onValueChange={setCategoryId}
               options={categories.map((c) => ({ value: c.id, label: c.name }))}
             />
-          </div>
-          <label className="flex items-center justify-between gap-2 text-sm">
-            {labels.featuredLabel}
+            <FieldError>{form.error("categoryId")}</FieldError>
+          </Field>
+          {/* Switch first, label after (ADR-089). */}
+          <Field orientation="horizontal">
             <Switch checked={isFeatured} onCheckedChange={(v) => setIsFeatured(v === true)} />
-          </label>
-        </div>
+            <FieldLabel className="font-normal">{labels.featuredLabel}</FieldLabel>
+          </Field>
+        </FieldGroup>
 
         <DialogFooter>
           <DialogClose render={<Button variant="ghost">{labels.cancel}</Button>} />
-          <Button
-            disabled={pending || title.trim() === ""}
-            onClick={() =>
-              run(
-                async () => {
-                  await quickUpdateArticleAction(row.id, {
-                    title,
-                    slug: slug || undefined,
-                    // Only send a category when one was picked — otherwise the
-                    // shortcut would clear a field it never showed a value for.
-                    ...(categoryId ? { categoryId } : {}),
-                    isFeatured,
-                  });
-                  onOpenChange(false);
-                  onSaved();
-                },
-                { successMessage: labels.saved },
-              )
-            }
-          >
+          {/* Enabled while fields are wrong: pressing it names them (F-07). */}
+          <Button loading={pending} onClick={submit}>
             {labels.save}
           </Button>
         </DialogFooter>

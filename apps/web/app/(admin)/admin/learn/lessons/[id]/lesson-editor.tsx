@@ -35,6 +35,7 @@ import {
   completionRuleSchema,
   contentVisibilitySchema,
   courseDifficultySchema,
+  lessonInputSchema,
   type ContentVisibility,
   type CourseDifficulty,
   type LessonInput,
@@ -48,8 +49,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@repo/ui/components/dropdown-menu";
+import {
+  Field as FieldRoot,
+  FieldContent,
+  FieldDescription,
+  FieldLabel,
+  FieldTitle,
+} from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
-import { Label } from "@repo/ui/components/label";
 import { Textarea } from "@repo/ui/components/textarea";
 import {
   duplicateLessonAction,
@@ -68,6 +75,7 @@ import {
   StatusBadge,
   statusTone,
 } from "../../../_components/status-badge.tsx";
+import { useFieldErrors } from "../../../_hooks/use-field-errors.ts";
 import { useServerAction } from "../../../_hooks/use-server-action.ts";
 import { ObjectivesPanel } from "./_panels/objectives-panel.tsx";
 import { ResourcesPanel, type AttachmentDraft } from "./_panels/resources-panel.tsx";
@@ -76,7 +84,7 @@ import type { LessonData, LessonEditorLabels, LessonTranslationDraft } from "./e
 function CharCount({ value, max }: { value: string; max: number }) {
   return (
     <span
-      className={`text-xs tabular-nums ${value.length > max ? "text-destructive" : "text-muted-foreground"}`}
+      className={`text-xs tabular-nums ${value.length > max ? "text-destructive-interactive" : "text-muted-foreground"}`}
     >
       {value.length}/{max}
     </span>
@@ -164,50 +172,60 @@ export function LessonEditor({
   const setDraft = (patch: Partial<LessonTranslationDraft>) =>
     setDrafts((current) => ({ ...current, [locale]: { ...draft, ...patch } }));
 
-  // Mirrors `lessonInputSchema`'s capability rule so the Save button does not
-  // offer to submit a payload the contract will refuse. The contract and
-  // `saveLesson` are still the gate — this only avoids a pointless round trip.
+  // `lessonInputSchema`'s capability rule, mirrored so the body field's
+  // message can say WHAT is missing rather than "check this value". The
+  // contract and `saveLesson` are still the gate.
   const hasBody = draft.content.trim() !== "";
   const hasCapability =
     hasBody || videoUrl.trim() !== "" || externalUrl.trim() !== "" || attachments.length > 0;
-  const canSave = draft.title.trim() !== "" && hasCapability;
 
   const publicPath = useMemo(
     () => `/${locale}/learn/${lesson.courseSlug}/${draft.slug || ""}`,
     [locale, lesson.courseSlug, draft.slug],
   );
 
+  // Built on every render rather than at submit, so the inline validation
+  // reads EXACTLY what `saveLessonAction` will be sent (ADR-077).
+  const payload: LessonInput = {
+    lessonId: lesson.id,
+    meta: {
+      difficulty,
+      visibility,
+      completionRule,
+      quizId,
+      isRequired,
+      estimatedMinutes: estimatedMinutes.trim() === "" ? null : Number(estimatedMinutes),
+      videoUrl: videoUrl.trim() === "" ? null : videoUrl.trim(),
+      externalUrl: externalUrl.trim() === "" ? null : externalUrl.trim(),
+      heroAssetId: hero.id,
+      prerequisiteLessonId,
+    },
+    translation: {
+      locale,
+      title: draft.title.trim(),
+      slug: draft.slug.trim() === "" ? undefined : draft.slug.trim(),
+      summary: draft.summary.trim() === "" ? null : draft.summary.trim(),
+      content: draft.content.trim() === "" ? null : draft.content,
+      learningObjectives: cleanObjectives(draft.learningObjectives),
+      seoTitle: draft.seoTitle.trim() === "" ? null : draft.seoTitle.trim(),
+      seoDescription: draft.seoDescription.trim() === "" ? null : draft.seoDescription.trim(),
+      seoFocusKeyword: draft.seoFocusKeyword.trim() === "" ? null : draft.seoFocusKeyword.trim(),
+    },
+    attachments: attachments.map((entry) => ({
+      assetId: entry.assetId,
+      label: entry.label.trim() === "" ? null : entry.label.trim(),
+    })),
+  };
+  const form = useFieldErrors(lessonInputSchema, payload);
+
+  // The capability rule reports on the body path; the Resources panel's own
+  // warning says what would satisfy it, which "check this value" does not.
+  const bodyError =
+    form.invalid("translation.content") && !hasCapability
+      ? labels.resources.capabilityWarning
+      : form.error("translation.content");
+
   const submitForm = async () => {
-    const payload: LessonInput = {
-      lessonId: lesson.id,
-      meta: {
-        difficulty,
-        visibility,
-        completionRule,
-        quizId,
-        isRequired,
-        estimatedMinutes: estimatedMinutes.trim() === "" ? null : Number(estimatedMinutes),
-        videoUrl: videoUrl.trim() === "" ? null : videoUrl.trim(),
-        externalUrl: externalUrl.trim() === "" ? null : externalUrl.trim(),
-        heroAssetId: hero.id,
-        prerequisiteLessonId,
-      },
-      translation: {
-        locale,
-        title: draft.title.trim(),
-        slug: draft.slug.trim() === "" ? undefined : draft.slug.trim(),
-        summary: draft.summary.trim() === "" ? null : draft.summary.trim(),
-        content: draft.content.trim() === "" ? null : draft.content,
-        learningObjectives: cleanObjectives(draft.learningObjectives),
-        seoTitle: draft.seoTitle.trim() === "" ? null : draft.seoTitle.trim(),
-        seoDescription: draft.seoDescription.trim() === "" ? null : draft.seoDescription.trim(),
-        seoFocusKeyword: draft.seoFocusKeyword.trim() === "" ? null : draft.seoFocusKeyword.trim(),
-      },
-      attachments: attachments.map((entry) => ({
-        assetId: entry.assetId,
-        label: entry.label.trim() === "" ? null : entry.label.trim(),
-      })),
-    };
     await saveLessonAction(payload);
   };
 
@@ -244,10 +262,14 @@ export function LessonEditor({
             </Button>
           )}
           {canUpdate && (
+            // Enabled while fields are wrong: pressing it names them (audit F-07).
             <Button
               size="sm"
-              disabled={pending || !canSave}
-              onClick={() => run(() => submitForm(), { successMessage: labels.saved })}
+              loading={pending}
+              onClick={() => {
+                if (!form.validate()) return;
+                run(() => submitForm(), { successMessage: labels.saved });
+              }}
             >
               {labels.updateLesson}
             </Button>
@@ -304,7 +326,7 @@ export function LessonEditor({
         </div>
       </div>
 
-      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 min-w-0 gap-4 lg:grid-cols-(--grid-2-1)">
         <div className="flex min-w-0 flex-col gap-4">
           <EditorSection
             title={labels.bodySection}
@@ -313,12 +335,12 @@ export function LessonEditor({
             accent="primary"
           >
             <Field
-              id="lesson-title"
               label={labels.titleLabel}
+              required
+              error={form.error("translation.title")}
               adornment={<CharCount value={draft.title} max={255} />}
             >
               <Input
-                id="lesson-title"
                 value={draft.title}
                 disabled={!canUpdate}
                 onChange={(e) => setDraft({ title: e.target.value })}
@@ -326,12 +348,11 @@ export function LessonEditor({
             </Field>
 
             <Field
-              id="lesson-slug"
               label={labels.slugLabel}
               hint={`${labels.lessonUrl}: ${publicPath}`}
+              error={form.error("translation.slug")}
             >
               <Input
-                id="lesson-slug"
                 value={draft.slug}
                 disabled={!canUpdate}
                 onChange={(e) => setDraft({ slug: e.target.value })}
@@ -339,12 +360,11 @@ export function LessonEditor({
             </Field>
 
             <Field
-              id="lesson-summary"
               label={labels.summaryLabel}
+              error={form.error("translation.summary")}
               adornment={<CharCount value={draft.summary} max={1000} />}
             >
               <Textarea
-                id="lesson-summary"
                 rows={2}
                 value={draft.summary}
                 disabled={!canUpdate}
@@ -352,9 +372,8 @@ export function LessonEditor({
               />
             </Field>
 
-            <Field label={labels.bodyLabel}>
+            <Field label={labels.bodyLabel} error={bodyError}>
               <RichTextEditor
-                id="lesson-body"
                 value={draft.content}
                 onChange={(html) => setDraft({ content: html })}
                 labels={labels.editor}
@@ -368,8 +387,10 @@ export function LessonEditor({
             onHeroChange={setHero}
             videoUrl={videoUrl}
             onVideoUrlChange={setVideoUrl}
+            videoUrlError={form.error("meta.videoUrl")}
             externalUrl={externalUrl}
             onExternalUrlChange={setExternalUrl}
+            externalUrlError={form.error("meta.externalUrl")}
             attachments={attachments}
             onAttachmentsChange={setAttachments}
             hasBody={hasBody}
@@ -391,26 +412,24 @@ export function LessonEditor({
             accent="info"
           >
             <Field
-              id="lesson-seo-title"
               label={labels.seoTitleLabel}
               hint={labels.seoTitleHint}
+              error={form.error("translation.seoTitle")}
               adornment={<CharCount value={draft.seoTitle} max={70} />}
             >
               <Input
-                id="lesson-seo-title"
                 value={draft.seoTitle}
                 disabled={!canUpdate}
                 onChange={(e) => setDraft({ seoTitle: e.target.value })}
               />
             </Field>
             <Field
-              id="lesson-seo-description"
               label={labels.seoDescriptionLabel}
               hint={labels.seoDescriptionHint}
+              error={form.error("translation.seoDescription")}
               adornment={<CharCount value={draft.seoDescription} max={180} />}
             >
               <Textarea
-                id="lesson-seo-description"
                 rows={3}
                 value={draft.seoDescription}
                 disabled={!canUpdate}
@@ -418,12 +437,11 @@ export function LessonEditor({
               />
             </Field>
             <Field
-              id="lesson-seo-keyword"
               label={labels.focusKeywordsLabel}
               hint={labels.focusKeywordsHint}
+              error={form.error("translation.seoFocusKeyword")}
             >
               <Input
-                id="lesson-seo-keyword"
                 value={draft.seoFocusKeyword}
                 disabled={!canUpdate}
                 onChange={(e) => setDraft({ seoFocusKeyword: e.target.value })}
@@ -447,7 +465,10 @@ export function LessonEditor({
             scheduledFor={lesson.scheduledFor}
             updatedAt={lesson.updatedAt}
             canPublish={canPublish}
-            canSave={canSave && canUpdate}
+            canSave={canUpdate}
+            // The panel validates before a transition that saves first and
+            // stops there, with the fields named inline (ADR-077).
+            validate={form.validate}
             save={submitForm}
             transitionTo={(to, scheduledForIso) =>
               setLessonStatusAction(lesson.id, to, scheduledForIso)
@@ -461,7 +482,10 @@ export function LessonEditor({
             icon={MapPin}
             accent="neutral"
           >
-            <Field label={labels.courseLabel}>
+            {/* A link, not a form control: a label element would name
+                nothing, so the heading is a FieldTitle (ADR-077). */}
+            <div className="flex min-w-0 flex-col gap-2">
+              <FieldTitle>{labels.courseLabel}</FieldTitle>
               <Button
                 variant="outline"
                 size="sm"
@@ -470,7 +494,7 @@ export function LessonEditor({
               >
                 {lesson.courseTitle}
               </Button>
-            </Field>
+            </div>
 
             <Field label={labels.sectionLabel}>
               <AdminCombobox
@@ -547,9 +571,8 @@ export function LessonEditor({
               />
             </Field>
 
-            <Field id="lesson-minutes" label={labels.estimatedMinutesLabel}>
+            <Field label={labels.estimatedMinutesLabel} error={form.error("meta.estimatedMinutes")}>
               <Input
-                id="lesson-minutes"
                 type="number"
                 min={0}
                 max={6000}
@@ -597,17 +620,17 @@ export function LessonEditor({
               />
             </Field>
 
-            <Label className="flex items-start gap-2 font-normal">
+            <FieldRoot orientation="horizontal">
               <Checkbox
                 checked={isRequired}
                 disabled={!canUpdate}
                 onCheckedChange={(checked) => setIsRequired(checked === true)}
               />
-              <span className="flex flex-col gap-0.5">
-                <span className="text-sm">{labels.isRequiredLabel}</span>
-                <span className="text-xs text-muted-foreground">{labels.isRequiredHint}</span>
-              </span>
-            </Label>
+              <FieldContent>
+                <FieldLabel className="font-normal">{labels.isRequiredLabel}</FieldLabel>
+                <FieldDescription className="text-xs">{labels.isRequiredHint}</FieldDescription>
+              </FieldContent>
+            </FieldRoot>
           </EditorSection>
 
           <EditorSection

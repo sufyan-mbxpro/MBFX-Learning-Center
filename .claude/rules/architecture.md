@@ -33,7 +33,19 @@ rules named below.
 
 8. Dependencies point one way: `apps → packages`, and within packages,
    `core → db/contracts/rbac/settings`, never a package importing from an app.
-   `import-x/no-cycle` is lint-enforced.
+   `import-x/no-cycle` is lint-enforced. ADR-078 adds `auth → email` and
+   `core → email`: `@repo/email` is a domain package that owns its own tables
+   (the `settings`/`theme` precedent) and depends on
+   `db/contracts/settings/theme`. It sits BELOW both senders because both
+   layers send — auth the reset and verification mail, core the
+   admin-initiated notice and the newsletter — and a package they both need
+   cannot live in either. Email in `core` would force `auth → core`, dragging
+   `rbac`, `settings`, `theme`, `i18n` and `blocks` onto the session path.
+   ADR-087 adds `email → secrets` and `core → secrets`: `@repo/secrets` is a
+   leaf with no dependencies at all, holding the one AES-256-GCM seal both
+   sealed-secret owners use. It sits at the bottom for the same reason
+   `email` sits below its senders — two packages need it, so neither may own
+   it, and a duplicated crypto primitive drifts in the copy nobody reads.
 9. Every package declares every dependency it imports (no phantom deps —
    `pnpm check:phantom-deps` enforces). Granular exports in `@repo/ui` so one
    component doesn't drag the whole tree.
@@ -49,7 +61,11 @@ rules named below.
     `rbac:{userId}`, `content` (all content reads), and — added by ADR-025
     for Module 16 — `page:{id}`, `page-path:{locale}:{path}`,
     `layout:{contentType}`, `card-template:{id}`, `style-preset:{id}` (ADR-033), and — ADR-029 —
-    `part-data:{partKey}` for global site-part data, which is deliberately
+    `part-data:{partKey}` for global site-part data, and — ADR-087 —
+    `market` for every rate, bar and derived market figure, which is
+    deliberately **not** `content`: market data churns on a daily sweep and
+    content on editorial action, so sharing a tag would have every article
+    publish drop the rate cache. `part-data:{partKey}` is likewise
     **not** tagged `content` so ordinary content churn never invalidates the
     site shell. Admin writes invalidate by tag; nothing polls. `revalidateTag` always takes its second argument
     (`{ expire: 0 }`). Never `revalidatePath`, never a route-level

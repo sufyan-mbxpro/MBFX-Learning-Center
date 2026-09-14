@@ -17,17 +17,19 @@ import type {
   LayoutTokens,
   SurfacePalette,
 } from "@repo/theme";
+import { saveThemeSchema } from "@repo/contracts";
 import { humanizeKey } from "@repo/utils";
 import { Alert, AlertDescription, AlertTitle } from "@repo/ui/components/alert";
 import { Button } from "@repo/ui/components/button";
+import { Field, FieldError, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
-import { Label } from "@repo/ui/components/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@repo/ui/components/tabs";
 import { activateThemeAction, saveThemeAction } from "../_actions/admin-actions.ts";
 import { clearBrandAssetAction, setBrandAssetAction } from "../_actions/media-actions.ts";
 import { ImageUploadField, type ImageUploadLabels } from "../_components/image-upload-field.tsx";
 import { StatusBadge } from "../_components/status-badge.tsx";
 import { AdminCombobox } from "../_components/combobox.tsx";
+import { useFieldErrors } from "../_hooks/use-field-errors.ts";
 import { useServerAction } from "../_hooks/use-server-action.ts";
 
 interface Labels {
@@ -76,12 +78,15 @@ function ColorField({
   label,
   hexLabel,
   value,
+  error,
   onChange,
 }: {
   id: string;
   label: string;
   hexLabel: string;
   value: string;
+  /** The inline message from `saveThemeSchema` (ADR-077). */
+  error?: string;
   onChange: (v: string) => void;
 }) {
   // The native swatch is imprecise for landing on an exact hex (its own
@@ -105,27 +110,33 @@ function ColorField({
     if (HEX_COLOR_RE.test(next)) onChange(next);
   };
 
+  // Every swatch is required by `saveThemeSchema`. The label names the
+  // swatch (`controlId` keeps its long-standing id); the hex box is the same
+  // value typed, so it shares the Field's invalid state and message under an
+  // id of its own.
   return (
-    <div className="flex items-center gap-3">
-      <Input
-        id={id}
-        type="color"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="h-9 w-14 p-1"
-      />
-      <Label htmlFor={id} className="flex-1">
-        {label}
-      </Label>
-      <Input
-        aria-label={`${label} ${hexLabel}`}
-        value={draft}
-        onChange={(e) => commit(e.target.value)}
-        onBlur={() => setDraft(value)}
-        maxLength={7}
-        className="w-24 font-mono text-xs"
-      />
-    </div>
+    <Field invalid={error !== undefined} required controlId={id}>
+      <div className="flex items-center gap-3">
+        <Input
+          type="color"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="h-9 w-14 p-1"
+        />
+        <FieldLabel className="flex-1">{label}</FieldLabel>
+        {/* `font-mono`: a hex value is read character by character (ADR-044 #6). */}
+        <Input
+          id={`${id}-hex`}
+          aria-label={`${label} ${hexLabel}`}
+          value={draft}
+          onChange={(e) => commit(e.target.value)}
+          onBlur={() => setDraft(value)}
+          maxLength={7}
+          className="w-24 font-mono text-xs"
+        />
+      </div>
+      <FieldError>{error}</FieldError>
+    </Field>
   );
 }
 
@@ -183,27 +194,37 @@ export function ThemeEditor({
     [brand, light, dark, layout, initial],
   );
 
-  const save = () =>
+  // Exactly what the action receives, checked by the schema it parses with
+  // (ADR-077). Contrast is NOT judged here — `validateTheme` runs server-side
+  // and its issues render below as before.
+  const payload = {
+    themeKey,
+    brandColors: brand,
+    lightSurface: light,
+    darkSurface: dark,
+    darkBrandOverrides: initial.overrides,
+    layoutTokens: layout,
+  };
+  const form = useFieldErrors(saveThemeSchema, payload);
+
+  const save = () => {
+    if (!form.validate()) return;
     run(
       async () => {
-        const result = await saveThemeAction({
-          themeKey,
-          brandColors: brand,
-          lightSurface: light,
-          darkSurface: dark,
-          darkBrandOverrides: initial.overrides,
-          layoutTokens: layout,
-        });
+        const result = await saveThemeAction(payload);
         setIssues(result.issues);
         if (!result.saved) throw new Error(labels.saveBlocked);
       },
       { successMessage: labels.saved },
     );
+  };
 
   const surfaceEditor = (
     palette: SurfacePalette,
     setPalette: (p: SurfacePalette) => void,
     prefix: string,
+    /** The palette's key in the action payload — its schema path. */
+    path: "lightSurface" | "darkSurface",
   ) => (
     <div className="flex flex-col gap-2.5">
       {Object.entries(palette).map(([field, value]) => (
@@ -213,6 +234,7 @@ export function ThemeEditor({
           label={fieldLabel(field)}
           hexLabel={labels.hexValue}
           value={value}
+          error={form.error(`${path}.${field}`)}
           onChange={(v) => setPalette({ ...palette, [field]: v })}
         />
       ))}
@@ -245,6 +267,7 @@ export function ThemeEditor({
               label={fieldLabel(field)}
               hexLabel={labels.hexValue}
               value={brand[field as keyof BrandColors]}
+              error={form.error(`brandColors.${field}`)}
               onChange={(v) => setBrand({ ...brand, [field]: v })}
             />
           ))}
@@ -271,47 +294,48 @@ export function ThemeEditor({
             className="grid grid-cols-1 gap-3 pt-4 md:grid-cols-2 xl:grid-cols-3"
           >
             {(["radiusBase", "containerWidth", "baseFontSize"] as const).map((field) => (
-              <div key={field} className="flex items-center gap-3">
-                <Label htmlFor={`layout-${field}`} className="w-36">
-                  {fieldLabel(field)}
-                </Label>
+              <Field
+                key={field}
+                invalid={form.invalid(`layoutTokens.${field}`)}
+                // `baseFontSize` is the one optional layout token in the schema.
+                required={field !== "baseFontSize"}
+              >
+                <FieldLabel>{fieldLabel(field)}</FieldLabel>
                 <Input
-                  id={`layout-${field}`}
                   value={layout[field]}
                   onChange={(e) => setLayout({ ...layout, [field]: e.target.value })}
                   className="w-full"
                 />
-              </div>
+                <FieldError>{form.error(`layoutTokens.${field}`)}</FieldError>
+              </Field>
             ))}
             {(["fontSans", "fontMono"] as const).map((field) => {
               const options = fonts.filter((f) =>
                 field === "fontSans" ? f.category === "sans" : f.category === "mono",
               );
               return (
-                <div key={field} className="flex items-center gap-3">
-                  <Label htmlFor={`layout-${field}`} className="w-36">
-                    {fieldLabel(field)}
-                  </Label>
+                <Field key={field} invalid={form.invalid(`layoutTokens.${field}`)} required>
+                  <FieldLabel>{fieldLabel(field)}</FieldLabel>
                   <AdminCombobox
-                    id={`layout-${field}`}
                     value={layout[field]}
                     onValueChange={(v) => setLayout({ ...layout, [field]: v || layout[field] })}
                     options={options.map((f) => ({ value: f.key, label: f.label }))}
                   />
-                </div>
+                  <FieldError>{form.error(`layoutTokens.${field}`)}</FieldError>
+                </Field>
               );
             })}
           </TabsContent>
         )}
 
-        <TabsContent value="modes" className="grid gap-6 pt-4 md:grid-cols-2">
+        <TabsContent value="modes" className="grid grid-cols-1 gap-6 pt-4 md:grid-cols-2">
           <section className="card-hover flex flex-col gap-3 rounded-lg border p-4">
             <h3 className="text-sm font-semibold">{labels.lightSurface}</h3>
-            {surfaceEditor(light, setLight, "light")}
+            {surfaceEditor(light, setLight, "light", "lightSurface")}
           </section>
           <section className="card-hover flex flex-col gap-3 rounded-lg border p-4">
             <h3 className="text-sm font-semibold">{labels.darkSurface}</h3>
-            {surfaceEditor(dark, setDark, "dark")}
+            {surfaceEditor(dark, setDark, "dark", "darkSurface")}
           </section>
         </TabsContent>
 
@@ -359,9 +383,10 @@ export function ThemeEditor({
               ["favicon", labels.favicon, "brand"],
             ] as const
           ).map(([key, label]) => (
+            // Each upload saves on its own through its own action, outside
+            // the theme payload — so it carries no `error` from `form`.
             <ImageUploadField
               key={key}
-              id={`brand-asset-${key}`}
               label={label}
               value={logos[key]}
               purpose="brand"
@@ -403,7 +428,7 @@ export function ThemeEditor({
       {/* changes-08 #3: Save sits at the inline-END of its section, where every
       // other confirming action in the admin already sits (dialog footers,
       // "New X" buttons) — not at the start. */}
-      <Button onClick={save} disabled={pending || !dirty} className="self-end">
+      <Button onClick={save} disabled={!dirty} loading={pending} className="self-end">
         {labels.save}
       </Button>
     </div>

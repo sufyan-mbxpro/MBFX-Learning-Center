@@ -5,6 +5,7 @@ import { Select as SelectPrimitive } from "@base-ui/react/select";
 import { cva } from "class-variance-authority";
 
 import { cn } from "@repo/ui/lib/utils";
+import { useFieldControl } from "@repo/ui/components/field";
 import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from "lucide-react";
 
 // changes-20 / ADR-072 — the dropdown TRIGGER is the same box as an Input
@@ -44,11 +45,16 @@ function SelectGroup({ className, ...props }: SelectPrimitive.Group.Props) {
   );
 }
 
+// A truncating BLOCK, not a flex row. It used to be `flex` plus
+// `line-clamp-1`, but line-clamp only works on a -webkit-box and `flex`
+// replaced that display, so the clamp was inert: a long value was clipped
+// mid-letter with no ellipsis, on every dropdown (admin visual pass, the
+// user-status control). An icon beside the value sits inline instead.
 function SelectValue({ className, ...props }: SelectPrimitive.Value.Props) {
   return (
     <SelectPrimitive.Value
       data-slot="select-value"
-      className={cn("flex flex-1 text-start", className)}
+      className={cn("block min-w-0 flex-1 truncate text-start", className)}
       {...props}
     />
   );
@@ -62,16 +68,15 @@ function SelectTrigger({
 }: SelectPrimitive.Trigger.Props & {
   size?: SelectTriggerSize;
 }) {
+  // Inside a Field: id, aria-invalid, aria-describedby, and `required` as
+  // aria-required — the trigger is a button, which has no native one (ADR-077).
+  const wired = useFieldControl(props, { requiredAs: "aria" });
   return (
     <SelectPrimitive.Trigger
       data-slot="select-trigger"
       data-size={size}
-      className={cn(
-        selectTriggerVariants({ size }),
-        "w-fit *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-1.5",
-        className,
-      )}
-      {...props}
+      className={cn(selectTriggerVariants({ size }), "w-fit", className)}
+      {...wired}
     >
       {children}
       {/* The reference's plain-select indicator: chevron-down at half

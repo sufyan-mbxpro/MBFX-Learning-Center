@@ -186,32 +186,44 @@ describe("MEGA_MENU_PANELS — the schools", () => {
     }
   });
 
-  // The footer would say "Learn Forex · View all" over a link to the page
-  // covering BOTH schools. The umbrella is a labelled row instead.
-  it("declares no view-all footer", () => {
+  // ADR-076 §2: the footer lands on the school's OWN index — what "Learn Forex
+  // · View all" promises. ADR-065 §4 refused a footer only because it would
+  // have pointed at the umbrella page covering both schools.
+  it("declares a view-all footer on the track's own index, never the umbrella", () => {
     for (const track of LEARN_TRACK_KEYS) {
-      expect(panelForHref(learnTrackPath(track))?.viewAll).toBeUndefined();
+      const viewAll = panelForHref(learnTrackPath(track))?.viewAll;
+      expect(viewAll).toBe(`learn-${track}`);
+      expect(viewAll).not.toBe("learn");
+    }
+  });
+
+  // The About panel's shape: several headed columns, so the popup renders
+  // `wide` rather than as a one-column list (site-nav.tsx's size rule).
+  it("is a multi-column panel like About's", () => {
+    for (const track of LEARN_TRACK_KEYS) {
+      const columns = panelForHref(learnTrackPath(track))?.columns ?? [];
+      expect(columns.length).toBe(MEGA_MENU_PANELS.about.columns.length);
     }
   });
 
   it("resolves against live menu rows the way the seed builds them", () => {
     const children: MegaResolvableItem[] = [
       child("learn-forex", "Courses"),
+      child("learn-forex-videos", "Videos"),
       child("learn-forex-quizzes", "Quizzes"),
       child("learn-forex-glossary", "Glossary"),
       child("learn", "All learning"),
     ];
     const resolved = resolveMegaMenuPanel(MEGA_MENU_PANELS["learn-forex"], children);
-    expect(resolved.columns).toHaveLength(1);
-    expect(resolved.columns[0]?.items.map((i) => i.item.label)).toEqual([
-      "Courses",
-      "Quizzes",
-      "Glossary",
-      "All learning",
+    expect(resolved.columns.map((c) => c.items.map((i) => i.item.label))).toEqual([
+      ["Courses", "Videos"],
+      ["Quizzes", "Glossary"],
+      ["All learning"],
     ]);
     // Every row carries a glyph: the panel's rows are icon + label + one line,
     // and a single missing icon reads as a broken row rather than a plain one.
-    expect(resolved.columns[0]?.items.every((i) => i.icon !== undefined)).toBe(true);
-    expect(resolved.columns[0]?.items.at(-1)?.item.href).toBe(ROUTE_PATHS.learn);
+    expect(resolved.columns.flatMap((c) => c.items).every((i) => i.icon !== undefined)).toBe(true);
+    expect(resolved.columns.at(-1)?.items.at(-1)?.item.href).toBe(ROUTE_PATHS.learn);
+    expect(resolved.viewAll?.href).toBe(ROUTE_PATHS["learn-forex"]);
   });
 });

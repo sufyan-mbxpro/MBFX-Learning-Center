@@ -18,7 +18,7 @@ export const DEFAULT_CARD_CONFIG: CardConfig = {
 const ASPECT_CLASS: Record<CardConfig["imageAspectRatio"], string> = {
   square: "aspect-square",
   video: "aspect-video",
-  portrait: "aspect-[3/4]",
+  portrait: "aspect-3/4",
 };
 
 function truncate(text: string, max: number): string {

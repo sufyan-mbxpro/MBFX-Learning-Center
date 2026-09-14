@@ -391,6 +391,77 @@ describe("public reads", () => {
   });
 });
 
+// ─── The homepage rail (ADR-092) ─────────────────────────────
+
+describe("loadFeaturedVideoTopics", () => {
+  it("spans both schools, where the per-track loader cannot", async () => {
+    // The whole reason this reader exists. `loadVideoTopics` takes a track
+    // because a shelf belongs to one; a homepage that showed forex videos only
+    // would be advertising half the site.
+    const forex = await makeTopic({ track: "forex" });
+    const crypto = await makeTopic({ track: "crypto" });
+
+    const ids = (await videos.loadFeaturedVideoTopics("en", 50)).map((row) => row.id);
+    expect(ids).toContain(forex);
+    expect(ids).toContain(crypto);
+  });
+
+  it("omits a draft and a soft-deleted topic", async () => {
+    const draft = await makeTopic({ publish: false });
+    const live = await makeTopic({});
+    const deleted = await makeTopic({});
+    await videos.setVideoTopicDeleted(editor, deleted, true);
+
+    const ids = (await videos.loadFeaturedVideoTopics("en", 50)).map((row) => row.id);
+    expect(ids).toContain(live);
+    expect(ids).not.toContain(draft);
+    expect(ids).not.toContain(deleted);
+  });
+
+  it("resolves the first video it can make safe, skipping one it cannot", async () => {
+    // A single unrecognised URL must not mute a topic that has a good row
+    // behind it — the loop takes the first RESOLVABLE source, not the first
+    // row. security.md #9: the stored string never reaches a src.
+    const topicId = await makeTopic({
+      videoRows: [
+        { externalUrl: "https://evil.example/clip.mp4", sortOrder: 0 },
+        { externalUrl: EXTERNAL, sortOrder: 1 },
+      ],
+    });
+
+    const row = (await videos.loadFeaturedVideoTopics("en", 50)).find((r) => r.id === topicId);
+    expect(row!.source).not.toBeNull();
+    expect(row!.source!.kind).toBe("embed");
+    expect(JSON.stringify(row!.source)).not.toContain("evil.example");
+  });
+
+  it("reports a null source for a topic that is a written guide", async () => {
+    // The state that used to render as "Recording soon" over an invented
+    // registry entry. It is now a real topic with a page, and the tile links
+    // to it instead of promising a recording.
+    const topicId = await makeTopic({ videoRows: [] });
+
+    const row = (await videos.loadFeaturedVideoTopics("en", 50)).find((r) => r.id === topicId);
+    expect(row).toBeDefined();
+    expect(row!.source).toBeNull();
+  });
+
+  it("drops a row whose track is no longer registered", async () => {
+    const topicId = await makeTopic({ track: "forex" });
+    await db.videoTopic.update({ where: { id: topicId }, data: { track: "not-a-track" } });
+
+    const ids = (await videos.loadFeaturedVideoTopics("en", 50)).map((row) => row.id);
+    expect(ids).not.toContain(topicId);
+  });
+
+  it("honours the limit after the track and translation filters, not before", async () => {
+    // The query over-fetches and the loop counts survivors. Filtering inside
+    // `take` would let one de-registered track shorten the rail.
+    const rows = await videos.loadFeaturedVideoTopics("en", 2);
+    expect(rows).toHaveLength(2);
+  });
+});
+
 // ─── Publishing gate (ADR-068 §3) ────────────────────────────
 
 describe("publishing", () => {

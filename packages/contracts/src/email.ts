@@ -1,0 +1,291 @@
+// Email contracts (Module 17, ADR-078).
+//
+// Three rules live here rather than beside the service, so the admin form,
+// the server action and the sender fail identically:
+//
+//   1. The template SET is code; only its CONTENT is data (ADR-078 #5). An
+//      admin edits subject, body, sender and on/off — never the key, because
+//      code decides when an email is sent.
+//   2. A body may only use variables its template declares, and must use the
+//      ones it requires. A reset mail without its link is a dead end, and it
+//      fails on SAVE rather than on send.
+//   3. A URL-typed variable is checked before substitution, so a value can
+//      never smuggle `javascript:` into an href.
+//
+// No words live here. Variable descriptions and every message the admin reads
+// come from the catalog (code-style #2); this file carries names, shapes and
+// fixture values only.
+import { z } from "zod";
+
+const localeSchema = z.string().min(2).max(10);
+
+export const EMAIL_AUDIENCES = ["public", "staff", "any"] as const;
+export type EmailAudience = (typeof EMAIL_AUDIENCES)[number];
+
+export const EMAIL_BODY_MODES = ["RICH", "HTML"] as const;
+export type EmailBodyMode = (typeof EMAIL_BODY_MODES)[number];
+
+export const EMAIL_DRIVERS = ["SMTP", "LOG"] as const;
+export const SMTP_SECURITIES = ["NONE", "STARTTLS", "TLS"] as const;
+
+/** Available to every template, whatever its key. */
+export const GLOBAL_EMAIL_VARIABLES = [
+  "site.name",
+  "site.url",
+  "logo.url",
+  "year",
+  "recipient.name",
+  "recipient.email",
+] as const;
+
+/**
+ * Variables whose value must parse as an http(s) URL before it is substituted.
+ * The sanitiser cannot help here: `{{reset.url}}` is a harmless relative href
+ * until the moment it becomes a value.
+ */
+export const URL_EMAIL_VARIABLES = [
+  "site.url",
+  "logo.url",
+  "reset.url",
+  "verify.url",
+  "confirm.url",
+  "unsubscribe.url",
+] as const;
+
+export interface EmailTemplateDefinition {
+  /** Which catalogue the copy belongs to (ADR-043): staff mail is English. */
+  audience: EmailAudience;
+  /** Switching it off breaks a flow people depend on; the UI confirms first. */
+  critical: boolean;
+  /** Beyond GLOBAL_EMAIL_VARIABLES. */
+  variables: readonly string[];
+  /** Must appear in the subject or body, or the save is refused. */
+  required: readonly string[];
+  /** Fixture values for preview and test sends — data, not interface copy. */
+  sample: Readonly<Record<string, string>>;
+}
+
+const SAMPLE_BASE = {
+  "site.name": "MBX Learning Center",
+  "site.url": "https://example.com",
+  "logo.url": "https://example.com/logo.png",
+  year: "2026",
+  "recipient.name": "Alex Morgan",
+  "recipient.email": "alex@example.com",
+} as const;
+
+/**
+ * Every email this product can send. Adding one means an entry here, a seed
+ * row, a sample and a test — `email-registry.test.ts` names any half you
+ * forget.
+ */
+export const EMAIL_TEMPLATES = {
+  "auth.password_reset": {
+    audience: "any",
+    critical: true,
+    variables: ["reset.url", "expires.minutes"],
+    required: ["reset.url"],
+    sample: {
+      ...SAMPLE_BASE,
+      "reset.url": "https://example.com/reset-password?token=sample",
+      "expires.minutes": "30",
+    },
+  },
+  "auth.verify_email": {
+    audience: "public",
+    critical: true,
+    variables: ["verify.url"],
+    required: ["verify.url"],
+    sample: {
+      ...SAMPLE_BASE,
+      "verify.url": "https://example.com/api/auth/verify-email?token=sample",
+    },
+  },
+  "auth.password_changed": {
+    audience: "any",
+    critical: false,
+    variables: ["changed.at"],
+    required: [],
+    sample: { ...SAMPLE_BASE, "changed.at": "12 September 2026, 14:05 UTC" },
+  },
+  "newsletter.confirm": {
+    audience: "public",
+    critical: true,
+    variables: ["confirm.url"],
+    required: ["confirm.url"],
+    sample: {
+      ...SAMPLE_BASE,
+      "confirm.url": "https://example.com/newsletter/confirm?token=sample",
+    },
+  },
+  "newsletter.welcome": {
+    audience: "public",
+    critical: false,
+    variables: ["unsubscribe.url"],
+    required: ["unsubscribe.url"],
+    sample: {
+      ...SAMPLE_BASE,
+      "unsubscribe.url": "https://example.com/newsletter/unsubscribe?token=sample",
+    },
+  },
+} as const satisfies Record<string, EmailTemplateDefinition>;
+
+export type EmailTemplateKey = keyof typeof EMAIL_TEMPLATES;
+
+export const EMAIL_TEMPLATE_KEYS = Object.keys(EMAIL_TEMPLATES) as EmailTemplateKey[];
+
+export function isEmailTemplateKey(value: string): value is EmailTemplateKey {
+  return Object.prototype.hasOwnProperty.call(EMAIL_TEMPLATES, value);
+}
+
+/** Everything a template may use: its own variables plus the global set. */
+export function emailTemplateVariables(key: EmailTemplateKey): string[] {
+  return [...GLOBAL_EMAIL_VARIABLES, ...EMAIL_TEMPLATES[key].variables];
+}
+
+export function isUrlEmailVariable(name: string): boolean {
+  return (URL_EMAIL_VARIABLES as readonly string[]).includes(name);
+}
+
+// `{{ name }}`: letters, then word characters and dots. Deliberately no
+// spaces, pipes or arguments — a template language with logic is a template
+// language someone can put behaviour in (ADR-078 #6).
+const VARIABLE_PATTERN = /\{\{\s*([A-Za-z][\w.]*)\s*\}\}/g;
+
+/** Every variable a string references, in first-seen order, without repeats. */
+export function findTemplateVariables(text: string): string[] {
+  const found = new Set<string>();
+  for (const match of text.matchAll(VARIABLE_PATTERN)) {
+    const name = match[1];
+    if (name) found.add(name);
+  }
+  return [...found];
+}
+
+export const emailTemplateSaveSchema = z
+  .object({
+    key: z.string().refine(isEmailTemplateKey),
+    locale: localeSchema,
+    // CR/LF in a header is the classic injection: one newline and the rest of
+    // the subject becomes a Bcc.
+    subject: z
+      .string()
+      .trim()
+      .min(1)
+      .max(200)
+      .refine((value) => !/[\r\n]/.test(value)),
+    preheader: z
+      .string()
+      .trim()
+      .max(200)
+      .refine((value) => !/[\r\n]/.test(value))
+      .optional(),
+    mode: z.enum(EMAIL_BODY_MODES),
+    bodyHtml: z.string().trim().min(1).max(200_000),
+    fromName: z.string().trim().max(120).optional(),
+    fromEmail: z.email().max(255).optional().or(z.literal("")),
+    replyTo: z.email().max(255).optional().or(z.literal("")),
+  })
+  .superRefine((value, ctx) => {
+    if (!isEmailTemplateKey(value.key)) return;
+    const allowed = new Set(emailTemplateVariables(value.key));
+    const used = findTemplateVariables(`${value.subject} ${value.bodyHtml}`);
+
+    for (const name of used) {
+      if (!allowed.has(name)) {
+        // A typo'd variable renders as literal braces in someone's inbox.
+        ctx.addIssue({ code: "custom", path: ["bodyHtml"], params: { variable: name } });
+      }
+    }
+
+    for (const name of EMAIL_TEMPLATES[value.key].required) {
+      if (!used.includes(name)) {
+        ctx.addIssue({ code: "custom", path: ["bodyHtml"], params: { missing: name } });
+      }
+    }
+  });
+
+export type EmailTemplateSaveInput = z.infer<typeof emailTemplateSaveSchema>;
+
+export const emailTransportSaveSchema = z
+  .object({
+    driver: z.enum(EMAIL_DRIVERS),
+    host: z.string().trim().max(255).optional(),
+    port: z.number().int().min(1).max(65535).optional(),
+    security: z.enum(SMTP_SECURITIES),
+    username: z.string().trim().max(255).optional(),
+    // Empty means KEEP the stored password: the field is write-only, so the
+    // form cannot round-trip the current value back to us (ADR-078 #3).
+    password: z.string().max(255).optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.driver !== "SMTP") return;
+    if (!value.host) ctx.addIssue({ code: "custom", path: ["host"] });
+    if (!value.port) ctx.addIssue({ code: "custom", path: ["port"] });
+  });
+
+export type EmailTransportSaveInput = z.infer<typeof emailTransportSaveSchema>;
+
+export const emailTestSendSchema = z.object({
+  key: z.string().refine(isEmailTemplateKey),
+  locale: localeSchema,
+  to: z.email().max(255),
+});
+
+export type EmailTestSendInput = z.infer<typeof emailTestSendSchema>;
+
+/**
+ * Substitute every `{{variable}}`, using the SAME pattern
+ * `findTemplateVariables` reads with — so what a save validates and what a
+ * render replaces can never drift apart.
+ */
+export function replaceTemplateVariables(text: string, resolve: (name: string) => string): string {
+  return text.replace(VARIABLE_PATTERN, (_match, name: string) => resolve(name));
+}
+
+export const EMAIL_DELIVERY_STATUSES = ["SENT", "FAILED", "SUPPRESSED"] as const;
+export type EmailDeliveryStatus = (typeof EMAIL_DELIVERY_STATUSES)[number];
+
+export const emailTemplateActiveSchema = z.object({
+  key: z.string().refine(isEmailTemplateKey),
+  isActive: z.boolean(),
+});
+
+export const emailTemplateResetSchema = z.object({
+  key: z.string().refine(isEmailTemplateKey),
+  locale: localeSchema,
+});
+
+/**
+ * The delivery log's filters. `limit` clamps here rather than in the service,
+ * the ADR-067 shape: there is no way to ask this for the whole table, and the
+ * rows are PII the retention sweep is already counting down on.
+ */
+export const emailDeliveryFilterSchema = z.object({
+  status: z.enum(EMAIL_DELIVERY_STATUSES).optional(),
+  templateKey: z.string().refine(isEmailTemplateKey).optional(),
+  /** Matches the recipient address. */
+  q: z.string().trim().max(255).optional(),
+  isTest: z.boolean().optional(),
+  cursor: z.string().max(256).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+
+export type EmailDeliveryFilter = z.infer<typeof emailDeliveryFilterSchema>;
+
+/**
+ * What the isolated preview route accepts (ADR-078 #8). A DRAFT body, so the
+ * editor can render what is on screen rather than what was last saved — which
+ * is also why this is a POST with no side effect, and why it is parsed with the
+ * same variable rules the save uses.
+ */
+export const emailPreviewSchema = z.object({
+  key: z.string().refine(isEmailTemplateKey),
+  locale: localeSchema,
+  subject: z.string().max(200).optional(),
+  preheader: z.string().max(200).optional(),
+  mode: z.enum(EMAIL_BODY_MODES).optional(),
+  bodyHtml: z.string().max(200_000).optional(),
+});
+
+export type EmailPreviewInput = z.infer<typeof emailPreviewSchema>;

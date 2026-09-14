@@ -5,8 +5,10 @@ import { setupServer } from "msw/node";
 import { http, HttpResponse } from "msw";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
+  alphaVantageHistoryProvider,
   alphaVantageProvider,
   createMarketService,
+  parseAlphaVantageDaily,
   MarketDataError,
   resolveProvider,
   type RateCache,
@@ -155,5 +157,200 @@ describe("resolveProvider", () => {
     expect(resolveProvider({ ALPHAVANTAGE_API_KEY: "k" }).name).toBe("alphavantage");
     expect(() => resolveProvider({ MARKET_DATA_PROVIDER: "nope" })).toThrow(/Unknown/);
     expect(() => resolveProvider({})).toThrow(/API_KEY/);
+  });
+});
+
+// ─── Daily series (changes-25 T3, ADR-087) ───────────────────
+
+describe("parseAlphaVantageDaily", () => {
+  it("reads the numbered fields by WORD, not by number", () => {
+    // The FX and crypto endpoints number their keys differently ("1. open"
+    // vs "1a. open (USD)"), so matching on the word is what keeps ONE parser
+    // working for both.
+    const bars = parseAlphaVantageDaily({
+      "2026-09-01": { "1. open": "1.10", "2. high": "1.20", "3. low": "1.05", "4. close": "1.15" },
+    });
+    expect(bars).toHaveLength(1);
+    expect(bars[0]!.open).toBeCloseTo(1.1, 6);
+    expect(bars[0]!.high).toBeCloseTo(1.2, 6);
+    expect(bars[0]!.low).toBeCloseTo(1.05, 6);
+    expect(bars[0]!.close).toBeCloseTo(1.15, 6);
+  });
+
+  it("returns bars oldest first, whatever order the provider sent", () => {
+    const bars = parseAlphaVantageDaily({
+      "2026-09-03": { "1. open": "3", "2. high": "3", "3. low": "3", "4. close": "3" },
+      "2026-09-01": { "1. open": "1", "2. high": "1", "3. low": "1", "4. close": "1" },
+      "2026-09-02": { "1. open": "2", "2. high": "2", "3. low": "2", "4. close": "2" },
+    });
+    expect(bars.map((b) => b.close)).toEqual([1, 2, 3]);
+  });
+
+  it("DROPS a malformed bar rather than zero-filling it", () => {
+    // A zero close would read as a 100% crash to every consumer downstream —
+    // a log return of -Infinity, a correlation of nothing, a converted amount
+    // of zero. Dropping the day is the only honest option.
+    const bars = parseAlphaVantageDaily({
+      "2026-09-01": { "1. open": "1", "2. high": "1", "3. low": "1", "4. close": "1" },
+      "2026-09-02": { "1. open": "1", "2. high": "1", "3. low": "1", "4. close": "n/a" },
+      "2026-09-03": { "1. open": "0", "2. high": "0", "3. low": "0", "4. close": "0" },
+    });
+    expect(bars).toHaveLength(1);
+    expect(bars[0]!.date.toISOString().slice(0, 10)).toBe("2026-09-01");
+  });
+
+  it("is empty for an empty series rather than throwing", () => {
+    expect(parseAlphaVantageDaily({})).toEqual([]);
+  });
+});
+
+describe("alphaVantageHistoryProvider", () => {
+  const series = {
+    "Time Series FX (Daily)": {
+      "2026-09-01": { "1. open": "1.10", "2. high": "1.20", "3. low": "1.05", "4. close": "1.15" },
+      "2026-09-02": { "1. open": "1.15", "2. high": "1.25", "3. low": "1.10", "4. close": "1.20" },
+    },
+  };
+
+  it("fetches and parses a daily series", async () => {
+    server.use(http.get(`${BASE}/query`, () => HttpResponse.json(series)));
+    const provider = alphaVantageHistoryProvider({ apiKey: "k" });
+    const bars = await provider.fetchDailySeries("EUR/USD", "compact");
+    expect(bars).toHaveLength(2);
+    expect(bars[1]!.close).toBeCloseTo(1.2, 6);
+  });
+
+  it("passes the requested outputsize through", async () => {
+    let seen = "";
+    server.use(
+      http.get(`${BASE}/query`, ({ request }) => {
+        seen = new URL(request.url).searchParams.get("outputsize") ?? "";
+        return HttpResponse.json(series);
+      }),
+    );
+    const provider = alphaVantageHistoryProvider({ apiKey: "k" });
+    await provider.fetchDailySeries("EUR/USD", "full");
+    expect(seen).toBe("full");
+  });
+
+  it("treats a bare code as <code>/USD", async () => {
+    // What lets ONE instrument table serve both the converter's CURRENCY rows
+    // and the correlation set's pairs (ADR-087 #1).
+    let params: URLSearchParams | null = null;
+    server.use(
+      http.get(`${BASE}/query`, ({ request }) => {
+        params = new URL(request.url).searchParams;
+        return HttpResponse.json(series);
+      }),
+    );
+    await alphaVantageHistoryProvider({ apiKey: "k" }).fetchDailySeries("EUR", "compact");
+    expect(params!.get("from_symbol")).toBe("EUR");
+    expect(params!.get("to_symbol")).toBe("USD");
+  });
+
+  it("treats 200 + Note as rate-limited, not as success", async () => {
+    // AlphaVantage does not use a status code for this. The live rate path
+    // already handles it; the history path has to handle it too, or a sweep
+    // parses a rate-limit notice as an empty series and writes nothing while
+    // reporting success.
+    server.use(http.get(`${BASE}/query`, () => HttpResponse.json({ Note: "call frequency" })));
+    await expect(
+      alphaVantageHistoryProvider({ apiKey: "k" }).fetchDailySeries("EUR/USD", "compact"),
+    ).rejects.toThrow(MarketDataError);
+  });
+
+  it("treats 200 + Information as rate-limited too", async () => {
+    server.use(
+      http.get(`${BASE}/query`, () => HttpResponse.json({ Information: "premium endpoint" })),
+    );
+    await expect(
+      alphaVantageHistoryProvider({ apiKey: "k" }).fetchDailySeries("EUR/USD", "compact"),
+    ).rejects.toThrow(/rate-limited/);
+  });
+
+  it("reports a rejected symbol distinctly from a rate limit", async () => {
+    server.use(
+      http.get(`${BASE}/query`, () => HttpResponse.json({ "Error Message": "Invalid API call" })),
+    );
+    await expect(
+      alphaVantageHistoryProvider({ apiKey: "k" }).fetchDailySeries("ZZZ/USD", "compact"),
+    ).rejects.toThrow(/rejected symbol/);
+  });
+
+  it("rejects a payload with no time series at all", async () => {
+    server.use(http.get(`${BASE}/query`, () => HttpResponse.json({ Meta: {} })));
+    await expect(
+      alphaVantageHistoryProvider({ apiKey: "k" }).fetchDailySeries("EUR/USD", "compact"),
+    ).rejects.toThrow(/Malformed/);
+  });
+
+  it("rejects a series whose every bar was unusable", async () => {
+    // Distinct from "malformed payload": the shape was right and the content
+    // was not, and a sweep that wrote zero bars while reporting success would
+    // mark the instrument fresh.
+    server.use(
+      http.get(`${BASE}/query`, () =>
+        HttpResponse.json({
+          "Time Series FX (Daily)": {
+            "2026-09-01": { "1. open": "0", "2. high": "0", "3. low": "0", "4. close": "0" },
+          },
+        }),
+      ),
+    );
+    await expect(
+      alphaVantageHistoryProvider({ apiKey: "k" }).fetchDailySeries("EUR/USD", "compact"),
+    ).rejects.toThrow(/no usable bars/);
+  });
+
+  it("propagates a non-200 as a MarketDataError", async () => {
+    server.use(http.get(`${BASE}/query`, () => new HttpResponse(null, { status: 503 })));
+    await expect(
+      alphaVantageHistoryProvider({ apiKey: "k" }).fetchDailySeries("EUR/USD", "compact"),
+    ).rejects.toThrow(/HTTP 503/);
+  });
+});
+
+describe("the configured base URL", () => {
+  // MSW runs with onUnhandledRequest: "error", so a request to "//query"
+  // fails this suite rather than quietly 404ing at the provider — which is
+  // exactly how the trailing slash presented in the admin: an error that
+  // read like a bad API key.
+  it("tolerates a trailing slash, which is what copying the address bar gives you", async () => {
+    server.use(http.get(`${BASE}/query`, () => HttpResponse.json(goodPayload)));
+    const rate = await alphaVantageProvider({
+      apiKey: "k",
+      baseUrl: `${BASE}/`,
+    }).fetchRate("EUR/USD");
+    expect(rate.rate).toBeCloseTo(1.0845, 8);
+  });
+
+  it("tolerates several, and on the history provider too", async () => {
+    server.use(
+      http.get(`${BASE}/query`, () =>
+        HttpResponse.json({
+          "Time Series FX (Daily)": {
+            "2026-09-01": {
+              "1. open": "1.08",
+              "2. high": "1.09",
+              "3. low": "1.07",
+              "4. close": "1.085",
+            },
+          },
+        }),
+      ),
+    );
+    const bars = await alphaVantageHistoryProvider({
+      apiKey: "k",
+      baseUrl: `${BASE}///`,
+    }).fetchDailySeries("EUR/USD", "compact");
+    expect(bars).toHaveLength(1);
+  });
+
+  it("falls back to the default when the configured value is only slashes", async () => {
+    // "/" is not an origin. Stripping it would leave "", and "/query" would
+    // then be fetched against whatever host the process happens to resolve.
+    server.use(http.get(`${BASE}/query`, () => HttpResponse.json(goodPayload)));
+    const rate = await alphaVantageProvider({ apiKey: "k", baseUrl: "/" }).fetchRate("EUR/USD");
+    expect(rate.rate).toBeCloseTo(1.0845, 8);
   });
 });

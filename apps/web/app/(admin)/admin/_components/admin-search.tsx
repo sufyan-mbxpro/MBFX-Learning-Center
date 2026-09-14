@@ -139,9 +139,13 @@ export function AdminSearch({
 
   return (
     <>
+      {/* `shrink` overrides Button's own `shrink-0`: this trigger is the ONE
+          item in the top bar that should give way on a phone. With shrink-0
+          it held its 256px and pushed the theme toggle and avatar 74px off
+          a 390px screen (admin phone-width pass). */}
       <Button
         variant="outline"
-        className="w-full min-w-0 max-w-64 justify-start gap-2 text-muted-foreground sm:max-w-xs"
+        className="w-full min-w-0 max-w-64 shrink justify-start gap-2 text-muted-foreground sm:max-w-xs"
         onClick={() => setOpen(true)}
       >
         <SearchIcon aria-hidden className="size-4" />

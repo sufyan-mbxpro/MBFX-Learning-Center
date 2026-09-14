@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { getLearnIndex } from "@repo/core";
+import { getFeaturedVideoTopics, getLearnIndex } from "@repo/core";
 import { ROUTE_PATHS } from "@repo/contracts";
 import { getSetting, isFeatureVisible } from "@repo/settings";
 import { Link } from "@repo/i18n/navigation";
@@ -12,9 +12,12 @@ import { Empty, EmptyDescription, EmptyTitle } from "@repo/ui/components/empty";
 import { Section } from "@repo/ui/components/section";
 import { CourseShelf } from "./_components/course-shelf.tsx";
 import { LearnMasthead } from "./_components/learn-masthead.tsx";
-import { learnStats, shelfLabels, toShelfTracks } from "./_lib/shelf-data.ts";
-import { LEARNING_VIDEOS } from "../_content/home-videos.ts";
+import { shelfLabels, toShelfTracks } from "./_lib/shelf-data.ts";
 import { VideoShowcase } from "../_sections/video-showcase.tsx";
+
+/** Shared by the masthead's jump link and the rail itself, so the two cannot
+ *  disagree about whether there is anything to scroll to. */
+const LEARN_VIDEO_RAIL_LIMIT = 6;
 
 // The learn UMBRELLA index (changes-11 PR 4.1; re-scoped by ADR-065 §1).
 //
@@ -58,16 +61,24 @@ export default async function LearnIndexPage({ params }: PageProps<"/[locale]/le
   // the same rule `/news` and `/glossary` already follow.
   if (!(await isFeatureVisible("courses", null))) notFound();
 
-  const [t, groups] = await Promise.all([
+  // ADR-092: "are there videos" is a question about the DATABASE now, not
+  // about a code registry's length. Same arguments as the rail below, so the
+  // `"use cache"` entry is shared and this costs no second query.
+  const [t, groups, videoTopics, videosEnabled] = await Promise.all([
     getTranslations({ locale, namespace: "learn" }),
     getLearnIndex(locale),
+    getFeaturedVideoTopics(locale, LEARN_VIDEO_RAIL_LIMIT),
+    isFeatureVisible("videos", null),
   ]);
 
   const tracks = toShelfTracks(groups, t);
 
   return (
     <>
-      <LearnMasthead stats={learnStats(groups)} hasVideos={LEARNING_VIDEOS.length > 0} />
+      {/* The masthead's "watch" jump only offers itself when the anchor it
+          points at will render something — the flag AND the data, because the
+          rail below returns null on either. */}
+      <LearnMasthead hasVideos={videosEnabled && videoTopics.length > 0} />
 
       {tracks.length === 0 ? (
         <Section spacing="md">
@@ -86,19 +97,31 @@ export default async function LearnIndexPage({ params }: PageProps<"/[locale]/le
           the section component, because that component is shared with the
           homepage and an id belongs to the page that placed it. */}
       <div id="videos" className="scroll-mt-24">
-        <VideoShowcase locale={locale} variant="grid" showCta={false} />
+        <VideoShowcase
+          locale={locale}
+          variant="grid"
+          limit={LEARN_VIDEO_RAIL_LIMIT}
+          showCta={false}
+        />
       </div>
 
-      <CtaBand title={t("index.ctaTitle")} description={t("index.ctaDescription")}>
-        <Button
-          size="lg"
-          shape="pill"
-          variant="secondary"
-          render={<Link href={ROUTE_PATHS.glossary} />}
-        >
-          {t("index.ctaAction")}
-        </Button>
-      </CtaBand>
+      {/* The band closes the page, so it needs the section rhythm around it:
+          rendered bare it sat flush against the footer, with the page's last
+          card and the footer's first row sharing an edge (changes-22). Every
+          other CtaBand on the site is already inside a Section — these two
+          learn pages were the exceptions. */}
+      <Section spacing="md">
+        <CtaBand title={t("index.ctaTitle")} description={t("index.ctaDescription")}>
+          <Button
+            size="lg"
+            shape="pill"
+            variant="secondary"
+            render={<Link href={ROUTE_PATHS.glossary} />}
+          >
+            {t("index.ctaAction")}
+          </Button>
+        </CtaBand>
+      </Section>
     </>
   );
 }

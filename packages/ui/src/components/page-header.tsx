@@ -15,6 +15,7 @@ function PageHeader({
   icon,
   status,
   actions,
+  titleRender,
   className,
   ...props
 }: Omit<React.ComponentProps<"div">, "title"> & {
@@ -27,6 +28,9 @@ function PageHeader({
   status?: React.ReactNode;
   /** Page actions — primary `Button` first, then outline icon buttons. */
   actions?: React.ReactNode;
+  /** Swaps the title's tag without restyling it — `<h2 />` where the
+   * screen's h1 lives elsewhere (a settings sub-nav layout). */
+  titleRender?: React.ReactElement;
 }) {
   return (
     <div
@@ -36,12 +40,12 @@ function PageHeader({
     >
       <div className="min-w-0">
         {icon ? (
-          <PageTitleCompact>
+          <PageTitleCompact render={titleRender}>
             {icon}
             {title}
           </PageTitleCompact>
         ) : (
-          <PageTitle>{title}</PageTitle>
+          <PageTitle render={titleRender}>{title}</PageTitle>
         )}
         <div className="flex flex-wrap items-center gap-2">
           <PageDescription className={icon ? "text-sm" : undefined}>{description}</PageDescription>

@@ -44,7 +44,7 @@ export async function Faq({ locale, variant = "accordion", limit }: SectionProps
   if (variant === "split") {
     return (
       <Section spacing="md">
-        <Container className="grid items-start gap-10 lg:grid-cols-2">
+        <Container className="grid grid-cols-1 items-start gap-10 lg:grid-cols-2">
           <SectionHeading eyebrow={t("faqEyebrow")} title={t("faqTitle")} lead={t("faqLead")} />
           <Reveal variant="up">{accordion}</Reveal>
         </Container>

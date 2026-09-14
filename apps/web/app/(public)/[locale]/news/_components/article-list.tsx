@@ -14,7 +14,8 @@ import { getTranslations } from "next-intl/server";
 import type { ArticleListEntry } from "@repo/core";
 import { Link } from "@repo/i18n/navigation";
 import { Badge } from "@repo/ui/components/badge";
-import { Card } from "@repo/ui/components/card";
+import { Card, CardContent } from "@repo/ui/components/card";
+import { EmptyState } from "@repo/ui/components/empty";
 import { cn } from "@repo/ui/lib/utils";
 
 import { ArticleMedia } from "./article-media.tsx";
@@ -27,10 +28,17 @@ type ArticleCardsVariant = "standard" | "featured" | "compact";
 // `gridTemplateColumns` stayed a single track at 985px). The `@container`
 // context therefore lives on a separate wrapper (below), one level up from
 // the element the responsive `grid-cols` classes apply to.
+//
+// The one-column state is an EXPLICIT `grid-cols-1` (`minmax(0, 1fr)`), not
+// the implicit `auto` track a bare `grid` gets. An auto track sizes to its
+// items' min-content, and Chrome reports a `line-clamp` excerpt's min-content
+// as its UNWRAPPED width — so on a phone one long excerpt made the column
+// ~1300px and the homepage scrolled sideways (found in the changes-20
+// Phase 6 browser pass, measured 1307px track in a 460px list).
 const GRID_CLASS: Record<ArticleCardsVariant, string> = {
-  standard: "grid gap-6 @2xl:grid-cols-2 @6xl:grid-cols-3",
+  standard: "grid grid-cols-1 gap-6 @2xl:grid-cols-2 @6xl:grid-cols-3",
   // `featured` gives the first entry the full width and a taller image.
-  featured: "grid gap-6 @2xl:grid-cols-2",
+  featured: "grid grid-cols-1 gap-6 @2xl:grid-cols-2",
   compact: "flex flex-col gap-4",
 };
 
@@ -70,7 +78,7 @@ export async function ArticleCards({
     variant === "featured" || variant === "compact" ? variant : "standard";
 
   if (entries.length === 0) {
-    return <p className="py-12 text-center text-muted-foreground">{t("empty")}</p>;
+    return <EmptyState title={t("empty")} />;
   }
 
   return (
@@ -78,6 +86,9 @@ export async function ArticleCards({
       <ul className={GRID_CLASS[resolved]}>
         {entries.map((entry, index) => {
           const featuredFirst = resolved === "featured" && index === 0;
+          // A standard card's body is the card's content part; a compact row
+          // is already padded by the card, so its text column is a plain div.
+          const Body = resolved === "compact" ? "div" : CardContent;
 
           return (
             <li
@@ -95,6 +106,10 @@ export async function ArticleCards({
                 variant={
                   featuredFirst || (highlightFeatured && entry.isFeatured) ? "featured" : "default"
                 }
+                // changes-20 Phase 5: the card's own rhythm, never hand
+                // padding — a standard card is cover (card-media) + content,
+                // a compact row is the 16px `sm` card laid out as a row.
+                size={resolved === "compact" ? "sm" : "default"}
                 className={cn(
                   // `group` (unnamed) is what every hover effect below keys
                   // off, so the whole card answers the pointer even though it
@@ -102,26 +117,12 @@ export async function ArticleCards({
                   // the read affordance are separate targets, which is what
                   // keeps the chip clickable and the heading a real link in a
                   // screen reader's list of links.
-                  "group relative isolate h-full gap-0 py-0",
+                  "group relative isolate h-full",
                   resolved === "compact"
-                    ? "flex-row items-center gap-3 p-3"
+                    ? "flex-row items-center gap-3 px-(--card-spacing)"
                     : "hover-lift sheen hover:ring-primary/25",
                 )}
               >
-                {/* Rule sweeping from the inline START — `start-0` + `w-0` →
-                    `w-full`, so it runs the correct way in RTL with no [dir]
-                    rule. On a child, never on the Card: `.card-hover`
-                    declares its own `transition-property` and, sitting later
-                    in `@layer utilities` than Tailwind's generated classes,
-                    it beats a transition utility written in the class
-                    attribute — the card would jump rather than glide. */}
-                {resolved !== "compact" && (
-                  <span
-                    aria-hidden
-                    className="pointer-events-none absolute top-0 start-0 z-20 h-1 w-0 bg-primary transition-[width] duration-(--duration-slow) ease-(--ease-out-quint) group-hover:w-full"
-                  />
-                )}
-
                 {resolved === "compact" ? (
                   // The rail beside the homepage lead used to be text-only,
                   // which made a list of headlines read as a sidebar rather
@@ -149,6 +150,7 @@ export async function ArticleCards({
                     href={`/news/${entry.slug}`}
                     tabIndex={-1}
                     aria-hidden
+                    data-slot="card-media"
                     className="relative block"
                   >
                     <ArticleMedia
@@ -173,13 +175,13 @@ export async function ArticleCards({
                   </Link>
                 )}
 
-                <div
+                <Body
                   className={cn(
                     "flex flex-1 flex-col gap-2",
                     // `min-w-0` is what stops a long headline from pushing
                     // the thumbnail out of the row now that compact is a
                     // flex ROW with two children rather than one.
-                    resolved === "compact" ? "min-w-0 p-0" : "p-5",
+                    resolved === "compact" && "min-w-0",
                   )}
                 >
                   {(showKind || entry.category) && (
@@ -262,7 +264,24 @@ export async function ArticleCards({
                       {dateFormat.format(entry.publishedAt)}
                     </time>
                   )}
-                </div>
+                </Body>
+
+                {/* Rule sweeping from the inline START — `start-0` + `w-0` →
+                    `w-full`, so it runs the correct way in RTL with no [dir]
+                    rule. Last, not first, so the cover stays the card's first
+                    child (Card drops its top padding for a `card-media`
+                    first child); it is absolutely placed, so order is not
+                    position. On a child, never on the Card: `.card-hover`
+                    declares its own `transition-property` and, sitting later
+                    in `@layer utilities` than Tailwind's generated classes,
+                    it beats a transition utility written in the class
+                    attribute — the card would jump rather than glide. */}
+                {resolved !== "compact" && (
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute top-0 start-0 z-20 h-1 w-0 bg-primary transition-(--transition-size) duration-(--duration-slow) ease-(--ease-out-quint) group-hover:w-full"
+                  />
+                )}
               </Card>
             </li>
           );

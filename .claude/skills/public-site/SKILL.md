@@ -144,3 +144,33 @@ Routes: `/learn/[track]/videos`, `.../videos/categories/[category]`,
   is track-agnostic and these surfaces are per-track.
 - Category views are **not** in the sitemap — filtered views over topics whose
   own pages are already listed.
+
+## Newsletter signup (changes-21 F7, ADR-080)
+
+- **The form accepts submissions now.** It shipped hard-`disabled` from
+  changes-03 under "Newsletter signup is coming soon", with a
+  `TODO(newsletter)` naming the two conditions — a `NewsletterSubscriber`
+  model and an ADR. Both exist, so the placeholder is GONE, and
+  `apps/web/app/newsletter-signup.test.ts` fails on a `disabled` control, an
+  `unavailableLabel` prop or a lingering TODO. That guard is there for the
+  revert, not for a deliberate re-add.
+- **Two switches per placement, with different jobs** (ADR-080 #5): the
+  `newsletter` **flag** says signup exists, `newsletter.placements.<source>`
+  says it is drawn here. The four render sites are the footer, the homepage
+  band, `/news` and `/analysis`, and each passes its own `source` so admin can
+  filter by where an address came from. `footer.newsletterEnabled` is deleted.
+- **It submits without JavaScript.** `useActionState` on a real
+  `<form action={…}>`, with the locale, the source and the honeypot as hidden
+  INPUTS rather than closure values — that is what keeps the pre-hydration
+  state a working form. The confirm and unsubscribe screens are the opposite
+  and deliberately so: their token lives only in the URL, read at press time,
+  so they do need JavaScript and say so.
+- **Four visitor-visible states, and no fifth.** sent · invalid · limited ·
+  failed. There is deliberately no "you are already subscribed" — that turns
+  the form into a membership oracle for anybody's address.
+- **`/newsletter/confirm` and `/newsletter/unsubscribe` are `noindex` static
+  shells whose island POSTs** (ADR-080 #4). A mail scanner prefetching either
+  URL must not confirm or unsubscribe anyone, which is also why
+  `/api/newsletter/unsubscribe` exports no GET — a GET there answers 405.
+- Both are reserved in `RESERVED_PATHS` under the parent `newsletter` segment,
+  per the ADR-047 same-PR rule.

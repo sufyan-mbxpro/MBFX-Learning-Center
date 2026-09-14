@@ -41,7 +41,7 @@ export async function CategoryCards({
   if (shown.length === 0) return null;
 
   return (
-    <ul className={cn("grid gap-4 sm:grid-cols-2 lg:grid-cols-4", className)}>
+    <ul className={cn("grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4", className)}>
       {shown.map((category, index) => {
         const accent = ACCENT[index % ACCENT.length]!;
         const current = category.slug === activeSlug;
@@ -66,7 +66,7 @@ export async function CategoryCards({
                 accent.bar,
                 current
                   ? "w-full"
-                  : "w-10 transition-[width] duration-(--duration-slow) ease-(--ease-out-quint) group-hover:w-full",
+                  : "w-10 transition-(--transition-size) duration-(--duration-slow) ease-(--ease-out-quint) group-hover:w-full",
               )}
             />
 

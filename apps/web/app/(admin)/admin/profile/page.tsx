@@ -31,7 +31,7 @@ export default async function ProfilePage() {
   return (
     <AdminPage title={t("profile")} description={t("profileSubtitle")}>
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
-        <AdminSection className="items-center text-center lg:w-72 lg:shrink-0">
+        <AdminSection cardClassName="lg:w-72 lg:shrink-0" className="items-center text-center">
           <Avatar className="size-20">
             {profile.image && <AvatarImage src={profile.image} alt="" />}
             <AvatarFallback className="text-xl">{initials}</AvatarFallback>
@@ -75,6 +75,8 @@ export default async function ProfilePage() {
                 currentPassword: t("currentPassword"),
                 newPassword: t("newPassword"),
                 confirmPassword: t("confirmPassword"),
+                showPassword: t("showPassword"),
+                hidePassword: t("hidePassword"),
                 change: t("changePassword"),
                 changed: t("passwordChanged"),
                 mismatch: t("passwordMismatch"),
@@ -83,7 +85,7 @@ export default async function ProfilePage() {
           </AdminSection>
 
           <AdminSection title={t("accountInformation")}>
-            <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2 text-sm">
+            <dl className="grid grid-cols-(--grid-label-value) gap-x-6 gap-y-2 text-sm">
               <dt className="text-muted-foreground">{t("created")}</dt>
               <dd>{profile.createdAt.toISOString().slice(0, 10)}</dd>
               <dt className="text-muted-foreground">{t("lastLogin")}</dt>

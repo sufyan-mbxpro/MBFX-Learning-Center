@@ -89,7 +89,7 @@ export function AboutWorldMap({ className }: { className?: string }) {
       aria-hidden
       // 9/4 is the generated file's own viewBox ratio (720×320); a mismatch
       // here would letterbox the mask and move every pin off its anchor.
-      className={cn("aspect-[9/4] w-full bg-current text-foreground/30", className)}
+      className={cn("aspect-9/4 w-full bg-current text-foreground/30", className)}
       style={{ WebkitMask: mask, mask }}
     />
   );

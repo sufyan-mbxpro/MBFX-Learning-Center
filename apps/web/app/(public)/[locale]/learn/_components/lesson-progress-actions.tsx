@@ -36,13 +36,15 @@ export function LessonProgressActions({
   if (status === "guest" || status === "off") return null;
 
   const completed = stateFor(lessonId) === "completed";
-  const busy = pending || status === "loading";
 
   return (
     <div className="flex flex-wrap items-center gap-3">
       <Button
         variant={completed ? "outline" : "default"}
-        disabled={busy}
+        // The initial progress read is not this button's work, so it only
+        // disables; the spinner is for the write this press started.
+        disabled={status === "loading"}
+        loading={pending}
         onClick={() => void write(completed ? "incomplete" : "complete", lessonId)}
       >
         {completed ? (

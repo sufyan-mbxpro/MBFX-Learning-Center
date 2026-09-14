@@ -9,8 +9,8 @@
 // the kind of duplication this repo has already paid for once (four copies of
 // one FNV-1a hash, collapsed in changes-18).
 import { Button } from "@repo/ui/components/button";
+import { Field, FieldError, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
-import { Label } from "@repo/ui/components/label";
 
 export interface ScheduleFieldLabels {
   scheduleFor: string;
@@ -55,23 +55,28 @@ export function ScheduleField({
   value,
   onChange,
   labels,
+  required,
+  error,
 }: {
-  id: string;
+  /** Only when something outside the field needs the input's id. */
+  id?: string;
   value: string;
   onChange: (next: string) => void;
   labels: ScheduleFieldLabels;
+  /** ADR-077: a SCHEDULED move needs a date, so the panel marks it required. */
+  required?: boolean;
+  /** The inline message for this field, from the host's `useFieldErrors`. */
+  error?: string;
 }) {
   const preset = (fn: () => Date) => () => onChange(toLocalInput(fn()));
 
+  // Its own Field (ADR-077): the label, the asterisk and the error wire to
+  // the input without the host threading an id pair through.
   return (
-    <div className="flex flex-col gap-1.5 border-t pt-3">
-      <Label htmlFor={id}>{labels.scheduleFor}</Label>
-      <Input
-        id={id}
-        type="datetime-local"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-      />
+    <Field controlId={id} invalid={Boolean(error)} required={required} className="border-t pt-3">
+      <FieldLabel>{labels.scheduleFor}</FieldLabel>
+      <Input type="datetime-local" value={value} onChange={(e) => onChange(e.target.value)} />
+      <FieldError>{error}</FieldError>
       <div className="flex flex-wrap gap-1.5">
         <Button variant="outline" size="xs" onClick={preset(plusHour)}>
           {labels.presetPlusHour}
@@ -86,6 +91,6 @@ export function ScheduleField({
           {labels.presetClear}
         </Button>
       </div>
-    </div>
+    </Field>
   );
 }

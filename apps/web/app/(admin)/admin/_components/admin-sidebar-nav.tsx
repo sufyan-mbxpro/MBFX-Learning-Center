@@ -8,6 +8,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Calculator,
+  CandlestickChart,
   Tags,
   ChartLine,
   CircleHelp,
@@ -19,6 +21,7 @@ import {
   LayoutDashboard,
   ListChecks,
   ListTree,
+  Mail,
   Newspaper,
   Palette,
   Settings,
@@ -32,12 +35,15 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@repo/ui/lib/utils";
+import { NavItem } from "@repo/ui/components/nav-item";
+import { MicroHeading } from "@repo/ui/components/typography";
 
 const ICONS: Record<string, LucideIcon> = {
   dashboard: LayoutDashboard,
   users: Users,
   roles: Shield,
   employees: IdCard,
+  newsletter: Mail,
   glossary: BookOpen,
   learnCourses: GraduationCap,
   learnLessons: ListChecks,
@@ -49,6 +55,8 @@ const ICONS: Record<string, LucideIcon> = {
   articles: Newspaper,
   websiteMedia: Image,
   website: Globe,
+  market: CandlestickChart,
+  tools: Calculator,
   settings: Settings,
   features: Flag,
   navigation: ListTree,
@@ -89,6 +97,10 @@ export function AdminSidebarNav({
 }) {
   const pathname = usePathname();
 
+  // Collapsed, the row is a 40px icon-only square: no label span to
+  // offset the glyph, so the gap and inline padding go.
+  const railClass = collapsed ? "justify-center gap-0 px-0" : undefined;
+
   return (
     <nav className={cn("flex flex-1 flex-col overflow-y-auto", collapsed ? "gap-2" : "gap-4")}>
       {groups.map((group, index) => (
@@ -100,9 +112,9 @@ export function AdminSidebarNav({
               // separator's label rather than dropping the structure.
               <hr aria-label={group.label} className="mx-2 my-1 border-t" />
             ) : (
-              <p className="px-2.5 pb-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+              <MicroHeading render={<p />} className="px-4 pb-1">
                 {group.label}
-              </p>
+              </MicroHeading>
             ))}
           {group.entries.map((entry) => {
             const Icon = ICONS[entry.icon];
@@ -110,55 +122,42 @@ export function AdminSidebarNav({
               ? pathname === entry.href
               : pathname === entry.href || pathname.startsWith(`${entry.href}/`);
             return (
-              <Link
+              <NavItem
                 key={entry.href}
-                href={entry.href}
-                aria-current={isActive ? "page" : undefined}
+                render={<Link href={entry.href} />}
+                active={isActive}
+                icon={Icon && <Icon aria-hidden />}
                 // Collapsed, the icon is the only visible content — the
                 // label has to reach both the accessibility tree
                 // (aria-label) and the pointer user (native tooltip).
                 aria-label={collapsed ? entry.label : undefined}
                 title={collapsed ? entry.label : undefined}
-                className={cn(
-                  "flex items-center rounded-md py-1.5 text-sm font-medium transition-colors",
-                  collapsed ? "justify-center px-0" : "gap-2.5 px-2.5",
-                  isActive
-                    ? "bg-muted text-foreground"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                )}
+                className={railClass}
               >
-                {Icon && <Icon aria-hidden className="size-4 shrink-0" />}
                 {!collapsed && entry.label}
-              </Link>
+              </NavItem>
             );
           })}
         </div>
       ))}
 
       {visitSite && (
-        // Pinned below every group (mt-auto), separated by a rule: this
-        // leaves the admin rather than navigating within it, so it must
-        // not read as one more section. A new tab — the admin was mid-task
-        // — which is exactly what target=_blank + rel=noopener is for.
-        <a
+        // Pinned below every group (mt-auto): this leaves the admin rather
+        // than navigating within it, so it must not read as one more
+        // section. A new tab — the admin was mid-task — which is exactly
+        // what target=_blank + rel=noopener is for.
+        <NavItem
           href={visitSite.href}
           target="_blank"
           rel="noopener noreferrer"
           aria-label={collapsed ? `${visitSite.label} — ${visitSite.hint}` : undefined}
           title={collapsed ? visitSite.label : visitSite.hint}
-          className={cn(
-            "mt-auto flex items-center rounded-md py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
-            collapsed ? "justify-center px-0" : "gap-2.5 px-2.5",
-          )}
+          icon={<Globe aria-hidden />}
+          trailing={collapsed ? undefined : <ExternalLink aria-hidden className="opacity-70" />}
+          className={cn("mt-auto text-muted-foreground", railClass)}
         >
-          <Globe aria-hidden className="size-4 shrink-0" />
-          {!collapsed && (
-            <>
-              {visitSite.label}
-              <ExternalLink aria-hidden className="ms-auto size-3.5 opacity-70" />
-            </>
-          )}
-        </a>
+          {!collapsed && visitSite.label}
+        </NavItem>
       )}
     </nav>
   );

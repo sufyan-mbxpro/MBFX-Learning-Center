@@ -6,6 +6,7 @@ import { getTranslations } from "next-intl/server";
 import { articlePath, loadArticleRssEntries } from "@repo/core";
 import { routing } from "@repo/i18n/routing";
 import { loadFeatureFlag, loadSetting } from "@repo/settings";
+import { siteUrl } from "../../_lib/site-url.ts";
 
 function escapeXml(value: string): string {
   return value
@@ -20,7 +21,7 @@ export async function GET(): Promise<Response> {
   const flag = await loadFeatureFlag("news");
   if (!flag?.isEnabled) return new Response(null, { status: 404 });
 
-  const base = process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
+  const base = siteUrl();
   const locale = routing.defaultLocale;
   const [t, siteName, entries] = await Promise.all([
     getTranslations({ locale, namespace: "news" }),

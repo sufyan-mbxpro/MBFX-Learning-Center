@@ -26,14 +26,14 @@
 // leave one band, not two with one empty. A server band cannot know that.
 import { useDeferredValue, useMemo, useState } from "react";
 import Image from "next/image";
-import { Search, SlidersHorizontal, X } from "lucide-react";
+import { SlidersHorizontal, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { CourseCard, type CourseCardLabels } from "@repo/ui/components/course-card";
 import type { CourseLevelTone } from "@repo/ui/components/course-card";
 import { Button } from "@repo/ui/components/button";
 import { Container } from "@repo/ui/components/container";
 import { Empty, EmptyDescription, EmptyTitle } from "@repo/ui/components/empty";
-import { Input } from "@repo/ui/components/input";
+import { SearchInput } from "@repo/ui/components/search-input";
 import { ProgressBar } from "@repo/ui/components/progress-bar";
 import { Reveal } from "@repo/ui/components/reveal";
 import { Section } from "@repo/ui/components/section";
@@ -146,22 +146,25 @@ export function CourseShelf({ tracks, labels }: { tracks: ShelfTrack[]; labels: 
       {/* The toolbar, and the anchor the masthead's "Browse courses" scrolls
           to — landing on the controls rather than mid-grid means the reader
           arrives able to narrow, not just to scroll. `scroll-mt` clears the
-          sticky site header. */}
-      <Section id="courses" spacing="sm" className="scroll-mt-24">
+          sticky site header.
+
+          `section-flush-end`: the toolbar is chrome FOR the bands below it,
+          not a section beside them, and paying its own bottom rhythm on top of
+          the first band's top rhythm left the filters stranded in ~128px of
+          empty page (changes-22). The band's own padding is now the whole
+          gap. */}
+      <Section id="courses" spacing="sm" className="section-flush-end scroll-mt-24">
         <Container className="flex flex-col gap-4">
           <div className="flex flex-col gap-3 rounded-2xl border bg-card/60 p-4 shadow-sm backdrop-blur-sm sm:flex-row sm:items-center sm:gap-4">
             <div className="relative flex-1">
-              <Search
-                aria-hidden
-                className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-              />
-              <Input
-                type="search"
+              {/* SearchInput owns the glyph; pe-9 leaves room for the clear
+                  button beside it in this positioned box. */}
+              <SearchInput
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 aria-label={t("filters.searchLabel")}
                 placeholder={t("filters.searchPlaceholder")}
-                className="ps-9 pe-9"
+                className="pe-9"
               />
               {query !== "" && (
                 <button
@@ -253,7 +256,7 @@ export function CourseShelf({ tracks, labels }: { tracks: ShelfTrack[]; labels: 
               <Reveal variant="up">
                 <SectionHeading title={group.title} lead={group.description} />
               </Reveal>
-              <div className="grid gap-4 lg:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 {group.courses.map((course, cardIndex) => (
                   // Staggered by position in the band, capped so the last card
                   // of a long shelf is not still waiting when it scrolls in.
@@ -355,7 +358,7 @@ function FilterChip({
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "rounded-full px-3.5 py-1.5 text-sm font-medium ring-1 transition-[background-color,color,box-shadow,transform] duration-(--duration-base) ease-(--ease-out-quint) focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
+        "rounded-full px-3.5 py-1.5 text-sm font-medium ring-1 transition duration-(--duration-base) ease-(--ease-out-quint) focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
         active
           ? "bg-primary text-primary-foreground shadow-sm ring-primary"
           : "bg-background text-muted-foreground ring-border hover:-translate-y-px hover:text-foreground hover:shadow-sm hover:ring-primary/25",
@@ -410,13 +413,16 @@ function ContinueBand({ tracks, labels }: { tracks: ShelfTrack[]; labels: ShelfL
   if (started.length === 0) return null;
 
   return (
-    <Section spacing="md">
+    // Flush at the bottom for the same reason the toolbar is (changes-22):
+    // the toolbar immediately below already opens with `section-sm`, and two
+    // paddings between a rail and the controls that filter it is one too many.
+    <Section spacing="md" className="section-flush-end">
       <Container className="flex flex-col gap-6">
         <SectionHeading
           title={t("progress.yourCoursesTitle")}
           lead={t("progress.yourCoursesIntro")}
         />
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {started.map(({ enrollment, course }) => {
             const resume =
               course.sections

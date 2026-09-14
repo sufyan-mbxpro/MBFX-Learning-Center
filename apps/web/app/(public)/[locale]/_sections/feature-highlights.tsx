@@ -57,8 +57,8 @@ export async function FeatureHighlights({ locale, variant = "grid", limit }: Sec
           <ul
             className={
               variant === "compact"
-                ? "grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
-                : "grid gap-5 sm:grid-cols-2 lg:grid-cols-3"
+                ? "grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
+                : "grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3"
             }
           >
             {shown.map((highlight) => {

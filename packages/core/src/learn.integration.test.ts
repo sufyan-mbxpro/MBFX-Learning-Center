@@ -468,6 +468,48 @@ describe("lifecycle", () => {
     expect(afterDelete.lessonCount).toBe(1);
   });
 
+  // changes-22. The header said "2 lessons" over a curriculum that said there
+  // were none, because the count asked "is the lesson published" and the
+  // curriculum asks "can a reader reach it" — and `CourseSection.isPublished`
+  // defaults to false, so an editor who published a course and both its
+  // lessons still had a third switch nobody had told them about.
+  it("counts only lessons a reader can REACH, so the header cannot outrun the curriculum", async () => {
+    const { courseId, sectionId, slug } = await makeCourse();
+    expect((await db.course.findUniqueOrThrow({ where: { id: courseId } })).lessonCount).toBe(1);
+
+    await sections.saveSection(editor, {
+      sectionId,
+      isPublished: false,
+      translation: { locale: "en", title: "Section One" },
+    });
+
+    const hidden = await db.course.findUniqueOrThrow({ where: { id: courseId } });
+    const view = await publicCourses.loadCourseBySlug("en", slug);
+    // The two numbers the reader sees, from the two different code paths that
+    // produce them, asserted together — that they AGREE is the property.
+    expect({ count: hidden.lessonCount, sections: view?.sections.length }).toEqual({
+      count: 0,
+      sections: 0,
+    });
+
+    await sections.saveSection(editor, {
+      sectionId,
+      isPublished: true,
+      translation: { locale: "en", title: "Section One" },
+    });
+    expect((await db.course.findUniqueOrThrow({ where: { id: courseId } })).lessonCount).toBe(1);
+  });
+
+  // changes-22. The other half of the same bug: a section had to be published
+  // by hand before anything under it was visible, which is a switch a
+  // container should not have. Staging one is the exception and costs a click.
+  it("creates a section VISIBLE, so publishing a course and its lessons is enough", async () => {
+    const courseId = await courses.createCourse(editor, { track: "forex", title: "Fresh course" });
+    const sectionId = await sections.createSection(editor, courseId, "Section One");
+    const section = await db.courseSection.findUniqueOrThrow({ where: { id: sectionId } });
+    expect(section.isPublished).toBe(true);
+  });
+
   it("refuses to delete a section that still holds lessons", async () => {
     const { sectionId } = await makeCourse();
     // The DB cascades section → lessons, so without this guard one click
@@ -895,6 +937,165 @@ describe("lesson detail", () => {
     ).slug;
 
     expect(await publicCourses.loadLessonBySlug("en", b.slug, lessonSlug)).toBeNull();
+  });
+});
+
+// ─── The assessment (ADR-084) ────────────────────────────────
+
+/**
+ * A quiz, straight through Prisma rather than `saveQuiz`.
+ *
+ * Deliberate: what is under test is which quizzes the CONTENT LOADER is
+ * willing to point at, so the fixture has to be able to build the states an
+ * editor can leave behind — published with no questions, published with no
+ * translation, soft-deleted, filed under another track — and the service
+ * refuses most of them by design.
+ */
+async function makeQuiz(options?: {
+  track?: string;
+  title?: string;
+  published?: boolean;
+  questions?: number;
+  translated?: boolean;
+  deleted?: boolean;
+  passingScore?: number;
+}): Promise<string> {
+  fixtureSeq += 1;
+  const quiz = await db.quiz.create({
+    data: {
+      track: options?.track ?? "forex",
+      passingScore: options?.passingScore ?? 70,
+      status: options?.published === false ? ContentStatus.DRAFT : ContentStatus.PUBLISHED,
+      publishedAt: options?.published === false ? null : new Date(),
+      deletedAt: options?.deleted ? new Date() : null,
+    },
+  });
+
+  if (options?.translated !== false) {
+    await db.quizTranslation.create({
+      data: {
+        quizId: quiz.id,
+        locale: "en",
+        title: options?.title ?? `Quiz ${fixtureSeq}`,
+        slug: `quiz-${fixtureSeq}`,
+      },
+    });
+  }
+
+  for (let index = 0; index < (options?.questions ?? 1); index += 1) {
+    await db.quizQuestion.create({
+      data: {
+        quizId: quiz.id,
+        type: "SINGLE_CHOICE",
+        sortOrder: index,
+        points: 1,
+        correctAnswer: 0,
+        translations: {
+          create: { locale: "en", prompt: `Q${index}`, options: ["a", "b"] },
+        },
+      },
+    });
+  }
+
+  return quiz.id;
+}
+
+describe("the final assessment reaches the course view", () => {
+  it("carries a published, answerable final quiz", async () => {
+    const { courseId, slug } = await makeCourse({ title: "Assessed Course" });
+    const quizId = await makeQuiz({ title: "Final Exam", questions: 3, passingScore: 80 });
+    await db.course.update({ where: { id: courseId }, data: { finalQuizId: quizId } });
+
+    const view = await publicCourses.loadCourseBySlug("en", slug);
+    expect(view!.finalQuiz).not.toBeNull();
+    expect(view!.finalQuiz).toMatchObject({
+      id: quizId,
+      title: "Final Exam",
+      questionCount: 3,
+      passingScore: 80,
+      maxAttempts: null,
+    });
+  });
+
+  // Each of these is a state an editor can leave a quiz in, and in every one
+  // of them the card must be ABSENT rather than broken — a link to a page
+  // that 404s, or to a quiz with nothing to answer, is worse than no link.
+  it("carries no quiz a reader could not take", async () => {
+    for (const unreachable of [
+      { published: false },
+      { questions: 0 },
+      { translated: false },
+      { deleted: true },
+      { track: "stocks" },
+    ]) {
+      const { courseId, slug } = await makeCourse();
+      const quizId = await makeQuiz(unreachable);
+      await db.course.update({ where: { id: courseId }, data: { finalQuizId: quizId } });
+
+      const view = await publicCourses.loadCourseBySlug("en", slug);
+      expect(view!.finalQuiz, `${JSON.stringify(unreachable)} should not resolve`).toBeNull();
+    }
+  });
+
+  it("reports the QUIZ's own track, not the course's (ADR-065 §3)", async () => {
+    const { courseId, slug } = await makeCourse({ track: "forex" });
+    const quizId = await makeQuiz({ track: "crypto" });
+    await db.course.update({ where: { id: courseId }, data: { finalQuizId: quizId } });
+
+    const view = await publicCourses.loadCourseBySlug("en", slug);
+    // The href is built from this. Taking the course's track would send the
+    // reader to /learn/forex/quizzes/<slug>, which 404s.
+    expect(view!.finalQuiz!.track).toBe("crypto");
+  });
+
+  it("carries null when the course has no final quiz", async () => {
+    const { slug } = await makeCourse();
+    const view = await publicCourses.loadCourseBySlug("en", slug);
+    expect(view!.finalQuiz).toBeNull();
+  });
+});
+
+describe("a QUIZ_PASS lesson reaches its quiz", () => {
+  it("reports the quiz on the lesson whose rule is QUIZ_PASS", async () => {
+    const { courseId, lessonId, slug } = await makeCourse({ title: "Gated Course" });
+    const lessonQuizId = await makeQuiz({ title: "Lesson Check", track: "crypto" });
+    const finalQuizId = await makeQuiz({ title: "Course Final" });
+    await db.lesson.update({
+      where: { id: lessonId },
+      data: { completionRule: "QUIZ_PASS", quizId: lessonQuizId },
+    });
+    await db.course.update({ where: { id: courseId }, data: { finalQuizId } });
+
+    const lessonSlug = (
+      await db.lessonTranslation.findFirstOrThrow({
+        where: { lessonId, locale: "en" },
+        select: { slug: true },
+      })
+    ).slug;
+
+    const view = await publicCourses.loadLessonBySlug("en", slug, lessonSlug);
+    expect(view!.quiz).toMatchObject({ id: lessonQuizId, track: "crypto" });
+    // The forward step past the last lesson (ADR-084 #5) rides along on every
+    // lesson, out of the same query.
+    expect(view!.courseFinalQuiz).toMatchObject({ id: finalQuizId });
+  });
+
+  it("reports no quiz for a lesson completed some other way", async () => {
+    const { lessonId, slug } = await makeCourse();
+    const quizId = await makeQuiz();
+    // A quiz attached to a MANUAL lesson is not its completion control, so
+    // offering it beside "Mark complete" would give one question two answers.
+    await db.lesson.update({ where: { id: lessonId }, data: { quizId } });
+
+    const lessonSlug = (
+      await db.lessonTranslation.findFirstOrThrow({
+        where: { lessonId, locale: "en" },
+        select: { slug: true },
+      })
+    ).slug;
+
+    const view = await publicCourses.loadLessonBySlug("en", slug, lessonSlug);
+    expect(view!.quiz).toBeNull();
   });
 });
 

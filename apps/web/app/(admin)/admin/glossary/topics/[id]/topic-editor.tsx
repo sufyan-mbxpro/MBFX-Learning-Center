@@ -15,6 +15,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Copy, ExternalLink, FolderTree, Search, Tags, Trash2 } from "lucide-react";
+import { saveGlossaryTopicSchema, type SaveGlossaryTopicInput } from "@repo/contracts";
 import { Button } from "@repo/ui/components/button";
 import { ConfirmDialog } from "@repo/ui/components/confirm-dialog";
 import {
@@ -24,6 +25,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@repo/ui/components/dropdown-menu";
+import {
+  Field as FieldRoot,
+  FieldContent,
+  FieldDescription,
+  FieldLabel,
+} from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
 import { Switch } from "@repo/ui/components/switch";
 import { Textarea } from "@repo/ui/components/textarea";
@@ -37,6 +44,7 @@ import {
   duplicateGlossaryTopicAction,
   saveGlossaryTopicAction,
 } from "../../../_actions/glossary-topic-actions.ts";
+import { useFieldErrors } from "../../../_hooks/use-field-errors.ts";
 import { useServerAction } from "../../../_hooks/use-server-action.ts";
 import type { RichTextLabels } from "../../../_components/rich-text-editor.tsx";
 import type { TopicEditorLabels, TopicTranslationDraft, TopicView } from "./editor-types.ts";
@@ -87,28 +95,31 @@ export function TopicEditor({
   const setDraft = (patch: Partial<TopicTranslationDraft>) =>
     setDrafts((current) => ({ ...current, [locale]: { ...draft, ...patch } }));
 
-  const canSave = draft.name.trim() !== "";
-
   const previewPath = useMemo(
     () => (slug: string) =>
       `${locale === topic.defaultLocale ? "" : `/${locale}`}/glossary/topics/${slug}`,
     [locale, topic.defaultLocale],
   );
 
+  // Exactly what the action receives, checked by the schema it parses with
+  // (ADR-077) — so a message on screen is the refusal the server would give.
+  const payload: SaveGlossaryTopicInput = {
+    topicId: topic.id,
+    meta: { isActive },
+    translation: {
+      locale,
+      name: draft.name.trim(),
+      slug: draft.slug.trim() === "" ? undefined : draft.slug.trim(),
+      description: draft.description.trim() === "" ? null : draft.description,
+      seoTitle: draft.seoTitle.trim() === "" ? null : draft.seoTitle.trim(),
+      seoDescription: draft.seoDescription.trim() === "" ? null : draft.seoDescription.trim(),
+      seoKeywords: draft.seoKeywords.trim() === "" ? null : draft.seoKeywords.trim(),
+    },
+  };
+  const form = useFieldErrors(saveGlossaryTopicSchema, payload);
+
   const submitForm = async () => {
-    await saveGlossaryTopicAction({
-      topicId: topic.id,
-      meta: { isActive },
-      translation: {
-        locale,
-        name: draft.name.trim(),
-        slug: draft.slug.trim() === "" ? undefined : draft.slug.trim(),
-        description: draft.description.trim() === "" ? null : draft.description,
-        seoTitle: draft.seoTitle.trim() === "" ? null : draft.seoTitle.trim(),
-        seoDescription: draft.seoDescription.trim() === "" ? null : draft.seoDescription.trim(),
-        seoKeywords: draft.seoKeywords.trim() === "" ? null : draft.seoKeywords.trim(),
-      },
-    });
+    await saveGlossaryTopicAction(payload);
   };
 
   return (
@@ -180,16 +191,21 @@ export function TopicEditor({
             </DropdownMenuContent>
           </DropdownMenu>
 
+          {/* Enabled while fields are wrong: pressing it names them (ADR-077). */}
           <Button
-            disabled={pending || !canSave || !canUpdate}
-            onClick={() => run(() => submitForm(), { successMessage: labels.saved })}
+            disabled={!canUpdate}
+            loading={pending}
+            onClick={() => {
+              if (!form.validate()) return;
+              run(() => submitForm(), { successMessage: labels.saved });
+            }}
           >
             {labels.save}
           </Button>
         </div>
       </div>
 
-      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
+      <div className="grid grid-cols-1 min-w-0 gap-4 lg:grid-cols-(--grid-main-aside)">
         <div className="flex min-w-0 flex-col gap-4">
           <EditorSection
             title={labels.detailsSection}
@@ -197,9 +213,8 @@ export function TopicEditor({
             icon={FolderTree}
             accent="primary"
           >
-            <Field id="topic-name" label={labels.nameLabel}>
+            <Field label={labels.nameLabel} required error={form.error("translation.name")}>
               <Input
-                id="topic-name"
                 value={draft.name}
                 disabled={!canUpdate}
                 onChange={(event) => setDraft({ name: event.target.value })}
@@ -207,11 +222,11 @@ export function TopicEditor({
             </Field>
 
             <SlugField
-              id="topic-slug"
               value={draft.slug}
               source={draft.name}
               previewPath={previewPath}
               disabled={!canUpdate}
+              error={form.error("translation.slug")}
               onChange={(next) => setDraft({ slug: next })}
               labels={labels.slug}
             />
@@ -220,9 +235,12 @@ export function TopicEditor({
                 public topic page, not as a caption under a heading. Sanitized
                 server-side on save (security.md #8) regardless of what this
                 editor emits. */}
-            <Field label={labels.descriptionLabel} hint={labels.descriptionHint}>
+            <Field
+              label={labels.descriptionLabel}
+              hint={labels.descriptionHint}
+              error={form.error("translation.description")}
+            >
               <RichTextEditor
-                id="topic-description"
                 value={draft.description}
                 onChange={(html) => setDraft({ description: html })}
                 mediaCategory="learn"
@@ -237,9 +255,12 @@ export function TopicEditor({
             icon={Search}
             accent="info"
           >
-            <Field id="topic-seo-title" label={labels.seoTitleLabel} hint={labels.seoTitleHint}>
+            <Field
+              label={labels.seoTitleLabel}
+              hint={labels.seoTitleHint}
+              error={form.error("translation.seoTitle")}
+            >
               <Input
-                id="topic-seo-title"
                 value={draft.seoTitle}
                 maxLength={70}
                 disabled={!canUpdate}
@@ -247,9 +268,11 @@ export function TopicEditor({
               />
             </Field>
 
-            <Field id="topic-seo-description" label={labels.seoDescriptionLabel}>
+            <Field
+              label={labels.seoDescriptionLabel}
+              error={form.error("translation.seoDescription")}
+            >
               <Textarea
-                id="topic-seo-description"
                 value={draft.seoDescription}
                 maxLength={180}
                 rows={3}
@@ -262,12 +285,11 @@ export function TopicEditor({
                 here: it scores prose against ONE focus keyword and a topic page
                 has no prose to score (changes-18 §2 D4). */}
             <Field
-              id="topic-seo-keywords"
               label={labels.seoKeywordsLabel}
               hint={labels.seoKeywordsHint}
+              error={form.error("translation.seoKeywords")}
             >
               <Input
-                id="topic-seo-keywords"
                 value={draft.seoKeywords}
                 maxLength={255}
                 disabled={!canUpdate}
@@ -284,13 +306,16 @@ export function TopicEditor({
             icon={Tags}
             accent="success"
           >
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex min-w-0 flex-col">
-                <span className="text-sm font-medium">{labels.publishedLabel}</span>
-                <span className="text-xs text-muted-foreground">{labels.publishedHint}</span>
-              </div>
+            {/* A switch row, so @repo/ui's horizontal Field rather than the
+                section's label-above-control wrapper — and the switch leads
+                it (ADR-089). */}
+            <FieldRoot orientation="horizontal">
               <Switch checked={isActive} disabled={!canUpdate} onCheckedChange={setIsActive} />
-            </div>
+              <FieldContent>
+                <FieldLabel>{labels.publishedLabel}</FieldLabel>
+                <FieldDescription>{labels.publishedHint}</FieldDescription>
+              </FieldContent>
+            </FieldRoot>
 
             <p className="border-t pt-3 text-xs text-muted-foreground">{labels.saveHint}</p>
           </EditorSection>

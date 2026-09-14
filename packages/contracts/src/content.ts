@@ -187,3 +187,43 @@ export const publicArticleSearchSchema = z.object({
   page: z.coerce.number().int().min(0).max(10_000).optional(),
 });
 export type PublicArticleSearchInput = z.infer<typeof publicArticleSearchSchema>;
+
+/**
+ * The closed class vocabulary the rich-text editor may emit (changes-10,
+ * ADR-046). Mirrors the `.ed-*` rules in `@repo/ui`'s globals.css — that file
+ * is the definition, this is the gate. Enumerated rather than globbed as
+ * `ed-*` so a class with no stylesheet behind it cannot ride along.
+ *
+ * It lives here rather than in `@repo/core` because two sanitisers need it
+ * now: core's `sanitizeRichText`, and `@repo/email`'s layout, which maps each
+ * class to an inline style because email clients drop class CSS. Email cannot
+ * import core: it sits BELOW both its senders (ADR-078 #1), so the vocabulary
+ * has to live upstream of both.
+ */
+export const EDITORIAL_CLASSES = [
+  "ed-tx-primary",
+  "ed-tx-success",
+  "ed-tx-warning",
+  "ed-tx-info",
+  "ed-tx-danger",
+  "ed-tx-muted",
+  "ed-hl-primary",
+  "ed-hl-success",
+  "ed-hl-warning",
+  "ed-hl-info",
+  "ed-hl-danger",
+  "ed-hl-muted",
+  "ed-ff-sans",
+  "ed-ff-serif",
+  "ed-ff-mono",
+  "ed-fs-sm",
+  "ed-fs-base",
+  "ed-fs-lg",
+  "ed-fs-xl",
+  "ed-fs-2xl",
+  "ed-align-start",
+  "ed-align-center",
+  "ed-align-end",
+  "ed-align-justify",
+  "ed-embed",
+] as const;

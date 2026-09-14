@@ -1,15 +1,35 @@
 "use client";
 
 import { useTranslations } from "next-intl";
+import { Button } from "@repo/ui/components/button";
+import { Container } from "@repo/ui/components/container";
+import { ErrorState } from "@repo/ui/components/empty";
 
-export default function PublicError({ reset }: { error: Error; reset: () => void }) {
+// The public error boundary (changes-21 Phase A). It was a bare heading and an
+// underlined text button; it is now the one ErrorState every surface uses,
+// sized `lg` because the state IS the page — so its title is the h1. It owns
+// the <main> landmark: the [locale] layout renders none of its own.
+//
+// `retry`, never `reset` (changes-21 F-06): `reset` re-renders the segment
+// WITHOUT re-fetching, so a server-side failure fails again the same way.
+// `retry` re-fetches then re-renders; stable since Next 16.3.
+export default function PublicError({ retry }: { error: Error; retry: () => void }) {
   const t = useTranslations("error");
   return (
-    <main className="flex min-h-full flex-col items-center justify-center gap-4 p-8">
-      <h1 className="text-lg font-semibold">{t("title")}</h1>
-      <button type="button" onClick={reset} className="text-sm underline underline-offset-4">
-        {t("retry")}
-      </button>
+    <main>
+      <Container>
+        <ErrorState
+          size="lg"
+          titleAs="h1"
+          title={t("title")}
+          description={t("description")}
+          action={
+            <Button variant="outline" onClick={retry}>
+              {t("retry")}
+            </Button>
+          }
+        />
+      </Container>
     </main>
   );
 }

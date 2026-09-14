@@ -73,6 +73,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@repo/ui/components/dropdown-menu";
+import { useFieldContext } from "@repo/ui/components/field";
 import { Separator } from "@repo/ui/components/separator";
 import { Textarea } from "@repo/ui/components/textarea";
 import { cn } from "@repo/ui/lib/utils";
@@ -256,6 +257,8 @@ export function RichTextEditor({
   allowHtmlMode?: boolean;
 }) {
   const t = useTranslations("admin");
+  // ADR-077: inside a Field the editor is that Field's control.
+  const field = useFieldContext();
   const fileRef = React.useRef<HTMLInputElement>(null);
   const [, force] = React.useReducer((n: number) => n + 1, 0);
   const [mode, setMode] = React.useState<"visual" | "html">("visual");
@@ -313,8 +316,7 @@ export function RichTextEditor({
         // editor is inside a grid track, and without these the track grows
         // to fit the content and pushes the sidebar off screen.
         class:
-          "min-h-72 max-w-none px-3 py-2 text-sm leading-relaxed break-words outline-none [&_a]:text-primary-interactive [&_a]:underline-offset-4 [&_a:hover]:underline [&_blockquote]:border-s-2 [&_blockquote]:ps-4 [&_blockquote]:text-muted-foreground [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:font-mono [&_code]:text-sm [&_h2]:mt-4 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:mt-3 [&_h3]:text-lg [&_h3]:font-semibold [&_h4]:font-semibold [&_hr]:my-4 [&_img]:my-2 [&_img]:max-h-96 [&_img]:rounded-lg [&_ol]:list-decimal [&_ol]:ps-5 [&_p]:my-1.5 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:bg-muted [&_pre]:p-4 [&_ul]:list-disc [&_ul]:ps-5 [&_table]:my-3 [&_table]:w-full [&_table]:table-fixed [&_table]:border-collapse [&_td]:border [&_td]:p-2 [&_td]:align-top [&_th]:border [&_th]:bg-muted/50 [&_th]:p-2 [&_th]:text-start [&_.selectedCell]:bg-primary/10 [&_.is-editor-empty:first-child]:before:pointer-events-none [&_.is-editor-empty:first-child]:before:float-start [&_.is-editor-empty:first-child]:before:h-0 [&_.is-editor-empty:first-child]:before:text-muted-foreground [&_.is-editor-empty:first-child]:before:content-[attr(data-placeholder)]",
-        ...(id ? { id } : {}),
+          "min-h-72 max-w-none px-3 py-2 text-sm leading-relaxed break-words outline-none [&_a]:text-primary-interactive [&_a]:underline-offset-4 [&_a:hover]:underline [&_blockquote]:border-s-2 [&_blockquote]:ps-4 [&_blockquote]:text-muted-foreground [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:font-mono [&_code]:text-sm [&_h2]:mt-4 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:mt-3 [&_h3]:text-lg [&_h3]:font-semibold [&_h4]:font-semibold [&_hr]:my-4 [&_img]:my-2 [&_img]:max-h-96 [&_img]:rounded-lg [&_ol]:list-decimal [&_ol]:ps-5 [&_p]:my-1.5 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:bg-muted [&_pre]:p-4 [&_ul]:list-disc [&_ul]:ps-5 [&_table]:my-3 [&_table]:w-full [&_table]:table-fixed [&_table]:border-collapse [&_td]:border [&_td]:p-2 [&_td]:align-top [&_th]:border [&_th]:bg-muted/50 [&_th]:p-2 [&_th]:text-start [&_.selectedCell]:bg-primary/10 [&_.is-editor-empty:first-child]:before:pointer-events-none [&_.is-editor-empty:first-child]:before:float-start [&_.is-editor-empty:first-child]:before:h-0 [&_.is-editor-empty:first-child]:before:text-muted-foreground [&_.is-editor-empty:first-child]:before:content-placeholder",
       },
     },
     onUpdate: ({ editor: e }) => emit(e.getHTML()),
@@ -332,6 +334,31 @@ export function RichTextEditor({
     emitted.current = value;
     editor.commands.setContent(value, { emitUpdate: false });
   }, [editor, value]);
+
+  // ADR-077 — the editable surface is a div, which a label's `for` cannot
+  // name, so it is named by the Field's label id instead, and carries the
+  // Field's state like any other control. Set on the DOM node rather than
+  // through editorProps: those are read when ProseMirror builds its props,
+  // so a field turning invalid without a transaction would not reach them.
+  // ProseMirror leaves attributes it did not set alone.
+  const fieldId = id ?? field?.controlId;
+  const labelledBy = field?.labelId;
+  const describedBy = field?.describedBy;
+  const invalid = field?.invalid ?? false;
+  const required = field?.required ?? false;
+  React.useEffect(() => {
+    const dom = editor?.view.dom;
+    if (!dom) return;
+    const set = (name: string, next: string | undefined) =>
+      next === undefined ? dom.removeAttribute(name) : dom.setAttribute(name, next);
+    set("role", "textbox");
+    set("aria-multiline", "true");
+    set("id", fieldId);
+    set("aria-labelledby", labelledBy);
+    set("aria-describedby", describedBy);
+    set("aria-invalid", invalid ? "true" : undefined);
+    set("aria-required", required ? "true" : undefined);
+  }, [editor, fieldId, labelledBy, describedBy, invalid, required]);
 
   const setLink = (e: Editor) => {
     const previous = e.getAttributes("link").href as string | undefined;
@@ -381,7 +408,12 @@ export function RichTextEditor({
   };
 
   if (!editor) {
-    return <div className={cn("min-h-72 rounded-lg border bg-transparent", className)} aria-busy />;
+    return (
+      <div
+        className={cn("min-h-72 rounded-md border border-input bg-background", className)}
+        aria-busy
+      />
+    );
   }
 
   const can = editor.can();
@@ -407,12 +439,18 @@ export function RichTextEditor({
 
   return (
     <div
+      data-invalid={invalid || undefined}
       className={cn(
         // `min-w-0` is what keeps the editor from widening its grid track:
         // a flex/grid child defaults to min-width:auto, i.e. "as wide as my
         // widest unbreakable content", which is how one pasted URL used to
         // push the whole page into horizontal scroll.
-        "flex min-w-0 flex-col overflow-hidden rounded-lg border border-input transition-colors focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50 dark:bg-input/30",
+        //
+        // The frame is the Textarea recipe (tokens.md §1.5, §6.14; audit
+        // F-04): the Input's radius, border and page background, the 2px
+        // ring at a 2px offset, and the Input's invalid state. No `dark:`
+        // class — the dark tokens already carry the dark surface.
+        "flex min-w-0 flex-col overflow-hidden rounded-md border border-input bg-background transition-colors focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background data-invalid:border-destructive data-invalid:ring-2 data-invalid:ring-destructive/20",
         className,
       )}
     >
@@ -463,7 +501,8 @@ export function RichTextEditor({
           spellCheck={false}
           // ADR-044 #6's stated exception: a control whose VALUE is code the
           // admin reads character by character keeps a fixed-width face.
-          className="min-h-72 resize-y rounded-none border-0 font-mono text-xs whitespace-pre focus-visible:ring-0"
+          // The frame draws the focus and invalid rings for both modes.
+          className="min-h-72 resize-y rounded-none border-0 font-mono text-xs whitespace-pre focus-visible:ring-0 focus-visible:ring-offset-0 aria-invalid:ring-0"
           onChange={(e) => emit(e.target.value)}
         />
       ) : (
@@ -772,7 +811,7 @@ export function RichTextEditor({
           </div>
 
           {sizeError && (
-            <p className="border-b px-3 py-2 text-xs text-destructive" role="status">
+            <p className="border-b px-3 py-2 text-xs text-destructive-interactive" role="status">
               {sizeError}
             </p>
           )}

@@ -12,7 +12,13 @@ import { useTranslations } from "next-intl";
 import { ImageIcon, LibraryBig, Trash2, Upload } from "lucide-react";
 import { Button } from "@repo/ui/components/button";
 import { ConfirmDialog } from "@repo/ui/components/confirm-dialog";
-import { Label } from "@repo/ui/components/label";
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldLabel,
+  useFieldControl,
+} from "@repo/ui/components/field";
 import { Spinner } from "@repo/ui/components/spinner";
 import { cn } from "@repo/ui/lib/utils";
 import { useUploadProgress } from "../_hooks/use-upload-progress.ts";
@@ -41,6 +47,25 @@ export interface UploadedImage {
   url: string;
 }
 
+/**
+ * The Upload button is this field's CONTROL (ADR-077): the label points at
+ * it, and a failed save focuses it with the message in its description. The
+ * file input it opens is sr-only, so focusing THAT would leave the focus
+ * ring nowhere on screen. A button has no `required`, and aria-required is
+ * not allowed on the button role, so the requirement is carried by the
+ * label's asterisk and the message alone.
+ */
+type UploadButtonProps = React.ComponentProps<typeof Button> & { required?: boolean };
+
+function UploadButton(props: UploadButtonProps) {
+  const {
+    required: _required,
+    "aria-required": _ariaRequired,
+    ...wired
+  } = useFieldControl<UploadButtonProps>(props, { requiredAs: "aria" });
+  return <Button {...wired} />;
+}
+
 export function ImageUploadField({
   id,
   label,
@@ -54,8 +79,11 @@ export function ImageUploadField({
   category,
   sourceType,
   allowLibrary = true,
+  required,
+  error,
 }: {
-  id: string;
+  /** Only when something outside the field needs the Upload button's id. */
+  id?: string;
   label: string;
   /** Current stored URL (null/empty = nothing set). */
   value: string | null;
@@ -74,6 +102,9 @@ export function ImageUploadField({
   category: MediaCategory;
   /** Scopes the picker's recently-used strip to the surface this field belongs to. */
   sourceType?: MediaSourceType;
+  required?: boolean;
+  /** The inline message for this field, from the host's `useFieldErrors`. */
+  error?: string;
 }) {
   const t = useTranslations("admin");
   const inputRef = React.useRef<HTMLInputElement>(null);
@@ -117,9 +148,12 @@ export function ImageUploadField({
     if (inputRef.current) inputRef.current.value = "";
   };
 
+  // A refused file is this field's problem too, so it shares the error slot.
+  const message = error ?? sizeError ?? undefined;
+
   return (
-    <div className="flex flex-col gap-1.5">
-      <Label htmlFor={id}>{label}</Label>
+    <Field controlId={id} invalid={Boolean(message)} required={required}>
+      <FieldLabel>{label}</FieldLabel>
       <div className="flex items-start gap-3">
         <div
           className={cn(
@@ -140,7 +174,7 @@ export function ImageUploadField({
         </div>
         <div className="flex min-w-0 flex-col gap-1.5">
           <div className="flex flex-wrap items-center gap-1.5">
-            <Button
+            <UploadButton
               type="button"
               variant="outline"
               size="sm"
@@ -149,7 +183,7 @@ export function ImageUploadField({
             >
               <Upload data-icon="inline-start" aria-hidden />
               {preview ? labels.replace : labels.upload}
-            </Button>
+            </UploadButton>
             {allowLibrary && (
               // ADR-049: the reuse half of ADR-034's "never uploaded again"
               // criterion. Every ImageUploadField call site gets it without
@@ -176,7 +210,7 @@ export function ImageUploadField({
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="text-destructive"
+                    className="text-destructive-interactive"
                     disabled={disabled || uploading}
                   >
                     <Trash2 data-icon="inline-start" aria-hidden />
@@ -194,9 +228,11 @@ export function ImageUploadField({
               />
             )}
           </div>
-          <p className="text-xs text-muted-foreground">{description ?? labels.hint}</p>
+          <FieldDescription className="text-xs nth-last-2:mt-0">
+            {description ?? labels.hint}
+          </FieldDescription>
           {preview && <span className="truncate text-xs text-muted-foreground">{preview}</span>}
-          {sizeError && <p className="text-xs text-destructive">{sizeError}</p>}
+          <FieldError className="text-xs">{message}</FieldError>
           {upload.status !== "idle" && (
             <UploadProgress
               status={upload.status}
@@ -209,12 +245,15 @@ export function ImageUploadField({
           )}
         </div>
       </div>
+      {/* Driven by the Upload button, so kept out of the tab order and the
+          accessibility tree — the button is what the label names. */}
       <input
         ref={inputRef}
-        id={id}
         type="file"
         accept="image/png,image/jpeg,image/gif,image/webp,image/x-icon,image/vnd.microsoft.icon,image/svg+xml"
         className="sr-only"
+        tabIndex={-1}
+        aria-hidden
         disabled={disabled || uploading}
         onChange={(e) => void onFile(e.target.files?.[0])}
       />
@@ -234,6 +273,6 @@ export function ImageUploadField({
           }}
         />
       )}
-    </div>
+    </Field>
   );
 }

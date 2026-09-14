@@ -84,15 +84,30 @@ import {
   EmptyContent,
   EmptyDescription,
   EmptyMedia,
+  EmptyState,
   EmptyTitle,
+  ErrorState,
 } from "@repo/ui/components/empty";
 import { FilterBar, FilterBarItem, FilterBarRow } from "@repo/ui/components/filter-bar";
 import { Input } from "@repo/ui/components/input";
+import { PasswordInput } from "@repo/ui/components/password-input";
 import { Kbd, KbdGroup } from "@repo/ui/components/kbd";
 import { Label } from "@repo/ui/components/label";
 import { MetricCard } from "@repo/ui/components/metric-card";
 import { NavItem, NavItemGroup } from "@repo/ui/components/nav-item";
 import { PageHeader } from "@repo/ui/components/page-header";
+import { SectionLoader } from "@repo/ui/components/page-loader";
+import { MetricCardSkeleton } from "@repo/ui/components/page-skeletons";
+import {
+  SkeletonAvatar,
+  SkeletonButton,
+  SkeletonCard,
+  SkeletonField,
+  SkeletonHeading,
+  SkeletonTable,
+  SkeletonText,
+} from "@repo/ui/components/skeleton";
+import { Spinner } from "@repo/ui/components/spinner";
 import {
   Pagination,
   PaginationBar,
@@ -536,6 +551,9 @@ export function DesignSystem() {
   const t = useTranslations("admin.designSystem");
   const s = useTranslations("admin.designSystem.sample");
   const state = useTranslations("admin.designSystem.states");
+  // The reveal toggle's labels are the same two admin strings every password
+  // field uses — the showcase must not mint its own words for them.
+  const common = useTranslations("admin");
   const [compare, setCompare] = React.useState(false);
   const [rtl, setRtl] = React.useState(false);
   const [pair, setPair] = React.useState("eurusd");
@@ -672,7 +690,7 @@ export function DesignSystem() {
           </Section>
 
           <Section id="inputs">
-            <div className="grid max-w-3xl gap-6 md:grid-cols-2">
+            <div className="grid grid-cols-1 max-w-3xl gap-6 md:grid-cols-2">
               <div className="flex flex-col gap-2">
                 <Label htmlFor="ds-input">{s("fieldLabel")}</Label>
                 <Input id="ds-input" placeholder={s("fieldPlaceholder")} />
@@ -714,6 +732,31 @@ export function DesignSystem() {
                 wrapperClassName="w-56"
               />
             </Row>
+            <Row label={humanizeKey("passwordField")}>
+              <PasswordInput
+                aria-label={s("fieldLabel")}
+                defaultValue={s("fieldPlaceholder")}
+                showLabel={common("showPassword")}
+                hideLabel={common("hidePassword")}
+                wrapperClassName="w-72"
+              />
+              <PasswordInput
+                size="sm"
+                aria-label={s("fieldLabel")}
+                defaultValue={s("fieldPlaceholder")}
+                showLabel={common("showPassword")}
+                hideLabel={common("hidePassword")}
+                wrapperClassName="w-64"
+              />
+              <PasswordInput
+                size="xs"
+                aria-label={s("fieldLabel")}
+                defaultValue={s("fieldPlaceholder")}
+                showLabel={common("showPassword")}
+                hideLabel={common("hidePassword")}
+                wrapperClassName="w-56"
+              />
+            </Row>
             <div className="flex max-w-xl flex-col gap-2">
               <Label htmlFor="ds-notes">{s("notes")}</Label>
               <Textarea id="ds-notes" placeholder={s("notesPlaceholder")} />
@@ -724,7 +767,7 @@ export function DesignSystem() {
               primitives. Ten options cross the searchable threshold; three
               stay a plain Select. Both triggers are full width. */}
           <Section id="dropdowns">
-            <div className="grid max-w-3xl gap-6 md:grid-cols-2">
+            <div className="grid grid-cols-1 max-w-3xl gap-6 md:grid-cols-2">
               <div className="flex flex-col gap-2">
                 <Label htmlFor="ds-pair">{s("pairLabel")}</Label>
                 <AdminCombobox
@@ -1163,8 +1206,11 @@ export function DesignSystem() {
 
           <Section id="layout">
             <Row label={humanizeKey("pageHeader")}>
+              {/* Specimens, so their titles are h2: the page's own header is
+                  its one h1 (`titleRender` swaps the tag, not the recipe). */}
               <div className="w-full">
                 <PageHeader
+                  titleRender={<h2 />}
                   title={s("pageTitle")}
                   description={s("pageDescription")}
                   status={
@@ -1187,13 +1233,14 @@ export function DesignSystem() {
               </div>
               <div className="w-full">
                 <PageHeader
+                  titleRender={<h2 />}
                   title={s("cardTitle")}
                   description={s("cardDescription")}
                   icon={<Megaphone aria-hidden />}
                 />
               </div>
             </Row>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
               <MetricCard
                 label={s("metricLabel")}
                 icon={<Users aria-hidden className="text-muted-foreground" />}
@@ -1222,7 +1269,7 @@ export function DesignSystem() {
                 footer={<Progress size="xs" value={60} />}
               />
             </div>
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <Card>
                 <CardHeader>
                   <CardTitle>{s("cardTitle")}</CardTitle>
@@ -1276,6 +1323,27 @@ export function DesignSystem() {
                 <AlertDescription>{s("alertSuccessBody")}</AlertDescription>
               </Alert>
             </div>
+            {/* changes-21 Phase A: the composed states are the call-site API;
+                the Empty parts stay public for the rare bespoke layout. */}
+            <div className="grid max-w-3xl grid-cols-1 gap-4 md:grid-cols-2">
+              <EmptyState
+                icon={<Inbox aria-hidden />}
+                title={s("emptyTitle")}
+                description={s("emptyBody")}
+                action={<Button size="sm">{s("emptyAction")}</Button>}
+              />
+              <ErrorState
+                title={s("errorTitle")}
+                description={s("errorBody")}
+                action={
+                  <Button size="sm" variant="outline">
+                    {s("retry")}
+                  </Button>
+                }
+              />
+              <EmptyState size="sm" icon={<Inbox aria-hidden />} title={s("emptyTitle")} />
+              <ErrorState size="sm" title={s("errorTitle")} />
+            </div>
             <Empty className="max-w-md">
               <EmptyMedia>
                 <Inbox aria-hidden />
@@ -1286,6 +1354,50 @@ export function DesignSystem() {
                 <Button size="sm">{s("emptyAction")}</Button>
               </EmptyContent>
             </Empty>
+            <Row label={humanizeKey("spinner")}>
+              <div className="flex flex-wrap items-center gap-4">
+                {(["xs", "sm", "default", "lg", "section"] as const).map((size) => (
+                  <Spinner key={size} size={size} aria-label={s("loadingLabel")} />
+                ))}
+              </div>
+            </Row>
+            <Row label={humanizeKey("buttonLoading")}>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button loading>{s("saving")}</Button>
+                <Button loading variant="outline">
+                  {s("saving")}
+                </Button>
+                <Button loading variant="destructive" size="sm">
+                  {s("saving")}
+                </Button>
+                <Button loading size="xs">
+                  {s("saving")}
+                </Button>
+                <Button loading size="icon" aria-label={s("saving")}>
+                  <Inbox aria-hidden />
+                </Button>
+              </div>
+            </Row>
+            <SectionLoader label={s("loadingLabel")} className="max-w-md" />
+            <Row label={humanizeKey("skeletons")}>
+              <div className="grid w-full max-w-3xl grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center gap-3">
+                    <SkeletonAvatar />
+                    <SkeletonHeading size="compact" />
+                  </div>
+                  <SkeletonText lines={3} />
+                  <SkeletonField />
+                  <div className="flex gap-2">
+                    <SkeletonButton />
+                    <SkeletonButton size="sm" shape="pill" />
+                  </div>
+                </div>
+                <SkeletonCard media="video" />
+                <MetricCardSkeleton />
+                <SkeletonTable rows={3} columns={4} footer={false} className="md:col-span-2" />
+              </div>
+            </Row>
             <Row label={humanizeKey("progress")}>
               <div className="flex w-full max-w-md flex-col gap-3">
                 <Progress size="xs" value={25} />

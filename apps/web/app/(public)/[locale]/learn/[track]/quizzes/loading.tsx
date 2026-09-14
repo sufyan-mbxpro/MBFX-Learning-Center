@@ -16,6 +16,7 @@
 // asked for less motion gets plain tinted blocks, not stilled ones.
 import { Container } from "@repo/ui/components/container";
 import { Section } from "@repo/ui/components/section";
+import { QuizCardSkeleton } from "@repo/ui/components/quiz-card";
 import { Skeleton } from "@repo/ui/components/skeleton";
 
 export default function QuizIndexLoading() {
@@ -33,21 +34,6 @@ export default function QuizIndexLoading() {
         </Container>
       </Section>
 
-      {/* The counted-figures strip. */}
-      <Section spacing="sm" tone="muted">
-        <Container>
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
-            {Array.from({ length: 3 }, (_, index) => (
-              <div key={index} className="flex flex-col items-center gap-2">
-                <Skeleton className="shimmer size-10 rounded-full" />
-                <Skeleton className="shimmer h-8 w-16" />
-                <Skeleton className="shimmer h-4 w-24" />
-              </div>
-            ))}
-          </div>
-        </Container>
-      </Section>
-
       {/* The category chip row, then the grid. The sign-in prompt above them
           is deliberately absent: it renders nothing until it knows whether the
           reader has an account, so a placeholder for it would promise a band
@@ -59,39 +45,13 @@ export default function QuizIndexLoading() {
               <Skeleton key={index} className="shimmer h-8 w-28 rounded-full" />
             ))}
           </div>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 6 }, (_, index) => (
               <QuizCardSkeleton key={index} />
             ))}
           </div>
         </Container>
       </Section>
-    </div>
-  );
-}
-
-/** The card's own anatomy — a 16:9 panel over a copy column that ends in the
- * score meter and its CTA. */
-function QuizCardSkeleton() {
-  return (
-    <div className="flex flex-col rounded-2xl bg-card ring-1 ring-foreground/10">
-      <Skeleton className="shimmer aspect-video w-full rounded-t-2xl" />
-      <div className="flex flex-col gap-2.5 p-5">
-        <Skeleton className="shimmer h-5 w-40" />
-        <Skeleton className="shimmer h-4 w-full" />
-        <Skeleton className="shimmer h-4 w-2/3" />
-        <div className="flex flex-col gap-1.5 pt-3">
-          <div className="flex justify-between gap-3">
-            <Skeleton className="shimmer h-3 w-20" />
-            <Skeleton className="shimmer h-3 w-10" />
-          </div>
-          <Skeleton className="shimmer h-2 w-full rounded-full" />
-        </div>
-        <div className="flex items-center justify-between gap-3 pt-1">
-          <Skeleton className="shimmer h-3 w-16" />
-          <Skeleton className="shimmer h-8 w-24 rounded-md" />
-        </div>
-      </div>
     </div>
   );
 }

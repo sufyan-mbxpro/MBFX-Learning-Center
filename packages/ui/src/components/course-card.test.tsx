@@ -151,6 +151,16 @@ describe("CourseCard — level tone and the video chip", () => {
     expect(chip).toContain("bg-success/10");
   });
 
+  it("gives the level chip an opaque page-background ground over the cover art", () => {
+    // A /10 tint is mostly transparent: over artwork its ink measured
+    // 3.9–4.1:1 in dark mode. On bg-background it composites onto the surface
+    // ADR-073 derives the ink against (changes-20 Phase 5).
+    renderCard({ difficultyTone: "success" });
+    const ground = screen.getByText("Beginner").parentElement;
+    expect(ground?.className).toContain("bg-background");
+    expect(ground?.className).toContain("rounded-full");
+  });
+
   it("shows a video chip only when the caller counted videos", () => {
     renderCard();
     expect(screen.queryByText("2 videos")).toBeNull();

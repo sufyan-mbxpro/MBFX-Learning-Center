@@ -22,15 +22,21 @@
 import { getTranslations } from "next-intl/server";
 import { cacheLife } from "next/cache";
 import { Apple, ChevronRight, Monitor, Smartphone } from "lucide-react";
-import { buildMenu, getActiveSocialLinks, getBrandAssets } from "@repo/core";
+import {
+  buildMenu,
+  getActiveSocialLinks,
+  getBrandAssets,
+  isNewsletterPlacementEnabled,
+} from "@repo/core";
 import { Link } from "@repo/i18n/navigation";
-import { getSetting } from "@repo/settings";
+import { getSetting, isFeatureVisible } from "@repo/settings";
 import { BrandLogo } from "@repo/ui/components/brand-logo";
-import { SocialGlyph } from "@repo/ui/components/social-glyph";
+import { SocialLinkIcon } from "./social-link-icon.tsx";
 import { Container } from "@repo/ui/components/container";
 import { Reveal } from "@repo/ui/components/reveal";
 import { NavLink } from "./nav-link.tsx";
 import { NewsletterForm } from "./newsletter-form.tsx";
+import { newsletterFormLabels } from "./newsletter-labels.ts";
 
 // Cache Components rejects a bare `new Date()` during prerender — rightly:
 // it would bake the build-time year into the static shell forever. Cached
@@ -40,21 +46,6 @@ async function getCurrentYear(): Promise<number> {
   "use cache";
   cacheLife({ revalidate: 3600 });
   return new Date().getFullYear();
-}
-
-// A social link's icon: the admin-uploaded asset when there is one,
-// otherwise the built-in glyph named by `icon` (ADR-045). This used to
-// look the name up as a `lucide-react` export, which resolved to
-// `undefined` for every brand icon after lucide v1 removed them — the
-// footer rendered five empty circles and said nothing about it.
-function SocialLinkIcon({ icon, iconUrl }: { icon: string; iconUrl: string | null }) {
-  if (iconUrl) {
-    // Plain <img>: uploaded assets are served by our own route (ADR-017),
-    // and the icon is decorative here — the <a> carries the label.
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img src={iconUrl} alt="" aria-hidden className="size-4 object-contain" />;
-  }
-  return <SocialGlyph name={icon} />;
 }
 
 // App-store links are admin-configured URLs (footer.appLinks). The BADGE
@@ -93,7 +84,7 @@ const LINK_GRID_CLASS: Record<number, string> = {
 function ColumnHeading({ id, children }: { id: string; children: React.ReactNode }) {
   return (
     <h2 id={id} className="text-secondary-foreground">
-      <span className="text-xs font-semibold tracking-[0.14em] uppercase">{children}</span>
+      <span className="text-xs font-semibold tracking-caps uppercase">{children}</span>
       {/* Short rule under the heading. currentcolor, so it inherits the
           band's own legible ink instead of asking a brand token to work on
           a surface it was never derived against. */}
@@ -110,7 +101,8 @@ export async function SiteFooter({ locale }: { locale: string }) {
     copyright,
     disclaimer,
     menuColumns,
-    newsletterEnabled,
+    newsletterFlag,
+    newsletterPlaced,
     appLinks,
     showPaymentBadges,
     socialLinks,
@@ -122,7 +114,12 @@ export async function SiteFooter({ locale }: { locale: string }) {
     getSetting("legal.copyrightNotice"),
     getSetting("legal.riskDisclaimer"),
     getSetting("footer.menuColumns"),
-    getSetting("footer.newsletterEnabled"),
+    // TWO switches with different jobs (ADR-080 #5): the FLAG says signup
+    // exists, the placement SETTING says it is drawn here. One setting,
+    // `footer.newsletterEnabled`, used to do both — and sat in the `layout`
+    // group ADR-038 paused, so nobody could reach it. F7 deleted it.
+    isFeatureVisible("newsletter", null),
+    isNewsletterPlacementEnabled("footer"),
     getSetting("footer.appLinks"),
     getSetting("footer.showPaymentBadges"),
     getActiveSocialLinks(),
@@ -159,7 +156,7 @@ export async function SiteFooter({ locale }: { locale: string }) {
           visual. */}
       <div
         aria-hidden
-        className="bg-dot-grid pointer-events-none absolute inset-0 opacity-[0.15] [mask-image:linear-gradient(to_bottom,black,transparent_70%)]"
+        className="bg-dot-grid pointer-events-none absolute inset-0 opacity-15 [mask-image:linear-gradient(to_bottom,black,transparent_70%)]"
       />
       {/* Ambient brand wash — the one large-area use of --primary this band
           allows (the same utility the header uses). Sits UNDER the dot grid
@@ -183,7 +180,7 @@ export async function SiteFooter({ locale }: { locale: string }) {
               eight. Keeping the links beside the brand rather than in a band
               of their own is what stops three columns from floating in
               1400px of empty secondary. */}
-          <div className="grid gap-x-8 gap-y-12 pt-14 pb-10 lg:grid-cols-12 lg:gap-x-12">
+          <div className="grid grid-cols-1 gap-x-8 gap-y-12 pt-14 pb-10 lg:grid-cols-12 lg:gap-x-12">
             <Reveal variant="up" className="lg:col-span-4">
               <div className="flex flex-col items-start gap-5">
                 {/* Uploaded logo (ADR-017) via the shared BrandLogo, with
@@ -196,7 +193,7 @@ export async function SiteFooter({ locale }: { locale: string }) {
                     the shared component. */}
                 <Link
                   href="/"
-                  className="flex w-fit items-center truncate transition-transform duration-(--duration-base) ease-(--ease-out-quint) hover:scale-[1.03]"
+                  className="flex w-fit items-center truncate transition-transform duration-(--duration-base) ease-(--ease-out-quint) hover:scale-103"
                 >
                   <BrandLogo
                     light={brandAssets.logo_dark?.url ?? null}
@@ -215,7 +212,7 @@ export async function SiteFooter({ locale }: { locale: string }) {
 
                 {footerSocials.length > 0 && (
                   <div className="flex flex-col gap-3">
-                    <p className="text-xs font-semibold tracking-[0.14em] text-secondary-foreground/70 uppercase">
+                    <p className="text-xs font-semibold tracking-caps text-secondary-foreground/70 uppercase">
                       {t("followUs")}
                     </p>
                     <ul className="flex flex-wrap items-center gap-2.5">
@@ -228,7 +225,7 @@ export async function SiteFooter({ locale }: { locale: string }) {
                             // its own paired --primary-foreground ink, which
                             // IS contrast-guaranteed (readableOn in
                             // @repo/theme). Rule 5 permits exactly this.
-                            className="flex size-10 items-center justify-center rounded-full bg-secondary-foreground/10 text-secondary-foreground ring-1 ring-secondary-foreground/15 transition-[background-color,color,transform,box-shadow] duration-(--duration-base) ease-(--ease-out-quint) ring-inset hover:-translate-y-0.5 hover:scale-105 hover:bg-primary hover:text-primary-foreground hover:shadow-lg focus-visible:-translate-y-0.5 focus-visible:bg-primary focus-visible:text-primary-foreground"
+                            className="flex size-10 items-center justify-center rounded-full bg-secondary-foreground/10 text-secondary-foreground ring-1 ring-secondary-foreground/15 transition duration-(--duration-base) ease-(--ease-out-quint) ring-inset hover:-translate-y-0.5 hover:scale-105 hover:bg-primary hover:text-primary-foreground hover:shadow-lg focus-visible:-translate-y-0.5 focus-visible:bg-primary focus-visible:text-primary-foreground"
                             {...(link.openInNewTab
                               ? { target: "_blank", rel: "noopener noreferrer" }
                               : {})}
@@ -279,7 +276,7 @@ export async function SiteFooter({ locale }: { locale: string }) {
                                     [dir] rule of its own. */}
                                 <span
                                   aria-hidden
-                                  className="h-px w-0 shrink-0 bg-current opacity-70 transition-[width,margin] duration-(--duration-base) ease-(--ease-out-quint) group-hover/link:me-2 group-hover/link:w-3 group-focus-visible/link:me-2 group-focus-visible/link:w-3"
+                                  className="h-px w-0 shrink-0 bg-current opacity-70 transition-(--transition-size) duration-(--duration-base) ease-(--ease-out-quint) group-hover/link:me-2 group-hover/link:w-3 group-focus-visible/link:me-2 group-focus-visible/link:w-3"
                                 />
                                 <span className="truncate">{item.label}</span>
                               </NavLink>
@@ -332,7 +329,7 @@ export async function SiteFooter({ locale }: { locale: string }) {
           </div>
 
           {/* ── Band 2: newsletter ───────────────────────────────────── */}
-          {newsletterEnabled && (
+          {newsletterFlag && newsletterPlaced && (
             <div className="border-t border-secondary-foreground/12 py-8">
               {/* .sheen supplies its own position/overflow/isolation, so no
                   Tailwind `relative` here — and nothing that sets `position`
@@ -342,7 +339,7 @@ export async function SiteFooter({ locale }: { locale: string }) {
                   room to travel, and the form is not competing with the
                   sitemap for the same eye. */}
               <div className="sheen rounded-2xl bg-secondary-foreground/[0.06] p-6 ring-1 ring-secondary-foreground/12 ring-inset sm:p-7">
-                <div className="relative z-[2] flex flex-col gap-5 md:flex-row md:items-center md:justify-between md:gap-10">
+                <div className="relative z-2 flex flex-col gap-5 md:flex-row md:items-center md:justify-between md:gap-10">
                   <div className="flex flex-col gap-1.5 md:max-w-lg">
                     <p className="text-base font-semibold text-secondary-foreground">
                       {t("newsletterHeading")}
@@ -354,10 +351,9 @@ export async function SiteFooter({ locale }: { locale: string }) {
                   <div className="w-full md:max-w-sm md:shrink-0">
                     <NewsletterForm
                       tone="onSecondary"
-                      placeholder={t("newsletterPlaceholder")}
-                      label={t("newsletterLabel")}
-                      submitLabel={t("newsletterSubmit")}
-                      unavailableLabel={t("newsletterUnavailable")}
+                      locale={locale}
+                      source="footer"
+                      labels={newsletterFormLabels(t)}
                     />
                   </div>
                 </div>
@@ -373,7 +369,7 @@ export async function SiteFooter({ locale }: { locale: string }) {
               // here a regulator expects to find, and an unlabelled run of
               // 11px prose reads as boilerplate nobody meant to be read.
               <div className="rounded-xl border-s-2 border-secondary-foreground/25 bg-secondary-foreground/[0.04] px-4 py-3.5">
-                <p className="text-xs font-semibold tracking-[0.12em] text-secondary-foreground/70 uppercase">
+                <p className="text-xs font-semibold tracking-caps text-secondary-foreground/70 uppercase">
                   {t("riskDisclaimerLabel")}
                 </p>
                 <p className="mt-1.5 text-xs leading-relaxed text-secondary-foreground/75">

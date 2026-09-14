@@ -27,6 +27,27 @@ export const RESERVED_PATHS = [
   // Public self-registration (ADR-052). Reserved for the same reason
   // sign-in is: a CMS page at this path would shadow the real route.
   "sign-up",
+  // Password recovery (ADR-079, changes-21 F6). Reserved in the SAME PR that
+  // lands the routes, per the ADR-047 precedent — a CMS page at either path
+  // would shadow the screen a reset link points at.
+  "forgot-password",
+  "reset-password",
+  // Announced destinations whose section is still being built (ADR-081 #1).
+  // They are CODED routes rendering `ComingSoon`, not CMS pages: plan v2.2 had
+  // `/tools` down as a STATIC page, which ADR-042 cancelled, so a CMS page at
+  // either path would now shadow a real route.
+  //
+  // Keep double quotes out of the comments in this block:
+  // `check-reserved-paths.mjs` reads the array as TEXT and takes every quoted
+  // run between the brackets for an entry, so a quoted phrase here becomes a
+  // reservation with no route behind it.
+  "tools",
+  "markets",
+  // Newsletter confirm and unsubscribe (ADR-080, changes-21 F7). Reserved in
+  // the SAME PR that lands the routes, per the ADR-047 precedent: the segment
+  // has children, and a CMS page here would shadow the page an unsubscribe
+  // link in an already-sent email points at.
+  "newsletter",
   "admin",
   "api",
   "uploads",
@@ -39,8 +60,11 @@ export const RESERVED_PATHS = [
 /**
  * Segments claimed ahead of their route file landing. A module appends its
  * prefix here in the same PR that claims it — `courses` is GT2's detail
- * route (Phase 5). `tools` is deliberately NOT here: `/tools` is a CMS
- * STATIC page (Phase 7), not a reserved prefix.
+ * route (Phase 5).
+ *
+ * `tools` used to carry a note here saying it was deliberately absent because
+ * `/tools` would be a CMS STATIC page. ADR-042 cancelled that programme and
+ * ADR-081 gave the path a coded route, so it is a RESERVED_PATH above now.
  */
 export const RESERVED_PREFIXES = ["courses"] as const;
 

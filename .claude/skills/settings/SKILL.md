@@ -17,8 +17,18 @@ plan.md Module 05 + architecture doc §3. Cache per ADR-004, tags
   via route guards; flags feed navigation building (Module 08).
 - Seeded keys must cover plan A6 additions: header settings (logo variant per
   mode, CTA, sticky, announcement bar), footer settings (column layout,
-  copyright with `{year}`, risk disclaimer as translatable `legal` setting,
-  newsletter toggle), homepage/layout section config.
+  copyright with `{year}`, risk disclaimer as translatable `legal` setting),
+  homepage/layout section config.
+- **The newsletter toggle is four keys in `email`, not one in `layout`**
+  (ADR-080 #5, changes-21 F7). `footer.newsletterEnabled` was DELETED: it
+  conflated "does signup exist" with "is it in the footer", and it sat in the
+  `layout` group ADR-038 paused in admin, so nobody could reach it. The
+  replacement splits the two questions — the `newsletter` **flag** decides
+  whether signup exists at all, and the four `newsletter.placements.*` keys
+  decide where the form is drawn. Every render site reads BOTH, and
+  `apps/web/app/newsletter-signup.test.ts` fails on one that reads only one or
+  that still names the deleted key. A fifth placement means a source in
+  `NEWSLETTER_SOURCES`, a sibling setting key and a render site, together.
 - Secrets never in settings — env vars referenced by name.
 
 ## Required tests

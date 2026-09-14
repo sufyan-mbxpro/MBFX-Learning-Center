@@ -3,7 +3,7 @@
 // level guard applies to editing a role's permissions the same as to
 // assigning it.
 import { revalidateTag } from "next/cache";
-import { db } from "@repo/db";
+import { db, permissionGroupOrder } from "@repo/db";
 import { canAssignRole, type Subject } from "@repo/rbac";
 import { recordAudit } from "./index.ts";
 import { RoleLevelError } from "./users.ts";
@@ -31,10 +31,19 @@ export async function loadRoleMatrix(): Promise<{
       orderBy: { level: "desc" },
       include: { permissions: { select: { permission: { select: { key: true } } } } },
     }),
-    db.permission.findMany({ orderBy: [{ groupName: "asc" }, { key: "asc" }] }),
+    // `sortOrder` is the seed registry index (ADR-083): within a card the keys
+    // read view → create → update → delete → publish, not alphabetically.
+    // `key` only breaks a tie, which a database seeded before the sort orders
+    // existed produces for every row.
+    db.permission.findMany({ orderBy: [{ sortOrder: "asc" }, { key: "asc" }] }),
   ]);
 
-  const groupNames = [...new Set(permissions.map((p) => p.groupName))];
+  // Group order is the code registry, NOT the alphabet: the cards mirror the
+  // admin sidebar (People → Learning → Content → System). An unregistered
+  // group sorts last rather than disappearing.
+  const groupNames = [...new Set(permissions.map((p) => p.groupName))].sort(
+    (a, b) => permissionGroupOrder(a) - permissionGroupOrder(b) || a.localeCompare(b),
+  );
   return {
     roles: roles.map((r) => ({
       id: r.id,

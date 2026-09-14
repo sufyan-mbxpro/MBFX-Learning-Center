@@ -9,7 +9,8 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { isRouteKey, LEARN_TRACK_KEYS, LEARN_TRACK_SURFACES, ROUTE_PATHS } from "@repo/contracts";
 import en from "@repo/i18n/messages/en.json";
-import { activeSectionHref, learnSectionsFor } from "./learn-sections.ts";
+import { activeSectionHref } from "../../_nav/active-section.ts";
+import { learnSectionsFor } from "./learn-sections.ts";
 
 const PATHS = new Set<string>(Object.values(ROUTE_PATHS));
 
@@ -99,7 +100,7 @@ describe("activeSectionHref", () => {
 // configuration and silently wrong the moment the announcement bar is on.
 describe("the section bar is pinned below the header (ADR-065 §5)", () => {
   const source = readFileSync(
-    fileURLToPath(new URL("../_components/learn-section-nav.tsx", import.meta.url)),
+    fileURLToPath(new URL("../../_components/section-nav.tsx", import.meta.url)),
     "utf8",
   );
 

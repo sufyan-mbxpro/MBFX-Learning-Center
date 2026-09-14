@@ -10,6 +10,9 @@ import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { hash } from "@node-rs/argon2";
 import type { PrismaClient } from "../src/generated/client/client.ts";
+import { EMAIL_TEMPLATE_DEFAULTS } from "../src/email-template-defaults.ts";
+import { CONTENT_LIFECYCLE_GROUPS } from "../src/permission-groups.ts";
+import { isSuperAdminOnlyPermission } from "../src/role-exclusions.ts";
 import defaultThemeTokens from "./default-theme-tokens.json" with { type: "json" };
 import homePageLayout from "./home-page-layout.json" with { type: "json" };
 
@@ -30,52 +33,83 @@ const HOME_PAGE_LAYOUT = homePageLayout;
 // ─────────────────────────────────────────────────────────────
 
 const PERMISSIONS = [
-  // Content
-  ["content", "lessons.view", "View lessons"],
-  ["content", "lessons.create", "Create lessons"],
-  ["content", "lessons.update", "Edit lessons"],
-  ["content", "lessons.delete", "Delete lessons"],
-  ["content", "lessons.publish", "Publish lessons"],
-  ["content", "courses.view", "View courses"],
-  ["content", "courses.create", "Create courses"],
-  ["content", "courses.update", "Edit courses"],
-  ["content", "courses.delete", "Delete courses"],
-  ["content", "courses.publish", "Publish courses"],
-  ["content", "glossary.view", "View glossary"],
-  ["content", "glossary.create", "Create glossary terms"],
-  ["content", "glossary.update", "Edit glossary terms"],
-  ["content", "glossary.delete", "Delete glossary terms"],
-  ["content", "glossary.publish", "Publish glossary terms"],
-  ["content", "analysis.view", "View analysis"],
-  ["content", "analysis.create", "Create analysis"],
-  ["content", "analysis.update", "Edit analysis"],
-  ["content", "analysis.delete", "Delete analysis"],
-  ["content", "analysis.publish", "Publish analysis"],
-  ["content", "news.manage", "Manage news"],
-  ["content", "media.view", "View the media library"],
-  ["content", "media.upload", "Upload media"],
-  ["content", "media.update", "Edit media metadata, replace files"],
-  ["content", "media.delete", "Delete media"],
-  ["content", "comments.moderate", "Moderate comments"],
+  // Learning — /admin/learn/* (courses, lessons, quizzes, videos).
+  // Quizzes (ADR-058 #8) and videos (ADR-068 §3) are gated on the LESSON keys
+  // rather than groups of their own, which is why this card is "Courses &
+  // lessons" and covers four screens.
+  ["learning", "courses.view", "View courses"],
+  ["learning", "courses.create", "Create courses"],
+  ["learning", "courses.update", "Edit courses"],
+  ["learning", "courses.delete", "Delete courses"],
+  ["learning", "courses.publish", "Publish courses"],
+  ["learning", "lessons.view", "View lessons"],
+  ["learning", "lessons.create", "Create lessons"],
+  ["learning", "lessons.update", "Edit lessons"],
+  ["learning", "lessons.delete", "Delete lessons"],
+  ["learning", "lessons.publish", "Publish lessons"],
 
-  // Translations
-  ["translations", "translations.view", "View translations"],
-  ["translations", "translations.update", "Edit translations"],
-  ["translations", "translations.approve", "Approve translations"],
-  ["translations", "locales.manage", "Manage locales"],
+  // Glossary — /admin/glossary and /admin/glossary/topics. A topic IS glossary
+  // data (D27), so it reuses these keys rather than adding three nobody holds.
+  ["glossary", "glossary.view", "View glossary"],
+  ["glossary", "glossary.create", "Create glossary terms"],
+  ["glossary", "glossary.update", "Edit glossary terms"],
+  ["glossary", "glossary.delete", "Delete glossary terms"],
+  ["glossary", "glossary.publish", "Publish glossary terms"],
 
-  // SEO
-  ["seo", "seo.update", "Edit SEO fields"],
-  ["seo", "redirects.manage", "Manage redirects"],
-  ["seo", "sitemaps.manage", "Manage sitemaps"],
+  // Media library — /admin/media
+  ["media", "media.view", "View the media library"],
+  ["media", "media.upload", "Upload media"],
+  ["media", "media.update", "Edit media metadata, replace files"],
+  ["media", "media.delete", "Delete media"],
 
-  // Market data
+  // News & Analysis — /admin/articles (+ its categories and tags). Comments
+  // hang off an article and are moderated nowhere else, so they belong here.
+  ["articles", "analysis.view", "View analysis"],
+  ["articles", "analysis.create", "Create analysis"],
+  ["articles", "analysis.update", "Edit analysis"],
+  ["articles", "analysis.delete", "Delete analysis"],
+  ["articles", "analysis.publish", "Publish analysis"],
+  ["articles", "news.manage", "Manage news"],
+  ["articles", "comments.moderate", "Moderate comments"],
+
+  // Website builder (Module 16 — ADR-021 pages, ADR-027 parts). CANCELLED by
+  // ADR-042 and hidden, not deleted; the keys stay seeded for the same reason
+  // the code does. A part publish is site-wide, hence its own key. The
+  // redirects screen reuses the seeded `redirects.manage`; the media library
+  // reuses `media.*`.
+  ["website", "cms.pages.view", "View website pages"],
+  ["website", "cms.pages.create", "Create website pages"],
+  ["website", "cms.pages.update", "Edit website pages"],
+  ["website", "cms.pages.delete", "Delete website pages"],
+  ["website", "cms.pages.publish", "Publish website pages"],
+  ["website", "cms.parts.publish", "Publish global site parts"],
+  ["website", "cms.styles.manage", "Manage style presets"],
+  ["website", "cms.templates.manage", "Manage layout templates"],
+  ["website", "cms.cards.manage", "Manage card templates"],
+
+  // Market data (Module 13)
   ["market", "market.view", "View market data config"],
   ["market", "market.providers.manage", "Manage data providers"],
   ["market", "market.instruments.manage", "Manage instruments"],
   ["market", "calendar.manage", "Manage economic calendar"],
 
-  // Users
+  // Trading tools (Module 13, ADR-086 #6)
+  ["tools", "tools.view", "View trading tools"],
+  ["tools", "tools.update", "Edit tool content and configuration"],
+  ["tools", "tools.publish", "Enable or disable a tool"],
+
+  // Translations & locales (Module 06)
+  ["translations", "translations.view", "View translations"],
+  ["translations", "translations.update", "Edit translations"],
+  ["translations", "translations.approve", "Approve translations"],
+  ["translations", "locales.manage", "Manage locales"],
+
+  // SEO & redirects
+  ["seo", "seo.update", "Edit SEO fields"],
+  ["seo", "redirects.manage", "Manage redirects"],
+  ["seo", "sitemaps.manage", "Manage sitemaps"],
+
+  // Users & roles — /admin/users, /admin/roles
   ["users", "users.view", "View users"],
   ["users", "users.create", "Create users"],
   ["users", "users.update", "Edit users"],
@@ -86,14 +120,35 @@ const PERMISSIONS = [
   ["users", "roles.manage", "Create and edit roles"],
   ["users", "permissions.assign", "Assign permissions"],
 
-  // Employees
+  // Employees — /admin/employees
   ["employees", "employees.view", "View employees"],
   ["employees", "employees.create", "Add employees"],
   ["employees", "employees.update", "Edit employees"],
   ["employees", "employees.delete", "Remove employees"],
   ["employees", "departments.manage", "Manage departments"],
 
-  // Settings
+  // Newsletter (Module 17, ADR-080 #7). Administration is a list, not a CRM:
+  // view, manage (unsubscribe + the hard erase an erasure request means) and
+  // export, which is separate because it is the one action that leaves the
+  // building with a copy of the addresses.
+  ["newsletter", "newsletter.view", "View newsletter subscribers"],
+  ["newsletter", "newsletter.manage", "Unsubscribe and delete subscribers"],
+  ["newsletter", "newsletter.export", "Export subscribers as CSV"],
+
+  // Email (Module 17, ADR-078). Five keys, split deliberately:
+  // `email.settings.manage` guards the TRANSPORT and is super_admin-only
+  // (ADR-078 #4 — an editable SMTP host is a mail-interception path around
+  // `canAssignRole`'s strict `<`), while editing templates, sending a test and
+  // reading the delivery log stay with `admin`. That is why the email settings
+  // screen splits by permission rather than hiding whole.
+  ["email", "email.settings.manage", "Configure email delivery"],
+  ["email", "email.templates.view", "View email templates"],
+  ["email", "email.templates.update", "Edit email templates"],
+  ["email", "email.templates.test", "Send test emails"],
+  ["email", "email.log.view", "View email delivery log"],
+
+  // Settings & branding — /admin/settings and the screens its sub-nav fronts
+  // (theme, navigation, features, social, integrations).
   ["settings", "settings.view", "View settings"],
   ["settings", "settings.update", "Edit settings"],
   ["settings", "theme.update", "Edit theme and branding"],
@@ -102,21 +157,9 @@ const PERMISSIONS = [
   ["settings", "social.manage", "Manage social links"],
   ["settings", "integrations.manage", "Manage integrations"],
 
-  // Website builder (Module 16 — ADR-021 pages, ADR-027 parts). A part
-  // publish is site-wide, hence its own key. The redirects screen reuses
-  // the seeded `redirects.manage`; the media library reuses `media.*`
-  // (`media.view` / `media.update` land with the library in Phase 3).
-  ["cms", "cms.pages.view", "View website pages"],
-  ["cms", "cms.pages.create", "Create website pages"],
-  ["cms", "cms.pages.update", "Edit website pages"],
-  ["cms", "cms.pages.delete", "Delete website pages"],
-  ["cms", "cms.pages.publish", "Publish website pages"],
-  ["cms", "cms.parts.publish", "Publish global site parts"],
-  ["cms", "cms.styles.manage", "Manage style presets"],
-  ["cms", "cms.templates.manage", "Manage layout templates"],
-  ["cms", "cms.cards.manage", "Manage card templates"],
-
-  // System
+  // System. `analytics.view` stays here rather than under Learning even though
+  // it gates /admin/learn/progress: it also gates the dashboard, and the
+  // sidebar already records why a numbers audience is not an editing one.
   ["system", "audit.view", "View audit logs"],
   ["system", "analytics.view", "View analytics"],
   ["system", "system.maintenance", "Run maintenance tasks"],
@@ -149,10 +192,12 @@ const ROLES: Array<{
     key: "admin",
     name: "Admin",
     level: 90,
-    description: "Full access except editing roles and permissions.",
-    permissions: PERMISSIONS.map(([, key]) => key).filter(
-      (k) => !["roles.manage", "permissions.assign", "users.impersonate"].includes(k),
-    ),
+    description: "Full access except editing roles, permissions, and email delivery.",
+    // The exclusion list is a named constant with a reason per entry
+    // (`../src/role-exclusions.ts`), because it is the sharpest privilege rule
+    // in the repo and `role-exclusions.test.ts` asserts that nothing below
+    // `super_admin` is granted any of it.
+    permissions: PERMISSIONS.map(([, key]) => key).filter((k) => !isSuperAdminOnlyPermission(k)),
   },
   {
     key: "content_manager",
@@ -160,12 +205,24 @@ const ROLES: Array<{
     level: 60,
     description: "Owns the full content lifecycle including publishing.",
     permissions: [
-      ...PERMISSIONS.filter(([g]) => g === "content").map(([, k]) => k),
+      // Every key in the four content groups (ADR-083). This used to read
+      // against the single `content` group they were all cut from; the split
+      // is display-shaped, so the grant set is deliberately identical. A group
+      // added to the registry later does NOT land here on its own — whether a
+      // content manager gets it is a privilege decision.
+      ...PERMISSIONS.filter(([g]) =>
+        (CONTENT_LIFECYCLE_GROUPS as readonly string[]).includes(g),
+      ).map(([, k]) => k),
       "translations.view",
       "translations.update",
       "translations.approve",
       "seo.update",
       "analytics.view",
+      // ADR-086 #6. A content manager writes the words on a tool page but does
+      // not decide which tools the site offers — that is tools.publish, and it
+      // stays with admin, exactly as a header publish does two lines down.
+      "tools.view",
+      "tools.update",
       // Pages, not parts: a header publish stays with admin and above.
       "cms.pages.view",
       "cms.pages.create",
@@ -254,6 +311,7 @@ const ROLES: Array<{
       "market.providers.manage",
       "market.instruments.manage",
       "calendar.manage",
+      "tools.view",
       "settings.view",
       "integrations.manage",
     ],
@@ -285,7 +343,10 @@ const ROLES: Array<{
     name: "Support",
     level: 20,
     description: "Reads user records and resets passwords.",
-    permissions: ["users.view", "users.password.reset", "employees.view"],
+    // `email.log.view` is the answer to "I never got my reset email" — the one
+    // question support is asked that only the delivery log can settle. It reads
+    // the attempt, never the message (ADR-078 #10).
+    permissions: ["users.view", "users.password.reset", "employees.view", "email.log.view"],
   },
   {
     key: "read_only",
@@ -400,7 +461,11 @@ const SETTINGS = [
       // make both promises distinctly (see latest-news.tsx).
       { key: "latest_news", enabled: true, order: 5, variant: "split", limit: 5 },
       { key: "latest_analysis", enabled: true, order: 6, variant: "standard", limit: 3 },
-      { key: "glossary_spotlight", enabled: true, order: 7, variant: "chips", limit: 8 },
+      // changes-28: `cards`, not `chips`. A row of eight term pills under a
+      // two-line heading is a band whose heading is three times the height of
+      // its content — and a chip says nothing to the reader this band exists
+      // for. `cards` shows the plain-language line beside the term.
+      { key: "glossary_spotlight", enabled: true, order: 7, variant: "cards", limit: 8 },
 
       // The seven keys below are seeded but DISABLED, and that is the point:
       // nothing is built behind them, so enabling one renders the dashed
@@ -421,14 +486,25 @@ const SETTINGS = [
       { key: "learning_paths", enabled: false, order: 8, variant: "elevated", limit: 3 },
       { key: "forex_rates", enabled: false, order: 9, variant: "marquee" },
       { key: "economic_events", enabled: false, order: 10, limit: 5 },
-      { key: "popular_tools", enabled: false, order: 11, variant: "default", limit: 4 },
+      // Live as of changes-25 T9. NOTE: this needs `pnpm db:reset` to appear in
+      // an existing database — the homepage rows are create-only.
+      { key: "popular_tools", enabled: true, order: 11, variant: "default", limit: 4 },
       { key: "featured_lessons", enabled: false, order: 12, variant: "default", limit: 3 },
       { key: "market_sentiment", enabled: false, order: 13 },
       { key: "trading_sessions", enabled: false, order: 14 },
 
+      // changes-28 (ADR-093). Placed where the brief's screenshot puts it:
+      // after the reading sections, before the newsletter ask — "here is where
+      // else to find us" reads as a closing offer, not as a second header.
+      // Renders nothing until an admin activates a social link.
+      { key: "connect", enabled: true, order: 14 },
+
       { key: "newsletter", enabled: true, order: 15, variant: "full-width" },
       { key: "faq", enabled: true, order: 16, variant: "accordion", limit: 6 },
-      { key: "risk_disclaimer", enabled: true, order: 17 },
+      // The page closes on a quote, above the risk disclaimer — the last thing
+      // a reader sees before the legal line. `single` is the day's quote.
+      { key: "quotes", enabled: true, order: 17, variant: "single" },
+      { key: "risk_disclaimer", enabled: true, order: 18 },
     ],
     "JSON",
     "Homepage sections",
@@ -479,7 +555,6 @@ const SETTINGS = [
     "Footer menu columns (which menus, in which order)",
     true,
   ],
-  ["layout", "footer.newsletterEnabled", true, "BOOLEAN", "Show newsletter signup in footer", true],
 
   // Public design system (ADR-018 / changes-03-plan.md §5.1). All default to
   // OFF or empty: these add chrome to the public surface, so an install that
@@ -576,7 +651,47 @@ const SETTINGS = [
     "Copyright notice",
     true,
   ],
+
+  // ─── Email (Module 17, ADR-078) ────────────────────────────
+  //
+  // Sender identity and the shell. None of it is public: an email address a
+  // site sends FROM is a spam magnet, and none of these render on a page.
+  // The SMTP credentials are not settings at all — they live in
+  // EmailTransport, super_admin-only, with the password sealed.
+  ["email", "email.enabled", true, "BOOLEAN", "Send email", false],
+  ["email", "email.fromName", "MBX Learning Center", "STRING", "From name", false],
+  ["email", "email.fromEmail", "no-reply@mbxpro.com", "STRING", "From address", false],
+  ["email", "email.replyTo", "", "STRING", "Reply-to address", false],
+  ["email", "email.logo", "", "IMAGE", "Email logo", false],
+  [
+    "email",
+    "email.footerText",
+    "You are receiving this because you have an account with MBX Learning Center.",
+    "TEXT",
+    "Email footer text",
+    false,
+  ],
+  ["email", "email.postalAddress", "", "TEXT", "Postal address (bulk mail)", false],
+
+  // Newsletter placement (ADR-080 #5). The `newsletter` FLAG decides whether
+  // signup exists at all; these decide where it shows. They live in the
+  // `email` group because `layout` is paused in admin (ADR-038), which is how
+  // `footer.newsletterEnabled` became uneditable — changes-21 F7 deleted that
+  // key, so these four are the only placement switches.
+  ["email", "newsletter.placements.footer", true, "BOOLEAN", "Newsletter in the footer", false],
+  ["email", "newsletter.placements.home", true, "BOOLEAN", "Newsletter on the homepage", false],
+  ["email", "newsletter.placements.news", true, "BOOLEAN", "Newsletter on /news", false],
+  ["email", "newsletter.placements.analysis", true, "BOOLEAN", "Newsletter on /analysis", false],
 ] as const;
+
+// ─────────────────────────────────────────────────────────────
+// 4b. EMAIL TEMPLATES (Module 17, ADR-078)
+//
+// The starting CONTENT lives in `../src/email-template-defaults.ts`, not
+// here: the admin's "Reset to default" button needs the same five bodies,
+// and a second copy of them is exactly the drift check:email-templates
+// exists to prevent.
+// ─────────────────────────────────────────────────────────────
 
 // ─────────────────────────────────────────────────────────────
 // 5. FEATURE FLAGS
@@ -645,12 +760,17 @@ const {
 export async function seed(db: PrismaClient) {
   console.log("Seeding…");
 
-  // Permissions
+  // Permissions. `sortOrder` is the registry index, so a card lists its keys
+  // in the order they were written (view → create → update → delete → publish)
+  // rather than alphabetically, where "create" precedes "view" and a reader
+  // scanning a role has to hunt for the one key that grants access at all.
+  let permissionSortOrder = 0;
   for (const [groupName, key, label] of PERMISSIONS) {
+    const sortOrder = permissionSortOrder++;
     await db.permission.upsert({
       where: { key },
-      update: { groupName, label },
-      create: { key, groupName, label },
+      update: { groupName, label, sortOrder },
+      create: { key, groupName, label, sortOrder },
     });
   }
   console.log(`  permissions: ${PERMISSIONS.length}`);
@@ -793,6 +913,39 @@ export async function seed(db: PrismaClient) {
   }
   console.log(`  feature flags: ${FEATURE_FLAGS.length}`);
 
+  // ─── Email templates (Module 17, ADR-078 #5) ───────────────
+  //
+  // Code owns the SET of keys (EMAIL_TEMPLATES in @repo/contracts);
+  // `../src/email-template-defaults.ts` owns the starting CONTENT, because the
+  // admin's "Reset to default" reads the same array.
+  // `scripts/check-email-templates.mjs` fails when the two disagree — neither
+  // file can import the registry, because @repo/db sits upstream of
+  // @repo/contracts.
+  //
+  // Both upserts are create-only on content: an edited template is never
+  // overwritten by a later seed run, exactly like a settings value.
+  for (const template of EMAIL_TEMPLATE_DEFAULTS) {
+    await db.emailTemplate.upsert({
+      where: { key: template.key },
+      update: {},
+      create: { key: template.key },
+    });
+    await db.emailTemplateTranslation.upsert({
+      where: { templateKey_locale: { templateKey: template.key, locale: "en" } },
+      update: {},
+      create: {
+        templateKey: template.key,
+        locale: "en",
+        subject: template.subject,
+        preheader: template.preheader,
+        mode: "RICH",
+        bodyHtml: template.bodyHtml,
+        translationStatus: "TRANSLATED",
+      },
+    });
+  }
+  console.log(`  email templates: ${EMAIL_TEMPLATE_DEFAULTS.length}`);
+
   // Social links
   for (const link of SOCIAL_LINKS) {
     await db.socialLink.upsert({
@@ -846,13 +999,6 @@ export async function seed(db: PrismaClient) {
       icon: "book-a",
       requiresFeature: "glossary",
       sortOrder: 3,
-    },
-    {
-      routeKey: "tools",
-      label: "Tools",
-      icon: "calculator",
-      requiresFeature: "calculators",
-      sortOrder: 4,
     },
     {
       routeKey: "markets",
@@ -1034,6 +1180,94 @@ export async function seed(db: PrismaClient) {
     ],
   }));
 
+  // The eight tools (ADR-086 §9 / changes-25 T9). A TREE rather than a flat
+  // row, so the header gets a mega panel in the same shape as About and the
+  // two schools — three headed columns and a "view all" footer, which
+  // `mega-menu.ts` composes from these route keys.
+  //
+  // Built from TOOL_KEYS rather than typed out, so a ninth tool arrives in the
+  // header from the same edit that registers it. The `title` is the one-line
+  // description the panel renders under each label.
+  // The eight tools (ADR-086 §9 / changes-25 T9). A TREE rather than a flat
+  // row, so the header gets a mega panel in the same shape as About and the
+  // two schools — three headed columns and a "view all" footer, which
+  // `mega-menu.ts` composes from these route keys.
+  //
+  // **Spelled out rather than imported from `TOOLS`.** `@repo/db` does not
+  // depend on `@repo/contracts`, and does not acquire the dependency for a
+  // list of eight labels — the HOME_PAGE_LAYOUT note at the top of this file
+  // is the same call. `contracts/tools.test.ts` is what keeps the two honest:
+  // it fails on a `tool-*` route key with no registered tool, or the reverse.
+  //
+  // The `title` is the one-line description the mega panel renders under
+  // each label.
+  const TOOLS_NAV = {
+    routeKey: "tools",
+    label: "Tools",
+    icon: "calculator",
+    sortOrder: 4,
+    requiresFeature: "calculators",
+    children: [
+      {
+        routeKey: "tool-position-size",
+        label: "Position size",
+        title: "How big a trade your risk allows",
+        icon: "calculator",
+        sortOrder: 1,
+      },
+      {
+        routeKey: "tool-pip-value",
+        label: "Pip value",
+        title: "What one pip is worth to you",
+        icon: "coins",
+        sortOrder: 2,
+      },
+      {
+        routeKey: "tool-gain-loss",
+        label: "Gain & loss",
+        title: "And what it takes to get back to even",
+        icon: "percent",
+        sortOrder: 3,
+      },
+      {
+        routeKey: "tool-pivot-points",
+        label: "Pivot points",
+        title: "Five methods, one table",
+        icon: "git-fork",
+        sortOrder: 4,
+      },
+      {
+        routeKey: "tool-market-hours",
+        label: "Market hours",
+        title: "Which sessions are open right now",
+        icon: "clock",
+        sortOrder: 5,
+      },
+      {
+        routeKey: "tool-currency-converter",
+        label: "Currency converter",
+        title: "And what a markup really costs",
+        icon: "arrow-left-right",
+        requiresFeature: "currency_converter",
+        sortOrder: 6,
+      },
+      {
+        routeKey: "tool-correlation",
+        label: "Correlation",
+        title: "Which pairs move together",
+        icon: "grid-3x3",
+        sortOrder: 7,
+      },
+      {
+        routeKey: "tool-risk-sentiment",
+        label: "Risk on / risk off",
+        title: "Where the market has been leaning",
+        icon: "gauge",
+        sortOrder: 8,
+      },
+    ],
+  };
+
   /**
    * A root row and its children, matched the way every row above is: the
    * parent on [menuId, routeKey, parentId: null], the children on the same
@@ -1113,7 +1347,7 @@ export async function seed(db: PrismaClient) {
     }
   }
 
-  for (const tree of [...TRACK_NAV, ABOUT_NAV]) await upsertNavTree(tree);
+  for (const tree of [...TRACK_NAV, ABOUT_NAV, TOOLS_NAV]) await upsertNavTree(tree);
 
   // Footer menus — referenced by the footer.menuColumns setting (A6).
   //
@@ -2577,7 +2811,7 @@ export async function seed(db: PrismaClient) {
   //
   // ─── Why almost every demo topic has a body and no video ─────────────────
   //
-  // `_content/home-videos.ts` records the rule and the reason: a video URL is a
+  // ADR-047 §3 records the rule and the reason: a video URL is a
   // FACTUAL CLAIM — it asserts "this specific recording exists and teaches
   // this" — and an invented eleven-character id resolves to whatever happens to
   // occupy it. So these rows do not invent one. The capability rule in
@@ -3405,6 +3639,420 @@ export async function seed(db: PrismaClient) {
     });
   }
   console.log("  cms pages: news-collection (published, PR 4.4 migration)");
+
+  // ─────────────────────────────────────────────────────────────
+  // Market platform + trading tools (Module 13, ADR-086 / ADR-087)
+  // ─────────────────────────────────────────────────────────────
+  //
+  // Create-only on content, like every other seeded row: an admin who renames
+  // an instrument or rewrites a tool's intro keeps their words through the next
+  // seed run.
+
+  // The provider is seeded MANUAL and DISABLED. A fresh clone must not reach
+  // for a network on first boot, and every rate-backed tool degrades to a
+  // labelled empty state rather than an error (ADR-087 #11).
+  await db.marketProvider.upsert({
+    where: { id: "default" },
+    update: {},
+    create: { id: "default", driver: "MANUAL", isEnabled: false },
+  });
+
+  const MAJOR_CURRENCIES: [string, string][] = [
+    ["USD", "US Dollar"],
+    ["EUR", "Euro"],
+    ["GBP", "British Pound"],
+    ["JPY", "Japanese Yen"],
+    ["CHF", "Swiss Franc"],
+    ["AUD", "Australian Dollar"],
+    ["CAD", "Canadian Dollar"],
+    ["NZD", "New Zealand Dollar"],
+  ];
+
+  const PAIRS: [string, string, string][] = [
+    ["EUR/USD", "EUR", "USD"],
+    ["GBP/USD", "GBP", "USD"],
+    ["USD/JPY", "USD", "JPY"],
+    ["USD/CHF", "USD", "CHF"],
+    ["AUD/USD", "AUD", "USD"],
+    ["USD/CAD", "USD", "CAD"],
+    ["NZD/USD", "NZD", "USD"],
+    ["EUR/GBP", "EUR", "GBP"],
+    ["EUR/JPY", "EUR", "JPY"],
+    ["GBP/JPY", "GBP", "JPY"],
+    ["EUR/CHF", "EUR", "CHF"],
+    ["AUD/JPY", "AUD", "JPY"],
+  ];
+
+  const OTHER_INSTRUMENTS: [string, string, string, string, string][] = [
+    // symbol, name, kind, base, quote
+    ["XAU/USD", "Gold", "METAL", "XAU", "USD"],
+    ["XAG/USD", "Silver", "METAL", "XAG", "USD"],
+    ["BTC/USD", "Bitcoin", "CRYPTO", "BTC", "USD"],
+    ["ETH/USD", "Ethereum", "CRYPTO", "ETH", "USD"],
+    ["SPX/USD", "S&P 500", "INDEX", "SPX", "USD"],
+    ["NDX/USD", "Nasdaq 100", "INDEX", "NDX", "USD"],
+    ["WTI/USD", "Crude Oil (WTI)", "COMMODITY", "WTI", "USD"],
+    ["DXY/USD", "US Dollar Index", "INDEX", "DXY", "USD"],
+  ];
+
+  let instrumentOrder = 0;
+  const instrumentIdBySymbol = new Map<string, string>();
+
+  async function seedInstrument(input: {
+    symbol: string;
+    displayName: string;
+    kind: "CURRENCY" | "PAIR" | "CRYPTO" | "METAL" | "INDEX" | "COMMODITY";
+    base: string | null;
+    quote: string | null;
+    decimals: number;
+  }) {
+    const row = await db.marketInstrument.upsert({
+      where: { symbol: input.symbol },
+      update: {},
+      create: {
+        symbol: input.symbol,
+        displayName: input.displayName,
+        kind: input.kind,
+        base: input.base,
+        quote: input.quote,
+        decimals: input.decimals,
+        sortOrder: instrumentOrder++,
+      },
+    });
+    instrumentIdBySymbol.set(input.symbol, row.id);
+  }
+
+  for (const [code, name] of MAJOR_CURRENCIES) {
+    await seedInstrument({
+      symbol: code,
+      displayName: name,
+      kind: "CURRENCY",
+      // A CURRENCY row is quoted against USD, which is what lets
+      // getRateSnapshot place it without a second table (ADR-087 #1).
+      base: code,
+      quote: "USD",
+      decimals: code === "JPY" ? 3 : 5,
+    });
+  }
+  for (const [symbol, base, quote] of PAIRS) {
+    await seedInstrument({
+      symbol,
+      displayName: symbol,
+      kind: "PAIR",
+      base,
+      quote,
+      decimals: quote === "JPY" ? 3 : 5,
+    });
+  }
+  for (const [symbol, displayName, kind, base, quote] of OTHER_INSTRUMENTS) {
+    await seedInstrument({
+      symbol,
+      displayName,
+      kind: kind as "CRYPTO" | "METAL" | "INDEX" | "COMMODITY",
+      base,
+      quote,
+      decimals: 2,
+    });
+  }
+  console.log(
+    `  market instruments: ${MAJOR_CURRENCIES.length + PAIRS.length + OTHER_INSTRUMENTS.length}` +
+      " (provider: MANUAL, disabled)",
+  );
+
+  // ─── The eight tools ─────────────────────────────────────────
+  //
+  // ADR-086 #1: the SET is code (TOOL_KEYS) and the CONTENT is data. These
+  // rows are the starting content — every word below is admin-editable, and
+  // none of the behaviour is.
+
+  const id = (symbol: string) => instrumentIdBySymbol.get(symbol) ?? "";
+  const currencyIds = MAJOR_CURRENCIES.map(([code]) => id(code)).filter(Boolean);
+  const pairIds = PAIRS.map(([symbol]) => id(symbol)).filter(Boolean);
+
+  const TOOL_SEEDS: {
+    key: string;
+    sortOrder: number;
+    title: string;
+    tagline: string;
+    intro: string;
+    body: string;
+    config: unknown;
+  }[] = [
+    {
+      key: "position-size",
+      sortOrder: 0,
+      title: "Position Size Calculator",
+      tagline: "Work out how big a trade can be before it risks more than you meant.",
+      intro:
+        "<p>Decide what you are willing to lose first, and let the position size follow from it. " +
+        "Tell us your account balance, the share of it you are prepared to risk, and how far away " +
+        "your stop loss sits — and we will tell you how many units that allows.</p>",
+      body:
+        "<h2>About the Position Size Calculator</h2>" +
+        "<p>Position size is the one decision that is entirely yours. The market decides whether a " +
+        "trade wins; you decide how much it costs when it loses.</p>" +
+        "<p>The arithmetic is short. The amount at risk is your balance multiplied by your risk " +
+        "percentage. Divide that by the stop-loss distance in pips, and again by the value of one " +
+        "pip, and what is left is the position size that makes those two numbers agree.</p>" +
+        "<p>When your account currency is not the pair's quote currency, one more step is needed: " +
+        "the pip value has to be converted. We show that conversion rather than folding it away, " +
+        "because it is the step most spreadsheets get wrong.</p>",
+      config: {
+        defaultAccountCurrency: "USD",
+        defaultPairId: id("EUR/USD"),
+        defaultRiskPercent: 1,
+        minRiskPercent: 0.1,
+        maxRiskPercent: 10,
+        pairIds,
+        accountCurrencyIds: currencyIds,
+      },
+    },
+    {
+      key: "pip-value",
+      sortOrder: 1,
+      title: "Pip Value Calculator",
+      tagline: "What one pip is worth on your position, in your own currency.",
+      intro:
+        "<p>A pip is the smallest ordinary move in a currency pair. What it is <em>worth</em> " +
+        "depends on how much you are trading and what currency your account is held in — which is " +
+        "why the same one-pip move can be ten dollars or nine euros.</p>",
+      body:
+        "<h2>About the Pip Value Calculator</h2>" +
+        "<p>For most pairs a pip is 0.0001. For pairs quoted in Japanese yen it is 0.01, because " +
+        "the yen is quoted to two decimal places rather than four.</p>" +
+        "<p>Multiply the pip size by your position size in units, and you have the value of a pip " +
+        "in the pair's quote currency. If your account is held in a different currency, that " +
+        "figure is converted at the current rate.</p>",
+      config: {
+        defaultAccountCurrency: "USD",
+        defaultPairId: id("EUR/USD"),
+        defaultUnits: 100000,
+        pairIds,
+        accountCurrencyIds: currencyIds,
+      },
+    },
+    {
+      key: "gain-loss",
+      sortOrder: 2,
+      title: "Gain & Loss Percentage Calculator",
+      tagline: "Tell us one of the three figures and we will work out the other two.",
+      intro:
+        "<p>Give us where you started and any one of: the amount you made or lost, the percentage, " +
+        "or where you ended up. We will fill in the rest — and tell you what it takes to get back " +
+        "to level.</p>",
+      body:
+        "<h2>About gains, losses, and getting back to even</h2>" +
+        "<p>Losses and gains are not symmetrical, and this is the tool that shows it. Lose 50% of " +
+        "an account and a 50% gain does not restore it: you need 100%, because the gain is earned " +
+        "on the smaller balance that is left.</p>" +
+        "<p>That asymmetry is the whole argument for position sizing. A string of small, survivable " +
+        "losses is recoverable arithmetic. A large one is not.</p>",
+      config: { defaultStartBalance: 10000, decimals: 2 },
+    },
+    {
+      key: "pivot-points",
+      sortOrder: 3,
+      title: "Pivot Point Calculator",
+      tagline: "Five methods, computed from the last completed period.",
+      intro:
+        "<p>Pivot points turn one period's high, low, open and close into a set of levels for the " +
+        "next one. Pick an interval and a symbol and we will fill the figures in, or enter your " +
+        "own.</p>",
+      body:
+        "<h2>About Pivot Points</h2>" +
+        "<p>Five methods are offered, and they disagree with each other on purpose.</p>" +
+        "<p><strong>Floor</strong> is the classic: the pivot is the average of the high, the low " +
+        "and the close, and the supports and resistances are reflected around it.</p>" +
+        "<p><strong>Woodie</strong> weights the opening price double, so the pivot leans toward " +
+        "where the period began rather than where it ended.</p>" +
+        "<p><strong>Camarilla</strong> is the only method with four levels a side, and its levels " +
+        "are measured from the close rather than from the pivot.</p>" +
+        "<p><strong>DeMark</strong> gives one level a side, and which formula it uses depends on " +
+        "whether the period closed above or below its open.</p>" +
+        "<p><strong>Fibonacci</strong> places its levels at 38.2%, 61.8% and 100% of the period's " +
+        "range, measured from the pivot.</p>" +
+        "<p>Levels are computed from the last COMPLETED period, never from one still trading. A " +
+        "level recalculated every hour out of a half-formed bar is not a level anyone can plan " +
+        "against.</p>",
+      config: {
+        intervals: ["1D", "1W", "1M", "1Y"],
+        defaultInterval: "1D",
+        symbolIds: pairIds,
+        defaultSymbolId: id("EUR/USD"),
+      },
+    },
+    {
+      key: "market-hours",
+      sortOrder: 4,
+      title: "Forex Market Hours",
+      tagline: "Which sessions are open right now, in your own timezone.",
+      intro:
+        "<p>The currency market runs around the clock from Sydney's Sunday open to New York's " +
+        "Friday close, but it is not equally busy throughout. Four sessions overlap in turn, and " +
+        "the overlaps are where most of the volume is.</p>",
+      body:
+        "<h2>About the trading sessions</h2>" +
+        "<p>All four session times are shown in the timezone you pick, and they follow daylight " +
+        "saving automatically — which is why London's hours shift against Tokyo's twice a year " +
+        "even though Tokyo never changes its clocks.</p>" +
+        "<p>The busiest window is the London/New York overlap, when the two largest sessions are " +
+        "open at once. The quietest is the gap between the New York close and the Tokyo open.</p>" +
+        "<p>The market is shut across the weekend. The gap is bounded by two local times, not by " +
+        "a UTC midnight, so it opens and closes at a different clock hour depending where you " +
+        "are reading this.</p>",
+      config: {
+        sessions: [
+          {
+            name: "Sydney",
+            city: "Sydney",
+            timeZone: "Australia/Sydney",
+            open: "07:00",
+            close: "16:00",
+          },
+          { name: "Tokyo", city: "Tokyo", timeZone: "Asia/Tokyo", open: "09:00", close: "18:00" },
+          {
+            name: "London",
+            city: "London",
+            timeZone: "Europe/London",
+            open: "08:00",
+            close: "17:00",
+          },
+          {
+            name: "New York",
+            city: "New York",
+            timeZone: "America/New_York",
+            open: "08:00",
+            close: "17:00",
+          },
+        ],
+        mediumVolumeFrom: 2,
+        highVolumeFrom: 3,
+      },
+    },
+    {
+      key: "currency-converter",
+      sortOrder: 5,
+      title: "Currency Converter",
+      tagline: "Convert between currencies, and see what a markup really costs.",
+      intro:
+        "<p>Convert any amount between the major currencies at the mid-market rate — and then see " +
+        "what a bank, an ATM, a card or an airport kiosk would typically hand you instead.</p>",
+      body:
+        "<h2>About the rates you are shown</h2>" +
+        "<p>The mid-market rate is the midpoint between what buyers are offering and what sellers " +
+        "are asking. It is the rate quoted in the news, and it is not a rate you can get.</p>" +
+        "<p>The other four options apply a typical markup to that rate. They are estimates, not " +
+        "quotes, and they are not attributed to any named provider — what a particular bank or " +
+        "kiosk charges you on a particular day is between you and them. The figures exist to show " +
+        "the SHAPE of the cost, which is usually larger than people expect.</p>" +
+        "<p>Rates come from the last completed daily close, and the page says when that was.</p>",
+      config: {
+        currencyIds,
+        defaultFrom: "USD",
+        defaultTo: "EUR",
+        defaultAmount: 100,
+        decimals: 2,
+        rateMarkups: { bank: 3, atm: 4, card: 2.5, kiosk: 7 },
+        offeredRateTypes: ["market", "bank", "atm", "card", "kiosk"],
+      },
+    },
+    {
+      key: "correlation",
+      sortOrder: 6,
+      title: "Currency Correlation",
+      tagline: "Which pairs move together, and which move apart.",
+      intro:
+        "<p>Two positions in strongly correlated pairs are closer to one position than two. This " +
+        "grid shows how closely each pair has moved with the others over the window you pick.</p>",
+      body:
+        "<h2>What the numbers mean</h2>" +
+        "<p>Each cell is a correlation coefficient between −1 and +1. At +1 the two pairs have " +
+        "moved in lockstep; at −1 they have moved exactly opposite; near 0 their moves have been " +
+        "unrelated.</p>" +
+        "<p>We correlate daily <em>returns</em>, not prices. That distinction matters more than it " +
+        "sounds: two pairs that are both drifting upward will look correlated at the price level " +
+        "even when their day-to-day moves have nothing to do with each other.</p>" +
+        "<p>A cell with too little history shows a dash rather than a number. A coefficient " +
+        "computed from a handful of days is not a small measurement, it is a wrong one.</p>" +
+        "<p>These figures describe a window that has already closed. They are updated once a day " +
+        "and are not a forecast.</p>",
+      config: {
+        windows: ["5d", "10d", "30d", "60d", "90d", "180d", "250d"],
+        defaultWindow: "30d",
+        instrumentIds: pairIds,
+      },
+    },
+    {
+      key: "risk-sentiment",
+      sortOrder: 7,
+      title: "Risk-On / Risk-Off Meter",
+      tagline: "Whether the market has been reaching for risk, or away from it.",
+      intro:
+        "<p>A single score from 0 to 100, built from how a basket of markets has moved relative to " +
+        "its own recent history. High is risk-on; low is risk-off.</p>",
+      body:
+        "<h2>How the score is built</h2>" +
+        "<p>Each market in the basket is scored by where its latest move sits within its own " +
+        "recent range — its percentile rank. A market that usually moves half a percent and has " +
+        "just moved two ranks near the top of its own history, whatever the absolute number.</p>" +
+        "<p>Markets that rise when risk is being taken on — equity indices, commodity currencies — " +
+        "score as they rank. Markets that rise when risk is coming off — gold, the yen — have " +
+        "their rank flipped before it is counted. The weighted average of what is left is the " +
+        "score.</p>" +
+        "<p>A market with too little history is left out and counted, never filled in with a zero. " +
+        "A zero would be a claim that the market was neutral; leaving it out is the truth, which " +
+        "is that we do not know.</p>" +
+        "<p>The score is updated once a day. It describes what has already happened, it is not a " +
+        "forecast, and it is not a recommendation to do anything.</p>",
+      config: {
+        components: [
+          { instrumentId: id("SPX/USD"), weight: 3, direction: "risk-on" },
+          { instrumentId: id("NDX/USD"), weight: 2, direction: "risk-on" },
+          { instrumentId: id("AUD/USD"), weight: 2, direction: "risk-on" },
+          { instrumentId: id("WTI/USD"), weight: 1, direction: "risk-on" },
+          { instrumentId: id("XAU/USD"), weight: 2, direction: "risk-off" },
+          { instrumentId: id("USD/JPY"), weight: 2, direction: "risk-off" },
+          { instrumentId: id("USD/CHF"), weight: 1, direction: "risk-off" },
+        ].filter((c) => c.instrumentId !== ""),
+        lookbackDays: 60,
+        riskOffBelow: 35,
+        riskOnAbove: 65,
+      },
+    },
+  ];
+
+  for (const tool of TOOL_SEEDS) {
+    const row = await db.tool.upsert({
+      where: { key: tool.key },
+      update: {},
+      create: {
+        key: tool.key,
+        isEnabled: true,
+        sortOrder: tool.sortOrder,
+        config: tool.config as never,
+        relatedCount: 6,
+        showRelated: true,
+      },
+    });
+    await db.toolTranslation.upsert({
+      where: { toolId_locale: { toolId: row.id, locale: "en" } },
+      update: {},
+      create: {
+        toolId: row.id,
+        locale: "en",
+        title: tool.title,
+        tagline: tool.tagline,
+        intro: tool.intro,
+        body: tool.body,
+        // The source locale is not a translation OF anything, so it is the
+        // only one that is never OUTDATED. TRANSLATED is the settled state.
+        translationStatus: "TRANSLATED",
+        seoTitle: tool.title,
+        seoDescription: tool.tagline,
+      },
+    });
+  }
+  console.log(`  tools: ${TOOL_SEEDS.length} (all enabled)`);
 
   console.log("Done.");
 }

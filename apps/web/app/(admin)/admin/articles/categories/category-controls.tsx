@@ -8,6 +8,7 @@
 import { useMemo, useState } from "react";
 import { FolderTree, Pencil, Plus, Trash2 } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
+import { createArticleCategorySchema, saveArticleCategoryTranslationSchema } from "@repo/contracts";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { ConfirmDialog } from "@repo/ui/components/confirm-dialog";
@@ -21,8 +22,8 @@ import {
   DialogTitle,
 } from "@repo/ui/components/dialog";
 import { Empty, EmptyDescription, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
+import { Field, FieldError, FieldGroup, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
-import { Label } from "@repo/ui/components/label";
 import { Switch } from "@repo/ui/components/switch";
 import { Textarea } from "@repo/ui/components/textarea";
 import {
@@ -33,6 +34,7 @@ import {
 } from "../../_actions/article-actions.ts";
 import { AdminCombobox } from "../../_components/combobox.tsx";
 import { useClientTable } from "../../_hooks/use-client-table.ts";
+import { useFieldErrors } from "../../_hooks/use-field-errors.ts";
 import { useServerAction } from "../../_hooks/use-server-action.ts";
 
 export interface CategoryTranslationRow {
@@ -133,30 +135,46 @@ function CategoryEditDialog({
     setForm(category?.translations.find((t) => t.locale === next) ?? EMPTY_TRANSLATION(next));
   };
 
+  // ADR-077 — the values each action receives, validated with that action's
+  // own schema: create sends the name alone, edit the full translation.
+  const createInput = { name: form.name.trim() };
+  const saveInput = category
+    ? {
+        categoryId: category.id,
+        locale,
+        name: form.name.trim(),
+        slug: form.slug || undefined,
+        description: form.description || null,
+        seoTitle: form.seoTitle || null,
+        seoDescription: form.seoDescription || null,
+      }
+    : null;
+  const fields = useFieldErrors(
+    saveInput ? saveArticleCategoryTranslationSchema : createArticleCategorySchema,
+    saveInput ?? createInput,
+  );
+
+  const changeOpen = (next: boolean) => {
+    if (!next) fields.reset();
+    onOpenChange(next);
+  };
+
   const submit = () => {
-    if (!category) {
-      run(() => createArticleCategoryAction({ name: form.name.trim() }), {
-        onDone: () => onOpenChange(false),
+    if (!fields.validate()) return;
+    if (!saveInput) {
+      run(() => createArticleCategoryAction(createInput), {
+        onDone: () => changeOpen(false),
       });
       return;
     }
-    run(
-      () =>
-        saveArticleCategoryTranslationAction({
-          categoryId: category.id,
-          locale,
-          name: form.name.trim(),
-          slug: form.slug || undefined,
-          description: form.description || null,
-          seoTitle: form.seoTitle || null,
-          seoDescription: form.seoDescription || null,
-        }),
-      { successMessage: labels.saved, onDone: () => onOpenChange(false) },
-    );
+    run(() => saveArticleCategoryTranslationAction(saveInput), {
+      successMessage: labels.saved,
+      onDone: () => changeOpen(false),
+    });
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={changeOpen}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{category ? labels.edit : labels.newCategory}</DialogTitle>
@@ -164,71 +182,72 @@ function CategoryEditDialog({
             {category ? labels.editDescription : labels.newCategoryDescription}
           </DialogDescription>
         </DialogHeader>
-        <div className="flex flex-col gap-3">
+        <FieldGroup>
           {category && (
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="category-locale">{labels.locale}</Label>
+            <Field invalid={fields.invalid("locale")} required>
+              <FieldLabel>{labels.locale}</FieldLabel>
               <AdminCombobox
-                id="category-locale"
                 value={locale}
                 onValueChange={(next) => switchLocale(next || locale)}
                 options={locales.map((l) => ({ value: l.code, label: l.label }))}
               />
-            </div>
+              <FieldError>{fields.error("locale")}</FieldError>
+            </Field>
           )}
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="category-name">{labels.name}</Label>
+          <Field invalid={fields.invalid("name")} required>
+            <FieldLabel>{labels.name}</FieldLabel>
             <Input
-              id="category-name"
               value={form.name}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
             />
-          </div>
+            <FieldError>{fields.error("name")}</FieldError>
+          </Field>
           {category && (
             <>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="category-slug">{labels.slug}</Label>
+              <Field invalid={fields.invalid("slug")}>
+                <FieldLabel>{labels.slug}</FieldLabel>
                 <Input
-                  id="category-slug"
                   value={form.slug}
                   onChange={(e) => setForm((f) => ({ ...f, slug: e.target.value }))}
                 />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="category-description">{labels.description}</Label>
+                <FieldError>{fields.error("slug")}</FieldError>
+              </Field>
+              <Field invalid={fields.invalid("description")}>
+                <FieldLabel>{labels.description}</FieldLabel>
                 <Textarea
-                  id="category-description"
                   rows={2}
                   value={form.description ?? ""}
                   onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
                 />
-              </div>
+                <FieldError>{fields.error("description")}</FieldError>
+              </Field>
               <h3 className="text-sm font-semibold">{labels.seoOptional}</h3>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="category-seo-title">{labels.seoTitle}</Label>
+              <Field invalid={fields.invalid("seoTitle")}>
+                <FieldLabel>{labels.seoTitle}</FieldLabel>
                 <Input
-                  id="category-seo-title"
                   value={form.seoTitle ?? ""}
                   onChange={(e) => setForm((f) => ({ ...f, seoTitle: e.target.value }))}
                 />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="category-seo-description">{labels.seoDescription}</Label>
+                <FieldError>{fields.error("seoTitle")}</FieldError>
+              </Field>
+              <Field invalid={fields.invalid("seoDescription")}>
+                <FieldLabel>{labels.seoDescription}</FieldLabel>
                 <Textarea
-                  id="category-seo-description"
                   rows={2}
                   value={form.seoDescription ?? ""}
                   onChange={(e) => setForm((f) => ({ ...f, seoDescription: e.target.value }))}
                 />
-              </div>
+                <FieldError>{fields.error("seoDescription")}</FieldError>
+              </Field>
             </>
           )}
-        </div>
+        </FieldGroup>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
+          <Button variant="outline" onClick={() => changeOpen(false)} disabled={pending}>
             {labels.cancel}
           </Button>
-          <Button onClick={submit} disabled={pending || form.name.trim() === ""}>
+          {/* Enabled with no name: pressing it names the field (F-07). */}
+          <Button onClick={submit} loading={pending}>
             {labels.save}
           </Button>
         </DialogFooter>
@@ -350,7 +369,7 @@ export function CategoriesManager({
                   variant="ghost"
                   size="icon-sm"
                   aria-label={`${labels.delete}: ${row.original.name ?? ""}`}
-                  className="text-destructive"
+                  className="text-destructive-interactive"
                 >
                   <Trash2 aria-hidden />
                 </Button>

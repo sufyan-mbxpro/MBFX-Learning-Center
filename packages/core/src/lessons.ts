@@ -367,6 +367,11 @@ export async function saveLesson(actor: Subject, input: LessonInput): Promise<vo
 
     await replaceAttachments(tx, input.lessonId, input.attachments);
     await syncLessonMediaReferences(tx, input.lessonId);
+
+    // `visibility` is editable here, and since changes-22 it is one of the
+    // three things `Course.lessonCount` counts — so a save that gates a
+    // lesson has to recount, exactly as a save that deletes one already did.
+    await recomputeLessonCount(tx, courseId);
   });
 
   // Outside the transaction, matching saveArticleTranslation's split: a
@@ -520,6 +525,12 @@ export async function moveLesson(
     for (const [position, row] of ordered.entries()) {
       await tx.lesson.update({ where: { id: row.id }, data: { sortOrder: position } });
     }
+
+    // The move stays inside one course, but not necessarily inside one
+    // VISIBILITY: dragging a published lesson into a section that is not
+    // published takes it off the public curriculum, and since changes-22 the
+    // count follows what the curriculum shows.
+    await recomputeLessonCount(tx, target.courseId);
   });
 
   await recordAudit({

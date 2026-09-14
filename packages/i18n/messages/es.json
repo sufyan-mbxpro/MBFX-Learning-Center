@@ -66,28 +66,9 @@
     "videoLead": "Lecciones breves que se construyen en orden: qué es el mercado, cómo leerlo y cómo dimensionar una operación antes de abrirla.",
     "videoAll": "Todos los cursos",
     "videoPlay": "Reproducir: {title}",
-    "videoSoon": "Grabación en camino",
     "videoCarouselLabel": "Vídeos de aprendizaje",
     "videoCarouselPrevious": "Vídeos anteriores",
     "videoCarouselNext": "Más vídeos",
-    "videoBasicsTitle": "Qué es realmente el mercado de divisas",
-    "videoBasicsBody": "Quién opera divisas, por qué un par tiene dos precios y qué compras en realidad al comprar EUR/USD.",
-    "videoBasicsLevel": "Empieza aquí",
-    "videoCandlesticksTitle": "Leer un gráfico de velas",
-    "videoCandlesticksBody": "Apertura, máximo, mínimo y cierre: lo que una sola vela puede y no puede decirte sobre la siguiente.",
-    "videoCandlesticksLevel": "Principiante",
-    "videoRiskTitle": "Tamaño de posición y riesgo",
-    "videoRiskBody": "Decidir cuánto puede costarte una operación antes de tomarla, y la aritmética que convierte esa decisión en un lotaje.",
-    "videoRiskLevel": "Imprescindible",
-    "videoLevelsTitle": "Soportes, resistencias y estructura",
-    "videoLevelsBody": "Por qué el precio duda dos veces en el mismo sitio, cómo marcar un nivel con honestidad y cuándo deja de importar.",
-    "videoLevelsLevel": "Intermedio",
-    "videoPlanTitle": "Construir un plan de trading",
-    "videoPlanBody": "Convertir un setup que te gusta en reglas escritas: entrada, invalidación, objetivo y los días en que no operas.",
-    "videoPlanLevel": "Intermedio",
-    "videoPsychologyTitle": "Por qué se abandonan los buenos planes",
-    "videoPsychologyBody": "Los momentos predecibles en que falla la disciplina y los pequeños cambios de proceso que dificultan fallar.",
-    "videoPsychologyLevel": "Avanzado",
     "highlightsEyebrow": "Cómo enseñamos",
     "highlightsTitle": "Hecho para entenderse, no para impresionar",
     "highlightsLead": "Seis compromisos que dan forma a cada lección, artículo y definición de este sitio.",
@@ -134,7 +115,26 @@
     "backToTop": "Volver arriba",
     "home": "Inicio",
     "breadcrumb": "Ruta de navegación",
-    "signUp": "Registrarse"
+    "signUp": "Registrarse",
+    "appearance": "Apariencia",
+    "mega": {
+      "about": {
+        "company": "Empresa",
+        "howWeWork": "Cómo trabajamos",
+        "help": "Ayuda"
+      },
+      "viewAll": "Ver todo",
+      "learn": {
+        "study": "Formación",
+        "practise": "Practicar y consultar",
+        "more": "Más aprendizaje"
+      },
+      "tools": {
+        "position": "Position & risk",
+        "timing": "Market timing",
+        "rates": "Rates & relationships"
+      }
+    }
   },
   "footer": {
     "newsletterHeading": "Mantente informado",
@@ -149,9 +149,14 @@
     "newsletterPlaceholder": "tu@ejemplo.com",
     "newsletterLabel": "Correo electrónico",
     "newsletterSubmit": "Suscribirse",
-    "newsletterUnavailable": "La suscripción al boletín estará disponible pronto.",
     "followUs": "Síguenos",
-    "riskDisclaimerLabel": "Aviso de riesgo"
+    "riskDisclaimerLabel": "Aviso de riesgo",
+    "newsletterConsent": "Primero te enviamos un enlace de confirmación. Puedes darte de baja cuando quieras; nunca enviamos spam.",
+    "newsletterSent": "Ya casi está: revisa tu correo y abre el enlace de confirmación.",
+    "newsletterInvalid": "Eso no parece una dirección de correo válida.",
+    "newsletterLimited": "Demasiados intentos. Inténtalo de nuevo en unos minutos.",
+    "newsletterFailed": "Algo ha ido mal. Inténtalo de nuevo.",
+    "newsletterPending": "Suscribiendo…"
   },
   "glossary": {
     "title": "Glosario",
@@ -183,7 +188,6 @@
     "categories": "Categorías",
     "latestPosts": "Publicaciones recientes",
     "popularTags": "Etiquetas populares",
-    "archives": "Archivo",
     "subscribeTitle": "Suscríbete a las últimas novedades",
     "subscribeBody": "Nuevos análisis y formación de mercado, directamente en tu correo.",
     "shareLabel": "Compartir",
@@ -232,7 +236,9 @@
     "signUpFailed": "No pudimos crear tu cuenta. Revisa tus datos e inténtalo de nuevo.",
     "emailTaken": "Ya existe una cuenta con este correo electrónico.",
     "haveAccount": "¿Ya tienes una cuenta?",
-    "signInLink": "Iniciar sesión"
+    "signInLink": "Iniciar sesión",
+    "showPassword": "Mostrar contraseña",
+    "hidePassword": "Ocultar contraseña"
   },
   "admin": {
     "navPeople": "Personas",
@@ -453,13 +459,10 @@
     "dashboardActiveEmployees": "Empleados activos",
     "dashboardFeatureFlags": "Funciones activadas",
     "dashboardSettings": "Ajustes configurados",
-    "dashboardActiveMenuItems": "Elementos de menú activos",
     "dashboardGrowthChart": "Resumen de crecimiento",
     "dashboardGrowthChartDescription": "Usuarios nuevos y artículos publicados durante el periodo seleccionado",
     "dashboardUsersSeries": "Usuarios nuevos",
     "dashboardArticlesSeries": "Artículos publicados",
-    "dashboardArticleStatus": "Flujo de artículos",
-    "dashboardArticleStatusDescription": "Todos los artículos según su estado actual",
     "dashboardRecentActivity": "Actividad reciente",
     "dashboardRecentActivityDescription": "Últimas acciones auditadas en el portal de administración",
     "dashboardActivityEmpty": "Aún no hay actividad reciente.",
@@ -948,6 +951,248 @@
       "translationsMissing": "Falta",
       "translationsBlock": "Bloque",
       "translationsField": "Campo"
+    }
+  },
+  "newsletter": {
+    "confirmTitle": "Confirma tu suscripción",
+    "confirmBody": "Un paso más: pulsa el botón para empezar a recibir el boletín.",
+    "confirmAction": "Confirmar suscripción",
+    "confirmPending": "Confirmando…",
+    "confirmedTitle": "Ya estás suscrito",
+    "confirmedBody": "Gracias: ya estás en la lista. Todos nuestros correos incluyen un enlace para darte de baja.",
+    "confirmInvalidTitle": "Este enlace ha caducado",
+    "confirmInvalidBody": "Los enlaces de confirmación duran 48 horas y solo funcionan una vez. Vuelve a suscribirte para recibir uno nuevo.",
+    "unsubscribeTitle": "Darse de baja",
+    "unsubscribeBody": "Pulsa el botón para dejar de recibir el boletín.",
+    "unsubscribeAction": "Darse de baja",
+    "unsubscribePending": "Dando de baja…",
+    "unsubscribedTitle": "Te has dado de baja",
+    "unsubscribedBody": "No volveremos a enviarte el boletín. Puedes suscribirte de nuevo cuando quieras.",
+    "unsubscribeInvalidTitle": "No encontramos esa suscripción",
+    "unsubscribeInvalidBody": "Puede que el enlace esté incompleto. Si sigues recibiendo correos, escríbenos y te daremos de baja.",
+    "missingTokenTitle": "Enlace incompleto",
+    "missingTokenBody": "Esta página necesita el enlace de tu correo. Ábrelo desde el propio mensaje.",
+    "backHome": "Volver al inicio"
+  },
+  "tools": {
+    "eyebrow": "Tools",
+    "faqTitle": "Common questions",
+    "faqLead": "What people ask about this tool.",
+    "nav": {
+      "sectionLabel": "Trading tools"
+    },
+    "index": {
+      "title": "Trading tools",
+      "lead": "Calculators and market views that do the arithmetic, so you can think about the decision.",
+      "open": "Open",
+      "needs": {
+        "none": "Works offline — no market data needed",
+        "rates": "Uses the latest exchange rates",
+        "history": "Uses stored daily price history"
+      }
+    },
+    "common": {
+      "enterValues": "Fill in the fields to see a result.",
+      "loading": "Working out your local time…",
+      "search": "Search…",
+      "noMatches": "Nothing matches",
+      "asOf": "Rates as of {date}.",
+      "staleAsOf": "Rates as of {date} — out of date, and shown for reference only.",
+      "noRates": "No exchange rates are stored yet, so currency conversions are unavailable.",
+      "noRateForPair": "No rate is stored for this currency pair.",
+      "comingWithData": "This tool needs stored market data, which is not available on this site yet.",
+      "dataAsOf": "Worked out from data up to {date}."
+    },
+    "gainLoss": {
+      "startBalance": "Starting balance",
+      "direction": "Is this a gain or a loss?",
+      "gain": "Gain",
+      "loss": "Loss",
+      "knownLegend": "Which figure do you know?",
+      "known": {
+        "amount": "The amount gained or lost",
+        "percent": "The percentage",
+        "endingBalance": "The ending balance"
+      },
+      "result": {
+        "amount": "Amount",
+        "percent": "Percentage",
+        "endingBalance": "Ending balance",
+        "breakeven": "Gain needed to get back to even",
+        "breakevenNote": "Measured against the smaller balance you are left with."
+      }
+    },
+    "positionSize": {
+      "accountCurrency": "Account currency",
+      "balance": "Account balance",
+      "risk": "Risk per trade (%)",
+      "riskHint": "The share of the account you are willing to lose on this one trade.",
+      "stopLoss": "Stop loss (pips)",
+      "pair": "Currency pair",
+      "pipSize": "One pip is {size} on this pair.",
+      "result": {
+        "atRisk": "Amount at risk",
+        "units": "Position size (units)",
+        "lots": "In lots",
+        "lotsValue": "{standard} standard · {mini} mini · {micro} micro",
+        "pipValue": "Value of one pip per standard lot",
+        "pipValueNote": "Converted into your account currency.",
+        "needsRate": "The position size needs an exchange rate for your account currency, and none is stored yet. The amount at risk above is still correct."
+      }
+    },
+    "pipValue": {
+      "pair": "Currency pair",
+      "price": "Price",
+      "priceHint": "Leave empty to use the last stored price.",
+      "units": "Position size (units)",
+      "accountCurrency": "Account currency",
+      "pipSize": "One pip is {size} on this pair.",
+      "result": {
+        "inQuote": "One pip in {currency}",
+        "inAccount": "One pip in {currency}"
+      }
+    },
+    "pivot": {
+      "symbol": "Symbol",
+      "interval": "Interval",
+      "intervals": {
+        "1D": "Daily",
+        "1W": "Weekly",
+        "1M": "Monthly",
+        "1Y": "Yearly"
+      },
+      "open": "Open",
+      "high": "High",
+      "low": "Low",
+      "close": "Close",
+      "autofilled": "Filled from the period {from} to {to}.",
+      "manualOnly": "No stored prices for this period — enter the figures yourself.",
+      "needsOhlc": "Enter an open, high, low and close to see the levels.",
+      "tableHint": "All five methods, side by side. They disagree on purpose.",
+      "tableCaption": "Pivot levels by method",
+      "level": "Level",
+      "levels": {
+        "r4": "R4",
+        "r3": "R3",
+        "r2": "R2",
+        "r1": "R1",
+        "pp": "Pivot",
+        "s1": "S1",
+        "s2": "S2",
+        "s3": "S3",
+        "s4": "S4"
+      },
+      "methods": {
+        "floor": "Floor",
+        "woodie": "Woodie",
+        "camarilla": "Camarilla",
+        "demark": "DeMark",
+        "fibonacci": "Fibonacci"
+      }
+    },
+    "marketHours": {
+      "timezone": "Your timezone",
+      "hour12": "12-hour clock",
+      "marketOpen": "Market open",
+      "marketClosed": "Market closed",
+      "volume": {
+        "closed": "Closed",
+        "low": "Quiet",
+        "medium": "Busy",
+        "high": "Busiest"
+      },
+      "timelineTitle": "The day, in your timezone",
+      "timelineNote": "Session times follow daylight saving automatically. The market is shut from the New York close on Friday to the Sydney open on Sunday."
+    },
+    "related": {
+      "eyebrow": "Keep reading",
+      "title": "More about this",
+      "types": {
+        "lesson": "Lesson",
+        "article": "Article",
+        "glossary": "Glossary",
+        "video": "Video",
+        "course": "Course"
+      }
+    },
+    "converter": {
+      "amount": "Amount",
+      "from": "From",
+      "to": "To",
+      "swap": "Swap the two currencies",
+      "rateType": "What kind of rate?",
+      "rateTypeHint": "Typical markups, not quotes, and not attributed to any named provider. They show the shape of the cost, which is usually larger than people expect.",
+      "rateTypes": {
+        "market": "Mid-market",
+        "bank": "Bank transfer",
+        "atm": "ATM withdrawal",
+        "card": "Card payment",
+        "kiosk": "Airport kiosk"
+      },
+      "result": {
+        "converted": "Converted to {to}",
+        "rate": "Rate used",
+        "midNote": "The midpoint between what buyers offer and sellers ask. It is not a rate you can get.",
+        "markupNote": "The mid-market rate, less a typical {percent}% markup.",
+        "cost": "What the markup costs you",
+        "costNote": "At the mid-market rate you would have had {atMid} {to}."
+      }
+    },
+    "methodology": {
+      "title": "How this is worked out"
+    },
+    "correlation": {
+      "window": "Window",
+      "windows": {
+        "5d": "5 days",
+        "10d": "10 days",
+        "30d": "30 days",
+        "60d": "60 days",
+        "90d": "90 days",
+        "180d": "180 days",
+        "250d": "250 days"
+      },
+      "pair": "Pair",
+      "caption": "Correlation between pairs over the last {window}",
+      "empty": "There is not enough stored price history yet to work out correlations. They appear once the platform has a few weeks of daily closes.",
+      "excluded": "Not shown, for want of enough history: {symbols}.",
+      "method": {
+        "statistic": "Each cell is a correlation coefficient between −1 and +1. At +1 the two pairs moved in lockstep; at −1 exactly opposite; near 0 their moves were unrelated.",
+        "returns": "We correlate daily returns, not prices. Two pairs both drifting upward look correlated at the price level even when their day-to-day moves have nothing to do with each other.",
+        "minimum": "A cell with less history than the window shows a dash rather than a number. A coefficient worked out from a handful of days is not a small measurement, it is a wrong one.",
+        "cadence": "The figures are updated once a day, from the last completed daily close. The page says when that was.",
+        "notAdvice": "They describe a window that has already closed. They are not a forecast, and not a recommendation to trade one pair instead of another."
+      }
+    },
+    "risk": {
+      "bands": {
+        "risk-off": "Risk-off",
+        "neutral": "Neutral",
+        "risk-on": "Risk-on"
+      },
+      "directions": {
+        "risk-on": "Rises on risk",
+        "risk-off": "Rises off risk"
+      },
+      "reporting": "{reported} of {total} markets in the basket reported.",
+      "excluded": "No recent history for {symbols}.",
+      "empty": "None of the {total} markets in the basket has enough stored history yet, so there is no score to show. One appears once the platform has a few weeks of daily closes.",
+      "historyTitle": "The last {days} readings",
+      "historyNote": "One point per day the score could be worked out.",
+      "componentsTitle": "What went into it",
+      "method": {
+        "score": "A single score from 0 to 100. Above the upper threshold is risk-on, below the lower one is risk-off, and in between is neutral.",
+        "rank": "Each market is scored by where its latest move sits within its own recent range — its percentile rank. A market that usually moves half a percent and has just moved two ranks near the top of its own history, whatever the absolute number.",
+        "direction": "Markets that rise when risk is being taken on score as they rank. Markets that rise when risk is coming off have their rank flipped before it is counted. The weighted average of what is left is the score.",
+        "excluded": "A market with too little history is left out and counted, never filled in with a zero. A zero would be a claim that the market was flat; leaving it out is the truth, which is that we do not know.",
+        "cadence": "The score is worked out once a day, from the last completed daily close. The page says when that was.",
+        "notAdvice": "It describes what has already happened. It is not a forecast, and it is not a recommendation to do anything."
+      }
+    },
+    "home": {
+      "title": "Do the arithmetic first",
+      "lead": "Size a trade, value a pip, or see which pairs are really moving together.",
+      "viewAll": "All trading tools"
     }
   }
 }

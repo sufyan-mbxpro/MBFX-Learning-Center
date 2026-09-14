@@ -54,3 +54,17 @@ export function seededArticle(): SeededArticle {
 export function auditCount(entityId: string, action: string): number {
   return query<number>("auditCount", { entityId, action });
 }
+
+export interface SeededTool {
+  id: string;
+  key: string;
+  isEnabled: boolean;
+  relatedCount: number;
+  config: Record<string, unknown>;
+  translations: { locale: string; title: string; tagline: string | null }[];
+}
+
+/** One tool row, for the admin suite's database-level assertions. */
+export function seededTool(key: string): SeededTool {
+  return query<SeededTool>("tool", { key });
+}

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { connection } from "next/server";
 import { getTranslations } from "next-intl/server";
 import { DesignSystem } from "./design-system-client";
 
@@ -16,6 +17,12 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: t("title") };
 }
 
-export default function DesignSystemPage() {
+// Dynamic, stated explicitly — the dashboard's pattern. Every other admin
+// screen becomes request-scoped through requirePermission(); this one reads
+// nothing, so under Cache Components its body was prerenderable while its
+// metadata (a request-locale translation) was not, and Next reported
+// "runtime data in generateMetadata()" on every load (admin visual pass).
+export default async function DesignSystemPage() {
+  await connection();
   return <DesignSystem />;
 }

@@ -12,24 +12,29 @@
 //               feature is not rendered at all, matching what the header
 //               already does with `requiresFeature` and what `LatestAnalysis`
 //               does with `isFeatureVisible`.
-//   status    — whether the page behind it EXISTS yet.
+//   status    — whether the section BEHIND it is built yet.
 //
 // ...and not a label. Titles, blurbs and alt text are catalog keys
 // (code-style.md #2), derived from `key` at the call site.
 //
-// `status` is the honest half. `/tools` and `/markets` are seeded into the
-// header menu but have no route: they fall through to the `[...slug]`
-// catch-all, find no published page, and 404. A carousel card that links to a
-// 404 is worse than one that says "coming soon", so a `soon` card renders as a
-// flat, non-interactive tile — no link, no hover lift. That follows IconCard's
-// own rule: a card that rises under the pointer but does nothing when clicked
-// promises an interaction it does not have. Building the route is the only
-// edit needed to promote one: flip `status` to `live`.
+// `status` is the honest half, and what it MEANS changed in changes-22.
+//
+// It used to mean "there is no page here at all": `/tools` and `/markets` were
+// seeded into the header but had no route, so they fell through the
+// `[...slug]` catch-all onto the site's 404, and a `soon` card therefore
+// rendered as a flat, non-interactive tile rather than link to an error page.
+//
+// Both now have a real route that renders `ComingSoon` — a page that says what
+// the section will do and hands the reader the four finished ones. So `soon`
+// no longer means "do not link"; it means "the page behind this explains that
+// the section is still being built". The card links like any other, because a
+// link to a page that answers for itself is not a broken promise.
 //
 // `learn` was `soon` until 2026-09-11 and should not have been: `/learn` has
-// had a route since changes-11 Phase 4. `explore-destinations.test.ts` now
-// fails any entry whose `status` disagrees with whether its page file exists,
-// so the next route to land cannot leave its card stranded the same way.
+// had a route since changes-11 Phase 4. `explore-destinations.test.ts` still
+// checks the claim against the filesystem — every destination must have a page
+// file, and a `soon` one must be the page that renders `ComingSoon` — so
+// neither half can rot in silence the way the first one did.
 import {
   BadgeCheck,
   BookA,
@@ -54,7 +59,11 @@ export interface ExploreDestination {
   /** Feature flag gating the destination; `null` for pages no flag governs. */
   feature: string | null;
   tone: HomeMediaTone;
-  /** `soon` renders a non-clickable tile — the route does not exist yet. */
+  /**
+   * `soon` marks a destination whose route exists and renders `ComingSoon`
+   * — the card still links, and says so. Promoting one means building the
+   * section and pointing its route at the real page.
+   */
   status: "live" | "soon";
 }
 
@@ -73,7 +82,9 @@ export const EXPLORE_DESTINATIONS = [
     icon: Calculator,
     feature: "calculators",
     tone: "info",
-    status: "soon",
+    // Live as of changes-25 T6: /tools renders eight tools, not ComingSoon.
+    // The guard below reads the route file, so this cannot drift back.
+    status: "live",
   },
   {
     key: "calendar",

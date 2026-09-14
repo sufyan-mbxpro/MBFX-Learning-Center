@@ -33,6 +33,7 @@ import { Award, ListChecks, RotateCcw, Target } from "lucide-react";
 
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
+import { Skeleton, SkeletonButton, SkeletonText } from "@repo/ui/components/skeleton";
 import { cn } from "@repo/ui/lib/utils";
 
 /**
@@ -70,6 +71,42 @@ export interface QuizCardProgress {
   passed: boolean;
   /** e.g. "2 attempts". Omitted, nothing renders in its place. */
   attemptsLabel?: string;
+}
+
+/**
+ * changes-21 Phase A — the card's pending shape, beside the card so they
+ * cannot drift: the 16:9 panel, then a copy column that ends in the score
+ * meter and its CTA row.
+ */
+export function QuizCardSkeleton({ className }: { className?: string }) {
+  return (
+    <div
+      aria-hidden
+      className={cn(
+        "flex h-full min-w-0 flex-col rounded-2xl bg-card ring-1 ring-foreground/10",
+        className,
+      )}
+    >
+      <Skeleton className="aspect-video w-full rounded-none rounded-t-2xl" />
+      <div className="flex flex-1 flex-col gap-2 p-5">
+        <Skeleton className="h-5 w-40 max-w-full" />
+        <SkeletonText lines={2} />
+        <div className="mt-auto flex flex-col gap-3 pt-3">
+          <div className="flex flex-col gap-1.5">
+            <div className="flex justify-between gap-3">
+              <Skeleton className="h-3 w-20" />
+              <Skeleton className="h-3 w-10" />
+            </div>
+            <Skeleton className="h-2 w-full rounded-full" />
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <Skeleton className="h-3 w-16" />
+            <SkeletonButton size="sm" className="w-24" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function QuizCard({
@@ -204,7 +241,7 @@ export function QuizCard({
               accessible name is the quiz's name and nothing else. */}
           <a
             href={href}
-            className="transition-colors duration-(--duration-base) after:absolute after:inset-0 after:z-0 after:content-[''] group-hover/quiz:text-primary-interactive focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+            className="transition-colors duration-(--duration-base) after:absolute after:inset-0 after:z-0 group-hover/quiz:text-primary-interactive focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
           >
             {title}
           </a>
@@ -319,7 +356,7 @@ function ScoreMeter({
       >
         <span
           className={cn(
-            "absolute inset-y-0 start-0 rounded-full transition-[width] duration-(--duration-slow) ease-(--ease-out-quint)",
+            "absolute inset-y-0 start-0 rounded-full transition-(--transition-size) duration-(--duration-slow) ease-(--ease-out-quint)",
             METER_FILL[tone],
           )}
           style={{ width: `${fill}%` }}

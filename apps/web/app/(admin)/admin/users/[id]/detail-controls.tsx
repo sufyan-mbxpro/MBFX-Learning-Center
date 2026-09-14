@@ -6,10 +6,12 @@
 // re-checks its permission server-side; visibility here is UX.
 import { useState } from "react";
 import { KeyRound } from "lucide-react";
+import { z } from "zod";
 import { Badge } from "@repo/ui/components/badge";
 import { humanizeKey } from "@repo/utils";
 import { Button } from "@repo/ui/components/button";
 import { ConfirmDialog } from "@repo/ui/components/confirm-dialog";
+import { Field, FieldError } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
 import { ResetPasswordDialog } from "../../_components/reset-password-dialog.tsx";
 import {
@@ -19,8 +21,18 @@ import {
   setOverrideAction,
   setUserStatusAction,
 } from "../../_actions/user-actions.ts";
-import { AdminCombobox } from "../../_components/combobox.tsx";
+import { AdminCombobox, type ComboboxOption } from "../../_components/combobox.tsx";
+import { useFieldErrors } from "../../_hooks/use-field-errors.ts";
 import { useServerAction } from "../../_hooks/use-server-action.ts";
+
+// setOverrideAction parses its arguments inline (user-actions.ts) rather than
+// through a @repo/contracts schema, so this restates exactly those three
+// parses — no rule the action does not apply. Keep the two in step.
+const overrideSchema = z.object({
+  permissionKey: z.string().min(1),
+  effect: z.enum(["ALLOW", "DENY"]),
+  reason: z.string().min(3),
+});
 
 // ─── Account status ──────────────────────────────────────────
 
@@ -49,7 +61,7 @@ export function StatusControl({
       <AdminCombobox
         aria-label={labels.status}
         disabled={pending}
-        className="w-44"
+        className="min-w-0 flex-1"
         value={status}
         onValueChange={(value) => {
           if (value && value !== status) setTarget(value);
@@ -155,7 +167,7 @@ export function RoleControls({
               {availableRoles.find((r) => r.key === roleKey)?.name ?? roleKey}
               <button
                 type="button"
-                className="text-destructive underline-offset-2 hover:underline"
+                className="text-destructive-interactive underline-offset-2 hover:underline"
                 disabled={pending}
                 onClick={() => setRemoveTarget(roleKey)}
               >
@@ -168,7 +180,7 @@ export function RoleControls({
       <div className="flex items-center gap-2">
         <AdminCombobox
           aria-label={labels.assignRole}
-          className="w-48"
+          className="min-w-0 flex-1 sm:max-w-sm"
           placeholder="—"
           value={selected}
           onValueChange={setSelected}
@@ -179,7 +191,8 @@ export function RoleControls({
         />
         <Button
           size="sm"
-          disabled={pending || !selected}
+          disabled={!selected}
+          loading={pending}
           onClick={() =>
             run(() => assignRoleAction(userId, selected), { onDone: () => setSelected("") })
           }
@@ -210,12 +223,20 @@ export function RoleControls({
 export function OverrideControls({
   userId,
   overrides,
-  permissionKeys,
+  permissionOptions,
   labels,
 }: {
   userId: string;
   overrides: { permissionKey: string; effect: string; reason: string | null }[];
-  permissionKeys: string[];
+  /**
+   * Every permission, in the role editor's card order (ADR-083), each one
+   * labelled. It used to be a flat `string[]` of raw keys rendered as their
+   * own labels — an ADR-044 #5 violation, and unreadable besides: 75 dotted
+   * identifiers in one alphabetical list, with `analysis.*` and `courses.*`
+   * interleaved. The label carries the group so the search input can find a
+   * key by the screen it governs.
+   */
+  permissionOptions: ComboboxOption[];
   labels: {
     addOverride: string;
     reason: string;
@@ -234,6 +255,18 @@ export function OverrideControls({
   const [effect, setEffect] = useState("DENY");
   const [reason, setReason] = useState("");
   const [removeTarget, setRemoveTarget] = useState<string | null>(null);
+  const values = { permissionKey: permission, effect, reason };
+  const form = useFieldErrors(overrideSchema, values);
+
+  const addOverride = () => {
+    if (!form.validate()) return;
+    run(() => setOverrideAction(userId, permission, effect, reason), {
+      onDone: () => {
+        setReason("");
+        form.reset();
+      },
+    });
+  };
 
   return (
     <div className="flex flex-col gap-3">
@@ -247,7 +280,7 @@ export function OverrideControls({
             {o.reason && <span className="text-xs text-muted-foreground">— {o.reason}</span>}
             <button
               type="button"
-              className="ms-auto text-xs text-destructive underline-offset-2 hover:underline"
+              className="ms-auto text-xs text-destructive-interactive underline-offset-2 hover:underline"
               disabled={pending}
               onClick={() => setRemoveTarget(o.permissionKey)}
             >
@@ -256,15 +289,24 @@ export function OverrideControls({
           </li>
         ))}
       </ul>
+      {/* A compact inline form: its controls carry aria-labels rather than
+          visible labels, but they still sit in Fields so a failed add says
+          which one is wrong, inline, instead of a silently disabled button. */}
       <div className="flex flex-wrap items-center gap-2">
-        <AdminCombobox
-          aria-label={labels.permission}
-          className="w-56"
-          placeholder="—"
-          value={permission}
-          onValueChange={setPermission}
-          options={permissionKeys.map((key) => ({ value: key, label: key }))}
-        />
+        <Field
+          invalid={form.invalid("permissionKey")}
+          required
+          className="min-w-0 flex-1 sm:max-w-sm"
+        >
+          <AdminCombobox
+            aria-label={labels.permission}
+            placeholder="—"
+            value={permission}
+            onValueChange={setPermission}
+            options={permissionOptions}
+          />
+          <FieldError>{form.error("permissionKey")}</FieldError>
+        </Field>
         <AdminCombobox
           aria-label={labels.permission}
           className="w-28"
@@ -275,22 +317,16 @@ export function OverrideControls({
             { value: "DENY", label: labels.deny },
           ]}
         />
-        <Input
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          placeholder={labels.reason}
-          aria-label={labels.reason}
-          className="max-w-64"
-        />
-        <Button
-          size="sm"
-          disabled={pending || !permission || reason.trim().length < 3}
-          onClick={() =>
-            run(() => setOverrideAction(userId, permission, effect, reason), {
-              onDone: () => setReason(""),
-            })
-          }
-        >
+        <Field invalid={form.invalid("reason")} required className="max-w-64">
+          <Input
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder={labels.reason}
+            aria-label={labels.reason}
+          />
+          <FieldError>{form.error("reason")}</FieldError>
+        </Field>
+        <Button size="sm" loading={pending} onClick={addOverride}>
           {labels.addOverride}
         </Button>
       </div>

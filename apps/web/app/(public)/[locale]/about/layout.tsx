@@ -10,7 +10,7 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { ROUTE_PATHS } from "@repo/contracts";
 import { getSetting } from "@repo/settings";
 import { IS_DEMO_CONTENT } from "./_content/about-content-mode.ts";
-import { SectionNav, type SectionNavItem } from "./_components/section-nav.tsx";
+import { SectionNav, type SectionNavItem } from "../_components/section-nav.tsx";
 
 export default async function AboutLayout({ children, params }: LayoutProps<"/[locale]/about">) {
   const { locale } = await params;

@@ -75,7 +75,7 @@ export async function Hero({ locale, variant = "split" }: SectionProps) {
       <span aria-hidden className="bg-glow-primary pointer-events-none absolute inset-0 -z-10" />
       <span
         aria-hidden
-        className="bg-dot-grid pointer-events-none absolute inset-0 -z-10 opacity-[0.15] [mask-image:linear-gradient(to_bottom,black,transparent_80%)]"
+        className="bg-dot-grid pointer-events-none absolute inset-0 -z-10 opacity-15 [mask-image:linear-gradient(to_bottom,black,transparent_80%)]"
       />
       {/* `mixed` on the homepage specifically: this is the one band that
           introduces the whole platform, so the field carries currency,
@@ -108,7 +108,7 @@ export async function Hero({ locale, variant = "split" }: SectionProps) {
   return (
     <Section spacing="lg" className="relative isolate overflow-hidden">
       {backdrop}
-      <Container className="grid items-center gap-10 lg:grid-cols-2">
+      <Container className="grid grid-cols-1 items-center gap-10 lg:grid-cols-2">
         {copy}
         {/* `HOME_MEDIA.hero` rather than a literal path, so every image on
             this page is addressed through the one media module (the About
@@ -117,7 +117,7 @@ export async function Hero({ locale, variant = "split" }: SectionProps) {
         <Reveal
           variant="end"
           aria-hidden
-          className="group relative hidden aspect-[4/3] overflow-hidden rounded-2xl bg-gradient-to-br from-primary-subtle to-muted shadow-lg ring-1 ring-foreground/10 lg:block"
+          className="group relative hidden aspect-4/3 overflow-hidden rounded-2xl bg-gradient-to-br from-primary-subtle to-muted shadow-lg ring-1 ring-foreground/10 lg:block"
         >
           <Image
             src={HOME_MEDIA.hero}

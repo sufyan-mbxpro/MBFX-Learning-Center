@@ -11,7 +11,7 @@ import { revalidateTag } from "next/cache";
 import { db, type ContentStatus } from "@repo/db";
 import type { Subject } from "@repo/rbac";
 import type { SectionInput } from "@repo/contracts";
-import { SectionNotEmptyError } from "./courses.ts";
+import { SectionNotEmptyError, recomputeLessonCount } from "./courses.ts";
 import { recordAudit } from "./index.ts";
 
 async function defaultLocaleCode(): Promise<string> {
@@ -25,6 +25,17 @@ async function defaultLocaleCode(): Promise<string> {
  * Appends a section to a course. `sortOrder` is the current count rather than
  * a client-supplied index: a new section always lands at the end, and
  * `reorderSections` is the one way order changes.
+ *
+ * **It is created VISIBLE** (changes-22), against the column's own default of
+ * false. A section is grouping, not content — it has no status machine of its
+ * own, and the publish decisions that matter are the course's and the
+ * lessons'. Left invisible by default it was a THIRD switch nobody was told
+ * about: an editor published a course, published both its lessons, and read
+ * "2 lessons" over an empty curriculum, because the container they sat in had
+ * never been published. Staging a section is the rare case, so it is the one
+ * that costs a click. An empty section renders nothing either way — the
+ * public builder drops sections with no visible lessons — so a section that
+ * is visible from birth shows a reader nothing until it holds something.
  */
 export async function createSection(
   actor: Subject,
@@ -38,6 +49,7 @@ export async function createSection(
     data: {
       courseId,
       sortOrder,
+      isPublished: true,
       translations: { create: { locale: defaultLocale, title: title ?? "Untitled section" } },
     },
     select: { id: true },
@@ -56,13 +68,21 @@ export async function createSection(
 
 export async function saveSection(actor: Subject, input: SectionInput): Promise<void> {
   await db.$transaction(async (tx) => {
-    await tx.courseSection.update({
+    const section = await tx.courseSection.update({
       where: { id: input.sectionId },
       data: {
         ...(input.isPublished !== undefined ? { isPublished: input.isPublished } : {}),
         ...(input.sortOrder !== undefined ? { sortOrder: input.sortOrder } : {}),
       },
+      select: { courseId: true },
     });
+
+    // Publishing or hiding a section changes how many lessons a reader can
+    // reach, and `Course.lessonCount` counts reachable lessons as of
+    // changes-22 — so the section services recount too, not only the lesson
+    // ones. Inside this transaction, for the same reason the lesson services
+    // do it inside theirs.
+    await recomputeLessonCount(tx, section.courseId);
 
     const fields = {
       title: input.translation.title,

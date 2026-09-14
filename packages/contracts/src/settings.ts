@@ -38,10 +38,21 @@ export const HOME_SECTION_VARIANTS = {
   // pass straight through to it, so the section can still be a plain grid.
   latest_news: ["split", "standard", "featured", "compact"],
   latest_analysis: ["standard", "featured", "compact"],
-  glossary_spotlight: ["chips", "grid"],
+  // changes-28 added `cards` and made it the default: term PLUS its
+  // plain-language line. `chips` and `grid` are kept — a site with three
+  // hundred published terms may well want the dense row back.
+  glossary_spotlight: ["cards", "chips", "grid"],
   forex_rates: ["marquee", "grid"],
   newsletter: ["default", "full-width"],
   faq: ["accordion", "split"],
+  // changes-28 (ADR-093). `single` shows the day's quote (deterministic, the
+  // term-of-the-day technique); `carousel` offers the whole set in the
+  // scroll-snap rail. `connect` is deliberately ABSENT from this registry:
+  // it has one shape, and what varies is which social rows an admin has
+  // activated. An empty list here would reject every variant while looking
+  // like it configured something — the case `settings.test.ts` pins — and
+  // `risk_disclaimer` sets the precedent for a built band with no vocabulary.
+  quotes: ["single", "carousel"],
 } as const satisfies Record<string, readonly string[]>;
 
 export type HomeSectionKey = keyof typeof HOME_SECTION_VARIANTS;
@@ -73,6 +84,11 @@ export const HOME_SECTION_BUILT_KEYS = [
   "glossary_spotlight",
   "newsletter",
   "faq",
+  // Built by changes-25 T9; moved out of the stub list in the same breath.
+  "popular_tools",
+  // Built by changes-28 (ADR-093), in the same PRs that seeded them.
+  "connect",
+  "quotes",
   "risk_disclaimer",
 ] as const satisfies readonly string[];
 
@@ -85,7 +101,6 @@ export const HOME_SECTION_BUILT_KEYS = [
 export const HOME_SECTION_STUB_KEYS = [
   "forex_rates",
   "economic_events",
-  "popular_tools",
   "market_sentiment",
   "trading_sessions",
 ] as const satisfies readonly string[];
@@ -195,7 +210,6 @@ export const SETTINGS_SCHEMAS = {
   "header.cta": headerCtaSchema,
   "header.announcementBar": announcementBarSchema,
   "footer.menuColumns": z.array(footerMenuColumnSchema),
-  "footer.newsletterEnabled": z.boolean(),
 
   // Public design system (ADR-018 / changes-03-plan.md §5.1).
   // `layout.pageLoader` is SiteLoader's kill switch (ADR-018 rule 4d) — the
@@ -223,6 +237,28 @@ export const SETTINGS_SCHEMAS = {
   "media.maxBytes.video": z.int().min(1),
   "media.maxBytes.audio": z.int().min(1),
   "media.maxBytes.document": z.int().min(1),
+
+  // Email (Module 17, ADR-078). Sender identity and the shell around every
+  // message. The SMTP credentials are deliberately NOT here: they live in
+  // EmailTransport, super_admin-only, with the password sealed.
+  "email.enabled": z.boolean(),
+  "email.fromName": z.string().min(1).max(120),
+  "email.fromEmail": z.email(),
+  "email.replyTo": z.email().or(z.literal("")),
+  "email.logo": z.string().max(500),
+  "email.footerText": z.string().max(500),
+  // CAN-SPAM and its equivalents want a postal address on bulk mail.
+  "email.postalAddress": z.string().max(300),
+  // Where the newsletter signup appears (ADR-080 #5). These live here rather
+  // than in `layout`, the group ADR-038 paused in admin — which is how
+  // `footer.newsletterEnabled` ended up uneditable. changes-21 F7 DELETED that
+  // key rather than leaving it beside these four: two settings meaning "is
+  // there a signup in the footer" is one more than anyone can reason about,
+  // and only one of the two was reachable.
+  "newsletter.placements.footer": z.boolean(),
+  "newsletter.placements.home": z.boolean(),
+  "newsletter.placements.news": z.boolean(),
+  "newsletter.placements.analysis": z.boolean(),
 
   "cms.dataBudget": dataBudgetSchema,
 } as const satisfies Record<string, z.ZodType>;
@@ -262,7 +298,6 @@ export const SETTING_GROUPS: Record<SettingKey, string> = {
   "header.cta": "layout",
   "header.announcementBar": "layout",
   "footer.menuColumns": "layout",
-  "footer.newsletterEnabled": "layout",
 
   "layout.pageLoader": "layout",
   "header.topBar": "layout",
@@ -282,6 +317,18 @@ export const SETTING_GROUPS: Record<SettingKey, string> = {
   "media.maxBytes.video": "media",
   "media.maxBytes.audio": "media",
   "media.maxBytes.document": "media",
+
+  "email.enabled": "email",
+  "email.fromName": "email",
+  "email.fromEmail": "email",
+  "email.replyTo": "email",
+  "email.logo": "email",
+  "email.footerText": "email",
+  "email.postalAddress": "email",
+  "newsletter.placements.footer": "email",
+  "newsletter.placements.home": "email",
+  "newsletter.placements.news": "email",
+  "newsletter.placements.analysis": "email",
 
   "cms.dataBudget": "cms",
 };

@@ -8,7 +8,14 @@
 // island swaps in real state on hydrate (ADR-056 #1). That is why the size is
 // fixed here rather than inherited: the marker must occupy its space from
 // first paint or the whole curriculum shifts when the island lands.
-import { Check, Circle, CircleDot, Lock } from "lucide-react";
+//
+// **`not-started` is a play mark, not an empty circle** (changes-24, ADR-082
+// #1). It was the one state whose glyph said nothing — an empty ring is the
+// ABSENCE of a mark, so three states carried meaning and the fourth carried a
+// hole. A play triangle says "start here", which is exactly what not-started
+// means, and the four glyphs stay mutually distinct in greyscale:
+// check / dot / triangle / padlock. The `aria-label` is unchanged.
+import { Check, CircleDot, Lock, Play } from "lucide-react";
 
 import { cn } from "@repo/ui/lib/utils";
 
@@ -17,7 +24,7 @@ export type LessonState = "completed" | "in-progress" | "not-started" | "locked"
 const GLYPH: Record<LessonState, typeof Check> = {
   completed: Check,
   "in-progress": CircleDot,
-  "not-started": Circle,
+  "not-started": Play,
   locked: Lock,
 };
 
@@ -28,9 +35,20 @@ const TONE: Record<LessonState, string> = {
   locked: "border-border bg-muted/60 text-muted-foreground",
 };
 
+/**
+ * `sm` is the list marker (rail, compact card expansion); `lg` is the course
+ * outline's timeline node, where the marker is also the row's play affordance
+ * and has to be big enough to read as one (ADR-082 #1).
+ */
+const SIZE = {
+  sm: { ring: "size-5", glyph: "size-3" },
+  lg: { ring: "size-9 border-2", glyph: "size-4" },
+} as const;
+
 export function LessonStateIcon({
   state,
   label,
+  size = "sm",
   className,
 }: {
   state: LessonState;
@@ -40,9 +58,11 @@ export function LessonStateIcon({
    * an untranslated English string in a public component (code-style.md #2).
    */
   label: string;
+  size?: keyof typeof SIZE;
   className?: string;
 }) {
   const Glyph = GLYPH[state];
+  const scale = SIZE[size];
   return (
     <span
       // `role="img"` + `aria-label` rather than a visually-hidden span: the
@@ -53,12 +73,23 @@ export function LessonStateIcon({
       aria-label={label}
       data-state={state}
       className={cn(
-        "flex size-5 shrink-0 items-center justify-center rounded-full border",
+        "flex shrink-0 items-center justify-center rounded-full border",
+        scale.ring,
         TONE[state],
         className,
       )}
     >
-      <Glyph aria-hidden className="size-3" />
+      <Glyph
+        aria-hidden
+        className={cn(
+          scale.glyph,
+          // A stroked triangle at 12px is a sliver; filled, it reads as a play
+          // mark. `ms-px` is the optical centring a triangle needs in a
+          // circle, and `rtl:rotate-180` points it along the reading direction
+          // the way every other directional glyph here does.
+          state === "not-started" && "ms-px fill-current rtl:rotate-180",
+        )}
+      />
     </span>
   );
 }

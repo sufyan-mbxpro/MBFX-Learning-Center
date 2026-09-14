@@ -33,7 +33,9 @@ import {
 import {
   contentVisibilitySchema,
   courseDifficultySchema,
+  courseInputSchema,
   isLearnTrack,
+  validateFields,
   type ContentVisibility,
   type CourseDifficulty,
   type CourseInput,
@@ -66,6 +68,7 @@ import {
   StatusBadge,
   statusTone,
 } from "../../../_components/status-badge.tsx";
+import { useFieldErrors } from "../../../_hooks/use-field-errors.ts";
 import { useServerAction } from "../../../_hooks/use-server-action.ts";
 import { CurriculumPanel, type CurriculumSectionView } from "./_panels/curriculum-panel.tsx";
 import {
@@ -77,12 +80,19 @@ import type { CourseData, CourseEditorLabels, CourseTranslationDraft } from "./e
 function CharCount({ value, max }: { value: string; max: number }) {
   return (
     <span
-      className={`text-xs tabular-nums ${value.length > max ? "text-destructive" : "text-muted-foreground"}`}
+      className={`text-xs tabular-nums ${value.length > max ? "text-destructive-interactive" : "text-muted-foreground"}`}
     >
       {value.length}/{max}
     </span>
   );
 }
+
+/** The paths that live on the SEO tab; every other field is on Details. */
+const SEO_PATHS = [
+  "translation.seoTitle",
+  "translation.seoDescription",
+  "translation.seoFocusKeyword",
+];
 
 function blankTranslation(locale: string): CourseTranslationDraft {
   return {
@@ -135,6 +145,7 @@ export function CourseEditor({
   const router = useRouter();
   const { run, pending } = useServerAction();
 
+  const [tab, setTab] = useState("details");
   const [locale, setLocale] = useState(defaultLocale);
   const [drafts, setDrafts] = useState<Record<string, CourseTranslationDraft>>(() =>
     Object.fromEntries(course.translations.map((t) => [t.locale, t])),
@@ -167,9 +178,47 @@ export function CourseEditor({
   const setDraft = (patch: Partial<CourseTranslationDraft>) =>
     setDrafts((current) => ({ ...current, [locale]: { ...draft, ...patch } }));
 
-  const canSave = draft.title.trim() !== "";
-
   const publicPath = useMemo(() => `/${locale}/learn/${draft.slug || ""}`, [locale, draft.slug]);
+
+  // Built on every render rather than at submit, so the inline validation
+  // reads EXACTLY what `saveCourseAction` will be sent (ADR-077).
+  const payload: CourseInput = {
+    courseId: course.id,
+    meta: {
+      track,
+      difficulty,
+      visibility,
+      estimatedHours: estimatedHours.trim() === "" ? null : Number(estimatedHours),
+      coverAssetId: cover.id,
+      externalUrl: externalUrl.trim() === "" ? null : externalUrl.trim(),
+      finalQuizId,
+    },
+    translation: {
+      locale,
+      title: draft.title.trim(),
+      slug: draft.slug.trim() === "" ? undefined : draft.slug.trim(),
+      summary: draft.summary.trim() === "" ? null : draft.summary.trim(),
+      description: draft.description.trim() === "" ? null : draft.description,
+      seoTitle: draft.seoTitle.trim() === "" ? null : draft.seoTitle.trim(),
+      seoDescription: draft.seoDescription.trim() === "" ? null : draft.seoDescription.trim(),
+      seoFocusKeyword: draft.seoFocusKeyword.trim() === "" ? null : draft.seoFocusKeyword.trim(),
+    },
+    recommendations,
+  };
+  const form = useFieldErrors(courseInputSchema, payload);
+
+  /**
+   * `form.validate()`, plus opening the tab that holds the problem: an
+   * inactive tab panel is not mounted, so the hook could not focus a field on
+   * it. The tab switch lands in the same commit as the revealed messages, so
+   * the field exists by the time the hook looks for it.
+   */
+  const validate = (): boolean => {
+    if (form.validate()) return true;
+    const paths = Object.keys(validateFields(courseInputSchema, payload));
+    setTab(paths.length > 0 && paths.every((path) => SEO_PATHS.includes(path)) ? "seo" : "details");
+    return false;
+  };
 
   /**
    * One save for the whole screen, optionally followed by a transition — the
@@ -178,29 +227,6 @@ export function CourseEditor({
    * a save can never publish on behalf of an actor who may not.
    */
   const submitForm = async () => {
-    const payload: CourseInput = {
-      courseId: course.id,
-      meta: {
-        track,
-        difficulty,
-        visibility,
-        estimatedHours: estimatedHours.trim() === "" ? null : Number(estimatedHours),
-        coverAssetId: cover.id,
-        externalUrl: externalUrl.trim() === "" ? null : externalUrl.trim(),
-        finalQuizId,
-      },
-      translation: {
-        locale,
-        title: draft.title.trim(),
-        slug: draft.slug.trim() === "" ? undefined : draft.slug.trim(),
-        summary: draft.summary.trim() === "" ? null : draft.summary.trim(),
-        description: draft.description.trim() === "" ? null : draft.description,
-        seoTitle: draft.seoTitle.trim() === "" ? null : draft.seoTitle.trim(),
-        seoDescription: draft.seoDescription.trim() === "" ? null : draft.seoDescription.trim(),
-        seoFocusKeyword: draft.seoFocusKeyword.trim() === "" ? null : draft.seoFocusKeyword.trim(),
-      },
-      recommendations,
-    };
     await saveCourseAction(payload);
   };
 
@@ -237,10 +263,14 @@ export function CourseEditor({
             </Button>
           )}
           {canUpdate && (
+            // Enabled while fields are wrong: pressing it names them (audit F-07).
             <Button
               size="sm"
-              disabled={pending || !canSave}
-              onClick={() => run(() => submitForm(), { successMessage: labels.saved })}
+              loading={pending}
+              onClick={() => {
+                if (!validate()) return;
+                run(() => submitForm(), { successMessage: labels.saved });
+              }}
             >
               {labels.updateCourse}
             </Button>
@@ -281,7 +311,7 @@ export function CourseEditor({
         </div>
       </div>
 
-      <Tabs defaultValue="details">
+      <Tabs value={tab} onValueChange={(next) => setTab(String(next))}>
         <TabsList>
           <TabsTrigger value="details">{labels.tabDetails}</TabsTrigger>
           <TabsTrigger value="curriculum">{labels.tabCurriculum}</TabsTrigger>
@@ -290,7 +320,7 @@ export function CourseEditor({
         </TabsList>
 
         <TabsContent value="details">
-          <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+          <div className="grid grid-cols-1 min-w-0 gap-4 lg:grid-cols-(--grid-2-1)">
             <div className="flex min-w-0 flex-col gap-4">
               <EditorSection
                 title={labels.detailsSection}
@@ -299,12 +329,12 @@ export function CourseEditor({
                 accent="primary"
               >
                 <Field
-                  id="course-title"
                   label={labels.titleLabel}
+                  required
+                  error={form.error("translation.title")}
                   adornment={<CharCount value={draft.title} max={255} />}
                 >
                   <Input
-                    id="course-title"
                     value={draft.title}
                     disabled={!canUpdate}
                     onChange={(e) => setDraft({ title: e.target.value })}
@@ -312,12 +342,11 @@ export function CourseEditor({
                 </Field>
 
                 <Field
-                  id="course-slug"
                   label={labels.slugLabel}
                   hint={`${labels.courseUrl}: ${publicPath}`}
+                  error={form.error("translation.slug")}
                 >
                   <Input
-                    id="course-slug"
                     value={draft.slug}
                     disabled={!canUpdate}
                     onChange={(e) => setDraft({ slug: e.target.value })}
@@ -325,13 +354,12 @@ export function CourseEditor({
                 </Field>
 
                 <Field
-                  id="course-summary"
                   label={labels.summaryLabel}
                   hint={labels.summaryHint}
+                  error={form.error("translation.summary")}
                   adornment={<CharCount value={draft.summary} max={1000} />}
                 >
                   <Textarea
-                    id="course-summary"
                     rows={3}
                     value={draft.summary}
                     disabled={!canUpdate}
@@ -339,9 +367,11 @@ export function CourseEditor({
                   />
                 </Field>
 
-                <Field label={labels.descriptionLabel}>
+                <Field
+                  label={labels.descriptionLabel}
+                  error={form.error("translation.description")}
+                >
                   <RichTextEditor
-                    id="course-description"
                     value={draft.description}
                     onChange={(html) => setDraft({ description: html })}
                     labels={labels.editor}
@@ -359,7 +389,10 @@ export function CourseEditor({
                 scheduledFor={course.scheduledFor}
                 updatedAt={course.updatedAt}
                 canPublish={canPublish}
-                canSave={canSave && canUpdate}
+                canSave={canUpdate}
+                // The panel validates before a transition that saves first and
+                // stops there, with the fields named inline (ADR-077).
+                validate={validate}
                 save={submitForm}
                 transitionTo={(to, scheduledForIso) =>
                   setCourseStatusAction(course.id, to, scheduledForIso)
@@ -413,9 +446,8 @@ export function CourseEditor({
                   />
                 </Field>
 
-                <Field id="course-hours" label={labels.estimatedHoursLabel}>
+                <Field label={labels.estimatedHoursLabel} error={form.error("meta.estimatedHours")}>
                   <Input
-                    id="course-hours"
                     type="number"
                     min={0}
                     max={999}
@@ -442,12 +474,11 @@ export function CourseEditor({
                 </Field>
 
                 <Field
-                  id="course-external"
                   label={labels.externalUrlLabel}
                   hint={labels.externalUrlHint}
+                  error={form.error("meta.externalUrl")}
                 >
                   <Input
-                    id="course-external"
                     type="url"
                     inputMode="url"
                     value={externalUrl}
@@ -464,6 +495,7 @@ export function CourseEditor({
                   category="learn"
                   sourceType="COURSE"
                   disabled={!canUpdate}
+                  error={form.error("meta.coverAssetId")}
                   onChange={(next) => setCover({ id: next?.id ?? null, url: next?.url ?? null })}
                   labels={labels.upload}
                 />
@@ -506,7 +538,7 @@ export function CourseEditor({
         </TabsContent>
 
         <TabsContent value="recommendations">
-          <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+          <div className="grid grid-cols-1 min-w-0 gap-4 lg:grid-cols-(--grid-2-1)">
             <RecommendationsPanel
               value={recommendations}
               onChange={setRecommendations}
@@ -519,7 +551,7 @@ export function CourseEditor({
         </TabsContent>
 
         <TabsContent value="seo">
-          <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+          <div className="grid grid-cols-1 min-w-0 gap-4 lg:grid-cols-(--grid-2-1)">
             <EditorSection
               title={labels.seoSection}
               description={labels.seoSectionDescription}
@@ -527,13 +559,12 @@ export function CourseEditor({
               accent="info"
             >
               <Field
-                id="course-seo-title"
                 label={labels.seoTitleLabel}
                 hint={labels.seoTitleHint}
+                error={form.error("translation.seoTitle")}
                 adornment={<CharCount value={draft.seoTitle} max={70} />}
               >
                 <Input
-                  id="course-seo-title"
                   value={draft.seoTitle}
                   disabled={!canUpdate}
                   onChange={(e) => setDraft({ seoTitle: e.target.value })}
@@ -541,13 +572,12 @@ export function CourseEditor({
               </Field>
 
               <Field
-                id="course-seo-description"
                 label={labels.seoDescriptionLabel}
                 hint={labels.seoDescriptionHint}
+                error={form.error("translation.seoDescription")}
                 adornment={<CharCount value={draft.seoDescription} max={180} />}
               >
                 <Textarea
-                  id="course-seo-description"
                   rows={3}
                   value={draft.seoDescription}
                   disabled={!canUpdate}
@@ -556,12 +586,11 @@ export function CourseEditor({
               </Field>
 
               <Field
-                id="course-seo-keyword"
                 label={labels.focusKeywordsLabel}
                 hint={labels.focusKeywordsHint}
+                error={form.error("translation.seoFocusKeyword")}
               >
                 <Input
-                  id="course-seo-keyword"
                   value={draft.seoFocusKeyword}
                   disabled={!canUpdate}
                   onChange={(e) => setDraft({ seoFocusKeyword: e.target.value })}

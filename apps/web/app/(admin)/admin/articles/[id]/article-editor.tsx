@@ -34,7 +34,7 @@ import {
   Search,
   SlidersHorizontal,
 } from "lucide-react";
-import type { SaveArticleInput } from "@repo/contracts";
+import { saveArticleSchema, updateArticleMetaSchema, type SaveArticleInput } from "@repo/contracts";
 import { parseVideoUrl } from "@repo/utils";
 import { Button } from "@repo/ui/components/button";
 import { Checkbox } from "@repo/ui/components/checkbox";
@@ -46,8 +46,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@repo/ui/components/dropdown-menu";
+// The editor's labelled fields use EditorSection's `Field` wrapper; the raw
+// primitive is only for the rows that wrapper does not shape — horizontal
+// checkbox/switch rows and the locale switcher in a section header.
+import {
+  Field as UiField,
+  FieldContent,
+  FieldDescription,
+  FieldLabel,
+} from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
-import { Label } from "@repo/ui/components/label";
 import { Switch } from "@repo/ui/components/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@repo/ui/components/tabs";
 import { Textarea } from "@repo/ui/components/textarea";
@@ -65,6 +73,7 @@ import {
   statusTone,
 } from "../../_components/status-badge.tsx";
 import { AdminCombobox } from "../../_components/combobox.tsx";
+import { useFieldErrors } from "../../_hooks/use-field-errors.ts";
 import { useServerAction } from "../../_hooks/use-server-action.ts";
 import { ContentStats } from "../../_components/editor/content-stats.tsx";
 import { EditorSection, Field } from "../../_components/editor/editor-section.tsx";
@@ -75,15 +84,29 @@ import { PublishPanel } from "./_panels/publish-panel.tsx";
 import { TaxonomyPanel } from "./_panels/taxonomy-panel.tsx";
 import type { ArticleData, EditorLabels, FaqDraft, TranslationDraft } from "./editor-types.ts";
 
+// The over-limit ink is `-interactive` (audit F-03); past the limit the
+// field's own inline error says so in words as well.
 function CharCount({ value, max }: { value: string; max: number }) {
   return (
     <span
-      className={`text-xs tabular-nums ${value.length > max ? "text-destructive" : "text-muted-foreground"}`}
+      className={`text-xs tabular-nums ${value.length > max ? "text-destructive-interactive" : "text-muted-foreground"}`}
     >
       {value.length}/{max}
     </span>
   );
 }
+
+// ADR-077 — the save action's own schema. The one addition is the video
+// provider whitelist, which the service enforces through this same
+// `parseVideoUrl` (the contract only shapes the URL), so the form refuses
+// exactly what the server would.
+const editorSchema = saveArticleSchema.extend({
+  meta: updateArticleMetaSchema.extend({
+    videoUrl: updateArticleMetaSchema.shape.videoUrl.refine(
+      (url) => url == null || parseVideoUrl(url) !== null,
+    ),
+  }),
+});
 
 function blankTranslation(locale: string): TranslationDraft {
   return {
@@ -177,8 +200,6 @@ export function ArticleEditor({
   const publicPath = `${locale === defaultLocale ? "" : `/${locale}`}/news/${derivedSlug}`;
   const postUrl = `${siteUrl}${publicPath}`;
 
-  const canSave = tr.title.trim() !== "" && categoryId !== "" && !videoInvalid;
-
   const buildPayload = () =>
     ({
       articleId: article.id,
@@ -231,6 +252,10 @@ export function ArticleEditor({
       },
     }) satisfies SaveArticleInput;
 
+  // Validated as the payload the action receives, so every path below is a
+  // path in `saveArticleSchema` (`translation.title`, `meta.categoryId`, …).
+  const form = useFieldErrors(editorSchema, buildPayload());
+
   /**
    * The screen had TWO publish buttons, each doing half the job: this header
    * read "Update & Publish" but only ever called `saveArticleAction`, while
@@ -265,10 +290,12 @@ export function ArticleEditor({
   const headerPublishes =
     article.status === "DRAFT" && canPublish && article.legalTransitions.includes("PUBLISHED");
 
-  const save = () =>
+  const save = () => {
+    if (!form.validate()) return;
     run(() => submitForm(headerPublishes ? "PUBLISHED" : undefined), {
       successMessage: headerPublishes ? labels.publishedToast : labels.saved,
     });
+  };
 
   const dateFmt = useMemo(() => labels.createdValue, [labels.createdValue]);
 
@@ -282,10 +309,10 @@ export function ArticleEditor({
     <div className="flex w-full min-w-0 flex-col gap-4">
       {/* Sticky header — Cancel / Preview / View Live / Publish-or-Update. */}
       {/* Sticks BELOW the admin shell’s own sticky header, not under it:
-          that header is `sticky top-0 z-30 h-[var(--height-header)]`, so a
+          that header is `sticky top-0 z-30 h-(--height-header)`, so a
           plain `top-0 z-10` here slid the save button behind it and made it
           unclickable once the page scrolled. Caught in live verification. */}
-      <div className="sticky top-[var(--height-header)] z-20 -mx-1 flex flex-wrap items-center justify-end gap-2 border-b bg-background/95 px-1 py-3 backdrop-blur">
+      <div className="sticky top-(--height-header) z-20 -mx-1 flex flex-wrap items-center justify-end gap-2 border-b bg-background/95 px-1 py-3 backdrop-blur">
         {/* Colour is assigned by consequence, not by prominence (ADR-046):
             Cancel discards nothing and stays neutral; Preview is
             informational; the save is the one primary action on the screen.
@@ -312,7 +339,9 @@ export function ArticleEditor({
             {labels.viewLive}
           </Button>
         )}
-        <Button size="sm" disabled={pending || !canSave} onClick={save}>
+        {/* Enabled while fields are wrong: a disabled Save is silent about
+            WHICH field (audit F-07). Pressing it names them instead. */}
+        <Button size="sm" loading={pending} onClick={save}>
           {headerPublishes ? labels.publishPost : labels.updatePost}
         </Button>
         <DropdownMenu>
@@ -356,7 +385,7 @@ export function ArticleEditor({
       {/* `minmax(0, 1fr)` rather than `1fr` — see the min-w-0 note above.
           `1fr` is shorthand for `minmax(auto, 1fr)`, which is exactly the
           track that grows to fit its widest child. */}
-      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
+      <div className="grid grid-cols-1 min-w-0 gap-4 lg:grid-cols-(--grid-main-aside-wide)">
         {/* ── Left column ─────────────────────────────────── */}
         <div className="flex min-w-0 flex-col gap-4">
           <EditorSection
@@ -366,16 +395,15 @@ export function ArticleEditor({
             accent="primary"
             actions={
               <div className="flex items-center gap-2">
-                <Label htmlFor="article-locale" className="text-xs">
-                  {labels.localeLabel}
-                </Label>
-                <AdminCombobox
-                  id="article-locale"
-                  className="h-8 w-24"
-                  value={locale}
-                  onValueChange={(next) => setLocale(next || locale)}
-                  options={locales.map((code) => ({ value: code, label: code }))}
-                />
+                <UiField orientation="horizontal" className="w-auto">
+                  <FieldLabel className="text-xs">{labels.localeLabel}</FieldLabel>
+                  <AdminCombobox
+                    className="h-8 w-24"
+                    value={locale}
+                    onValueChange={(next) => setLocale(next || locale)}
+                    options={locales.map((code) => ({ value: code, label: code }))}
+                  />
+                </UiField>
                 <StatusBadge tone={statusTone(TRANSLATION_STATUS_TONE, tr.translationStatus)}>
                   {labels.statusLabels[tr.translationStatus] ?? tr.translationStatus}
                 </StatusBadge>
@@ -387,16 +415,11 @@ export function ArticleEditor({
               <ContentStats body={tr.body} focusKeywords={tr.focusKeywords} labels={labels.stats} />
             }
           >
-            <Field id="article-title" label={labels.titleLabel}>
-              <Input
-                id="article-title"
-                value={tr.title}
-                onChange={(e) => setTr({ title: e.target.value })}
-              />
+            <Field label={labels.titleLabel} required error={form.error("translation.title")}>
+              <Input value={tr.title} onChange={(e) => setTr({ title: e.target.value })} />
             </Field>
-            <Field id="article-slug" label={labels.slugLabel}>
+            <Field label={labels.slugLabel} error={form.error("translation.slug")}>
               <Input
-                id="article-slug"
                 value={tr.slug}
                 placeholder={derivedSlug}
                 className="font-mono text-xs"
@@ -413,9 +436,27 @@ export function ArticleEditor({
               </span>
             </div>
 
-            <Field id="article-body" label={labels.body}>
+            {/* Excerpt BEFORE the body (changes-22). It sat under it, which
+                put a three-line field at the far side of the one control on
+                this screen that can be thousands of words long — so the
+                editor who writes the summary first had to scroll past the
+                body to reach it, and the one who writes it last scrolled
+                twice. It is also the field every card, feed and search result
+                shows, which is an argument for reading it near the title. */}
+            <Field
+              label={labels.excerpt}
+              adornment={<CharCount value={tr.excerpt} max={500} />}
+              error={form.error("translation.excerpt")}
+            >
+              <Textarea
+                value={tr.excerpt}
+                rows={3}
+                onChange={(e) => setTr({ excerpt: e.target.value })}
+              />
+            </Field>
+
+            <Field label={labels.body} error={form.error("translation.body")}>
               <RichTextEditor
-                id="article-body"
                 value={tr.body}
                 onChange={(html) => setTr({ body: html })}
                 labels={labels.editor}
@@ -423,19 +464,6 @@ export function ArticleEditor({
                 // by people technical enough, to want a source view.
                 allowHtmlMode
                 mediaCategory="news"
-              />
-            </Field>
-
-            <Field
-              id="article-excerpt"
-              label={labels.excerpt}
-              adornment={<CharCount value={tr.excerpt} max={500} />}
-            >
-              <Textarea
-                id="article-excerpt"
-                value={tr.excerpt}
-                rows={3}
-                onChange={(e) => setTr({ excerpt: e.target.value })}
               />
             </Field>
           </EditorSection>
@@ -457,26 +485,24 @@ export function ArticleEditor({
 
               <TabsContent value="basic" className="flex flex-col gap-3 pt-3">
                 <Field
-                  id="article-seo-title"
                   label={labels.seoTitle}
                   hint={labels.seoTitleHint}
                   adornment={<CharCount value={tr.seoTitle} max={70} />}
+                  error={form.error("translation.seoTitle")}
                 >
                   <Input
-                    id="article-seo-title"
                     value={tr.seoTitle}
                     placeholder={tr.title}
                     onChange={(e) => setTr({ seoTitle: e.target.value })}
                   />
                 </Field>
                 <Field
-                  id="article-seo-description"
                   label={labels.seoDescription}
                   hint={labels.seoDescriptionHint}
                   adornment={<CharCount value={tr.seoDescription} max={180} />}
+                  error={form.error("translation.seoDescription")}
                 >
                   <Textarea
-                    id="article-seo-description"
                     value={tr.seoDescription}
                     rows={2}
                     placeholder={tr.excerpt}
@@ -484,57 +510,53 @@ export function ArticleEditor({
                   />
                 </Field>
                 <Field
-                  id="article-keywords"
                   label={labels.focusKeywords}
                   hint={labels.focusKeywordsHint}
+                  error={form.error("translation.focusKeywords")}
                 >
                   <Input
-                    id="article-keywords"
                     value={tr.focusKeywords}
                     onChange={(e) => setTr({ focusKeywords: e.target.value })}
                   />
                 </Field>
                 <Field
-                  id="article-canonical"
                   label={labels.canonicalUrl}
                   hint={labels.canonicalUrlHint}
+                  error={form.error("translation.canonicalUrl")}
                 >
                   <Input
-                    id="article-canonical"
                     value={tr.canonicalUrl}
                     onChange={(e) => setTr({ canonicalUrl: e.target.value })}
                   />
                 </Field>
                 {/* The reference's two checkboxes are phrased positively; the
                     columns are negative (noIndex/noFollow), so they invert. */}
-                <label className="flex items-center gap-2 text-sm">
+                <UiField orientation="horizontal">
                   <Checkbox
                     checked={!tr.noIndex}
                     onCheckedChange={(v) => setTr({ noIndex: v !== true })}
                   />
-                  {labels.allowIndex}
-                </label>
-                <label className="flex items-center gap-2 text-sm">
+                  <FieldLabel className="font-normal">{labels.allowIndex}</FieldLabel>
+                </UiField>
+                <UiField orientation="horizontal">
                   <Checkbox
                     checked={!tr.noFollow}
                     onCheckedChange={(v) => setTr({ noFollow: v !== true })}
                   />
-                  {labels.allowFollow}
-                </label>
+                  <FieldLabel className="font-normal">{labels.allowFollow}</FieldLabel>
+                </UiField>
               </TabsContent>
 
               <TabsContent value="social" className="flex flex-col gap-3 pt-3">
-                <Field id="article-og-title" label={labels.ogTitle}>
+                <Field label={labels.ogTitle} error={form.error("translation.ogTitle")}>
                   <Input
-                    id="article-og-title"
                     value={tr.ogTitle}
                     placeholder={tr.seoTitle || tr.title}
                     onChange={(e) => setTr({ ogTitle: e.target.value })}
                   />
                 </Field>
-                <Field id="article-og-description" label={labels.ogDescription}>
+                <Field label={labels.ogDescription} error={form.error("translation.ogDescription")}>
                   <Textarea
-                    id="article-og-description"
                     value={tr.ogDescription}
                     rows={2}
                     placeholder={tr.seoDescription || tr.excerpt}
@@ -542,20 +564,19 @@ export function ArticleEditor({
                   />
                 </Field>
                 <ImageUploadField
-                  id="article-og-image"
                   label={labels.ogImageUrl}
                   value={tr.ogImageUrl || null}
                   purpose="article"
                   category="news"
                   sourceType="ARTICLE"
                   labels={labels.upload}
+                  error={form.error("translation.ogImageUrl")}
                   onChange={(next) =>
                     setTr({ ogImageUrl: next?.url ?? "", ogImageAssetId: next?.id ?? null })
                   }
                 />
-                <Field id="article-twitter-card" label={labels.twitterCard}>
+                <Field label={labels.twitterCard}>
                   <AdminCombobox
-                    id="article-twitter-card"
                     value={tr.twitterCard || "summary_large_image"}
                     onValueChange={(twitterCard) => setTr({ twitterCard })}
                     options={Object.entries(labels.twitterCardOptions).map(([value, label]) => ({
@@ -565,13 +586,13 @@ export function ArticleEditor({
                   />
                 </Field>
                 <ImageUploadField
-                  id="article-twitter-image"
                   label={labels.twitterImage}
                   value={tr.twitterImageUrl || null}
                   purpose="article"
                   category="news"
                   sourceType="ARTICLE"
                   labels={labels.upload}
+                  error={form.error("translation.twitterImageUrl")}
                   onChange={(next) =>
                     setTr({
                       twitterImageUrl: next?.url ?? "",
@@ -643,7 +664,7 @@ export function ArticleEditor({
             publishedAt={article.publishedAt}
             updatedAt={article.updatedAt}
             canPublish={canPublish}
-            canSave={canSave}
+            validate={form.validate}
             submitForm={submitForm}
             labels={labels.publish}
           />
@@ -655,6 +676,7 @@ export function ArticleEditor({
             tagIds={tagIds}
             onCategoryChange={setCategoryId}
             onTagsChange={setTagIds}
+            categoryError={form.error("meta.categoryId")}
             labels={labels.taxonomy}
           />
 
@@ -665,23 +687,22 @@ export function ArticleEditor({
             accent="warning"
             footer={
               <div className="flex flex-col gap-2">
-                <label className="flex items-center justify-between gap-2 text-sm">
-                  {labels.featuredPost}
+                {/* Switch first, label after — all three (ADR-089). */}
+                <UiField orientation="horizontal">
                   <Switch checked={isFeatured} onCheckedChange={(v) => setIsFeatured(v === true)} />
-                </label>
-                <label className="flex items-center justify-between gap-2 text-sm">
-                  {labels.activeLabel}
+                  <FieldLabel className="font-normal">{labels.featuredPost}</FieldLabel>
+                </UiField>
+                <UiField orientation="horizontal">
                   <Switch checked={isActive} onCheckedChange={(v) => setIsActive(v === true)} />
-                </label>
-                <label className="flex items-center justify-between gap-2 text-sm">
-                  <span>
-                    {labels.premium}
-                    <span className="block text-xs text-muted-foreground">
-                      {labels.premiumHint}
-                    </span>
-                  </span>
+                  <FieldLabel className="font-normal">{labels.activeLabel}</FieldLabel>
+                </UiField>
+                <UiField orientation="horizontal">
                   <Switch checked={isPremium} onCheckedChange={(v) => setIsPremium(v === true)} />
-                </label>
+                  <FieldContent>
+                    <FieldLabel className="font-normal">{labels.premium}</FieldLabel>
+                    <FieldDescription className="text-xs">{labels.premiumHint}</FieldDescription>
+                  </FieldContent>
+                </UiField>
               </div>
             }
           >
@@ -692,13 +713,13 @@ export function ArticleEditor({
               </TabsList>
               <TabsContent value="image" className="pt-3">
                 <ImageUploadField
-                  id="article-cover"
                   label={labels.coverImageUrl}
                   value={coverImageUrl || null}
                   purpose="article"
                   category="news"
                   sourceType="ARTICLE"
                   labels={labels.upload}
+                  error={form.error("meta.coverImageUrl")}
                   onChange={(next) => {
                     setCoverImageUrl(next?.url ?? "");
                     setCoverImageAssetId(next?.id ?? null);
@@ -706,34 +727,30 @@ export function ArticleEditor({
                 />
               </TabsContent>
               <TabsContent value="video" className="pt-3">
-                <Field id="article-video" label={labels.videoUrl}>
-                  <Input
-                    id="article-video"
-                    value={videoUrl}
-                    aria-invalid={videoInvalid}
-                    onChange={(e) => setVideoUrl(e.target.value)}
-                  />
-                  {videoInvalid && (
-                    <p className="text-xs text-destructive">{labels.videoInvalid}</p>
-                  )}
-                  {parsedVideo && (
-                    <p className="truncate text-xs text-muted-foreground">
-                      {parsedVideo.provider} · {parsedVideo.videoId}
-                    </p>
-                  )}
+                {/* Still flagged as you type, as before; a submit also
+                    catches a URL that is merely too long. The provider
+                    message beats the schema's generic one when both apply. */}
+                <Field
+                  label={labels.videoUrl}
+                  hint={
+                    parsedVideo ? `${parsedVideo.provider} · ${parsedVideo.videoId}` : undefined
+                  }
+                  error={videoInvalid ? labels.videoInvalid : form.error("meta.videoUrl")}
+                >
+                  <Input value={videoUrl} onChange={(e) => setVideoUrl(e.target.value)} />
                 </Field>
               </TabsContent>
             </Tabs>
 
             <div className="flex flex-col gap-1.5 border-t pt-3">
               <ImageUploadField
-                id="article-header-image"
                 label={labels.headerImage}
                 value={headerImageUrl || null}
                 purpose="article"
                 category="news"
                 sourceType="ARTICLE"
                 labels={labels.upload}
+                error={form.error("meta.headerImageUrl")}
                 onChange={(next) => {
                   setHeaderImageUrl(next?.url ?? "");
                   setHeaderImageAssetId(next?.id ?? null);
@@ -749,9 +766,8 @@ export function ArticleEditor({
             icon={Info}
             accent="neutral"
           >
-            <Field id="article-kind" label={labels.kind}>
+            <Field label={labels.kind}>
               <AdminCombobox
-                id="article-kind"
                 value={kind}
                 onValueChange={(next) => setKind(next || kind)}
                 options={Object.entries(labels.kinds).map(([value, label]) => ({ value, label }))}
@@ -774,19 +790,11 @@ export function ArticleEditor({
                 <dd className="min-w-0 truncate font-mono text-xs">{article.id}</dd>
               </div>
             </dl>
-            <Field id="article-source" label={labels.sourceLabel}>
-              <Input
-                id="article-source"
-                value={source}
-                onChange={(e) => setSource(e.target.value)}
-              />
+            <Field label={labels.sourceLabel} error={form.error("meta.source")}>
+              <Input value={source} onChange={(e) => setSource(e.target.value)} />
             </Field>
-            <Field id="article-source-url" label={labels.sourceUrlLabel}>
-              <Input
-                id="article-source-url"
-                value={sourceUrl}
-                onChange={(e) => setSourceUrl(e.target.value)}
-              />
+            <Field label={labels.sourceUrlLabel} error={form.error("meta.sourceUrl")}>
+              <Input value={sourceUrl} onChange={(e) => setSourceUrl(e.target.value)} />
             </Field>
           </EditorSection>
         </div>

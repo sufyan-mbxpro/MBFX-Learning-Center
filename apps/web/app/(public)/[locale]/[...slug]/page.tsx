@@ -62,7 +62,9 @@ export async function generateMetadata({
     title: (template ?? "%s").replace("%s", seo.title),
     description: seo.description ?? undefined,
     alternates: seo.canonicalUrl ? { canonical: seo.canonicalUrl } : undefined,
-    robots: seo.robots?.includes("noindex") ? { index: false, follow: false } : undefined,
+    // Conditional spread, not `: undefined` — see ADR-090 and the article
+    // route: a present-but-undefined `robots` key erases the layout's.
+    ...(seo.robots?.includes("noindex") ? { robots: { index: false, follow: false } } : {}),
     openGraph: {
       title: seo.title,
       description: seo.description ?? undefined,

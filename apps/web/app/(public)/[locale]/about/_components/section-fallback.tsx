@@ -55,7 +55,7 @@ export function SectionFallback({
               <Skeleton className="h-4 w-24" />
               <Skeleton className="h-9 w-full max-w-md" />
             </div>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {Array.from({ length: 6 }, (_, index) => (
                 <Skeleton key={index} className="h-44 w-full rounded-xl" />
               ))}
@@ -64,7 +64,7 @@ export function SectionFallback({
         )}
 
         {variant === "split" && (
-          <div className="grid gap-10 lg:grid-cols-[minmax(0,24rem)_1fr] lg:gap-16">
+          <div className="grid grid-cols-1 gap-10 lg:grid-cols-(--grid-intro-main) lg:gap-16">
             <div className="flex flex-col gap-3">
               <Skeleton className="h-4 w-24" />
               <Skeleton className="h-9 w-full max-w-sm" />

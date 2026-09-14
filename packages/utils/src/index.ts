@@ -10,3 +10,6 @@ export * from "./economic-calendar.ts";
 export * from "./file-size.ts";
 export * from "./stable-hash.ts";
 export * from "./slug.ts";
+export * from "./market-hours.ts";
+export * from "./statistics.ts";
+export * from "./duration.ts";

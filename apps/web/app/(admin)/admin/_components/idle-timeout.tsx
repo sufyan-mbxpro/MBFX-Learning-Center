@@ -16,6 +16,7 @@
 // stealable session and is exactly what security.md #11 exists to prevent.
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { signOut as endSession } from "../../../_lib/credentials.ts";
 import { Button } from "@repo/ui/components/button";
 import {
   Dialog,
@@ -58,7 +59,7 @@ export function IdleTimeout({ labels }: { labels: IdleTimeoutLabels }) {
   const [remaining, setRemaining] = React.useState(Math.ceil(WARNING_MS / 1000));
 
   const signOut = React.useCallback(async () => {
-    await fetch("/api/auth/sign-out", { method: "POST" });
+    await endSession();
     router.push("/admin/sign-in");
     router.refresh();
   }, [router]);

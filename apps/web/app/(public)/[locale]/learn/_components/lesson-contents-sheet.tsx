@@ -42,13 +42,19 @@ export function LessonContentsSheet({
       </Button>
 
       <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent side="start" closeLabel={t("lesson.close")} className="w-[min(22rem,90vw)]">
+        {/* Width and the 24px padding are the Sheet's own (changes-20). */}
+        <SheetContent side="start" closeLabel={t("lesson.close")}>
           <SheetHeader>
             <SheetTitle>{t("lesson.contentsAria")}</SheetTitle>
           </SheetHeader>
-          <div className="overflow-y-auto px-4 pb-6">
+          {/* `rail`, like the desktop sidebar: the Sheet is 24rem at its
+              widest, which is nearer the rail than the article column, and the
+              two surfaces showing the same list differently would be the
+              disagreement this component exists to prevent (ADR-082 #2). */}
+          <div className="min-h-0 overflow-y-auto">
             <CurriculumWithProgress
               sections={sections}
+              variant="rail"
               defaultOpenSectionIds={defaultOpenSectionIds}
             />
           </div>

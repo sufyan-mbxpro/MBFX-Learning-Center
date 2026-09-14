@@ -7,7 +7,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { Bell } from "lucide-react";
-import { Badge } from "@repo/ui/components/badge";
+import { CountBadge } from "@repo/ui/components/count-badge";
 import { Button } from "@repo/ui/components/button";
 import {
   DropdownMenu,
@@ -17,6 +17,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@repo/ui/components/dropdown-menu";
+import { EmptyState } from "@repo/ui/components/empty";
 import { cn } from "@repo/ui/lib/utils";
 import {
   markAllNotificationsReadAction,
@@ -64,15 +65,9 @@ export function NotificationBell({
       <DropdownMenuTrigger
         render={
           <Button variant="ghost" size="icon" aria-label={labels.openMenu} className="relative">
-            <Bell className="size-4.5" />
-            {unreadCount > 0 && (
-              <Badge
-                variant="destructive"
-                className="absolute -top-0.5 -end-0.5 h-4 min-w-4 px-1 text-[0.625rem]"
-              >
-                {unreadCount > 99 ? "99+" : unreadCount}
-              </Badge>
-            )}
+            <Bell className="size-5" />
+            {/* Hides itself at zero; the reference caps the bell at 999+. */}
+            <CountBadge count={unreadCount} max={999} placement="corner" />
           </Button>
         }
       />
@@ -98,7 +93,8 @@ export function NotificationBell({
         </div>
         <DropdownMenuSeparator />
         {items.length === 0 ? (
-          <p className="px-1.5 py-4 text-center text-sm text-muted-foreground">{labels.empty}</p>
+          // Borderless: the menu is already the container.
+          <EmptyState size="sm" title={labels.empty} className="border-none" />
         ) : (
           <DropdownMenuGroup className="max-h-80 overflow-y-auto">
             {items.map((item) => {

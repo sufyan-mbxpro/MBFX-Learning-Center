@@ -108,3 +108,32 @@ describe("guarded settings write — audit row on every write", () => {
     expect(auditRow.changes).toEqual({ before: true, after: false });
   });
 });
+
+// Moved here from `packages/settings/src/settings.integration.test.ts` in
+// changes-21 F9, for the reason that file's own header already gave about the
+// audit test above it: `@repo/core` is the one package that may depend on
+// settings AND rbac (architecture.md #8), so a permission assertion about a
+// settings write belongs on this side of the boundary.
+//
+// It had to move, not merely wanted to. `@repo/settings` held a
+// **devDependency** on `@repo/rbac` for this single test, and when ADR-078
+// added `auth → email → settings` that closed a package cycle —
+// `rbac → auth → email → settings → rbac`. Turbo refuses a cyclic task graph,
+// so root `pnpm lint` and `pnpm build` failed at graph construction and could
+// only be run per package. Every edge is individually legal; the cycle is not.
+describe("the settings permission boundary", () => {
+  it("denies a learner subject settings.update — what a Server Action must check before calling updateSetting", async () => {
+    const user = await db.user.create({
+      data: {
+        id: crypto.randomUUID(),
+        email: `learner-${Date.now()}@example.com`,
+        name: "Learner",
+        status: "ACTIVE",
+        userType: "LEARNER",
+      },
+    });
+
+    const subject = await rbac.loadSubject(user.id);
+    expect(rbac.can(subject, "settings.update")).toBe(false);
+  });
+});

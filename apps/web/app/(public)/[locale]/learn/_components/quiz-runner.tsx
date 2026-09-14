@@ -177,7 +177,7 @@ export function QuizRunner({ quiz, locale }: { quiz: QuizView; locale: string })
   if (phase.kind === "idle" || phase.kind === "starting") {
     return (
       <div className="flex flex-col gap-4 rounded-xl border bg-card p-6">
-        <dl className="grid gap-2 text-sm sm:grid-cols-3">
+        <dl className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-3">
           <Fact label={t("quizzes.questionsLabel")} value={String(quiz.questionCount)} />
           <Fact
             label={t("quizzes.passMarkLabel")}
@@ -191,7 +191,7 @@ export function QuizRunner({ quiz, locale }: { quiz: QuizView; locale: string })
           />
         </dl>
         <div>
-          <Button size="lg" disabled={busy} onClick={() => void start()}>
+          <Button size="lg" loading={busy} onClick={() => void start()}>
             {t("quizzes.start")}
           </Button>
         </div>
@@ -232,7 +232,7 @@ export function QuizRunner({ quiz, locale }: { quiz: QuizView; locale: string })
         {question.multiple && (
           <p className="text-sm text-muted-foreground">{t("quizzes.chooseAll")}</p>
         )}
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {question.options.map((option, index) => {
             const picked = selection.includes(index);
             return (
@@ -270,7 +270,7 @@ export function QuizRunner({ quiz, locale }: { quiz: QuizView; locale: string })
           </span>
         )}
         {answered && feedback?.correct === false && (
-          <span className="flex items-center gap-1.5 font-medium text-destructive">
+          <span className="flex items-center gap-1.5 font-medium text-destructive-interactive">
             <X aria-hidden className="size-4" />
             {t("quizzes.incorrect")}
           </span>
@@ -282,12 +282,12 @@ export function QuizRunner({ quiz, locale }: { quiz: QuizView; locale: string })
 
       <div>
         {answered ? (
-          <Button disabled={busy} onClick={() => void next()}>
+          <Button loading={busy} onClick={() => void next()}>
             {position === quiz.questions.length ? t("quizzes.finish") : t("quizzes.next")}
             <ArrowRight data-icon="inline-end" aria-hidden className="rtl:rotate-180" />
           </Button>
         ) : (
-          <Button disabled={busy || selection.length === 0} onClick={() => void answer()}>
+          <Button disabled={selection.length === 0} loading={busy} onClick={() => void answer()}>
             {t("quizzes.submitAnswer")}
           </Button>
         )}

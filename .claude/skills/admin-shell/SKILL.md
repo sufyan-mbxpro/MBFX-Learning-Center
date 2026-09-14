@@ -62,3 +62,35 @@ disabled — changes-05 made contrast advisory); passing
 palette → save → public surface (second, unauthenticated context) shows the
 new brand without deploy; preset switch round-trip; settings write in audit
 log; every screen axe-clean.
+
+## The dashboard is gated tile by tile (changes-21 F8, extending ADR-085)
+
+ADR-085 gated the content blocks it added and left the tiles that predate it
+open: until F8 any STAFF member opening `/admin` saw the total user count, the
+active-employee headcount, the published-article count, the signup growth
+curve and the audit-log activity feed. A dashboard is not a lesser surface —
+an aggregate over rows someone may not read is still a read of those rows,
+and "it is only a total" is how a headcount reaches a contractor who holds one
+content permission.
+
+- **`OVERVIEW_TILES` in `@repo/core`'s `admin-reads.ts` is the registry**, and
+  `visibleOverviewTiles(allows)` narrows it. Each tile takes the key its own
+  SCREEN requires — `analysis.view` for articles, `features.manage` for the
+  flag count, because `/admin/features` has no `.view` key.
+- **A hidden tile runs no query and arrives ABSENT, not zero.** Every field on
+  `AdminDashboardOverview` is optional for exactly this reason: a zero is a
+  claim about the data, and rendering one for a tile the viewer may not see
+  would state something false rather than nothing.
+- **The growth chart gates per SERIES**, not per card (`showUsers` /
+  `showArticles`): someone may hold `users.view` and not `analysis.view`.
+- **The activity feed takes `audit.view`** — it IS the audit log.
+- **"Active menu items" is gone.** It counted rows for `/admin/navigation`, a
+  screen ADR-038 hid, so the number was unactionable and the link went
+  nowhere useful. **Email deliveries** replaced it, linking to
+  `/admin/settings/email/log`.
+- `loadAdminDashboardCounts()` — four ungated totals, exported and called by
+  nothing — was DELETED rather than left as a convenience.
+- Guarded by `apps/web/app/admin-dashboard-registries.test.ts`, which checks
+  every tile's permission exists in the seed (a misspelled key would hide a
+  tile from everyone, silently, forever) and that an empty-permission subject
+  sees nothing.

@@ -8,6 +8,8 @@ import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
+import { z } from "zod";
+import { createRoleSchema } from "@repo/contracts";
 import { Button } from "@repo/ui/components/button";
 import {
   Dialog,
@@ -17,9 +19,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@repo/ui/components/dialog";
+import { Field, FieldError, FieldGroup, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
-import { Label } from "@repo/ui/components/label";
 import { Textarea } from "@repo/ui/components/textarea";
+import { useFieldErrors } from "../_hooks/use-field-errors.ts";
 import { createRoleAction } from "../_actions/user-actions.ts";
 
 export function CreateRoleDialog({
@@ -54,16 +57,32 @@ export function CreateRoleDialog({
       .replace(/[^a-z0-9]+/g, "_")
       .replace(/^_+|_+$/g, "");
 
-  const submit = () =>
+  // The action's own schema, with the actor's ceiling (strict <) in place of
+  // the seed's 99 — the server enforces the same bound through canAssignRole.
+  const schema = React.useMemo(
+    () =>
+      createRoleSchema.extend({
+        level: z
+          .int()
+          .min(0)
+          .max(Math.max(0, maxLevel - 1)),
+      }),
+    [maxLevel],
+  );
+  const values = { key, name, level, description: description || undefined };
+  const form = useFieldErrors(schema, values);
+
+  const close = () => {
+    setOpen(false);
+    form.reset();
+  };
+
+  const submit = () => {
+    if (!form.validate()) return;
     startTransition(async () => {
       try {
-        await createRoleAction({
-          key,
-          name,
-          level,
-          description: description || undefined,
-        });
-        setOpen(false);
+        await createRoleAction(values);
+        close();
         setName("");
         setKey("");
         setKeyTouched(false);
@@ -74,9 +93,10 @@ export function CreateRoleDialog({
         toast.error(error instanceof Error ? error.message : String(error));
       }
     });
+  };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(next) => (next ? setOpen(true) : close())}>
       <Button onClick={() => setOpen(true)}>
         <Plus data-icon="inline-start" aria-hidden /> {labels.createRole}
       </Button>
@@ -85,22 +105,21 @@ export function CreateRoleDialog({
           <DialogTitle>{labels.createRole}</DialogTitle>
           <DialogDescription>{labels.createRoleDescription}</DialogDescription>
         </DialogHeader>
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="role-name">{labels.name}</Label>
+        <FieldGroup>
+          <Field invalid={form.invalid("name")} required>
+            <FieldLabel>{labels.name}</FieldLabel>
             <Input
-              id="role-name"
               value={name}
               onChange={(e) => {
                 setName(e.target.value);
                 if (!keyTouched) setKey(slugify(e.target.value));
               }}
             />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="role-key">{labels.key}</Label>
+            <FieldError>{form.error("name")}</FieldError>
+          </Field>
+          <Field invalid={form.invalid("key")} required>
+            <FieldLabel>{labels.key}</FieldLabel>
             <Input
-              id="role-key"
               value={key}
               className="font-mono"
               onChange={(e) => {
@@ -108,36 +127,36 @@ export function CreateRoleDialog({
                 setKey(slugify(e.target.value));
               }}
             />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="role-level">{labels.level}</Label>
+            <FieldError>{form.error("key")}</FieldError>
+          </Field>
+          <Field invalid={form.invalid("level")} required>
+            <FieldLabel>{labels.level}</FieldLabel>
             <Input
-              id="role-level"
               type="number"
               min={0}
               max={Math.max(0, maxLevel - 1)}
               value={level}
               onChange={(e) => setLevel(Number(e.target.value))}
             />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="role-description">{labels.description}</Label>
+            <FieldError>{form.error("level")}</FieldError>
+          </Field>
+          <Field invalid={form.invalid("description")}>
+            <FieldLabel>{labels.description}</FieldLabel>
             <Textarea
-              id="role-description"
               rows={3}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />
-          </div>
-        </div>
+            <FieldError>{form.error("description")}</FieldError>
+          </Field>
+        </FieldGroup>
         <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)} disabled={pending}>
+          <Button variant="outline" onClick={close} disabled={pending}>
             {labels.cancel}
           </Button>
-          <Button
-            onClick={submit}
-            disabled={pending || !name.trim() || !key || level < 0 || level >= maxLevel}
-          >
+          {/* Enabled while fields are wrong: a disabled Save is silent about
+              WHICH field (audit F-07). Pressing it names them instead. */}
+          <Button onClick={submit} loading={pending}>
             {labels.save}
           </Button>
         </DialogFooter>

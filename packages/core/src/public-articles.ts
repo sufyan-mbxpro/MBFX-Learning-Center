@@ -787,10 +787,16 @@ export async function loadArticleRssEntries(
 
 // ─── Blog sidebar facets (changes-03-plan.md §5.3) ────────────
 //
-// The reference's listing sidebar (image-10.png) shows categories, popular
-// tags, latest posts and a month archive. Four reads, one cached function,
-// one `content` tag — a sidebar that revalidates with the articles it
-// describes rather than four independently-cached fragments drifting apart.
+// The listing sidebar shows categories, popular tags and latest posts. Three
+// reads, one cached function, one `content` tag — a sidebar that revalidates
+// with the articles it describes rather than three independently-cached
+// fragments drifting apart.
+//
+// The reference (image-10.png) also had a month archive, and it is gone as of
+// changes-22: it rendered as unlinked text because no `/news/archive/<month>`
+// route exists, and deriving it meant one `findMany` over EVERY published row
+// on every sidebar render — the most expensive query here, paying for the one
+// panel a reader could not use.
 
 export interface ArticleFacetTerm {
   id: string;
@@ -800,16 +806,9 @@ export interface ArticleFacetTerm {
   count: number;
 }
 
-export interface ArticleArchiveEntry {
-  /** First day of the month, UTC — the caller formats it per locale. */
-  month: Date;
-  count: number;
-}
-
 export interface ArticleFacets {
   categories: ArticleFacetTerm[];
   tags: ArticleFacetTerm[];
-  archives: ArticleArchiveEntry[];
   latest: ArticleListEntry[];
 }
 
@@ -817,7 +816,7 @@ export interface ArticleFacets {
  * Facet options.
  *
  * `categoryId` scopes the view WITHOUT hiding the section's index, and the
- * asymmetry is deliberate: `tags`, `archives` and `latest` describe the
+ * asymmetry is deliberate: `tags` and `latest` describe the
  * articles currently being looked at, while `categories` stays global with
  * global counts because it is how a reader LEAVES the category they are in.
  * A category rail that showed only the current category would be a rail with
@@ -846,7 +845,7 @@ export async function loadArticleFacets(
 
   const sectionVisible = { ...publicArticleWhere(now), kind: { in: kinds } };
 
-  const [ctx, categories, tags, dated, latest] = await Promise.all([
+  const [ctx, categories, tags, latest] = await Promise.all([
     localeContext(),
     db.articleCategory.findMany({
       where: { isActive: true },
@@ -865,15 +864,6 @@ export async function loadArticleFacets(
         translations: { select: { locale: true, name: true, slug: true } },
         _count: { select: { articles: { where: { article: visible } } } },
       },
-    }),
-    // Archive months are derived in JS rather than SQL: the effective
-    // publish date is `publishedAt ?? scheduledFor` (a due-but-unswept
-    // SCHEDULED row is live, ADR-015 #6), which no single column can
-    // GROUP BY. Selecting two dates is cheap; getting this wrong would
-    // silently drop just-published months from the archive.
-    db.article.findMany({
-      where: visible,
-      select: { publishedAt: true, scheduledFor: true },
     }),
     loadPublishedArticles(locale, {
       kinds,
@@ -895,18 +885,18 @@ export async function loadArticleFacets(
     return picked ? { id, name: picked.name, slug: picked.slug, count } : null;
   }
 
-  const monthCounts = new Map<number, number>();
-  for (const row of dated) {
-    const effective = effectivePublishedAt(row);
-    if (!effective) continue;
-    const month = Date.UTC(effective.getUTCFullYear(), effective.getUTCMonth(), 1);
-    monthCounts.set(month, (monthCounts.get(month) ?? 0) + 1);
-  }
-
   return {
     categories: categories
       .map((c) => localize(c.translations, c.id, c._count.articles))
-      .filter((c) => c !== null),
+      .filter((c) => c !== null)
+      // A category with nothing in THIS feed is not shown (changes-22). The
+      // counts are scoped by `kinds`, and the feeds are split by ADR-015 #11 —
+      // `/news` is NEWS, `/analysis` is ANALYSIS + TRADE_IDEA — so a trade idea
+      // filed under "Trade Ideas" put a row reading "Trade Ideas 0" in the
+      // /news sidebar, linking to an archive that then showed the article. A
+      // rail row is a promise that there is something behind it; a zero is a
+      // promise the count itself contradicts.
+      .filter((c) => c.count > 0),
     tags: tags
       .map((t) => localize(t.translations, t.id, t._count.articles))
       .filter((t) => t !== null)
@@ -914,9 +904,6 @@ export async function loadArticleFacets(
       // every tag ever created.
       .sort((a, b) => b.count - a.count)
       .slice(0, options.tagLimit ?? 12),
-    archives: [...monthCounts.entries()]
-      .map(([month, count]) => ({ month: new Date(month), count }))
-      .sort((a, b) => b.month.getTime() - a.month.getTime()),
     latest: latest.entries,
   };
 }

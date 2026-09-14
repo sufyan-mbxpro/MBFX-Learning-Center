@@ -60,7 +60,10 @@ export function SiteNav({ items, ariaLabel }: { items: SiteNavItem[]; ariaLabel:
   const t = useTranslations("nav");
 
   return (
-    <MegaMenu aria-label={ariaLabel} className="hidden lg:block">
+    // From xl, not lg (changes-21 D-1): the nav alone is ~813px, and with the
+    // logo and the action cluster the header row needs 1,239px — it overflowed
+    // every page between 1024 and 1279. Below xl the mobile sheet serves.
+    <MegaMenu aria-label={ariaLabel} className="hidden xl:block">
       <MegaMenuList>
         {items.map((item) => {
           const panel = item.children.length > 0 ? panelForHref(item.href) : null;

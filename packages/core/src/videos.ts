@@ -1069,3 +1069,128 @@ export async function loadVideoSitemapEntries(): Promise<VideoSitemapEntry[]> {
       : [],
   );
 }
+
+// ─── The homepage rail (changes-28 PR 1, ADR-092) ────────────
+
+/**
+ * One topic as the homepage's video rail needs it.
+ *
+ * Deliberately NOT `VideoTopicCardView`: that one is the shelf card's shape
+ * (a cover and a count, no playable source, one track at a time). The rail
+ * plays IN PLACE, so it needs the resolved source of the topic's first video
+ * and it spans both schools — a homepage that showed forex videos only would
+ * be advertising half the site.
+ */
+export interface HomeVideoTopicView {
+  id: string;
+  slug: string;
+  /** A LEARN_TRACKS key — the rail links per track (ADR-065). */
+  track: LearnTrackKey;
+  title: string;
+  summary: string | null;
+  /** The topic's own cover asset, or null — the caller supplies the fallback. */
+  coverUrl: string | null;
+  /** The category name, already resolved through the locale chain. */
+  categoryName: string | null;
+  /**
+   * The FIRST video on the topic, resolved. Null when the topic carries none,
+   * or when every video it carries resolves to null (an unrecognised URL, a
+   * deleted asset) — in which case the tile renders as a written guide rather
+   * than as a player with nothing behind it.
+   */
+  source: VideoSourceView | null;
+}
+
+/**
+ * The newest published video topics, across every track.
+ *
+ * Ordered `publishedAt desc` and NOT by `sortOrder`: `sortOrder` is a
+ * per-track editorial ordering and interleaving two of them by it produces an
+ * order neither editor chose. Recency is the one ordering that means the same
+ * thing in both schools.
+ */
+export async function loadFeaturedVideoTopics(
+  locale: string,
+  limit: number,
+): Promise<HomeVideoTopicView[]> {
+  const { locales, defaultLocale } = await localeContext();
+
+  const rows = await db.videoTopic.findMany({
+    where: publicVideoWhere(),
+    select: {
+      id: true,
+      track: true,
+      coverAssetId: true,
+      translations: { select: { locale: true, title: true, slug: true, summary: true } },
+      category: {
+        select: {
+          isActive: true,
+          translations: { select: { locale: true, name: true, slug: true } },
+        },
+      },
+      videos: {
+        orderBy: { sortOrder: "asc" },
+        select: {
+          assetId: true,
+          externalUrl: true,
+          posterAssetId: true,
+          title: true,
+        },
+      },
+    },
+    orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
+    // Over-fetch before the track and translation filters below, so a
+    // de-registered track or an untranslated row cannot shorten the rail.
+    take: Math.max(limit * 3, limit),
+  });
+
+  const assetUrls = await resolveAssetUrls([
+    ...rows.map((row) => row.coverAssetId),
+    ...rows.flatMap((row) => row.videos.flatMap((v) => [v.assetId, v.posterAssetId])),
+  ]);
+
+  const views: HomeVideoTopicView[] = [];
+  for (const row of rows) {
+    if (views.length === limit) break;
+    const track = trackKeyOf(row.track);
+    if (!track) continue;
+    const t = pickTranslation(row.translations, locale, defaultLocale, locales);
+    if (!t) continue;
+    const category =
+      row.category && row.category.isActive
+        ? pickTranslation(row.category.translations, locale, defaultLocale, locales)
+        : null;
+
+    // The first video this service can make SAFE, not simply the first row:
+    // `resolveVideoSource` returns null for an unrecognised URL, and skipping
+    // to the next candidate is what keeps one bad row from muting a topic
+    // that has three good ones behind it.
+    let source: VideoSourceView | null = null;
+    for (const video of row.videos) {
+      source = resolveVideoSource(video, assetUrls);
+      if (source) break;
+    }
+
+    views.push({
+      id: row.id,
+      slug: t.slug,
+      track,
+      title: t.title,
+      summary: t.summary,
+      coverUrl: row.coverAssetId ? (assetUrls.get(row.coverAssetId) ?? null) : null,
+      categoryName: category?.name ?? null,
+      source,
+    });
+  }
+  return views;
+}
+
+export async function getFeaturedVideoTopics(
+  locale: string,
+  limit: number,
+): Promise<HomeVideoTopicView[]> {
+  "use cache";
+  cacheTag("content");
+  cacheLife({ revalidate: 300 });
+  return loadFeaturedVideoTopics(locale, limit);
+}

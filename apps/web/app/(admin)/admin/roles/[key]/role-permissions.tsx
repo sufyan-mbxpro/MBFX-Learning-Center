@@ -10,12 +10,17 @@ import { useTransition } from "react";
 import { toast } from "sonner";
 import { Check } from "lucide-react";
 import { Checkbox } from "@repo/ui/components/checkbox";
+import { Field, FieldContent, FieldDescription, FieldLabel } from "@repo/ui/components/field";
 import { humanizeKey } from "@repo/utils";
 import { Input } from "@repo/ui/components/input";
 import { setRolePermissionAction, setRolePermissionsAction } from "../../_actions/user-actions.ts";
 
 export interface PermissionGroupView {
   groupName: string;
+  /** Resolved by the page: a catalog string, else `humanizeKey()` (ADR-044 #5). */
+  label: string;
+  /** One line naming the admin screens this card governs. Optional. */
+  description?: string | null;
   permissions: { key: string; label: string }[];
 }
 
@@ -76,7 +81,13 @@ export function RolePermissions({
     .map((group) => ({
       ...group,
       permissions: group.permissions.filter(
-        (p) => !q || p.key.toLowerCase().includes(q) || p.label.toLowerCase().includes(q),
+        (p) =>
+          !q ||
+          // The GROUP label matches too: typing "courses" or "news" is how
+          // someone looks for a card, now that the cards are page-shaped.
+          group.label.toLowerCase().includes(q) ||
+          p.key.toLowerCase().includes(q) ||
+          p.label.toLowerCase().includes(q),
       ),
     }))
     .filter((group) => group.permissions.length > 0);
@@ -87,17 +98,18 @@ export function RolePermissions({
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-3 rounded-lg border bg-muted/30 p-4">
         <div className="flex items-center justify-between gap-3">
-          <label className="flex items-center gap-2.5 text-sm font-medium">
-            {!readOnly && (
+          {readOnly ? (
+            <span className="text-sm font-medium">{labels.grantAll}</span>
+          ) : (
+            <Field orientation="horizontal" className="w-auto">
               <Checkbox
                 checked={allGranted}
                 indeterminate={!allGranted && granted.size > 0}
                 onCheckedChange={(next) => apply(allKeys, next === true)}
-                aria-label={labels.grantAll}
               />
-            )}
-            {labels.grantAll}
-          </label>
+              <FieldLabel>{labels.grantAll}</FieldLabel>
+            </Field>
+          )}
           <span className="text-sm text-muted-foreground">
             {granted.size} {labels.enabledOf} {allKeys.length}
           </span>
@@ -117,49 +129,79 @@ export function RolePermissions({
         return (
           <section key={group.groupName} className="rounded-lg border">
             <header className="flex items-center justify-between gap-3 border-b bg-muted/20 px-4 py-2.5">
-              <h3 className="text-sm font-semibold capitalize">
-                {group.groupName}
-                <span className="ms-2 font-normal text-muted-foreground">
-                  {groupGranted} {labels.enabledOf} {groupKeys.length}
-                </span>
-              </h3>
+              {/* The `capitalize` class is gone (ADR-083). It was papering over
+                  a raw group id — and it only ever fixed the first letter, which
+                  is why `seo` rendered as "Seo". The label is a catalog string
+                  now, so nothing may re-case it: `text-transform: capitalize`
+                  would break "News & analysis" the moment a label has a word the
+                  catalog deliberately left lowercase. */}
+              <div className="flex min-w-0 flex-col">
+                {/* The count is a SIBLING of the heading, not inside it. Inside,
+                    the accessible name concatenated to "Users & roles0of9" —
+                    `ms-2` is a margin, and a margin is not a space. A heading
+                    also should not name a number that changes as you click. */}
+                <div className="flex items-baseline gap-2">
+                  <h3 className="text-sm font-semibold">{group.label}</h3>
+                  <span className="text-sm text-muted-foreground">
+                    {groupGranted} {labels.enabledOf} {groupKeys.length}
+                  </span>
+                </div>
+                {group.description ? (
+                  <p className="text-xs text-muted-foreground">{group.description}</p>
+                ) : null}
+              </div>
               {!readOnly && (
-                <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                  {labels.selectAll}
+                <Field orientation="horizontal" className="w-auto">
+                  <FieldLabel className="font-normal text-muted-foreground">
+                    {labels.selectAll}
+                  </FieldLabel>
+                  {/* The aria-label names the GROUP too: every section has a
+                      "Select all", and a screen reader lists them together. */}
                   <Checkbox
                     checked={groupAll}
                     indeterminate={!groupAll && groupGranted > 0}
                     onCheckedChange={(next) => apply(groupKeys, next === true)}
-                    aria-label={`${labels.selectAll}: ${group.groupName}`}
+                    aria-label={`${labels.selectAll}: ${group.label}`}
                   />
-                </label>
+                </Field>
               )}
             </header>
-            <ul className="grid gap-x-6 sm:grid-cols-2">
+            <ul className="grid grid-cols-1 gap-x-6 sm:grid-cols-2">
               {group.permissions.map((permission) => (
                 <li
                   key={permission.key}
                   className="flex items-center gap-2.5 border-b px-4 py-2 last:border-b-0 sm:nth-last-2:border-b-0"
                 >
                   {readOnly ? (
-                    granted.has(permission.key) ? (
-                      <Check aria-hidden className="size-4 shrink-0 text-success-interactive" />
-                    ) : (
-                      <span aria-hidden className="inline-block size-4 shrink-0" />
-                    )
+                    <>
+                      {granted.has(permission.key) ? (
+                        <Check aria-hidden className="size-4 shrink-0 text-success-interactive" />
+                      ) : (
+                        <span aria-hidden className="inline-block size-4 shrink-0" />
+                      )}
+                      <div className="flex min-w-0 flex-col py-0.5">
+                        <span className="truncate text-sm">{permission.label}</span>
+                        <span className="truncate text-xs text-muted-foreground">
+                          {humanizeKey(permission.key)}
+                        </span>
+                      </div>
+                    </>
                   ) : (
-                    <Checkbox
-                      checked={granted.has(permission.key)}
-                      onCheckedChange={(next) => apply([permission.key], next === true)}
-                      aria-label={permission.label}
-                    />
+                    <Field orientation="horizontal" className="min-w-0">
+                      <Checkbox
+                        checked={granted.has(permission.key)}
+                        onCheckedChange={(next) => apply([permission.key], next === true)}
+                      />
+                      <FieldContent className="min-w-0 py-0.5">
+                        <FieldLabel className="w-full min-w-0 font-normal">
+                          <span className="truncate">{permission.label}</span>
+                        </FieldLabel>
+                        <FieldDescription className="truncate text-xs">
+                          {humanizeKey(permission.key)}
+                        </FieldDescription>
+                      </FieldContent>
+                    </Field>
                   )}
-                  <div className="flex min-w-0 flex-col py-0.5">
-                    <span className="truncate text-sm">{permission.label}</span>
-                    <span className="truncate text-xs text-muted-foreground">
-                      {humanizeKey(permission.key)}
-                    </span>
-                  </div>
                 </li>
               ))}
             </ul>

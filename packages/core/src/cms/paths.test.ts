@@ -14,7 +14,7 @@ describe("assertPathNotReserved", () => {
   });
 
   it("allows an ordinary STATIC path", () => {
-    expect(() => assertPathNotReserved("/about", PageKind.STATIC)).not.toThrow();
+    expect(() => assertPathNotReserved("/pricing", PageKind.STATIC)).not.toThrow();
   });
 
   it("exempts COLLECTION pages — their path is the content type's hosting route", () => {

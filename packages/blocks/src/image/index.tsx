@@ -7,7 +7,7 @@ const ASPECT_CLASS: Record<ImageProps["aspectRatio"], string> = {
   auto: "",
   square: "aspect-square",
   video: "aspect-video",
-  portrait: "aspect-[3/4]",
+  portrait: "aspect-3/4",
 };
 
 const FIT_CLASS: Record<ImageProps["fit"], string> = {

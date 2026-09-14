@@ -2,6 +2,7 @@ import { Button as ButtonPrimitive } from "@base-ui/react/button";
 import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "@repo/ui/lib/utils";
+import { Spinner } from "@repo/ui/components/spinner";
 
 // changes-20 / ADR-072 — the reference's button anatomy (docs/design-system/
 // tokens.md §6.1). Size NAMES are unchanged so no call site has to move;
@@ -98,11 +99,27 @@ function Button({
   shape = "default",
   emphasis = false,
   nativeButton,
+  loading = false,
+  disabled,
+  children,
   ...props
-}: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
+}: ButtonPrimitive.Props &
+  VariantProps<typeof buttonVariants> & {
+    /**
+     * changes-21 Phase A — the one in-control pending state. Disables the
+     * button, marks it `aria-busy`, and puts the Spinner where the icon goes:
+     * a leading/only icon is hidden for the duration, the label stays, so the
+     * button neither changes its words nor its width by more than one glyph.
+     * Pass it to the button that STARTED the work; siblings that merely wait
+     * on it stay `disabled`.
+     */
+    loading?: boolean;
+  }) {
   return (
     <ButtonPrimitive
       data-slot="button"
+      data-loading={loading || undefined}
+      aria-busy={loading || undefined}
       // Base UI defaults nativeButton to true, assuming `render` (when
       // given) still resolves to a real <button> — every call site in this
       // repo uses `render` to become a Next.js <Link> instead (an <a>), so
@@ -110,9 +127,19 @@ function Button({
       // genuinely renders a native <button> via `render` can still pass
       // nativeButton explicitly to override this.
       nativeButton={nativeButton ?? !props.render}
-      className={cn(buttonVariants({ variant, size, shape, emphasis, className }))}
+      disabled={disabled || loading}
+      className={cn(
+        buttonVariants({ variant, size, shape, emphasis, className }),
+        loading && "[&>svg:not([data-slot=spinner])]:hidden",
+      )}
       {...props}
-    />
+    >
+      {/* `inherit`: the button's own icon rule sizes it (16px, 14px at xs and
+          below). `current`: the label's ink, so it shows on a primary fill —
+          the brand-filled mark is bronze on bronze there. */}
+      {loading && <Spinner size="inherit" tone="current" data-icon="inline-start" />}
+      {children}
+    </ButtonPrimitive>
   );
 }
 

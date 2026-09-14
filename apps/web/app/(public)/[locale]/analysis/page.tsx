@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { publicArticleSearchSchema } from "@repo/contracts";
-import { getArticleFacets, getPublishedArticles } from "@repo/core";
+import { getArticleFacets, getPublishedArticles, isNewsletterPlacementEnabled } from "@repo/core";
 import { getSetting, isFeatureVisible } from "@repo/settings";
 import { Container } from "@repo/ui/components/container";
 import { CtaBand } from "@repo/ui/components/cta-band";
@@ -12,6 +12,7 @@ import { ArticleCards } from "../news/_components/article-list.tsx";
 import { ArticleSidebar } from "../news/_components/article-sidebar.tsx";
 import { ListingHeader } from "../news/_components/listing-header.tsx";
 import { NewsletterForm } from "../_components/newsletter-form.tsx";
+import { newsletterFormLabels } from "../_components/newsletter-labels.ts";
 import { NumberedPagination } from "../news/_components/numbered-pagination.tsx";
 
 export async function generateMetadata({
@@ -42,12 +43,15 @@ export default async function AnalysisPage({
   const parsed = publicArticleSearchSchema.safeParse({ q: search.q, page: search.page });
   const { q, page = 0 } = parsed.success ? parsed.data : {};
 
-  const [t, tFooter, perPage, showAuthor, newsletterEnabled] = await Promise.all([
+  const [t, tFooter, perPage, showAuthor, newsletterFlag, newsletterPlaced] = await Promise.all([
     getTranslations("news"),
     getTranslations("footer"),
     getSetting("articles.perPage"),
     getSetting("articles.showAuthor"),
-    getSetting("footer.newsletterEnabled"),
+    // Flag AND placement (ADR-080 #5) — the deleted `footer.newsletterEnabled`
+    // conflated the two and lived in a group nobody could edit.
+    isFeatureVisible("newsletter", null),
+    isNewsletterPlacementEnabled("analysis"),
   ]);
   const kinds = ["ANALYSIS", "TRADE_IDEA"] as const;
 
@@ -70,7 +74,7 @@ export default async function AnalysisPage({
       />
 
       <Section spacing="md">
-        <Container className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <Container className="grid grid-cols-1 gap-10 lg:grid-cols-(--grid-main-aside)">
           <div className="flex flex-col gap-8">
             {q && (
               <p className="text-sm text-muted-foreground">
@@ -97,18 +101,16 @@ export default async function AnalysisPage({
         </Container>
       </Section>
 
-      {newsletterEnabled && (
+      {newsletterFlag && newsletterPlaced && (
         <Section spacing="sm">
           <Reveal variant="up">
             <CtaBand title={t("subscribeTitle")} description={t("subscribeBody")}>
               <div className="w-full sm:w-80">
                 <NewsletterForm
                   tone="onFill"
-                  id="listing-newsletter"
-                  placeholder={tFooter("newsletterPlaceholder")}
-                  label={tFooter("newsletterLabel")}
-                  submitLabel={tFooter("newsletterSubmit")}
-                  unavailableLabel={tFooter("newsletterUnavailable")}
+                  locale={locale}
+                  source="analysis"
+                  labels={newsletterFormLabels(tFooter)}
                 />
               </div>
             </CtaBand>

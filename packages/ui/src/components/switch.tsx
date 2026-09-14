@@ -3,6 +3,7 @@
 import { Switch as SwitchPrimitive } from "@base-ui/react/switch";
 
 import { cn } from "@repo/ui/lib/utils";
+import { useFieldControl } from "@repo/ui/components/field";
 
 // changes-20 / ADR-074 — the reference's switch (tokens.md §6.14): a 44×24
 // track with a 20px thumb. The unchecked track is --input (the 3:1 slate
@@ -13,6 +14,11 @@ import { cn } from "@repo/ui/lib/utils";
 // The previous `size` prop had no call sites and the reference has one size,
 // so it is gone rather than kept as an untested second geometry.
 function Switch({ className, ...props }: SwitchPrimitive.Root.Props) {
+  // Inside a Field: id, required, aria-invalid, aria-describedby (ADR-077),
+  // and `aria-labelledby` — Base UI puts the `id` it is given on its hidden
+  // native input, so without it the role="switch" element has no accessible
+  // name (axe: aria-toggle-field-name).
+  const wired = useFieldControl(props, { labelledBy: true });
   return (
     <SwitchPrimitive.Root
       data-slot="switch"
@@ -20,7 +26,7 @@ function Switch({ className, ...props }: SwitchPrimitive.Root.Props) {
         "peer group/switch relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors outline-none after:absolute after:-inset-x-3 after:-inset-y-2 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background aria-invalid:ring-2 aria-invalid:ring-destructive/20 data-checked:bg-primary-interactive data-unchecked:bg-input data-disabled:cursor-not-allowed data-disabled:opacity-50",
         className,
       )}
-      {...props}
+      {...wired}
     >
       <SwitchPrimitive.Thumb
         data-slot="switch-thumb"

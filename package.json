@@ -18,6 +18,7 @@
     "governance:check": "node scripts/governance-check.mjs",
     "check:phantom-deps": "node scripts/check-phantom-deps.mjs",
     "check:permission-keys": "node scripts/check-permission-keys.mjs",
+    "check:email-templates": "node scripts/check-email-templates.mjs",
     "check:catalog-completeness": "node scripts/check-catalog-completeness.mjs",
     "check:home-sections": "node scripts/check-home-sections.mjs",
     "check:block-fixtures": "node scripts/check-block-fixtures.mjs",

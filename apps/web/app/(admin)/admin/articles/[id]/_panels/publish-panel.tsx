@@ -29,6 +29,7 @@
 
 import { useState } from "react";
 import { Archive, CalendarClock, Rocket, Send, Undo2 } from "lucide-react";
+import { scheduleArticleSchema } from "@repo/contracts";
 import { Button } from "@repo/ui/components/button";
 import { ConfirmDialog } from "@repo/ui/components/confirm-dialog";
 // ADR-071 — the schedule field is shared with ContentStatusPanel now that
@@ -44,8 +45,14 @@ import {
   StatusBadge,
   statusTone,
 } from "../../../_components/status-badge.tsx";
+import { useFieldErrors } from "../../../_hooks/use-field-errors.ts";
 import { useServerAction } from "../../../_hooks/use-server-action.ts";
 import { EditorSection } from "../../../_components/editor/editor-section.tsx";
+
+// ADR-077 — the date as `transitionArticleAction` reads it
+// (`z.coerce.date()`): an empty field coerces to an Invalid Date, which is
+// the "required" message rather than a RangeError from `toISOString()`.
+const scheduleSchema = scheduleArticleSchema.pick({ scheduledFor: true });
 
 export interface PublishLabels extends ScheduleFieldLabels {
   section: string;
@@ -90,7 +97,7 @@ export function PublishPanel({
   publishedAt,
   updatedAt,
   canPublish,
-  canSave,
+  validate,
   submitForm,
   labels,
 }: {
@@ -100,9 +107,11 @@ export function PublishPanel({
   publishedAt: string | null;
   updatedAt: string;
   canPublish: boolean;
-  /** The editor's own save validity. A transition that saves first cannot run
-   * while the form is incomplete, exactly as the header button cannot. */
-  canSave: boolean;
+  /** The editor's inline validation (ADR-077). A transition that saves first
+   * runs it and stops on false, exactly as the header button does — the
+   * editor's Fields then say what is wrong, where a disabled button could
+   * not (audit F-07). */
+  validate: () => boolean;
   /** The editor's save, optionally followed by a lifecycle move — the single
    * operation this panel and the header button share. */
   submitForm: (
@@ -114,6 +123,10 @@ export function PublishPanel({
   const [scheduleFor, setScheduleFor] = useState("");
   const [archiveOpen, setArchiveOpen] = useState(false);
   const { run, pending } = useServerAction();
+  // Which transition the pending work belongs to, so only THAT button shows
+  // the spinner; the rest wait disabled (changes-21 Phase A).
+  const [moving, setMoving] = useState<string | null>(null);
+  const schedule = useFieldErrors(scheduleSchema, { scheduledFor: scheduleFor });
 
   const transitions = legalTransitions.filter(
     (to) => canPublish || (to !== "PUBLISHED" && to !== "SCHEDULED"),
@@ -158,10 +171,11 @@ export function PublishPanel({
 
       {transitions.includes("SCHEDULED") && (
         <ScheduleField
-          id="article-schedule"
           value={scheduleFor}
           onChange={setScheduleFor}
           labels={labels}
+          required
+          error={schedule.error("scheduledFor")}
         />
       )}
 
@@ -173,12 +187,18 @@ export function PublishPanel({
               key={to}
               variant={TRANSITION_VARIANT[to] ?? "outline"}
               size="sm"
-              disabled={
-                pending ||
-                (to === "SCHEDULED" && scheduleFor === "") ||
-                (savesFirst(to) && !canSave)
-              }
-              onClick={() => (to === "ARCHIVED" ? setArchiveOpen(true) : transition(to))}
+              disabled={pending}
+              loading={pending && moving === to}
+              onClick={() => {
+                if (to === "ARCHIVED") return setArchiveOpen(true);
+                // Both run, so every problem shows at once: the date here,
+                // and the editor's own fields for a transition that saves.
+                const dateOk = to !== "SCHEDULED" || schedule.validate();
+                const formOk = !savesFirst(to) || validate();
+                if (!dateOk || !formOk) return;
+                setMoving(to);
+                void transition(to);
+              }}
             >
               {Icon && <Icon data-icon="inline-start" aria-hidden />}
               {labels.transitions[to] ?? to}

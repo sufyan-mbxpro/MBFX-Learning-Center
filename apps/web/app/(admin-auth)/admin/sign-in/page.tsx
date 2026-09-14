@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 import { getBrandAssets } from "@repo/core";
 import { getSetting } from "@repo/settings";
@@ -40,11 +41,22 @@ export default async function AdminSignInPage() {
             labels={{
               email: t("signIn.email"),
               password: t("signIn.password"),
+              showPassword: t("showPassword"),
+              hidePassword: t("hidePassword"),
               submit: t("signIn.submit"),
               failed: t("signIn.failed"),
               notStaff: t("signIn.notStaff"),
+              resetDone: t("passwordReset.resetDone"),
             }}
           />
+          <p className="-mt-2 text-center text-sm">
+            <Link
+              href="/admin/forgot-password"
+              className="font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+            >
+              {t("passwordReset.forgotLink")}
+            </Link>
+          </p>
         </div>
       </div>
     </main>

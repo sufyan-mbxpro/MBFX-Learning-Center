@@ -16,11 +16,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@repo/ui/components/dialog";
+import { updateEmployeeSchema } from "@repo/contracts";
+import { Field, FieldError, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
-import { Label } from "@repo/ui/components/label";
 import { Textarea } from "@repo/ui/components/textarea";
 import { setEmployeeStatusAction, updateEmployeeAction } from "../../_actions/user-actions.ts";
 import { AdminCombobox } from "../../_components/combobox.tsx";
+import { useFieldErrors } from "../../_hooks/use-field-errors.ts";
 import { useServerAction } from "../../_hooks/use-server-action.ts";
 
 export function EmployeeStatusControl({
@@ -117,38 +119,44 @@ export function EmployeeEditDialog({
 }) {
   const [open, setOpen] = React.useState(false);
   const { run, pending } = useServerAction();
-  const [form, setForm] = React.useState(initial);
+  const [draft, setDraft] = React.useState(initial);
 
   const set = <K extends keyof EmployeeEditValues>(key: K, value: string) =>
-    setForm((current) => ({ ...current, [key]: value }));
+    setDraft((current) => ({ ...current, [key]: value }));
 
-  const submit = () =>
-    run(
-      () =>
-        updateEmployeeAction(employeeId, {
-          firstName: form.firstName,
-          lastName: form.lastName,
-          phone: form.phone || null,
-          location: form.location || null,
-          departmentId: form.departmentId || null,
-          designationId: form.designationId || null,
-          reportingToId: form.reportingToId || null,
-          notes: form.notes || null,
-        }),
-      { onDone: () => setOpen(false) },
-    );
+  // Exactly the action's input — the form always sends both names, so the
+  // schema's `.min(1)` on them is what makes them required here.
+  const values = {
+    firstName: draft.firstName,
+    lastName: draft.lastName,
+    phone: draft.phone || null,
+    location: draft.location || null,
+    departmentId: draft.departmentId || null,
+    designationId: draft.designationId || null,
+    reportingToId: draft.reportingToId || null,
+    notes: draft.notes || null,
+  };
+  const form = useFieldErrors(updateEmployeeSchema, values);
+
+  const close = () => {
+    setOpen(false);
+    form.reset();
+  };
+
+  const submit = () => {
+    if (!form.validate()) return;
+    run(() => updateEmployeeAction(employeeId, values), { onDone: close });
+  };
 
   const optionSelect = (
-    id: string,
     label: string,
     value: string,
     options: { id: string; label: string }[],
     key: keyof EmployeeEditValues,
   ) => (
-    <div className="flex flex-col gap-1.5">
-      <Label htmlFor={id}>{label}</Label>
+    <Field invalid={form.invalid(key)}>
+      <FieldLabel>{label}</FieldLabel>
       <AdminCombobox
-        id={id}
         value={value}
         onValueChange={(next) => set(key, next)}
         options={[
@@ -156,7 +164,8 @@ export function EmployeeEditDialog({
           ...options.map((option) => ({ value: option.id, label: option.label })),
         ]}
       />
-    </div>
+      <FieldError>{form.error(key)}</FieldError>
+    </Field>
   );
 
   return (
@@ -164,86 +173,70 @@ export function EmployeeEditDialog({
       <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
         <Pencil data-icon="inline-start" aria-hidden /> {labels.edit}
       </Button>
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={(next) => (next ? setOpen(true) : close())}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>{labels.edit}</DialogTitle>
             <DialogDescription>{labels.editDescription}</DialogDescription>
           </DialogHeader>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="emp-first">{labels.firstName}</Label>
-              <Input
-                id="emp-first"
-                value={form.firstName}
-                onChange={(e) => set("firstName", e.target.value)}
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="emp-last">{labels.lastName}</Label>
-              <Input
-                id="emp-last"
-                value={form.lastName}
-                onChange={(e) => set("lastName", e.target.value)}
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="emp-phone">{labels.phone}</Label>
-              <Input
-                id="emp-phone"
-                value={form.phone}
-                onChange={(e) => set("phone", e.target.value)}
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="emp-location">{labels.location}</Label>
-              <Input
-                id="emp-location"
-                value={form.location}
-                onChange={(e) => set("location", e.target.value)}
-              />
-            </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field invalid={form.invalid("firstName")} required>
+              <FieldLabel>{labels.firstName}</FieldLabel>
+              <Input value={draft.firstName} onChange={(e) => set("firstName", e.target.value)} />
+              <FieldError>{form.error("firstName")}</FieldError>
+            </Field>
+            <Field invalid={form.invalid("lastName")} required>
+              <FieldLabel>{labels.lastName}</FieldLabel>
+              <Input value={draft.lastName} onChange={(e) => set("lastName", e.target.value)} />
+              <FieldError>{form.error("lastName")}</FieldError>
+            </Field>
+            <Field invalid={form.invalid("phone")}>
+              <FieldLabel>{labels.phone}</FieldLabel>
+              <Input value={draft.phone} onChange={(e) => set("phone", e.target.value)} />
+              <FieldError>{form.error("phone")}</FieldError>
+            </Field>
+            <Field invalid={form.invalid("location")}>
+              <FieldLabel>{labels.location}</FieldLabel>
+              <Input value={draft.location} onChange={(e) => set("location", e.target.value)} />
+              <FieldError>{form.error("location")}</FieldError>
+            </Field>
             {optionSelect(
-              "emp-department",
               labels.department,
-              form.departmentId,
+              draft.departmentId,
               departments.map((d) => ({ id: d.id, label: d.name })),
               "departmentId",
             )}
             {optionSelect(
-              "emp-designation",
               labels.designation,
-              form.designationId,
+              draft.designationId,
               designations.map((d) => ({ id: d.id, label: d.title })),
               "designationId",
             )}
             <div className="sm:col-span-2">
               {optionSelect(
-                "emp-reporting",
                 labels.reportingTo,
-                form.reportingToId,
+                draft.reportingToId,
                 reportingOptions.map((o) => ({ id: o.id, label: o.name })),
                 "reportingToId",
               )}
             </div>
-            <div className="flex flex-col gap-1.5 sm:col-span-2">
-              <Label htmlFor="emp-notes">{labels.notes}</Label>
+            <Field invalid={form.invalid("notes")} className="sm:col-span-2">
+              <FieldLabel>{labels.notes}</FieldLabel>
               <Textarea
-                id="emp-notes"
                 rows={3}
-                value={form.notes}
+                value={draft.notes}
                 onChange={(e) => set("notes", e.target.value)}
               />
-            </div>
+              <FieldError>{form.error("notes")}</FieldError>
+            </Field>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)} disabled={pending}>
+            <Button variant="outline" onClick={close} disabled={pending}>
               {labels.cancel}
             </Button>
-            <Button
-              onClick={submit}
-              disabled={pending || !form.firstName.trim() || !form.lastName.trim()}
-            >
+            {/* Enabled while fields are wrong: pressing it names them
+                instead (audit F-07). */}
+            <Button onClick={submit} loading={pending}>
               {labels.save}
             </Button>
           </DialogFooter>

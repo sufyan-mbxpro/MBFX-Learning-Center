@@ -641,18 +641,20 @@ describe("getArticleFacets — the listing sidebar", () => {
     expect(entry?.count).toBe(1);
   });
 
-  it("returns archive months newest-first, derived from the EFFECTIVE publish date", async () => {
-    const facets = await publicArticles.loadArticleFacets("en", {
+  // changes-22. `/news` is the NEWS feed and `/analysis` is ANALYSIS +
+  // TRADE_IDEA (ADR-015 #11), so the facet counts are scoped by `kinds` — and
+  // a category holding only trade ideas therefore appeared in the /news
+  // sidebar reading "Trade Ideas 0", linked to an archive that spans all three
+  // kinds and duly showed the article. A rail row is a promise that there is
+  // something behind it.
+  it("omits a category with nothing in THIS feed, rather than listing it at zero", async () => {
+    const newsFacets = await publicArticles.loadArticleFacets("en", { kinds: ["NEWS"] });
+    for (const category of newsFacets.categories) expect(category.count).toBeGreaterThan(0);
+
+    const allFacets = await publicArticles.loadArticleFacets("en", {
       kinds: ["NEWS", "ANALYSIS", "TRADE_IDEA"],
     });
-    expect(facets.archives.length).toBeGreaterThan(0);
-    const times = facets.archives.map((a) => a.month.getTime());
-    expect(times).toEqual([...times].sort((a, b) => b - a));
-    // Every bucket is the first instant of a UTC month.
-    for (const { month } of facets.archives) {
-      expect(month.getUTCDate()).toBe(1);
-      expect(month.getUTCHours()).toBe(0);
-    }
+    for (const category of allFacets.categories) expect(category.count).toBeGreaterThan(0);
   });
 
   it("honours latestCount and returns real listing entries", async () => {

@@ -8,6 +8,7 @@ import * as React from "react";
 import { useTransition } from "react";
 import { toast } from "sonner";
 import { RefreshCw } from "lucide-react";
+import { adminResetPasswordSchema } from "@repo/contracts";
 import { Button } from "@repo/ui/components/button";
 import {
   Dialog,
@@ -17,9 +18,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@repo/ui/components/dialog";
+import { Field, FieldError, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
-import { Label } from "@repo/ui/components/label";
 import { resetUserPasswordAction } from "../_actions/user-actions.ts";
+import { useFieldErrors } from "../_hooks/use-field-errors.ts";
 
 function generatePassword(): string {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%";
@@ -51,27 +53,30 @@ export function ResetPasswordDialog({
 }) {
   const [pending, startTransition] = useTransition();
   const [password, setPassword] = React.useState("");
+  const values = { userId, newPassword: password };
+  const form = useFieldErrors(adminResetPasswordSchema, values);
 
-  const submit = () =>
+  const close = () => {
+    onOpenChange(false);
+    setPassword("");
+    form.reset();
+  };
+
+  const submit = () => {
+    if (!form.validate()) return;
     startTransition(async () => {
       try {
-        await resetUserPasswordAction({ userId, newPassword: password });
+        await resetUserPasswordAction(values);
         toast.success(labels.done);
-        onOpenChange(false);
-        setPassword("");
+        close();
       } catch (error) {
         toast.error(error instanceof Error ? error.message : String(error));
       }
     });
+  };
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        onOpenChange(next);
-        if (!next) setPassword("");
-      }}
-    >
+    <Dialog open={open} onOpenChange={(next) => (next ? onOpenChange(true) : close())}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{labels.title}</DialogTitle>
@@ -79,11 +84,10 @@ export function ResetPasswordDialog({
             {labels.description} <span className="font-medium">{userLabel}</span>
           </DialogDescription>
         </DialogHeader>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="reset-password-value">{labels.newPassword}</Label>
+        <Field invalid={form.invalid("newPassword")} required>
+          <FieldLabel>{labels.newPassword}</FieldLabel>
           <div className="flex items-center gap-2">
             <Input
-              id="reset-password-value"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="font-mono"
@@ -98,12 +102,13 @@ export function ResetPasswordDialog({
               <RefreshCw aria-hidden />
             </Button>
           </div>
-        </div>
+          <FieldError>{form.error("newPassword")}</FieldError>
+        </Field>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
+          <Button variant="outline" onClick={close} disabled={pending}>
             {labels.cancel}
           </Button>
-          <Button onClick={submit} disabled={pending || password.length < 8}>
+          <Button onClick={submit} loading={pending}>
             {labels.confirm}
           </Button>
         </DialogFooter>

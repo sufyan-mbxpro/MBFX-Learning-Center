@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { Button } from "@repo/ui/components/button";
 import { Input } from "@repo/ui/components/input";
 import { Label } from "@repo/ui/components/label";
-import { Spinner } from "@repo/ui/components/spinner";
+import { PasswordInput } from "@repo/ui/components/password-input";
 import { signUpWithPassword } from "../../../_lib/credentials.ts";
 
 type Failure = "taken" | "failed";
@@ -12,12 +12,15 @@ type Failure = "taken" | "failed";
 export function SignUpForm({
   labels,
   homeHref,
+  verifiedHref,
   minPasswordLength,
 }: {
   labels: {
     name: string;
     email: string;
     password: string;
+    showPassword: string;
+    hidePassword: string;
     passwordHint: string;
     submit: string;
     failed: string;
@@ -25,6 +28,8 @@ export function SignUpForm({
   };
   /** Localized "/" for this render's locale — where a new learner lands. */
   homeHref: string;
+  /** Localized `/sign-in?verified=1` — where the verification link returns them. */
+  verifiedHref: string;
   /** Mirrors @repo/auth's emailAndPassword.minPasswordLength. */
   minPasswordLength: number;
 }) {
@@ -38,7 +43,7 @@ export function SignUpForm({
     event.preventDefault();
     setFailure(null);
     startTransition(async () => {
-      const result = await signUpWithPassword({ name, email, password });
+      const result = await signUpWithPassword({ name, email, password, callbackURL: verifiedHref });
       if (result.status !== "ok") {
         setFailure(result.status === "taken" ? "taken" : "failed");
         return;
@@ -84,9 +89,10 @@ export function SignUpForm({
       </div>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="signup-password">{labels.password}</Label>
-        <Input
+        <PasswordInput
           id="signup-password"
-          type="password"
+          showLabel={labels.showPassword}
+          hideLabel={labels.hidePassword}
           autoComplete="new-password"
           required
           minLength={minPasswordLength}
@@ -100,12 +106,11 @@ export function SignUpForm({
         </p>
       </div>
       {failure && (
-        <p id="signup-error" role="alert" className="text-sm text-destructive">
+        <p id="signup-error" role="alert" className="text-sm text-destructive-interactive">
           {failure === "taken" ? labels.taken : labels.failed}
         </p>
       )}
-      <Button type="submit" disabled={pending} className="w-full">
-        {pending && <Spinner aria-hidden data-icon="inline-start" />}
+      <Button type="submit" loading={pending} className="w-full">
         {labels.submit}
       </Button>
     </form>

@@ -137,7 +137,7 @@ export function RecommendationsPanel({
                   variant="ghost"
                   size="icon-sm"
                   aria-label={labels.remove}
-                  className="text-destructive"
+                  className="text-destructive-interactive"
                   disabled={disabled}
                   onClick={() => onChange(value.filter((entry) => entry !== id))}
                 >

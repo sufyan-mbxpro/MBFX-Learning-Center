@@ -7,6 +7,7 @@ import {
   getCategoryDigests,
   getPublishedArticles,
   getSpotlightArticles,
+  isNewsletterPlacementEnabled,
 } from "@repo/core";
 import { getSetting, isFeatureVisible } from "@repo/settings";
 import { Container } from "@repo/ui/components/container";
@@ -21,6 +22,7 @@ import { NewsMasthead } from "./_components/news-masthead.tsx";
 import { NewsSpotlight } from "./_components/news-spotlight.tsx";
 import { NewsTopics } from "./_components/news-topics.tsx";
 import { NewsletterForm } from "../_components/newsletter-form.tsx";
+import { newsletterFormLabels } from "../_components/newsletter-labels.ts";
 import { NumberedPagination } from "./_components/numbered-pagination.tsx";
 
 // ADR-042 (2026-09-07): the CMS switch that used to run ahead of this listing
@@ -82,12 +84,15 @@ export default async function NewsPage({ params, searchParams }: PageProps<"/[lo
   const parsed = publicArticleSearchSchema.safeParse({ q: search.q, page: search.page });
   const { q, page = 0 } = parsed.success ? parsed.data : {};
 
-  const [t, tFooter, perPage, showAuthor, newsletterEnabled] = await Promise.all([
+  const [t, tFooter, perPage, showAuthor, newsletterFlag, newsletterPlaced] = await Promise.all([
     getTranslations("news"),
     getTranslations("footer"),
     getSetting("articles.perPage"),
     getSetting("articles.showAuthor"),
-    getSetting("footer.newsletterEnabled"),
+    // Flag AND placement (ADR-080 #5) — the deleted `footer.newsletterEnabled`
+    // conflated the two and lived in a group nobody could edit.
+    isFeatureVisible("newsletter", null),
+    isNewsletterPlacementEnabled("news"),
   ]);
 
   // A search is a different page: the reader asked a question, and a lead
@@ -173,7 +178,7 @@ export default async function NewsPage({ params, searchParams }: PageProps<"/[lo
           separate the two, and with nothing above it the tone would just be
           the page's own background wearing a different name. */}
       <Section id="latest" spacing="md" tone={spotlight.length > 0 ? "muted" : "default"}>
-        <Container className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <Container className="grid grid-cols-1 gap-10 lg:grid-cols-(--grid-main-aside)">
           <div className="flex flex-col gap-8">
             {q ? (
               <p className="text-sm text-muted-foreground">
@@ -209,18 +214,16 @@ export default async function NewsPage({ params, searchParams }: PageProps<"/[lo
 
       <NewsTopics categories={facets.categories} />
 
-      {newsletterEnabled && (
+      {newsletterFlag && newsletterPlaced && (
         <Section id="subscribe" spacing="sm">
           <Reveal variant="up">
             <CtaBand title={t("subscribeTitle")} description={t("subscribeBody")}>
               <div className="w-full sm:w-80">
                 <NewsletterForm
                   tone="onFill"
-                  id="listing-newsletter"
-                  placeholder={tFooter("newsletterPlaceholder")}
-                  label={tFooter("newsletterLabel")}
-                  submitLabel={tFooter("newsletterSubmit")}
-                  unavailableLabel={tFooter("newsletterUnavailable")}
+                  locale={locale}
+                  source="news"
+                  labels={newsletterFormLabels(tFooter)}
                 />
               </div>
             </CtaBand>

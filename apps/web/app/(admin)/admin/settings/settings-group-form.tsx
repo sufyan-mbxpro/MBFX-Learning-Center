@@ -5,13 +5,22 @@
 // SELECT) plus the widget hints in @repo/contracts (timezone / locale /
 // select dropdowns). Only changed keys are submitted; the server validates
 // every entry before writing any, so a bad field saves nothing.
+//
+// Inline validation (ADR-077) uses the SAME per-key schemas the settings
+// service parses with (`SETTINGS_SCHEMAS`), over exactly the changed keys the
+// action will receive — so an unchanged, already-stored value is not judged
+// here either, just as it is not judged there.
 import * as React from "react";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+import { z } from "zod";
 import {
+  SETTINGS_SCHEMAS,
   SETTING_FIELDS,
   SETTING_SELECT_OPTIONS,
   SETTING_WIDGETS,
+  isKnownSettingKey,
+  type SettingFieldDef,
   type SettingKey,
 } from "@repo/contracts";
 import { humanizeKey } from "@repo/utils";
@@ -19,12 +28,20 @@ import { cn } from "@repo/ui/lib/utils";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { Checkbox } from "@repo/ui/components/checkbox";
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldError,
+  FieldLabel,
+  FieldTitle,
+} from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
-import { Label } from "@repo/ui/components/label";
 import { Textarea } from "@repo/ui/components/textarea";
 import { updateSettingsAction } from "../_actions/admin-actions.ts";
 import { ImageUploadField, type ImageUploadLabels } from "../_components/image-upload-field.tsx";
 import { AdminCombobox } from "../_components/combobox.tsx";
+import { useFieldErrors } from "../_hooks/use-field-errors.ts";
 import { useServerAction } from "../_hooks/use-server-action.ts";
 import {
   ListField,
@@ -65,6 +82,15 @@ const MANAGED_ELSEWHERE: Record<string, string> = {
   "home.sections": "/admin/homepage",
 };
 
+/**
+ * Stands in for a JSON setting whose text does not parse. It can never match,
+ * so the raw text fails as `invalid_format` and the row shows the ordinary
+ * "not in the expected format" message through the same FieldError as every
+ * other field — rather than a second, message-less error channel beside the
+ * form's. Nothing unparseable is ever sent: the save stops at validation.
+ */
+const UNPARSEABLE_JSON = z.string().regex(/(?!)/);
+
 export interface LocaleOption {
   code: string;
   name: string;
@@ -74,6 +100,46 @@ export interface LocaleOption {
 function initialText(setting: SettingFieldData): string {
   if (setting.type === "JSON") return JSON.stringify(setting.value, null, 2);
   return String(setting.value ?? "");
+}
+
+/** The value a text-backed control sends for `raw` — what the action receives. */
+function readValue(
+  setting: SettingFieldData,
+  raw: string,
+): { ok: true; value: unknown } | { ok: false } {
+  if (setting.type === "NUMBER") return { ok: true, value: Number(raw) };
+  if (setting.type === "JSON") {
+    try {
+      return { ok: true, value: JSON.parse(raw) };
+    } catch {
+      return { ok: false };
+    }
+  }
+  return { ok: true, value: raw };
+}
+
+/**
+ * The asterisk is the schema's answer, not a hand-kept list: a setting is
+ * required when its own schema refuses what this control sends while empty.
+ */
+function refusesEmpty(setting: SettingFieldData): boolean {
+  if (!isKnownSettingKey(setting.key)) return false;
+  if (setting.type === "BOOLEAN" || setting.type === "JSON") return false;
+  const read = readValue(setting, "");
+  if (!read.ok) return false;
+  const schema: z.ZodType = SETTINGS_SCHEMAS[setting.key];
+  return !schema.safeParse(read.value).success;
+}
+
+/** The same question for one sub-field of a structured (object/list) setting. */
+function subFieldRefusesEmpty(key: string, field: SettingFieldDef): boolean {
+  if (!isKnownSettingKey(key) || field.type === "boolean") return false;
+  const root: z.ZodType = SETTINGS_SCHEMAS[key];
+  const record = root instanceof z.ZodArray ? root.element : root;
+  if (!(record instanceof z.ZodObject)) return false;
+  const schema = record.shape[field.name];
+  // What FieldControl sends for an emptied control: null for a number, "" else.
+  return schema !== undefined && !z.safeParse(schema, field.type === "number" ? null : "").success;
 }
 
 function timezoneOptions(current: string): string[] {
@@ -109,7 +175,6 @@ export function SettingsGroupForm({
   const [booleans, setBooleans] = React.useState<Record<string, boolean>>(() =>
     Object.fromEntries(settings.map((s) => [s.key, Boolean(s.value)])),
   );
-  const [jsonErrors, setJsonErrors] = React.useState<Record<string, boolean>>({});
   // Keys with SETTING_FIELDS descriptors are edited as real VALUES, not as
   // text that has to survive a JSON.parse round trip.
   const structuredInitial = React.useMemo(
@@ -135,27 +200,36 @@ export function SettingsGroupForm({
     .map((s) => s.key);
   const dirty = changedKeys.length > 0;
 
-  const submit = () => {
-    const entries: { key: string; value: unknown }[] = [];
-    const nextJsonErrors: Record<string, boolean> = {};
-    for (const setting of settings) {
-      if (!changedKeys.includes(setting.key)) continue;
+  // The changed keys as the action will receive them, keyed for the schema:
+  // `{ "site.name": "…" }` checked by `{ "site.name": SETTINGS_SCHEMAS["site.name"] }`,
+  // so an issue's path IS the setting key (or `key.field` / `key.0.field`).
+  const values: Record<string, unknown> = {};
+  const shape: Record<string, z.ZodType> = {};
+  for (const setting of settings) {
+    if (!changedKeys.includes(setting.key)) continue;
+    let schema: z.ZodType | undefined = isKnownSettingKey(setting.key)
+      ? SETTINGS_SCHEMAS[setting.key]
+      : undefined;
+    if (SETTING_FIELDS[setting.key as SettingKey]) values[setting.key] = structured[setting.key];
+    else if (setting.type === "BOOLEAN") values[setting.key] = booleans[setting.key] ?? false;
+    else {
       const raw = text[setting.key] ?? "";
-      let value: unknown = raw;
-      if (SETTING_FIELDS[setting.key as SettingKey]) value = structured[setting.key];
-      else if (setting.type === "BOOLEAN") value = booleans[setting.key] ?? false;
-      else if (setting.type === "NUMBER") value = Number(raw);
-      else if (setting.type === "JSON") {
-        try {
-          value = JSON.parse(raw);
-        } catch {
-          nextJsonErrors[setting.key] = true;
-        }
+      const read = readValue(setting, raw);
+      if (read.ok) values[setting.key] = read.value;
+      else {
+        values[setting.key] = raw;
+        schema = UNPARSEABLE_JSON;
       }
-      entries.push({ key: setting.key, value });
     }
-    setJsonErrors(nextJsonErrors);
-    if (Object.keys(nextJsonErrors).length > 0 || entries.length === 0) return;
+    // An unknown key has no schema here; the action refuses it by name.
+    if (schema) shape[setting.key] = schema;
+  }
+  const form = useFieldErrors(z.object(shape), values);
+
+  const submit = () => {
+    if (!form.validate()) return;
+    const entries = Object.entries(values).map(([key, value]) => ({ key, value }));
+    if (entries.length === 0) return;
     run(() => updateSettingsAction(entries), { successMessage: labels.saved });
   };
 
@@ -175,80 +249,27 @@ export function SettingsGroupForm({
     // control — they never fit a half-row.
     Boolean(SETTING_FIELDS[setting.key as SettingKey]);
 
+  const rowClass = (setting: SettingFieldData) =>
+    cn("border-b pb-4", spansFullRow(setting) && "xl:col-span-2");
+
+  const badges = (setting: SettingFieldData) => (
+    <>
+      <Badge variant="secondary">
+        {setting.isPublic ? labels.publicBadge : labels.privateBadge}
+      </Badge>
+      <span className="text-xs text-muted-foreground">{humanizeKey(setting.key)}</span>
+    </>
+  );
+
+  /** One control for one text-backed setting. Its Field supplies id and aria. */
   const renderControl = (setting: SettingFieldData) => {
-    const id = `setting-${setting.key}`;
     const value = text[setting.key] ?? "";
     const widget = SETTING_WIDGETS[setting.key as SettingKey];
 
-    const managedHref = MANAGED_ELSEWHERE[setting.key];
-    if (managedHref) {
-      return (
-        <Link
-          href={managedHref}
-          className="inline-flex w-fit items-center gap-1.5 text-sm text-primary-interactive hover:underline"
-        >
-          {labels.managedElsewhere}
-          <ArrowRight aria-hidden className="size-3.5 rtl:rotate-180" />
-        </Link>
-      );
-    }
-
-    const fieldsDef = SETTING_FIELDS[setting.key as SettingKey];
-    if (fieldsDef) {
-      const onChange = (next: unknown) =>
-        setStructured((current) => ({ ...current, [setting.key]: next }));
-      return fieldsDef.shape === "list" ? (
-        <ListField
-          settingKey={setting.key}
-          def={fieldsDef}
-          value={structured[setting.key]}
-          sources={sources}
-          labels={labels.fields}
-          onChange={onChange}
-        />
-      ) : (
-        <ObjectField
-          settingKey={setting.key}
-          def={fieldsDef}
-          value={structured[setting.key]}
-          sources={sources}
-          labels={labels.fields}
-          onChange={onChange}
-        />
-      );
-    }
-
-    if (setting.type === "BOOLEAN") {
-      return (
-        <Checkbox
-          id={id}
-          checked={booleans[setting.key] ?? false}
-          onCheckedChange={(next) =>
-            setBooleans((current) => ({ ...current, [setting.key]: next === true }))
-          }
-        />
-      );
-    }
-    if (setting.type === "IMAGE") {
-      return (
-        <ImageUploadField
-          id={id}
-          label=""
-          value={value}
-          purpose="setting"
-          category="general"
-          sourceType="SETTING"
-          labels={labels.upload}
-          onChange={(next) => setValue(setting.key, next?.url ?? "")}
-        />
-      );
-    }
     if (setting.type === "TEXT" || setting.type === "JSON") {
       return (
         <Textarea
-          id={id}
           value={value}
-          aria-invalid={jsonErrors[setting.key] ? true : undefined}
           onChange={(e) => setValue(setting.key, e.target.value)}
           rows={setting.type === "JSON" ? 6 : 3}
           className={setting.type === "JSON" ? "font-mono" : undefined}
@@ -272,7 +293,6 @@ export function SettingsGroupForm({
       const current = selectOptions.find((o) => o.value === value);
       return (
         <AdminCombobox
-          id={id}
           value={value}
           onValueChange={(v) => setValue(setting.key, v)}
           placeholder={current?.label ?? value ?? labels.selectPlaceholder}
@@ -286,7 +306,6 @@ export function SettingsGroupForm({
 
     return (
       <Input
-        id={id}
         type={setting.type === "NUMBER" ? "number" : setting.type === "COLOR" ? "color" : "text"}
         value={value}
         onChange={(e) => setValue(setting.key, e.target.value)}
@@ -295,35 +314,148 @@ export function SettingsGroupForm({
     );
   };
 
+  const renderRow = (setting: SettingFieldData) => {
+    const id = `setting-${setting.key}`;
+
+    // Not a control — a pointer to the screen that edits this value.
+    const managedHref = MANAGED_ELSEWHERE[setting.key];
+    if (managedHref) {
+      return (
+        <div key={setting.key} className={cn("flex flex-col gap-2", rowClass(setting))}>
+          <div className="flex flex-wrap items-center gap-2">
+            <FieldTitle>{setting.label}</FieldTitle>
+            {badges(setting)}
+          </div>
+          {setting.description && (
+            <p className="text-sm text-muted-foreground">{setting.description}</p>
+          )}
+          <Link
+            href={managedHref}
+            className="inline-flex w-fit items-center gap-1.5 text-sm text-primary-interactive hover:underline"
+          >
+            {labels.managedElsewhere}
+            <ArrowRight aria-hidden className="size-3.5 rtl:rotate-180" />
+          </Link>
+        </div>
+      );
+    }
+
+    // A group of sub-fields, each its own Field — so the row is a named
+    // group, not a Field with one label pointing at no single control.
+    const fieldsDef = SETTING_FIELDS[setting.key as SettingKey];
+    if (fieldsDef) {
+      const onChange = (next: unknown) =>
+        setStructured((current) => ({ ...current, [setting.key]: next }));
+      const shared = {
+        settingKey: setting.key,
+        def: fieldsDef,
+        value: structured[setting.key],
+        sources,
+        labels: labels.fields,
+        errorFor: form.error,
+        isRequired: (field: SettingFieldDef) => subFieldRefusesEmpty(setting.key, field),
+        onChange,
+      };
+      return (
+        <div
+          key={setting.key}
+          role="group"
+          aria-labelledby={`${id}-title`}
+          className={cn("flex flex-col gap-2", rowClass(setting))}
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <FieldTitle id={`${id}-title`}>{setting.label}</FieldTitle>
+            {badges(setting)}
+          </div>
+          {setting.description && (
+            <p className="text-sm text-muted-foreground">{setting.description}</p>
+          )}
+          {fieldsDef.shape === "list" ? <ListField {...shared} /> : <ObjectField {...shared} />}
+          {/* A whole-list issue (too many rows) has no one sub-field to sit on. */}
+          <FieldError>{form.error(setting.key)}</FieldError>
+        </div>
+      );
+    }
+
+    if (setting.type === "BOOLEAN") {
+      return (
+        <Field
+          key={setting.key}
+          orientation="horizontal"
+          invalid={form.invalid(setting.key)}
+          className={rowClass(setting)}
+        >
+          <Checkbox
+            checked={booleans[setting.key] ?? false}
+            onCheckedChange={(next) =>
+              setBooleans((current) => ({ ...current, [setting.key]: next === true }))
+            }
+          />
+          <FieldContent>
+            <div className="flex flex-wrap items-center gap-2">
+              <FieldLabel>{setting.label}</FieldLabel>
+              {badges(setting)}
+            </div>
+            {setting.description && <FieldDescription>{setting.description}</FieldDescription>}
+            <FieldError>{form.error(setting.key)}</FieldError>
+          </FieldContent>
+        </Field>
+      );
+    }
+
+    if (setting.type === "IMAGE") {
+      // The image widget is its own Field (label, required mark, message), so
+      // it is not wrapped in another; the badges sit beneath it.
+      return (
+        <div key={setting.key} className={cn("flex flex-col gap-2", rowClass(setting))}>
+          <ImageUploadField
+            label={setting.label}
+            description={setting.description ?? undefined}
+            value={text[setting.key] ?? ""}
+            purpose="setting"
+            category="general"
+            sourceType="SETTING"
+            labels={labels.upload}
+            required={refusesEmpty(setting)}
+            error={form.error(setting.key)}
+            onChange={(next) => setValue(setting.key, next?.url ?? "")}
+          />
+          <div className="flex flex-wrap items-center gap-2">{badges(setting)}</div>
+        </div>
+      );
+    }
+
+    return (
+      <Field
+        key={setting.key}
+        invalid={form.invalid(setting.key)}
+        required={refusesEmpty(setting)}
+        className={rowClass(setting)}
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <FieldLabel>{setting.label}</FieldLabel>
+          {badges(setting)}
+        </div>
+        {setting.description && <FieldDescription>{setting.description}</FieldDescription>}
+        {renderControl(setting)}
+        <FieldError>{form.error(setting.key)}</FieldError>
+      </Field>
+    );
+  };
+
   return (
+    // `noValidate`: the controls now carry `required`, and the browser's own
+    // bubbles would otherwise block the submit before the inline messages
+    // (ADR-077) — which say the same thing, in the page, per field — can run.
     <form
+      noValidate
       className="grid grid-cols-1 items-start gap-x-8 gap-y-5 xl:grid-cols-2"
       onSubmit={(e) => {
         e.preventDefault();
         submit();
       }}
     >
-      {settings.map((setting) => (
-        <div
-          key={setting.key}
-          className={cn(
-            "flex flex-col gap-1.5 border-b pb-4",
-            spansFullRow(setting) && "xl:col-span-2",
-          )}
-        >
-          <div className="flex flex-wrap items-center gap-2">
-            <Label htmlFor={`setting-${setting.key}`}>{setting.label}</Label>
-            <Badge variant="secondary">
-              {setting.isPublic ? labels.publicBadge : labels.privateBadge}
-            </Badge>
-            <span className="text-xs text-muted-foreground">{humanizeKey(setting.key)}</span>
-          </div>
-          {setting.description && (
-            <p className="text-sm text-muted-foreground">{setting.description}</p>
-          )}
-          {renderControl(setting)}
-        </div>
-      ))}
+      {settings.map((setting) => renderRow(setting))}
       {/* changes-08 #3: Save at the inline-END of the section. The
           dirty-field summary reads BEFORE it (start-aligned) so the button
           keeps the corner every other confirming action in the admin uses.
@@ -335,7 +467,7 @@ export function SettingsGroupForm({
             {changedKeys.length} · {changedKeys.map((key) => humanizeKey(key)).join(", ")}
           </span>
         )}
-        <Button type="submit" disabled={pending || !dirty}>
+        <Button type="submit" disabled={!dirty} loading={pending}>
           {labels.save}
         </Button>
       </div>

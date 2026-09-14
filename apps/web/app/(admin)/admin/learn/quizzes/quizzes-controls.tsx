@@ -10,7 +10,12 @@
 // default it to that would not silently file the quiz in the wrong school.
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { isLearnTrack, LEARN_TRACK_KEYS, type LearnTrackKey } from "@repo/contracts";
+import {
+  createQuizSchema,
+  isLearnTrack,
+  LEARN_TRACK_KEYS,
+  type LearnTrackKey,
+} from "@repo/contracts";
 import { Button } from "@repo/ui/components/button";
 import {
   Dialog,
@@ -21,10 +26,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@repo/ui/components/dialog";
+import { Field, FieldError, FieldGroup, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
-import { Label } from "@repo/ui/components/label";
 import { AdminCombobox } from "../../_components/combobox.tsx";
 import { createQuizAction } from "../../_actions/quiz-actions.ts";
+import { useFieldErrors } from "../../_hooks/use-field-errors.ts";
 import { useServerAction } from "../../_hooks/use-server-action.ts";
 
 export function NewQuizDialog({
@@ -46,9 +52,16 @@ export function NewQuizDialog({
   const [title, setTitle] = useState("");
   const [track, setTrack] = useState<LearnTrackKey | "">(LEARN_TRACK_KEYS[0] ?? "");
   const { run, pending } = useServerAction();
+  // The action's own schema, over exactly what the action is sent (ADR-077).
+  const form = useFieldErrors(createQuizSchema, { title: title.trim(), track });
+
+  const openChange = (next: boolean) => {
+    setOpen(next);
+    if (!next) form.reset();
+  };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={openChange}>
       <DialogTrigger render={<Button size="sm">{labels.newQuiz}</Button>} />
       <DialogContent className="max-w-sm" closeLabel={labels.close}>
         <DialogHeader>
@@ -56,20 +69,15 @@ export function NewQuizDialog({
           <DialogTitle>{labels.newQuiz}</DialogTitle>
           <DialogDescription>{labels.newQuizDescription}</DialogDescription>
         </DialogHeader>
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="new-quiz-title">{labels.titleLabel}</Label>
-            <Input
-              id="new-quiz-title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              maxLength={255}
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="new-quiz-track">{labels.trackLabel}</Label>
+        <FieldGroup>
+          <Field invalid={form.invalid("title")} required>
+            <FieldLabel>{labels.titleLabel}</FieldLabel>
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={255} />
+            <FieldError>{form.error("title")}</FieldError>
+          </Field>
+          <Field invalid={form.invalid("track")} required>
+            <FieldLabel>{labels.trackLabel}</FieldLabel>
             <AdminCombobox
-              id="new-quiz-track"
               value={track}
               // The guard, not a cast: the dropdown hands back a plain string
               // and only a registered track key may reach the action.
@@ -79,16 +87,19 @@ export function NewQuizDialog({
                 label: labels.tracks[key] ?? key,
               }))}
             />
-          </div>
-        </div>
+            <FieldError>{form.error("track")}</FieldError>
+          </Field>
+        </FieldGroup>
         <DialogFooter>
-          <Button variant="outline" size="sm" onClick={() => setOpen(false)} disabled={pending}>
+          <Button variant="outline" size="sm" onClick={() => openChange(false)} disabled={pending}>
             {labels.cancel}
           </Button>
+          {/* Enabled while fields are wrong: pressing it names them (audit F-07). */}
           <Button
             size="sm"
-            disabled={pending || title.trim() === "" || track === ""}
-            onClick={() =>
+            loading={pending}
+            onClick={() => {
+              if (!form.validate()) return;
               run(
                 async () => {
                   if (!isLearnTrack(track)) return;
@@ -96,8 +107,8 @@ export function NewQuizDialog({
                   router.push(`/admin/learn/quizzes/${id}`);
                 },
                 { skipRefresh: true },
-              )
-            }
+              );
+            }}
           >
             {labels.create}
           </Button>

@@ -16,6 +16,7 @@
 // and drag without a keyboard equivalent does not ship.
 import { useState } from "react";
 import { ChevronDown, ChevronUp, Film, Link2, Plus, Trash2, Upload } from "lucide-react";
+import { useTranslations } from "next-intl";
 import type { VideoTopicVideoInput } from "@repo/contracts";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
@@ -61,6 +62,15 @@ export interface VideosPanelLabels {
   cancel: string;
 }
 
+/**
+ * The editor's field issues for this panel's list, by path relative to it
+ * (`0.externalUrl`) — the editor owns the one `useFieldErrors` (ADR-077).
+ */
+export interface PanelIssues {
+  invalid: (path: string) => boolean;
+  error: (path: string) => string | undefined;
+}
+
 type Picking = { index: number; slot: "video" | "poster" } | null;
 
 export function VideosPanel({
@@ -68,12 +78,15 @@ export function VideosPanel({
   onChange,
   disabled,
   labels,
+  issues,
 }: {
   items: VideoDraft[];
   onChange: (next: VideoDraft[]) => void;
   disabled: boolean;
   labels: VideosPanelLabels;
+  issues: PanelIssues;
 }) {
+  const tv = useTranslations("admin.validation");
   const [picking, setPicking] = useState<Picking>(null);
   const [removing, setRemoving] = useState<number | null>(null);
 
@@ -141,6 +154,12 @@ export function VideosPanel({
         <ul className="flex flex-col gap-3">
           {items.map((item, index) => {
             const isUpload = Boolean(item.assetId);
+            // The one-source refine reports on `assetId`, and only ever means
+            // "neither": this panel never lets both be filled. The URL is the
+            // control an editor can fix it from, so it carries the message.
+            const urlError =
+              issues.error(`${index}.externalUrl`) ??
+              (issues.invalid(`${index}.assetId`) ? tv("required") : undefined);
             return (
               <li key={index} className="flex flex-col gap-3 rounded-lg border bg-card p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -210,9 +229,10 @@ export function VideosPanel({
                   id={`video-${index}-url`}
                   label={labels.externalUrlLabel}
                   hint={labels.externalUrlHint}
+                  required={!isUpload}
+                  error={urlError}
                 >
                   <Input
-                    id={`video-${index}-url`}
                     value={item.externalUrl ?? ""}
                     disabled={disabled}
                     maxLength={500}
@@ -267,9 +287,9 @@ export function VideosPanel({
                   id={`video-${index}-title`}
                   label={labels.titleLabel}
                   hint={labels.titleHint}
+                  error={issues.error(`${index}.title`)}
                 >
                   <Input
-                    id={`video-${index}-title`}
                     value={item.title ?? ""}
                     disabled={disabled}
                     maxLength={200}

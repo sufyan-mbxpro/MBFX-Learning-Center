@@ -25,7 +25,7 @@ import {
 import { Empty, EmptyDescription, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
 import { duplicateQuizAction, setQuizDeletedAction } from "../../_actions/quiz-actions.ts";
 import { AdminCombobox } from "../../_components/combobox.tsx";
-import { FilterBar } from "../../_components/filter-bar.tsx";
+import { FilterBarRow } from "@repo/ui/components/filter-bar";
 import {
   CONTENT_STATUS_TONE,
   StatusBadge,
@@ -371,7 +371,7 @@ export function QuizzesTable({
       columns={columns}
       labels={tableLabels}
       filters={
-        <FilterBar>
+        <FilterBarRow>
           {/* ADR-057 §3: a toolbar filter declares its own width; full width is
               the form-field default and would take the whole row. */}
           <AdminCombobox
@@ -384,7 +384,7 @@ export function QuizzesTable({
               ...statusKeys.map((key) => ({ value: key, label: labels.statuses[key] ?? key })),
             ]}
           />
-        </FilterBar>
+        </FilterBarRow>
       }
     />
   );

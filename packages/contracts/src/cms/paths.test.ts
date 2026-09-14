@@ -107,16 +107,20 @@ describe("reserved paths", () => {
   });
 
   it("does not flag an ordinary CMS page segment", () => {
-    // `tools` is still a CMS page by design (see the RESERVED_PREFIXES note
-    // in paths.ts). `about` was one when this test was written and is not
-    // any more: ADR-047 made it five coded route files, so reserving it is
-    // what stops a CMS page from shadowing them.
-    expect(isReservedFirstSegment("tools")).toBe(false);
+    // A segment with no route file and no reservation. `tools` used to be the
+    // example here and no longer is — see the test below.
+    expect(isReservedFirstSegment("partners")).toBe(false);
   });
 
   it("flags coded route sections that used to be CMS pages", () => {
     expect(isReservedFirstSegment("about")).toBe(true); // ADR-047
     expect(isReservedFirstSegment("economic-calendar")).toBe(true); // ADR-050
+    // ADR-081 #1: `/tools` and `/markets` are coded routes rendering
+    // `ComingSoon`. Plan v2.2 had them down as CMS STATIC pages, which
+    // ADR-042 cancelled, so the reservation is what stops a retained CMS row
+    // from shadowing the real route.
+    expect(isReservedFirstSegment("tools")).toBe(true);
+    expect(isReservedFirstSegment("markets")).toBe(true);
   });
 
   it("does not flag the empty segment", () => {

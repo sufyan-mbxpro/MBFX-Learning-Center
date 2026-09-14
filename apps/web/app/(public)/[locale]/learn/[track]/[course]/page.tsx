@@ -211,7 +211,7 @@ export default async function CoursePage({
       <Section spacing="sm" tone="muted" className="relative isolate overflow-hidden">
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-0 -z-10 opacity-[0.14] select-none"
+          className="pointer-events-none absolute inset-0 -z-10 opacity-14 select-none"
         >
           <LearnBackdrop slot="courseBanner" />
         </div>
@@ -224,14 +224,14 @@ export default async function CoursePage({
             learnHref={learnTrackPath(track)}
           />
 
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] lg:items-start">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-(--grid-2-1) lg:items-start">
             <div className="flex min-w-0 flex-col gap-4">
               {coverUrl && (
                 <Reveal variant="up" className="group">
                   {/* 16:6 — a header band, not a card cover. Wide enough to
                       carry the track's artwork, short enough that the title
                       below it is still above the fold on a phone. */}
-                  <div className="relative aspect-[16/6] w-full overflow-hidden rounded-2xl bg-muted ring-1 ring-foreground/10">
+                  <div className="relative aspect-16/6 w-full overflow-hidden rounded-2xl bg-muted ring-1 ring-foreground/10">
                     <Image
                       src={coverUrl}
                       alt=""
@@ -336,7 +336,7 @@ export default async function CoursePage({
       </Section>
 
       <Section spacing="md">
-        <Container className="grid gap-8 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] lg:items-start">
+        <Container className="grid grid-cols-1 gap-8 lg:grid-cols-(--grid-2-1) lg:items-start">
           <div className="flex min-w-0 flex-col gap-4">
             {/* Phase 7: the completion state. Above the curriculum, because a
                 learner who has finished is looking for what is next, not for

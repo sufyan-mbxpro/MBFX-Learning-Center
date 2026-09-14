@@ -1,8 +1,11 @@
+"use client";
+
 import * as React from "react";
 import { Input as InputPrimitive } from "@base-ui/react/input";
 import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "@repo/ui/lib/utils";
+import { useFieldControl } from "@repo/ui/components/field";
 
 // changes-20 / ADR-072 — the reference's input (tokens.md §6.2): a 40px box
 // on the page background, bordered in --input (the 3:1 slate border, not the
@@ -31,13 +34,15 @@ type InputProps = Omit<React.ComponentProps<"input">, "size"> & VariantProps<typ
 // count) is omitted on purpose — nothing in the repo uses it, and a numeric
 // `size` silently widening a field would fight the width utilities.
 function Input({ className, type, size = "default", ...props }: InputProps) {
+  // Inside a Field: id, required, aria-invalid, aria-describedby (ADR-077).
+  const wired = useFieldControl(props);
   return (
     <InputPrimitive
       type={type}
       data-slot="input"
       data-size={size}
       className={cn(inputVariants({ size }), className)}
-      {...props}
+      {...wired}
     />
   );
 }

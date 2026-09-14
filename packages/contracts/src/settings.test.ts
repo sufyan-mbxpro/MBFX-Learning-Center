@@ -132,15 +132,16 @@ describe("homepage section built/stub registries (Phase 9a)", () => {
   });
 
   it("a section can declare variants without being built yet — and that is not a contradiction", () => {
-    // popular_tools has a variant vocabulary but no component: the admin
+    // forex_rates has a variant vocabulary but no component: the admin
     // screen must label it, not hide it. Pinned so the relationship stays
     // deliberate rather than becoming an accident.
     //
-    // learning_paths held this role until changes-11 PR 5.4 built it. That it
-    // had to be swapped out is the test working: the pairing it pins is real,
-    // so building a section is supposed to show up here.
-    expect(isKnownHomeSectionKey("popular_tools")).toBe(true);
-    expect(isBuiltHomeSectionKey("popular_tools")).toBe(false);
+    // learning_paths held this role until changes-11 PR 5.4 built it, and
+    // popular_tools until changes-25 T9. That it keeps having to be swapped
+    // out is the test working: the pairing it pins is real, so building a
+    // section is supposed to show up here.
+    expect(isKnownHomeSectionKey("forex_rates")).toBe(true);
+    expect(isBuiltHomeSectionKey("forex_rates")).toBe(false);
   });
 
   it("every section that declares variants is either built or a known stub", () => {

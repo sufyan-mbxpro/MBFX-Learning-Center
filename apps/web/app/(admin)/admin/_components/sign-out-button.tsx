@@ -2,12 +2,13 @@
 
 import { useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
+import { signOut as endSession } from "../../../_lib/credentials.ts";
 import { Button } from "@repo/ui/components/button";
 
 export function SignOutButton({ label, iconOnly }: { label: string; iconOnly?: boolean }) {
   const router = useRouter();
   const signOut = async () => {
-    await fetch("/api/auth/sign-out", { method: "POST" });
+    await endSession();
     router.push("/");
     router.refresh();
   };
@@ -23,7 +24,7 @@ export function SignOutButton({ label, iconOnly }: { label: string; iconOnly?: b
   }
 
   return (
-    <Button variant="outline" size="sm" onClick={signOut}>
+    <Button variant="outline" size="sm" className="w-full" onClick={signOut}>
       {label}
     </Button>
   );

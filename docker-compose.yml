@@ -35,6 +35,22 @@ services:
       timeout: 5s
       retries: 10
 
+  # Mail catcher for development and the @repo/email integration suite
+  # (Module 17, ADR-078). Nothing it receives leaves this machine: point
+  # EMAIL settings at localhost:1025 and read the mail at localhost:8025.
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: mbfx-mailpit
+    restart: unless-stopped
+    ports:
+      - "1025:1025" # SMTP
+      - "8025:8025" # web UI + API
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
 volumes:
   mariadb_data:
   redis_data:

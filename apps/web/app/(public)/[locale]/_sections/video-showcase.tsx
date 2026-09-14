@@ -6,16 +6,30 @@
 // another card grid, and what visually separates it from the hero directly
 // below it.
 //
-// Server component apart from the tiles. `parseVideoUrl` runs HERE, on the
-// server, so a raw URL never reaches the client and never reaches an iframe
-// `src` (security.md #9): the tile receives a derived `embedUrl` or null, and
-// there is no third code path.
+// ─── It reads the database (changes-28 PR 1, ADR-092) ─────────────────────
+//
+// Until changes-28 this rail rendered `_content/home-videos.ts`: six coded
+// entries whose `url` was null by design, so the live homepage opened on six
+// "Recording soon" tiles — beside a database that already held published
+// `VideoTopic` rows with titles, summaries, categories, covers and, on two of
+// them, a playable source. The placeholder was never the problem; reading the
+// wrong source was.
+//
+// Composition is still code (ADR-042): which band, where, what shape, how many.
+// What is in it is data, like every other homepage band that lists things, so
+// an editor who publishes a topic gets it on the homepage without a deploy.
+//
+// Server component apart from the tiles. Sources are resolved in @repo/core —
+// a raw URL never reaches the client and never reaches an iframe `src`
+// (security.md #9): the tile receives a derived `embedUrl` or null, and there
+// is no third code path.
 import { getTranslations } from "next-intl/server";
 import { ArrowRight } from "lucide-react";
 
+import { learnTrackVideosPath } from "@repo/contracts";
+import { getFeaturedVideoTopics } from "@repo/core";
 import { Link } from "@repo/i18n/navigation";
 import { isFeatureVisible } from "@repo/settings";
-import { parseVideoUrl } from "@repo/utils";
 import { Button } from "@repo/ui/components/button";
 import { Carousel } from "@repo/ui/components/carousel";
 import { Container } from "@repo/ui/components/container";
@@ -23,13 +37,10 @@ import { Reveal } from "@repo/ui/components/reveal";
 import { Section } from "@repo/ui/components/section";
 
 import { VideoTile } from "../_components/video-tile.tsx";
-import { LEARNING_VIDEOS } from "../_content/home-videos.ts";
+import { videoTopicCoverUrl } from "../_content/video-covers.ts";
 import type { SectionProps } from "./registry.ts";
 
-/** `basics` → `Basics`, so one key addresses three catalog entries. */
-function catalogKey(key: string): string {
-  return key.charAt(0).toUpperCase() + key.slice(1);
-}
+const DEFAULT_LIMIT = 6;
 
 export async function VideoShowcase({
   locale,
@@ -42,35 +53,42 @@ export async function VideoShowcase({
   // `SectionProps`) is unchanged.
   showCta = true,
 }: SectionProps & { showCta?: boolean }) {
-  // The rail teaches; it belongs to the courses feature. An operator who
-  // turns off `courses` should not still be shown a wall of lessons.
-  if (!(await isFeatureVisible("courses", null))) return null;
+  // The rail teaches; it belongs to the videos feature. An operator who turns
+  // off `videos` should not still be shown a wall of them. (It was gated on
+  // `courses` before changes-28, which was the closest flag while the rail was
+  // a code registry of lessons — now that it reads video topics, the flag that
+  // governs those is the right one.)
+  if (!(await isFeatureVisible("videos", null))) return null;
 
-  const t = await getTranslations({ locale, namespace: "home" });
+  const [t, topics] = await Promise.all([
+    getTranslations({ locale, namespace: "home" }),
+    getFeaturedVideoTopics(locale, limit ?? DEFAULT_LIMIT),
+  ]);
 
-  const shown = LEARNING_VIDEOS.slice(0, limit ?? LEARNING_VIDEOS.length);
-  // An empty registry is a legitimate configuration, not an error state —
-  // render nothing rather than a heading over an empty rail.
-  if (shown.length === 0) return null;
+  // No published topic is a legitimate state, not an error — render nothing
+  // rather than a heading over an empty rail. The same rule every other band
+  // that lists things already follows.
+  if (topics.length === 0) return null;
 
-  const tiles = shown.map((video) => {
-    const suffix = catalogKey(video.key);
-    const title = t(`video${suffix}Title` as "videoBasicsTitle");
-    // Parsed on the server. A null `url` — and equally a malformed one, which
-    // `parseVideoUrl` rejects rather than passes through — yields a tile with
-    // no play affordance instead of a broken embed.
-    const parsed = video.url ? parseVideoUrl(video.url) : null;
-
+  const tiles = topics.map((topic) => {
+    const href = `${learnTrackVideosPath(topic.track)}/${topic.slug}`;
     return (
       <VideoTile
-        key={video.key}
-        embedUrl={parsed?.embedUrl ?? null}
-        poster={video.poster}
-        title={title}
-        description={t(`video${suffix}Body` as "videoBasicsBody")}
-        level={t(`video${suffix}Level` as "videoBasicsLevel")}
-        playLabel={t("videoPlay", { title })}
-        soonLabel={t("videoSoon")}
+        key={topic.id}
+        // Only an `embed` source can play inside the rail's facade. An
+        // `upload` has a real file behind it, but it is a <video> and not an
+        // iframe, and a rail that silently swapped element types would be two
+        // players wearing one component. Those tiles link to the topic page,
+        // where the real player lives.
+        embedUrl={topic.source?.kind === "embed" ? topic.source.embedUrl : null}
+        poster={topic.coverUrl ?? videoTopicCoverUrl(topic.slug)}
+        href={href}
+        title={topic.title}
+        description={topic.summary}
+        level={topic.categoryName}
+        playLabel={t("videoPlay", { title: topic.title })}
+        guideLabel={topic.source ? t("videoWatch") : t("videoGuide")}
+        openLabel={t("videoOpen", { title: topic.title })}
       />
     );
   });
@@ -84,7 +102,7 @@ export async function VideoShowcase({
       <span aria-hidden className="bg-glow-primary pointer-events-none absolute inset-0 -z-10" />
       <span
         aria-hidden
-        className="bg-dot-grid pointer-events-none absolute inset-0 -z-10 opacity-[0.18] [mask-image:linear-gradient(to_bottom,black,transparent_85%)]"
+        className="bg-dot-grid pointer-events-none absolute inset-0 -z-10 opacity-18 [mask-image:linear-gradient(to_bottom,black,transparent_85%)]"
       />
 
       <Container className="flex flex-col gap-(--section-gap)">
@@ -127,9 +145,9 @@ export async function VideoShowcase({
 
         <Reveal variant="up">
           {variant === "grid" ? (
-            <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            <ul className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
               {tiles.map((tile, index) => (
-                <li key={shown[index]?.key}>{tile}</li>
+                <li key={topics[index]?.id}>{tile}</li>
               ))}
             </ul>
           ) : (
@@ -140,10 +158,8 @@ export async function VideoShowcase({
               label={t("videoCarouselLabel")}
               previousLabel={t("videoCarouselPrevious")}
               nextLabel={t("videoCarouselNext")}
-              slideLabels={shown.map((video) =>
-                t(`video${catalogKey(video.key)}Title` as "videoBasicsTitle"),
-              )}
-              itemClassName="w-[86%] sm:w-[64%] lg:w-[calc((100%-1.25rem)/2)]"
+              slideLabels={topics.map((topic) => topic.title)}
+              itemClassName="w-43/50 sm:w-16/25 lg:w-(--width-slide-2)"
               tone="inverted"
             >
               {tiles}

@@ -22,6 +22,8 @@
 
 import { useMemo, useState } from "react";
 import { FolderTree, Plus, Tags } from "lucide-react";
+import type { z } from "zod";
+import { createArticleCategorySchema, createArticleTagSchema } from "@repo/contracts";
 import { Button } from "@repo/ui/components/button";
 import { Checkbox } from "@repo/ui/components/checkbox";
 import {
@@ -32,14 +34,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@repo/ui/components/dialog";
+import { Field as UiField, FieldError, FieldGroup, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
-import { Label } from "@repo/ui/components/label";
 import { Textarea } from "@repo/ui/components/textarea";
 import {
   createArticleCategoryAction,
   createArticleTagAction,
 } from "../../../_actions/article-actions.ts";
 import { AdminCombobox } from "../../../_components/combobox.tsx";
+import { useFieldErrors } from "../../../_hooks/use-field-errors.ts";
 import { useServerAction } from "../../../_hooks/use-server-action.ts";
 import { EditorSection, Field } from "../../../_components/editor/editor-section.tsx";
 
@@ -86,6 +89,7 @@ function NewTermDialog({
   createLabel,
   cancelLabel,
   pending,
+  schema,
   onCreate,
 }: {
   open: boolean;
@@ -101,19 +105,26 @@ function NewTermDialog({
   cancelLabel: string;
   /** The PARENT's transition state — the create runs in its `run()`, not ours. */
   pending: boolean;
+  /** The create action's own schema (ADR-077) — category or tag. */
+  schema: z.ZodType;
   onCreate: (input: { name: string; slug?: string; description?: string }) => void;
 }) {
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [description, setDescription] = useState("");
 
+  const input = {
+    name: name.trim(),
+    ...(slug.trim() === "" ? {} : { slug: slug.trim() }),
+    ...(descriptionLabel && description.trim() !== "" ? { description: description.trim() } : {}),
+  };
+  // Mounted only while open (the panel renders it conditionally), so a
+  // close discards the attempt — no reset needed.
+  const form = useFieldErrors(schema, input);
+
   const submit = () => {
-    if (name.trim() === "" || pending) return;
-    onCreate({
-      name: name.trim(),
-      ...(slug.trim() === "" ? {} : { slug: slug.trim() }),
-      ...(descriptionLabel && description.trim() !== "" ? { description: description.trim() } : {}),
-    });
+    if (pending || !form.validate()) return;
+    onCreate(input);
   };
 
   return (
@@ -123,11 +134,10 @@ function NewTermDialog({
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{dialogDescription}</DialogDescription>
         </DialogHeader>
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="new-term-name">{nameLabel}</Label>
+        <FieldGroup>
+          <UiField invalid={form.invalid("name")} required>
+            <FieldLabel>{nameLabel}</FieldLabel>
             <Input
-              id="new-term-name"
               value={name}
               autoFocus
               onChange={(e) => setName(e.target.value)}
@@ -138,35 +148,37 @@ function NewTermDialog({
                 }
               }}
             />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="new-term-slug">{slugLabel}</Label>
+            <FieldError>{form.error("name")}</FieldError>
+          </UiField>
+          <UiField invalid={form.invalid("slug")}>
+            <FieldLabel>{slugLabel}</FieldLabel>
             <Input
-              id="new-term-slug"
               value={slug}
               // ADR-044 #6's exception: the VALUE is a URL segment read
               // character by character.
               className="font-mono text-xs"
               onChange={(e) => setSlug(e.target.value)}
             />
-          </div>
+            <FieldError>{form.error("slug")}</FieldError>
+          </UiField>
           {descriptionLabel && (
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="new-term-description">{descriptionLabel}</Label>
+            <UiField invalid={form.invalid("description")}>
+              <FieldLabel>{descriptionLabel}</FieldLabel>
               <Textarea
-                id="new-term-description"
                 rows={2}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
               />
-            </div>
+              <FieldError>{form.error("description")}</FieldError>
+            </UiField>
           )}
-        </div>
+        </FieldGroup>
         <DialogFooter>
           <Button variant="ghost" disabled={pending} onClick={() => onOpenChange(false)}>
             {cancelLabel}
           </Button>
-          <Button disabled={pending || name.trim() === ""} onClick={submit}>
+          {/* Enabled with no name: pressing it names the field (F-07). */}
+          <Button loading={pending} onClick={submit}>
             {createLabel}
           </Button>
         </DialogFooter>
@@ -188,6 +200,7 @@ export function TaxonomyPanel({
   tagIds,
   onCategoryChange,
   onTagsChange,
+  categoryError,
   labels,
 }: {
   categories: TaxonomyTerm[];
@@ -196,6 +209,8 @@ export function TaxonomyPanel({
   tagIds: string[];
   onCategoryChange: (id: string) => void;
   onTagsChange: (ids: string[]) => void;
+  /** The editor's inline message for `meta.categoryId` (ADR-077). */
+  categoryError?: string;
   labels: TaxonomyLabels;
 }) {
   const { run, pending } = useServerAction();
@@ -233,9 +248,8 @@ export function TaxonomyPanel({
           </Button>
         }
       >
-        <Field id="article-category" label={labels.category}>
+        <Field label={labels.category} required error={categoryError}>
           <AdminCombobox
-            id="article-category"
             value={categoryId}
             onValueChange={(next) => onCategoryChange(next || categoryId)}
             options={allCategories.map((category) => ({
@@ -272,7 +286,7 @@ export function TaxonomyPanel({
             )}
             <div className="flex max-h-56 flex-col gap-1 overflow-y-auto">
               {visibleTags.map((tag) => (
-                <label key={tag.id} className="flex items-center gap-2 text-sm">
+                <UiField key={tag.id} orientation="horizontal">
                   <Checkbox
                     checked={tagIds.includes(tag.id)}
                     onCheckedChange={(checked) =>
@@ -283,9 +297,11 @@ export function TaxonomyPanel({
                       )
                     }
                   />
-                  <span className="min-w-0 flex-1 truncate">{tag.name}</span>
+                  <FieldLabel className="min-w-0 font-normal">
+                    <span className="min-w-0 truncate">{tag.name}</span>
+                  </FieldLabel>
                   <span className="text-xs text-muted-foreground tabular-nums">({tag.count})</span>
-                </label>
+                </UiField>
               ))}
             </div>
           </>
@@ -306,6 +322,7 @@ export function TaxonomyPanel({
           createLabel={labels.create}
           cancelLabel={labels.cancel}
           pending={pending}
+          schema={createArticleCategorySchema}
           onCreate={(input) =>
             run(
               async () => {
@@ -334,6 +351,7 @@ export function TaxonomyPanel({
           createLabel={labels.create}
           cancelLabel={labels.cancel}
           pending={pending}
+          schema={createArticleTagSchema}
           onCreate={(input) =>
             run(
               async () => {

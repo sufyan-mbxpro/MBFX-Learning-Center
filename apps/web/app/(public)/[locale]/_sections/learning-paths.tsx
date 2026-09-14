@@ -58,7 +58,7 @@ export async function LearningPaths({ locale, variant }: SectionProps) {
       <Container className="flex flex-col gap-(--section-gap)">
         <SectionHeading title={t("learningPaths.title")} lead={t("learningPaths.description")} />
         <Reveal variant="up">
-          <ul className="grid gap-4 sm:grid-cols-2">
+          <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {groups.map((group) => {
               const spec = LEARN_TRACKS[group.track as LearnTrackKey];
               return (

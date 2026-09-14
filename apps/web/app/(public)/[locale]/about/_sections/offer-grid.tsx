@@ -47,7 +47,7 @@ export async function OfferGrid({ locale }: { locale: string }) {
             lead={t("overview.offer.lead")}
           />
         </Reveal>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {visible.map((card, index) => (
             <Reveal key={card.key} variant="up" delay={index * 60}>
               <IconCard

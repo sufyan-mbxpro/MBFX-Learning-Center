@@ -19,11 +19,23 @@ the mechanical rules, so edge cases get judged correctly.
    through a catalog key — that part is universal. Whether a non-English
    _value_ is required depends on the surface: **public** namespaces (`common`,
    `home`, `error`, `notFound`, `notTranslated`, `public`, `nav`, `footer`,
-   `glossary`, `news`, `auth`) must be complete for every ACTIVE locale, and
-   `check:catalog-completeness` fails the build if one isn't. **Admin**
-   namespaces (`admin`, `cms`) are English-only by design and are exempt — add
-   the key to `en.json` and stop. A new namespace defaults to _public_, so
-   getting this wrong errs toward more translation, not less.
+   `glossary`, `news`, `auth`, `newsletter`) must be complete for every ACTIVE
+   locale, and `check:catalog-completeness` fails the build if one isn't.
+   **Admin** namespaces (`admin`, `cms`) are English-only by design and are
+   exempt — add the key to `en.json` and stop. A new namespace defaults to
+   _public_, so getting this wrong errs toward more translation, not less.
+
+   **Filling `en` alone is now correct, and the build agrees (ADR-091).**
+   `next build` used to PRERENDER every SEEDED locale, active or not, so a key
+   missing from an INACTIVE locale was a hard `MISSING_MESSAGE` at build time
+   while the check only warned — which is how eight `nav.mega.*` keys from
+   ADR-076 sat broken until changes-21 F9, and how `about.*`, `learn.*` and
+   `economicCalendar.*` went missing from es/ar/ur entirely. ADR-091 resolved
+   the mismatch the way this paragraph used to anticipate: **only an ACTIVE
+   locale is prerendered, served or listed in the sitemap**, so an inactive
+   locale's catalog is genuinely not owed yet. Add the key to `en.json` and
+   stop; `ENFORCED_LOCALES` is what makes it owed, on the PR that activates
+   the locale.
 
 3. **Logical properties only:** `ps-`/`pe-`/`ms-`/`me-`/`text-start`/
    `text-end`. Physical `pl-`/`pr-`/`ml-`/`mr-` utilities fail lint
@@ -96,6 +108,27 @@ these.
     renders both elements. Guarded by
     `apps/web/app/admin-dialog-conventions.test.ts` (ADR-057 #5).
 
+### Permission groups (ADR-083)
+
+11b. **A permission belongs to the SCREEN it governs, and the card order is
+code.** `Permission.groupName` is page-shaped: `learning` (courses,
+lessons, and so quizzes and videos, which share the lesson keys),
+`glossary`, `media`, `articles`, `website`, `users`, `employees`,
+`newsletter`, `market`, `tools`, `translations`, `seo`, `email`, `settings`,
+`system`. `tools` is the fourteenth, added by ADR-086 #6 and the first use of
+this rule's own escape hatch — `/admin/tools` is its own screen, so its keys
+are its own. Instruments got none: `market.*` has been seeded since Module 01.
+A new key names one of those; adding a group means adding it to
+`PERMISSION_GROUPS` in `@repo/db`'s `permission-groups.ts`, whose ARRAY
+ORDER is the order the role editor draws the cards in — it mirrors the
+admin sidebar, not the alphabet. The registry holds no strings: the
+screen resolves `admin.permissionGroups.<name>` through `t.has` with a
+`humanizeKey()` fallback (ADR-044 #5's two-step), and never re-cases the
+result — the `capitalize` class is what made `seo` render as "Seo".
+Guarded by `packages/db/src/permission-groups.test.ts`, which fails in
+both directions: a seeded group the registry does not list, and a listed
+group with no keys.
+
 ## TypeScript
 
 12. Strict mode everywhere; `noUncheckedIndexedAccess` stays on. No `any`
@@ -133,3 +166,88 @@ these.
     it renders its own `<script>` and defers execution past first paint.
     Give the injected script the request's `x-nonce` on the dynamic admin
     surfaces, the way `#brand-tokens` already does (security.md #14).
+
+## Design system (changes-20, ADR-072)
+
+21. **No arbitrary Tailwind values** (ADR-072 §10). A class whose bracket
+    closes it — `w-[150px]`, `lg:grid-cols-[1fr_20rem]` — fails lint
+    (`noArbitraryValueRule`, react-internal config). In order of preference:
+    the scale (`w-37.5`, `h-180`, `aspect-4/3`, `opacity-15`, `z-2`), a
+    design-system step (`text-3xs`, `tracking-caps`), or a **named token** in
+    the "Layout tokens" block of `@repo/ui` `globals.css`, read as a reference
+    (`lg:grid-cols-(--grid-main-aside)`). A new value is added there once, not
+    inlined. Still allowed: arbitrary **variants** (`data-[side=top]:`,
+    `has-[>img:first-child]:`), `(--token)` references, and custom-property
+    definitions (`[--card-spacing:--spacing(6)]`). Tests are exempt (a guard
+    names the class it forbids), and so are the retained Website Builder and
+    homepage composer (ADR-042/038).
+22. **lucide-react is the only icon library.** Any other icon package fails
+    lint (`noOtherIconLibraries`, base config). Brand marks go through
+    `SocialGlyph` (ADR-045).
+23. **A responsive grid states its one-column base.** Write
+    `grid grid-cols-1 lg:grid-cols-2`, never `grid lg:grid-cols-2`. Below the
+    breakpoint the bare form is one implicit `auto` track, which sizes to its
+    items' min-content, and Chrome reports a line-clamped excerpt's min-content
+    as its unwrapped width, so the page scrolls sideways on a phone.
+    `grid-cols-1` is `minmax(0, 1fr)` and cannot outgrow its container.
+    Guarded by `apps/web/app/grid-base.test.ts`.
+
+## Forms (ADR-077)
+
+24. **An admin form field is a `Field`, and it validates inline.**
+    - **Markup.** Every visibly labelled control sits in
+      `@repo/ui/components/field`'s `Field` with a `FieldLabel` and a
+      `FieldError`. Admin screens never import `Label`, render a raw
+      `<label>`, or write `htmlFor`/`aria-describedby` by hand: the Field
+      wires them. The editors' `editor-section` `Field` and the composite
+      controls take `required`/`error` props instead.
+    - **Required.** `<Field required>` draws an asterisk. Optional fields get
+      no marker, never "(optional)".
+    - **Messages.** They come from `useFieldErrors` running the server
+      action's own `@repo/contracts` schema, rendered from
+      `admin.validation.*`.
+    - **Save.** It is not disabled for validation: pressing it names the
+      invalid fields and focuses the first.
+    - **Toast.** Only for server or submission failures.
+    - **Ink.** Destructive TEXT is `text-destructive-interactive` everywhere,
+      both surfaces; raw red fails 4.5:1 on the dark ground. Icons may keep
+      `text-destructive`.
+    - **Guard.** `apps/web/app/admin-form-conventions.test.ts`.
+
+25. **A switch sits on a row, and the switch leads it (ADR-089).** A `Switch`
+    is always in a `Field orientation="horizontal"`, never a vertical one, and
+    it is the FIRST child — the label (or a `FieldContent` holding label plus
+    hint) comes after it. A vertical Field puts a control under its label,
+    which is the shape of a field being filled in; a switch is a state being
+    flipped and reads on one line with the words it governs. It also carries
+    `*:w-full`, which is right for an Input and wrong for the one control
+    whose 44×24 geometry IS its meaning (ADR-074) — that stretched the tool
+    editor's toggle into a 288px bar. `fieldVariants` now exempts
+    `[data-slot=switch]` as well, so the rule does not rest on memory. A
+    switch with no label in its row (a table cell's, named by its column
+    header) is out of scope. Same guard as #24.
+
+## Metadata (ADR-090)
+
+26. **A route never returns `robots: undefined`.** Where the directive is
+    conditional, write a conditional SPREAD —
+    `...(cond ? { robots: { index: false } } : {})` — so the key is absent
+    when it does not apply. This is not style: Next's `mergeMetadata`
+    iterates the child's keys by **presence**, and `resolveRobots(undefined)`
+    is `null`, so a present-but-undefined `robots` ERASES the root layout's
+    site-wide directive rather than inheriting it. The same reasoning applies
+    to any metadata field a layout sets and a page conditionally overrides.
+    Guarded by `apps/web/app/seo-metadata.test.ts`.
+
+27. **The site's origin has one owner.** `siteUrl()`
+    (`apps/web/app/_lib/site-url.ts`) is the only place
+    `process.env.BETTER_AUTH_URL` and its localhost fallback are spelled out
+    — the sitemap, robots, the RSS feed and the public root layout's
+    `metadataBase` all read it. Same guard.
+
+28. **A setting that is read by nothing does not ship.** A seeded, typed,
+    admin-editable row whose value reaches no code is worse than a missing
+    feature: the admin saves it, sees success, and believes something
+    changed. Either wire it or leave it out of the seed. This is what put
+    `seo.robotsIndex` and `seo.googleSiteVerification` in the admin for two
+    modules without effect (ADR-090).

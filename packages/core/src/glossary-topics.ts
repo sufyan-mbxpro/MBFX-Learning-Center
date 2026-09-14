@@ -71,6 +71,17 @@ export interface GlossaryTopicAdminRow {
   isActive: boolean;
   sortOrder: number;
   termCount: number;
+  /**
+   * How many of those terms a reader can actually see — the SAME rule
+   * `loadGlossaryTopics` applies (`publicGlossaryTermWhere`).
+   *
+   * It exists because the two counts disagreeing is invisible otherwise
+   * (changes-22): a topic whose terms are all drafts, or that has no terms at
+   * all, is OMITTED from /glossary/topics by design, and the admin list had no
+   * way to say so. An editor created a topic, published a term, left the term
+   * Unfiled, and read the topic list as proof that the topic was live.
+   */
+  publishedTermCount: number;
   locales: string[];
   updatedAt: Date;
 }
@@ -89,6 +100,17 @@ export async function listGlossaryTopics(): Promise<GlossaryTopicAdminRow[]> {
     },
   });
 
+  // A second query rather than a second `_count`: Prisma counts a relation
+  // once per read and cannot alias it under two different filters, and the two
+  // numbers answer different questions — "how many terms are filed here" and
+  // "how many of them a reader can see".
+  const published = await db.glossaryTerm.groupBy({
+    by: ["topicId"],
+    where: { ...publicGlossaryTermWhere(), topicId: { not: null } },
+    _count: { _all: true },
+  });
+  const publishedByTopic = new Map(published.map((g) => [g.topicId, g._count._all]));
+
   return rows.map((row) => {
     const t = pickTranslation(row.translations, defaultLocale, defaultLocale, locales);
     return {
@@ -99,6 +121,7 @@ export async function listGlossaryTopics(): Promise<GlossaryTopicAdminRow[]> {
       isActive: row.isActive,
       sortOrder: row.sortOrder,
       termCount: row._count.terms,
+      publishedTermCount: publishedByTopic.get(row.id) ?? 0,
       locales: row.translations.map((tr) => tr.locale),
       updatedAt: row.updatedAt,
     };

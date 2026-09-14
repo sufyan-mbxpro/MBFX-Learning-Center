@@ -4,13 +4,19 @@
 // its own key — visibility is never the authorization).
 import { can, type Subject } from "@repo/rbac";
 import { loadAllSettings, type AdminSetting } from "@repo/settings";
+import { humanizeKey } from "@repo/utils";
 import type { SettingsNavEntry } from "./settings-nav.tsx";
 
 type Translate = (key: string, values?: Record<string, string | number | Date>) => string;
 type TranslateHas = Translate & { has: (key: string) => boolean };
 
 export function groupLabel(t: TranslateHas, group: string): string {
-  return t.has(`settingsGroups.${group}`) ? t(`settingsGroups.${group}`) : group;
+  // ADR-044 #5's order of preference: a catalog string, then `humanizeKey()`.
+  // The fallback used to be the raw group key, which is how `media` had been
+  // rendering as a lowercase identifier in the sub-nav — found while verifying
+  // the email screens (changes-21 F5). `media` now has a label of its own; this
+  // stops the NEXT group added without one from doing the same.
+  return t.has(`settingsGroups.${group}`) ? t(`settingsGroups.${group}`) : humanizeKey(group);
 }
 
 export function groupDescription(t: TranslateHas, group: string): string | null {
@@ -47,10 +53,30 @@ export async function loadSettingsIndex(subject: Subject, t: TranslateHas): Prom
   );
 
   const navEntries: SettingsNavEntry[] = [
-    ...groups.map((group) => ({
-      href: `/admin/settings/${group}`,
-      label: groupLabel(t, group),
-    })),
+    ...groups.flatMap((group) => [
+      { href: `/admin/settings/${group}`, label: groupLabel(t, group) },
+      // Email (Module 17) is one registry group with three screens, because a
+      // template body and a delivery log are not settings fields. They are
+      // listed beside their group rather than nested: `SettingsNav` is flat,
+      // and the alternative — reaching them only from inside the email screen
+      // — hides the log from `support`, who holds no other email key.
+      ...(group === "email"
+        ? [
+            ...(can(subject, "email.templates.view")
+              ? [{ href: "/admin/settings/email/templates", label: t("email.templatesNav") }]
+              : []),
+            ...(can(subject, "email.log.view")
+              ? [{ href: "/admin/settings/email/log", label: t("email.logNav") }]
+              : []),
+          ]
+        : []),
+    ]),
+    // The log again, for a subject who cannot see the `email` group at all —
+    // `support` has `email.log.view` and not `settings.view`, so `groups` is
+    // empty for them and the branch above never runs.
+    ...(!canViewSettings && can(subject, "email.log.view")
+      ? [{ href: "/admin/settings/email/log", label: t("email.logNav") }]
+      : []),
     ...(can(subject, "social.manage")
       ? [{ href: "/admin/settings/social", label: t("social") }]
       : []),

@@ -57,20 +57,35 @@ export default async function globalSetup() {
     );
   }
 
-  // `migrate deploy` needs the database to exist. Prisma 7 dropped `--url`
-  // from `db execute`, so the connection comes from DATABASE_URL — pointed at
-  // the DEV database here because that URL is known-valid. It is one DDL
-  // statement naming a DIFFERENT database: no dev data is read or written.
-  inDbPackage(
-    [prismaCli, "db", "execute", "--stdin"],
-    devUrl,
-    "create database",
-    `CREATE DATABASE IF NOT EXISTS \`${dbName}\`;`,
-  );
+  // DROP, then create. `IF NOT EXISTS` is what this used to say, and it made
+  // the seed's idempotence a liability rather than a feature: the seed upserts
+  // create-only, so a database first created weeks ago keeps its ORIGINAL
+  // values for every setting and every row the seed will not overwrite. The
+  // symptom is a suite that passes against a site nobody ships — this one was
+  // asserting against a one-column footer months after the footer became a
+  // three-column sitemap, and its homepage carried none of the sections added
+  // since. Recreating costs one `migrate deploy` per run, and it is the only
+  // way "the suite's starting state" means the state a fresh install gets.
+  //
+  // Prisma 7 dropped `--url` from `db execute`, so the connection comes from
+  // DATABASE_URL — pointed at the DEV database here because that URL is
+  // known-valid. Both statements name a DIFFERENT database, the one the guard
+  // above has already refused to let be the dev one: no dev data is read or
+  // written.
+  // One statement per call: `db execute` hands the script to the driver as a
+  // single query, and MySQL rejects two semicolon-separated statements there
+  // unless multi-statement mode is on — which it is not, and which is not
+  // worth turning on for this.
+  for (const statement of [
+    `DROP DATABASE IF EXISTS \`${dbName}\`;`,
+    `CREATE DATABASE \`${dbName}\`;`,
+  ]) {
+    inDbPackage([prismaCli, "db", "execute", "--stdin"], devUrl, "recreate database", statement);
+  }
 
   inDbPackage([prismaCli, "migrate", "deploy"], databaseUrl, "migrate deploy");
-  // The seed is idempotent (`create`-only upserts), so re-running it between
-  // local runs is safe and keeps the suite's starting state honest.
+  // Onto an empty database, so every create-only upsert actually creates and
+  // the starting state is the one a fresh install gets — see above.
   inDbPackage(["--experimental-strip-types", "prisma/seed.ts"], databaseUrl, "seed");
   inDbPackage(["--experimental-strip-types", "prisma/e2e-fixtures.ts"], databaseUrl, "fixtures");
 }

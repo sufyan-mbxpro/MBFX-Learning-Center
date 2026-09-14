@@ -8,10 +8,44 @@ const intl = createMiddleware(routing);
 /**
  * The staff credential screen (ADR-052). It lives UNDER /admin — never on
  * the public site — so the public surface carries no administrator entry
- * point at all, and it is the single /admin path the STAFF gate below lets
- * through unauthenticated.
+ * point at all, and it is where the STAFF gate below sends people.
  */
 const ADMIN_SIGN_IN_PATH = "/admin/sign-in";
+
+/**
+ * The /admin paths reachable WITHOUT a session (ADR-079 #3).
+ *
+ * All three are the same case: a person who cannot sign in. Gating sign-in
+ * would redirect it to itself; gating recovery would redirect someone to the
+ * screen they came here because they cannot get past. It is an allowlist
+ * rather than three `!==` comparisons so that adding a fourth is a deliberate
+ * edit to one named set.
+ *
+ * Membership is EXACT, never a prefix: `/admin/reset-password-debug` is gated
+ * like everything else. And this is still only a gate — the `(admin)` layout's
+ * server-side STAFF re-check is the boundary (security.md #3), and none of
+ * these three routes renders from that group at all.
+ */
+const ADMIN_PUBLIC_PATHS = new Set([
+  ADMIN_SIGN_IN_PATH,
+  "/admin/forgot-password",
+  "/admin/reset-password",
+]);
+
+/**
+ * The ONE /admin path that may be framed (ADR-078 #8).
+ *
+ * The email template editor renders its preview in a `sandbox=""` iframe, and a
+ * frame the surrounding policy says `DENY` to renders nothing. The route sets
+ * its own `Content-Security-Policy: sandbox; default-src 'none'` on the
+ * response, so what is framed has an opaque origin, no script and no
+ * same-origin access to the admin surface — the exception widens what may be
+ * embedded, not what it can reach.
+ *
+ * Every other /admin path keeps `X-Frame-Options: DENY` and
+ * `frame-ancestors 'none'`. Adding a second entry here needs its own reason.
+ */
+const ADMIN_FRAMABLE_PATHS = new Set(["/admin/api/email/preview"]);
 
 // ─── Security headers (Module 14, security.md #14) ───────────
 //
@@ -65,14 +99,17 @@ function applySecurityHeaders(
   response: NextResponse,
   surface: "admin" | "public",
   nonce: string | null,
+  /** ADR-078 #8 — the email preview, and nothing else on /admin. */
+  framable = false,
 ) {
   response.headers.set("X-Content-Type-Options", "nosniff");
   response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   response.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
-  response.headers.set("X-Frame-Options", surface === "admin" ? "DENY" : "SAMEORIGIN");
+  const sameOrigin = surface === "public" || framable;
+  response.headers.set("X-Frame-Options", sameOrigin ? "SAMEORIGIN" : "DENY");
   response.headers.set(
     "Content-Security-Policy-Report-Only",
-    `${baseCsp(nonce)}; frame-ancestors ${surface === "admin" ? "'none'" : "'self'"}`,
+    `${baseCsp(nonce)}; frame-ancestors ${sameOrigin ? "'self'" : "'none'"}`,
   );
   return response;
 }
@@ -99,12 +136,13 @@ export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (pathname.startsWith("/admin")) {
-    // The staff credential screen is the one /admin path that must be
-    // reachable without a session — gating it would redirect it to itself
-    // (ADR-052). It renders from the (admin-auth) route group, outside the
-    // (admin) layout that carries the server-side STAFF re-check, and still
-    // gets the admin surface's headers and per-request nonce below.
-    if (pathname !== ADMIN_SIGN_IN_PATH) {
+    // The credential and recovery screens must be reachable without a session
+    // — gating sign-in would redirect it to itself (ADR-052), and gating
+    // recovery would strand exactly the person it exists for (ADR-079 #3).
+    // All three render from the (admin-auth) route group, outside the (admin)
+    // layout that carries the server-side STAFF re-check, and still get the
+    // admin surface's headers and per-request nonce below.
+    if (!ADMIN_PUBLIC_PATHS.has(pathname)) {
       const gated = await staffGate(request, pathname);
       if (gated) return gated;
     }
@@ -115,7 +153,7 @@ export async function proxy(request: NextRequest) {
     const requestHeaders = new Headers(request.headers);
     requestHeaders.set("x-nonce", nonce);
     const response = NextResponse.next({ request: { headers: requestHeaders } });
-    return applySecurityHeaders(response, "admin", nonce);
+    return applySecurityHeaders(response, "admin", nonce, ADMIN_FRAMABLE_PATHS.has(pathname));
   }
 
   return applySecurityHeaders(intl(request), "public", null);

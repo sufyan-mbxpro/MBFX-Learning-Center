@@ -49,6 +49,28 @@ hold 4.5:1 exactly up to that tint.
   `selectTriggerVariants`.
 - **Badge meanings:** `destructive` is the SOLID alert pill; a destructive
   STATUS is `danger` (tonal).
+- **Pending, empty and error states are components** (changes-21 Phase A,
+  tokens.md §6 build status):
+  - `Button loading` goes on the button that STARTED the work; siblings stay
+    `disabled`. Never hand-place `{pending && <Spinner />}`.
+  - A route loader is a `page-skeletons.tsx` archetype, and a card's skeleton
+    is exported beside the card. Never an app-local copy.
+  - "Nothing here" is `EmptyState` and "this failed" is `ErrorState`, never a
+    muted `<p>` or red text.
+  - A loader announces once (`label`) or not at all.
+  - `apps/web/app/loading-states.test.ts` fails on any of the old patterns.
+- **A `Field` wires its control** (changes-21 Phase B, ADR-077):
+  - `Field` holds the ids and the `invalid`/`required` state.
+    `FieldLabel`, `FieldDescription`, `FieldError` and every control read it
+    through `useFieldControl`.
+  - A control inside a Field never sets its own `id`. Pass `controlId` to the
+    Field instead.
+  - A new control component must call `useFieldControl`. Use
+    `requiredAs: "aria"` when its DOM node is a button, and strip
+    `aria-required` entirely on a plain button role.
+  - `FieldError` uses `-interactive` ink and has no live region. The form
+    moves focus to the first invalid control instead.
+  - Guarded by `field.test.tsx` and `apps/web/app/admin-form-conventions.test.ts`.
 - **Provisional components** (checkbox, switch, radio, textarea, tooltip,
   dropdown popups/items) are not restyled until their spec is confirmed from
   the owner's second capture.
@@ -78,6 +100,17 @@ hold 4.5:1 exactly up to that tint.
 - `DataTable` takes a `filters` slot rendered in its own toolbar beside
   the search box. Screens pass their Selects there rather than stacking a
   filter bar above the table.
+- **A toolbar is 36px throughout; a form is 40px.** A container that is a
+  toolbar wraps its controls in `ControlSizeProvider size="sm"`
+  (`components/control-size.tsx`) instead of passing `size="sm"` to each one.
+  `DataTable`'s filter slot already does; an explicit `size` still wins.
+- **A dropdown's value truncates with an ellipsis.** `SelectValue` and the
+  Combobox value are truncating blocks and option content is inline. Never
+  put `flex` back on the value slot: it disables `line-clamp`/ellipsis and
+  clips the text mid-letter.
+- **A tab tray scrolls when it outgrows the screen**
+  (`max-w-full overflow-x-auto`, start-justified). Don't cap tab counts to
+  make a phone fit.
 - `SocialGlyph` owns the brand marks. `lucide-react` v1 removed every
   brand icon, so looking one up by name silently rendered nothing —
   an unresolvable name here draws the generic link mark instead (ADR-045).
@@ -92,7 +125,7 @@ hold 4.5:1 exactly up to that tint.
 ## Required tests
 
 RTL rendering per layout-bearing component (dir=rtl → start/end alignment);
-axe on the kitchen-sink page (light/dark × ltr/rtl); DataTable interaction
+axe on `/admin/design-system` (light/dark × ltr/rtl); DataTable interaction
 tests (sort/filter/select/export hit server callbacks); visual snapshot under
 default + one alternate theme (proves token indirection); keyboard-tab
 focus-ring test.
@@ -104,5 +137,5 @@ Q13) is the permanent specimen board: every shared component in every
 variant, size and state, with a dark pane alongside and an RTL switch. A new
 component or variant is added THERE in the same change, and every string it
 shows is an `admin.designSystem.*` key (`admin-design-system.test.ts` fails on
-a missing one). It replaces the dev-only `/admin/_dev/kitchen-sink`. Zero
+a missing one). It replaced the dev-only kitchen sink, which is deleted. Zero
 physical-property utilities in the repo.

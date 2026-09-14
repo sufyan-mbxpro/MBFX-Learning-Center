@@ -95,7 +95,7 @@ function FormLabel({ className, ...props }: React.ComponentProps<typeof FieldLab
     <FieldLabel
       data-slot="form-label"
       data-error={!!error}
-      className={cn("data-[error=true]:text-destructive", className)}
+      className={cn("data-[error=true]:text-destructive-interactive", className)}
       htmlFor={formItemId}
       {...props}
     />

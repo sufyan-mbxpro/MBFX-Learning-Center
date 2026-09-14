@@ -1,3 +1,4 @@
+import { Fragment, Suspense } from "react";
 import type { Metadata } from "next";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { getSetting } from "@repo/settings";
@@ -5,7 +6,8 @@ import { getActiveLocales } from "@repo/i18n";
 import { routing } from "@repo/i18n/routing";
 import { Container } from "@repo/ui/components/container";
 import { Section } from "@repo/ui/components/section";
-import { SECTION_COMPONENTS } from "./_sections/registry.ts";
+import { SECTION_COMPONENTS, SECTION_PENDING } from "./_sections/registry.ts";
+import { SectionSkeleton } from "./_sections/section-skeleton.tsx";
 
 // Homepage assembled from the section registry (`home.sections` setting):
 // order, visibility, layout VARIANT and item COUNT are data, and the
@@ -75,6 +77,15 @@ async function SectionStub({ sectionKey }: { sectionKey: string }) {
   );
 }
 
+/**
+ * How many bands render without a boundary (changes-28 PR 6, ADR-095).
+ *
+ * The first two are what a visitor sees before scrolling, and suspending them
+ * buys nothing — a skeleton that is replaced before the reader's eye has
+ * settled is a flash, not a progressive load. Everything after streams.
+ */
+const EAGER_SECTIONS = 2;
+
 export default async function Home({ params }: PageProps<"/[locale]">) {
   const { locale } = await params;
   setRequestLocale(locale);
@@ -84,16 +95,30 @@ export default async function Home({ params }: PageProps<"/[locale]">) {
 
   return (
     <main className="flex flex-col">
-      {enabled.map((section) => {
+      {enabled.map((section, index) => {
         const Component = SECTION_COMPONENTS[section.key];
         if (!Component) return <SectionStub key={section.key} sectionKey={section.key} />;
+
+        const band = <Component locale={locale} variant={section.variant} limit={section.limit} />;
+        // A Fragment, not a wrapper element: `main` is a flex column and an
+        // extra div between it and a full-bleed `Section` would become the
+        // flex item, collapsing the band's own background to content width.
+        if (index < EAGER_SECTIONS) return <Fragment key={section.key}>{band}</Fragment>;
+
+        // ADR-095. One boundary per band, so the page arrives band by band
+        // instead of all at once at the speed of its slowest query. Under
+        // Cache Components a fully cached section resolves immediately and the
+        // fallback never paints, so this costs nothing on a warm cache — it
+        // is the cold one, and the uncached reads inside a band, that it is
+        // here for.
+        const pending = SECTION_PENDING[section.key];
         return (
-          <Component
+          <Suspense
             key={section.key}
-            locale={locale}
-            variant={section.variant}
-            limit={section.limit}
-          />
+            fallback={<SectionSkeleton tone={pending?.tone} cards={pending?.cards} />}
+          >
+            {band}
+          </Suspense>
         );
       })}
     </main>

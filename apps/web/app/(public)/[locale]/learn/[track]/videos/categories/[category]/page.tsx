@@ -4,7 +4,7 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { getVideoCategories, getVideoTopics } from "@repo/core";
 import { isLearnTrack, learnTrackVideosPath, LEARN_TRACKS } from "@repo/contracts";
 import { getSetting, isFeatureVisible } from "@repo/settings";
-import { VideoMasthead, videoStats } from "../../../../_components/video-masthead.tsx";
+import { VideoMasthead } from "../../../../_components/video-masthead.tsx";
 import { VideoShelf } from "../../../../_components/video-shelf.tsx";
 
 // One category, inside one school (changes-16 PR 7, ADR-068 §1).
@@ -75,7 +75,6 @@ export default async function VideoCategoryPage({
           two levels down and its title is the category's name alone — without
           the trail, "Getting started" says nothing about where the reader is. */}
       <VideoMasthead
-        stats={videoStats(topics)}
         heading={{
           eyebrow: `${t(LEARN_TRACKS[track].titleKey)} — ${t("videos.title")}`,
           title: match.name,

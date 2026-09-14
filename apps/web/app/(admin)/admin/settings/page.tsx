@@ -2,7 +2,7 @@ import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 import { ArrowRight } from "lucide-react";
 import { requireAnyPermission } from "@repo/rbac";
-import { Card, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
+import { Card, CardAction, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
 import { AdminPage } from "../_components/admin-page.tsx";
 import { groupDescription, loadSettingsIndex } from "./_components/settings-shared.ts";
 
@@ -17,6 +17,8 @@ export default async function SettingsHubPage() {
     "features.manage",
     "navigation.manage",
     "theme.update",
+    // `support` holds only this one key under settings (ADR-078 #4).
+    "email.log.view",
   ]);
   const t = await getTranslations("admin");
   const { navEntries, groups } = await loadSettingsIndex(subject, t);
@@ -35,18 +37,24 @@ export default async function SettingsHubPage() {
 
   return (
     <AdminPage title={t("settings")} description={t("settingsHubSubtitle")}>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         {cards.map((card) => (
-          <Link key={card.href} href={card.href} className="group rounded-xl">
-            <Card className="h-full transition-colors group-hover:bg-muted/50">
+          // ADR-075 hand-off: a category tile is a SMALL card (16px title and
+          // rhythm); a 24px title is for a card that is its own section.
+          <Link
+            key={card.href}
+            href={card.href}
+            className="group rounded-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
+          >
+            <Card size="sm" className="h-full group-hover:bg-muted/50">
               <CardHeader>
-                <CardTitle className="flex items-center justify-between gap-2">
-                  {card.label}
+                <CardTitle>{card.label}</CardTitle>
+                <CardAction>
                   <ArrowRight
                     aria-hidden
                     className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 rtl:rotate-180 rtl:group-hover:-translate-x-0.5"
                   />
-                </CardTitle>
+                </CardAction>
                 {card.description && <CardDescription>{card.description}</CardDescription>}
               </CardHeader>
             </Card>
