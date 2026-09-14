@@ -26,12 +26,30 @@ const shellSource = readFileSync(
   "utf8",
 );
 
-/** Every `labelKey: "…"` in the nav definitions. */
+/**
+ * Every `labelKey: "…"` in the nav definitions.
+ *
+ * Dots are matched too. `admin.nav.ai` is the first entry to use one
+ * (code-style.md #29), and a pattern that excluded dots would have SKIPPED it
+ * rather than checked it — a guard that silently stops covering the newest case
+ * is worse than one that fails.
+ */
 function navLabelKeys(): string[] {
-  return [...shellSource.matchAll(/labelKey:\s*"([A-Za-z0-9_]+)"/g)].map((m) => m[1]!);
+  return [...shellSource.matchAll(/labelKey:\s*"([A-Za-z0-9_.]+)"/g)].map((m) => m[1]!);
 }
 
 const admin = en.admin as Record<string, unknown>;
+
+/** Resolve a dotted path under `admin`, the way `t()` does. */
+function resolve(key: string): unknown {
+  return key
+    .split(".")
+    .reduce<unknown>(
+      (node, segment) =>
+        node && typeof node === "object" ? (node as Record<string, unknown>)[segment] : undefined,
+      admin,
+    );
+}
 
 describe("admin sidebar label keys", () => {
   it("finds the nav entries at all — a silent zero would pass every assertion below", () => {
@@ -42,9 +60,9 @@ describe("admin sidebar label keys", () => {
     // The failure this catches reads "INSUFFICIENT_PATH: Message at
     // `admin.<key>` resolved to `object`" and takes the ENTIRE admin shell
     // down, not just the screen that owns the key.
-    expect(admin, `admin.${key} is missing from en.json`).toHaveProperty(key);
+    expect(resolve(key), `admin.${key} is missing from en.json`).toBeDefined();
     expect(
-      typeof admin[key],
+      typeof resolve(key),
       `admin.${key} holds an object, so t("${key}") throws INSUFFICIENT_PATH and the ` +
         `sidebar cannot render. Put the screen's keys under a different name — ` +
         `admin.glossary/admin.glossaryEditor and admin.market/admin.marketData are the precedents.`,
@@ -73,5 +91,14 @@ describe("admin sidebar label keys", () => {
     expect(typeof admin.glossaryEditor).toBe("object");
     expect(typeof admin.market).toBe("string");
     expect(typeof admin.marketData).toBe("object");
+  });
+
+  it("avoids the collision entirely for AI, the way code-style.md #29 says to", () => {
+    // The third instance (ADR-097) took the rule rather than the workaround:
+    // the label is `admin.nav.ai` and `admin.ai` is free to be the object every
+    // AI screen reads from. `glossaryEditor` and `marketData` are what the flat
+    // key costs when it is claimed first.
+    expect(typeof admin.ai).toBe("object");
+    expect(typeof (admin.nav as Record<string, unknown>).ai).toBe("string");
   });
 });

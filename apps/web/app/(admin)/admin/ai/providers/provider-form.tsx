@@ -281,15 +281,17 @@ export function AiProviderForm({
 
       {provider.id && (
         <div className="flex justify-end">
-          {/* Destructive TEXT is `text-destructive-interactive` on both
-              surfaces; raw red fails 4.5:1 on the dark ground (ADR-077). */}
+          {/* Destructive text takes the -interactive ink on both surfaces, and
+              so does the glyph beside it: the raw hue is a FILL colour and
+              fails 4.5:1 on the dark ground (ADR-077, ADR-018 rule 5). The
+              button's own ink covers the icon, so the icon sets none. */}
           <Button
             variant="ghost"
             className="text-destructive-interactive"
             onClick={() => setConfirmingDelete(true)}
             disabled={pending}
           >
-            <Trash2 aria-hidden data-icon="inline-start" className="text-destructive" />
+            <Trash2 aria-hidden data-icon="inline-start" />
             {labels.deleteAction}
           </Button>
         </div>

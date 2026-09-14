@@ -46,7 +46,10 @@ interface NavEntryDef {
     | "website"
     | "market"
     | "tools"
-    | "ai"
+    // code-style.md #29 — the label lives under `admin.nav.<section>` so that
+    // `admin.ai` can be the OBJECT holding the screens' strings. Every entry
+    // above it predates that rule and keeps its flat key.
+    | "nav.ai"
     | "settings"
     | "features"
     | "navigation"
@@ -226,7 +229,7 @@ const ADMIN_NAV_GROUPS: {
       // Providers tab at all.
       {
         href: "/admin/ai",
-        labelKey: "ai",
+        labelKey: "nav.ai",
         icon: "ai",
         permission: ["ai.usage.view", "ai.settings.manage", "ai.providers.manage"],
       },

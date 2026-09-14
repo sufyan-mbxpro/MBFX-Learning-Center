@@ -1,9 +1,9 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
-import { purgeEmailDeliveries, purgeExpiredPending } from "@repo/core";
+import { purgeAiUsage, purgeEmailDeliveries, purgeExpiredPending } from "@repo/core";
 
-// Retention sweeps (ADR-078 #10, ADR-080 #1) — `publish-due`'s sibling, and
-// deliberately its near-copy: the same shared-secret shape, the same
+// Retention sweeps (ADR-078 #10, ADR-080 #1, ADR-097 #7) — `publish-due`'s
+// sibling, and deliberately its near-copy: the same shared-secret shape, the same
 // fail-closed 503, the same "no queue, no worker, no `node-cron`" answer.
 //
 // **Unlike `publish-due`, this one is NOT optional.** Scheduled publishing is
@@ -13,6 +13,11 @@ import { purgeEmailDeliveries, purgeExpiredPending } from "@repo/core";
 // forever. Both are PII, so "nobody called the endpoint" is a privacy
 // regression rather than untidy bookkeeping. That is worth saying out loud
 // because the two routes look identical.
+//
+// ADR-097 adds the third sweep, and it is PII on the same clock: an `AiUsage`
+// row carries `userId` — who spent what. The DAILY ROLLUPS carry no person and
+// are kept forever, which is what lets spend history outlive the retention
+// window and keeps a twelve-month chart from scanning a year of raw rows.
 //
 // **Auth is a shared secret, not `requirePermission()`** — there is no
 // subject, and inventing a system user to satisfy security.md #1 would put a
@@ -57,13 +62,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (!timingSafeEqual(digest(presented), digest(secret))) return unauthorized();
 
   const now = new Date();
-  const [pendingSubscribers, deliveries] = await Promise.all([
+  const [pendingSubscribers, deliveries, aiUsage] = await Promise.all([
     purgeExpiredPending(now),
     purgeEmailDeliveries(now),
+    purgeAiUsage(),
   ]);
 
   return NextResponse.json(
-    { sweptAt: now.toISOString(), pendingSubscribers, deliveries },
+    { sweptAt: now.toISOString(), pendingSubscribers, deliveries, aiUsage },
     { headers: { "cache-control": "no-store" } },
   );
 }

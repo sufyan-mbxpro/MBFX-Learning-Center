@@ -4,9 +4,12 @@ ADR-097 (the platform), ADR-098 (the sealed provider key), ADR-099 (the
 provider seam + model tiers), ADR-100 (cost estimation).
 Plan: `docs/changes/changes-29-ai-platform.md` (PRs A0–A9, then B1–B6).
 
-**Status: A0 only.** The ADRs, this skill and the governance rows exist; no
-package, no schema, no screen. Everything below describes what A1+ must build,
-not what is there.
+**Status: PHASE 1 COMPLETE (A1-A9, 2026-09-14).** `@repo/ai`, six tables, five
+admin screens, one generation endpoint and the meter are all in. `ai.enabled`
+ships `false` and the default provider is `ECHO`, so a fresh clone has a
+working AI area that cannot spend a cent. **Phase 2 (B1-B6) is not started** —
+no editor has an AI control yet, which is why the invariants below read as
+rules rather than as descriptions of existing screens.
 
 ## The shape
 
@@ -93,6 +96,26 @@ path must not acquire a dependency that takes two seconds and spends money.
     period are unusable. Documented, not a bug — the limits screen shows
     "available to spend".
 
+## What Phase 1 learned
+
+Three failures worth knowing before B1, all found by tests rather than by
+running the thing:
+
+- **`upsert` is not atomic, and the obvious fix is half of one.** Two
+  concurrent meter writes race; catching the 1062 and retrying as an increment
+  then fails with "record not found", because MariaDB's default REPEATABLE READ
+  serves the retry a snapshot from before the other insert committed.
+  `usage.ts` runs at `ReadCommitted` for exactly this (ADR-056's lesson, second
+  domain).
+- **Haiku 4.5 takes a different request shape.** `budget_tokens` is a 400 on
+  the Claude 5 family; `output_config.effort` is a 400 on Haiku. Haiku is the
+  seeded LIGHT tier, so the wrong shape is every alt-text and grammar call.
+  `drivers/anthropic.ts` keeps an explicit table of provider facts, not a
+  pattern over model ids, and an unknown id gets the modern shape.
+- **`NOTIFY_ONLY` is identical to `DISABLE` unless the pre-flight check skips
+  it.** The worst-case budget refusal fires the moment `availableUsd` hits
+  zero, whatever the cap behaviour says.
+
 ## Where things go wrong
 
 - **An edited `.env` does nothing until `next dev` restarts** (DEVLOG
@@ -113,7 +136,7 @@ path must not acquire a dependency that takes two seconds and spends money.
   `app/(public)` never imports (architecture.md #5). Check the public
   Lighthouse budget if that is ever in doubt.
 
-## Owed to Module 14
+## Owed to Module 14 (Phase 1's share is now due)
 
 E2E for the five admin screens and each Phase 2 affordance (`fixme`, same
 auth-setup reason as every admin spec); axe on the AI screens and on B4's

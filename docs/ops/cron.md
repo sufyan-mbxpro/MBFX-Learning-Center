@@ -5,11 +5,11 @@ guarantee: **nothing on the site breaks if they never run.** A page falls back
 to its last good data and says so. Schedule them because the data goes stale,
 not because the site stops working.
 
-| Route                         | What it does                                      | Sensible cadence |
-| ----------------------------- | ------------------------------------------------- | ---------------- |
-| `POST /api/cron/market-sync`  | Fetches daily price bars for active instruments   | every 15 min †   |
-| `POST /api/cron/publish-due`  | Moves due scheduled content to `PUBLISHED`        | every 15 min     |
-| `POST /api/cron/housekeeping` | Deletes email deliveries > 90d, pending subs > 7d | daily            |
+| Route                         | What it does                                                           | Sensible cadence |
+| ----------------------------- | ---------------------------------------------------------------------- | ---------------- |
+| `POST /api/cron/market-sync`  | Fetches daily price bars for active instruments                        | every 15 min †   |
+| `POST /api/cron/publish-due`  | Moves due scheduled content to `PUBLISHED`                             | every 15 min     |
+| `POST /api/cron/housekeeping` | Deletes email deliveries > 90d, pending subs > 7d, AI usage rows > 90d | daily            |
 
 † **Not a typo, and this is the part worth understanding.** `market-sync` asks
 the database whether enough time has passed before it calls the data provider.
@@ -193,6 +193,23 @@ Two things follow:
   Vantage endpoints and will fail every run until the driver learns them. They
   are seeded active — deactivate them, or expect them in `failures`.
 
+## AI spend
+
+`housekeeping` also deletes `AiUsage` rows older than **90 days** (ADR-097).
+Two things about that are worth knowing before the first month rolls over:
+
+- **The rollups are not deleted.** `AiUsageDaily` carries no `userId` and is
+  kept forever, so a twelve-month spend chart keeps working after the raw rows
+  behind it are gone. What the purge removes is the per-call detail — who spent
+  it, and against which article — which is PII on a clock.
+- **The budget is not a cron job.** The monthly cap lives in
+  `AiBudgetPeriod`, keyed by UTC month, and a new month's row is created by the
+  first call of that month. Nothing has to run on the 1st; a capped platform
+  un-caps itself when the month turns, and the banner clears with it.
+
+There is no AI equivalent of `market-sync`: nothing is fetched on a schedule,
+and every AI call is something a member of staff pressed.
+
 ## When something looks wrong
 
 | Symptom                                   | Cause                                                                                            |
@@ -202,6 +219,8 @@ Two things follow:
 | `{"swept": false, "reason": "not_due"}`   | Working as intended. Shorten **Sync interval**, or pass `?force=1`                               |
 | Every symbol in `failures`                | The provider rejected the key, or `MARKET_SECRET_KEY` changed and the stored key no longer opens |
 | Tools show an empty state with an "as of" | No bars yet. Press **Sync now** — this is the pre-first-sync state                               |
+| AI features are absent from every editor  | `ai.enabled` is off, the feature is off, or the month's budget is spent — `/admin/ai` says which |
+| An AI call fails with `secret_unreadable` | `AI_SECRET_KEY` is unset or changed, so the stored provider key no longer opens                  |
 
 The last sweep's outcome is also on `/admin/market/provider` (last run, last
 error, next scheduled sync) and in the audit log as `market.sync` for an

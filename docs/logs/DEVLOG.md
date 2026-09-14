@@ -18190,3 +18190,128 @@ refuse. It lands in A2 with `secret.ts`, its only reader.
 Everything: A1 (schema, registry, permissions, settings, seed) through A9,
 then B1–B6. E2E for all five admin screens and every Phase 2 affordance goes
 to Module 14 with every other admin spec.
+
+## 2026-09-14 — A1–A9: the AI platform, from schema to gate
+
+**Module 18** — ADR-097/098/099/100, plan
+[changes-29](../changes/changes-29-ai-platform.md), PRs A1 through A9. Phase 1
+is complete: `@repo/ai`, six tables, five admin screens, one generation
+endpoint, and a meter that cannot be skipped. **`ai.enabled` ships `false`** and
+the seeded default provider is `ECHO`, so nothing in a fresh clone can spend a
+cent.
+
+### What shipped
+
+- **A1** — six tables and two enums; `AI_FEATURES` in `@repo/contracts` with six
+  entries; four permission keys; nine `ai.*` settings, all `isPublic: false`;
+  the seed (ECHO default, six priced models, every feature OFF).
+- **A2+A3** — `@repo/ai`: the `AiDriver` seam, three drivers, the sealed key's
+  one reader, the three-step model resolver, six pure prompt builders, the
+  pricing arithmetic, the meter and the budget.
+- **A4** — `@repo/core/ai-admin.ts`: the admin's door, with audit and the
+  notification `@repo/ai` cannot send.
+- **A5** — `POST /admin/api/ai/run` and `ai-actions.ts`.
+- **A6+A7** — Usage (the landing screen), Features, Budget & limits, Providers,
+  and one provider's models.
+- **A8** — the 90-day `AiUsage` purge joins `/api/cron/housekeeping`; `docs/ops/cron.md`
+  gains an "AI spend" section; `.env.example` gains `AI_SECRET_KEY`.
+- **A9** — the drift guard, the degradation guard, the output guard, and the
+  two existing guards that had to be taught the new facts.
+
+### Decisions taken during implementation
+
+1. **The `ai` permission group sits under System, above Settings** — not
+   "between tools and translations" as §7.2 of the plan wrote. The plan
+   contradicted itself: §10 puts the AI screen under System, and ADR-083
+   (code-style.md #11b) says the array MIRRORS the sidebar. The binding rule
+   decided, and `permission-groups.test.ts` records the reasoning beside the
+   entry.
+2. **The Anthropic driver keeps a table of which models take adaptive thinking
+   and which take a token budget**, enumerated by exact model id. It is a table
+   of PROVIDER FACTS, not meaning derived from a model id's shape — and it is
+   load-bearing rather than tidy: `budget_tokens` is a 400 on the Claude 5
+   family, `output_config.effort` is a 400 on Haiku 4.5, and Haiku is the seeded
+   LIGHT tier. Without it, every alt-text and grammar call would fail. A model
+   the table does not name gets the modern shape.
+3. **`NOTIFY_ONLY` skips the pre-flight budget check.** Without that it was
+   identical to `DISABLE` in practice — the pre-flight refusal fires the moment
+   `availableUsd` reaches zero, whatever the cap behaviour says. A setting that
+   looks like a choice and is not is the failure ADR-096 named in another
+   domain.
+4. **`pricedAt` moves only when a PRICE moves.** Touching it on every save
+   would make "prices last updated <date>" say today because somebody renamed a
+   model.
+5. **The budget notification's recipient list applies deny-beats-allow**
+   (security.md #2). Somebody whose `ai.settings.manage` was explicitly removed
+   should not keep receiving the alerts it came with.
+6. **`admin.nav.ai` is the sidebar label and `admin.ai` is the object** —
+   code-style.md #29 taken rather than worked around. `admin.glossaryEditor`
+   and `admin.marketData` are what the flat key costs when it is claimed first.
+   `admin-nav-labels.test.ts` now matches dotted label keys, because a pattern
+   that excluded dots would have SKIPPED the newest entry rather than checked
+   it.
+
+### Three bugs the tests found
+
+All three were real, and all three were found by tests written to the plan's
+own specification rather than to the implementation.
+
+1. **`AiUsageDaily.upsert` is not atomic.** Six concurrent calls raced and the
+   second insert took a 1062. Caught and retried as a pure increment — and the
+   retry then failed with "record not found", because under MariaDB's default
+   REPEATABLE READ it reads a snapshot from BEFORE the other insert committed.
+   `ReadCommitted` on the transaction is what makes the catch correct rather
+   than merely plausible. ADR-056's enrollment-counter lesson, in a second
+   domain: the obvious half of the fix looks right and drifts anyway.
+2. **The Anthropic stream zeroed its own input count.** `message_delta` was
+   merged as a whole object over the counts from `message_start`, so every
+   streamed call would have metered as though its prompt were free.
+3. **A raw NUL byte reached a source file.** The streamed-error sentinel was
+   written as a literal control character, and `grep` began reporting the route
+   handler as binary. It is now `AI_STREAM_ERROR_PREFIX` in `@repo/contracts`,
+   built with `fromCharCode(31)`, so the bytes stay out of every source file
+   while the marker stays un-typeable by a model.
+
+### Tests run
+
+- `@repo/ai` — **125 passing**; 92% statements, 80.5% branches (the 80% service
+  floor), with `pricing.ts` and the prompt builders above the 90% pure-logic
+  floor. Includes a Testcontainers suite that asserts the meter's atomicity
+  under six concurrent calls, the cap flipping ON its boundary, notify-once, a
+  new UTC month resetting, and — by scanning every written row — that **no
+  prompt or completion text is stored anywhere**.
+- `@repo/contracts` — **375 passing**, including the new drift guard: every
+  `AI_FEATURES` key has a prompt builder, a payload schema, a seed row and a
+  catalog block, and `tutor_chatbot` has none of them.
+- `@repo/db` — unit suites green. Two existing guards failed first, which is
+  exactly what they are for: the exclusion list now names five keys and the
+  group registry fifteen, both updated with the ADR that earned it.
+- `apps/web` — **1973 passing across 44 files**, including
+  `ai-degradation.test.ts` (fails on an AI control disabled on availability)
+  and `ai-output.test.ts` (no `dangerouslySetInnerHTML` on any AI path, no tool
+  declaration in either driver, no `fetch` on the model's behalf).
+- All eight `check:*` scripts and `governance:check` green.
+
+`src/secret.ts` has its branch floor pinned at 75 rather than 90, with the
+reason in the vitest config: its one uncovered branch is a defensive re-throw
+that only mocking `@repo/secrets` could reach, and testing.md forbids that
+outright. `packages/email/src/secret.ts` has the identical shape and the
+identical uncovered line.
+
+### Deliberately not done
+
+- **No E2E.** Every admin spec in this repo is `fixme` for the same auth-setup
+  reason, and these five screens join them.
+- **No axe run** on the AI screens, and no Lighthouse check that no AI client
+  code reaches a public route. The second should be trivially true — §13's prop
+  mechanism means an AI-off install ships none — and the budget is how we would
+  know.
+- **No reconciliation view** against the provider's own billing API. ADR-100 #4
+  names it as future work rather than implying our arithmetic is authoritative,
+  and every figure on screen says "estimated" with a `pricedAt` date beside it.
+
+### Owed
+
+Phase 2: B1 (writing assistant) → B2 (SEO) → B3 (translation) → B4
+(summarization) → B5 (alt text) → B6 (quiz generation). The tutor chatbot stays
+spec-only and has no registry key.

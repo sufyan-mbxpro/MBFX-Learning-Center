@@ -220,7 +220,7 @@ export function ModelsTable({
                         aria-label={labels.deleteLabel}
                         onClick={() => setDeleting(model)}
                       >
-                        <Trash2 aria-hidden className="text-destructive" />
+                        <Trash2 aria-hidden className="text-destructive-interactive" />
                       </Button>
                     </div>
                   </TableCell>
