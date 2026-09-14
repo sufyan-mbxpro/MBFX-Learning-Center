@@ -188,6 +188,51 @@ describe("B1 — the writing assistant is a PROP, not a flag", () => {
   });
 });
 
+describe("B2 — auto-SEO reviews before it applies", () => {
+  // `stripped`, not raw: the file's own comment has to NAME `ogImageUrl` in
+  // order to explain why the dialog does not offer it, and a guard that trips
+  // on its own explanation teaches the next reader to delete the explanation.
+  const dialog = stripped(join(APP_ROOT, "(admin)", "admin", "_components", "ai-seo-dialog.tsx"));
+  const editor = readFileSync(
+    join(APP_ROOT, "(admin)", "admin", "articles", "[id]", "article-editor.tsx"),
+    "utf8",
+  );
+
+  it("ticks a field by default only when it is EMPTY", () => {
+    // An admin who wrote a meta description should not lose it to an
+    // unattended tick.
+    expect(dialog).toContain("current[key].trim().length === 0");
+  });
+
+  it("offers no image field of any kind", () => {
+    // security.md #9: an image "URL" text field is replaced by the upload
+    // widget, not supplemented — and a model inventing an image URL is exactly
+    // the SSRF-shaped input that rule exists to refuse.
+    expect(dialog).not.toContain("ogImage");
+    expect(dialog).not.toContain("imageUrl");
+  });
+
+  it("parses the model's answer with the form's own schema", () => {
+    expect(dialog).toContain("seoSuggestionSchema.parse");
+  });
+
+  it("fills form fields and lets the editor's own Save persist them", () => {
+    // ADR-097 #4 — nothing here writes to the database.
+    expect(dialog).toContain("onApply(patch)");
+    expect(dialog).not.toContain("Action(");
+    expect(editor).toContain("onApply={(patch) => setTr(patch)}");
+  });
+
+  it("appears per FEATURE, so SEO can be on while the assistant is off", () => {
+    const page = readFileSync(
+      join(APP_ROOT, "(admin)", "admin", "articles", "[id]", "page.tsx"),
+      "utf8",
+    );
+    expect(page).toContain("availability.features.seo_generation");
+    expect(page).toContain("availability.features.writing_assistant");
+  });
+});
+
 describe("the sealed key reaches no screen", () => {
   it("names apiKey only as a write-only form field, never as a rendered value", () => {
     for (const file of AI_SCREENS) {

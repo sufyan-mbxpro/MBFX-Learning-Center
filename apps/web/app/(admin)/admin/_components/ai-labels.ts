@@ -10,6 +10,7 @@ import { AI_REASONS } from "@repo/ai";
 import type { AiAssistantAction, AiTone } from "@repo/contracts";
 
 import type { AiAssistantLabels } from "./ai-assistant.tsx";
+import type { AiSeoLabels } from "./ai-seo-dialog.tsx";
 
 /** Resolves a key under the `admin.ai` namespace. */
 type Translate = (key: string) => string;
@@ -58,5 +59,33 @@ export function aiAssistantLabels(t: Translate): AiAssistantLabels {
     discard: t("assistantDiscard"),
     reasons: aiReasonLabels(t),
     failed: t("assistantFailed"),
+  };
+}
+
+/**
+ * B2's labels. `cancel` comes from the shared admin namespace, so this builder
+ * takes both translators rather than pretending every string it needs lives
+ * under `admin.ai`.
+ */
+export function aiSeoLabels(t: Translate, common: Translate): AiSeoLabels {
+  return {
+    action: t("seoAction"),
+    title: t("seoTitle"),
+    description: t("seoDescription"),
+    current: t("seoCurrent"),
+    suggested: t("seoSuggested"),
+    empty: t("seoEmpty"),
+    apply: t("seoApply"),
+    cancel: common("cancel"),
+    generating: t("assistantGenerating"),
+    failed: t("assistantFailed"),
+    reasons: aiReasonLabels(t),
+    fields: {
+      seoTitle: t("seoFields.seoTitle"),
+      seoDescription: t("seoFields.seoDescription"),
+      ogTitle: t("seoFields.ogTitle"),
+      ogDescription: t("seoFields.ogDescription"),
+      focusKeywords: t("seoFields.focusKeywords"),
+    },
   };
 }

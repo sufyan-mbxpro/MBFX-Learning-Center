@@ -11,7 +11,7 @@ import { can, requireAnyPermission } from "@repo/rbac";
 import { routing } from "@repo/i18n/routing";
 import { getAiAvailability } from "@repo/ai";
 import { AdminPage } from "../../_components/admin-page.tsx";
-import { aiAssistantLabels } from "../../_components/ai-labels.ts";
+import { aiAssistantLabels, aiSeoLabels } from "../../_components/ai-labels.ts";
 import { richTextLabels } from "../../_components/editor-labels.ts";
 import { ArticlesSubnav } from "../_components/articles-subnav.tsx";
 import { articlesSubnavItems } from "../_components/subnav-items.ts";
@@ -44,15 +44,23 @@ export default async function ArticleEditPage({ params }: PageProps<"/admin/arti
   // here — both are re-checked server-side on the run endpoint and the save
   // action (security.md #1). The absence of this prop is what makes an AI-off
   // install ship no AI client code.
-  const ai =
-    availability.features.writing_assistant && can(subject, "ai.use")
+  const canUseAi = can(subject, "ai.use");
+  const tAiKey = (key: string) => tAi(key as "assistantMenu");
+  const assistant =
+    canUseAi && availability.features.writing_assistant
       ? {
-          assistant: {
-            config: { entity: { type: "article", id: detail.id } },
-            labels: aiAssistantLabels((key) => tAi(key as "assistantMenu")),
-          },
+          config: { entity: { type: "article", id: detail.id } },
+          labels: aiAssistantLabels(tAiKey),
         }
       : undefined;
+  // Gated per FEATURE, not per platform: an admin may switch the assistant on
+  // and leave SEO off, and each affordance then appears or does not on its own.
+  const seo =
+    canUseAi && availability.features.seo_generation
+      ? { labels: aiSeoLabels(tAiKey, (key) => t(key as "cancel")) }
+      : undefined;
+  const ai =
+    assistant || seo ? { ...(assistant ? { assistant } : {}), ...(seo ? { seo } : {}) } : undefined;
 
   const canPublish = can(subject, articleKindPermission(detail.kind, "publish"));
   const canDelete = can(subject, articleKindPermission(detail.kind, "delete"));

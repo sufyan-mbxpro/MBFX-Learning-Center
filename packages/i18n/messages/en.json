@@ -2257,6 +2257,20 @@
         "friendly": "Friendly",
         "concise": "Concise",
         "plain": "Plain language"
+      },
+      "seoAction": "Generate SEO",
+      "seoTitle": "Suggested search metadata",
+      "seoDescription": "Tick the fields to apply. A field you have already written is left unticked, and nothing is saved until you save the article.",
+      "seoCurrent": "Current",
+      "seoSuggested": "Suggested",
+      "seoEmpty": "Empty",
+      "seoApply": "Apply selected",
+      "seoFields": {
+        "seoTitle": "Meta title",
+        "seoDescription": "Meta description",
+        "ogTitle": "Social title",
+        "ogDescription": "Social description",
+        "focusKeywords": "Focus keywords"
       }
     }
   },

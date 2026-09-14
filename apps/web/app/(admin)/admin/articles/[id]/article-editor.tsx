@@ -62,6 +62,7 @@ import { Textarea } from "@repo/ui/components/textarea";
 import { ImageUploadField } from "../../_components/image-upload-field.tsx";
 import { RichTextEditor } from "../../_components/rich-text-editor.tsx";
 import type { AiAssistantConfig, AiAssistantLabels } from "../../_components/ai-assistant.tsx";
+import { AiSeoButton, type AiSeoLabels } from "../../_components/ai-seo-dialog.tsx";
 import {
   duplicateArticleAction,
   saveArticleAction,
@@ -170,6 +171,7 @@ export function ArticleEditor({
    */
   ai?: {
     assistant?: { config: AiAssistantConfig; labels: AiAssistantLabels };
+    seo?: { labels: AiSeoLabels };
   };
 }) {
   const router = useRouter();
@@ -492,6 +494,31 @@ export function ArticleEditor({
             description={labels.seoSectionDescription}
             icon={Search}
             accent="info"
+            actions={
+              // changes-29 B2. In the section HEADER, because it fills the whole
+              // section rather than one field — and absent entirely when the
+              // feature is off (ADR-097 #6).
+              ai?.seo ? (
+                <AiSeoButton
+                  labels={ai.seo.labels}
+                  entity={{ type: "article", id: article.id }}
+                  current={{
+                    seoTitle: tr.seoTitle,
+                    seoDescription: tr.seoDescription,
+                    ogTitle: tr.ogTitle,
+                    ogDescription: tr.ogDescription,
+                    focusKeywords: tr.focusKeywords,
+                  }}
+                  source={{
+                    title: tr.title,
+                    content: tr.body,
+                    ...(tr.excerpt ? { excerpt: tr.excerpt } : {}),
+                    locale,
+                  }}
+                  onApply={(patch) => setTr(patch)}
+                />
+              ) : undefined
+            }
           >
             <Tabs defaultValue="basic">
               <TabsList>

@@ -18374,3 +18374,44 @@ and text-in/text-out both directions. Lint, typecheck, catalog completeness and
 B2 (SEO) → B3 (translation) → B4 (summarization) → B5 (alt text) → B6 (quiz
 generation). E2E for the assistant goes to Module 14 with every other admin
 spec.
+
+## 2026-09-14 — B2: auto-SEO, which reviews before it applies
+
+**Module 18** — changes-29 PR B2. A **Generate SEO** button in the article
+editor's SEO section header, and a review dialog behind it.
+
+The dialog is the feature. It shows each suggested field SIDE BY SIDE with what
+is already there, with a per-field checkbox ticked by default **only where the
+field is empty** — an admin who wrote a meta description should not lose it to
+an unattended tick. Apply fills the form fields; the editor's own Save persists
+them, through the same action, the same schema and the same permission check as
+anything typed by hand (ADR-097 #4).
+
+**No image field, of any kind.** The prompt forbids returning one and the
+dialog has nowhere to put one: `ogImageUrl` stays with the upload widget,
+because security.md #9 replaces an image "URL" text field with the widget
+rather than supplementing it, and a model inventing an image URL is exactly the
+SSRF-shaped input that rule exists to refuse.
+
+The response is parsed by `seoSuggestionSchema` — the form's own schema, with
+the columns' own limits — so an over-length meta title is a FAILED generation
+rather than a truncation. A model that wraps its JSON in a code fence is the
+one deviation `runAiJson` absorbs rather than failing on: it is common,
+harmless and unambiguous.
+
+### Two smaller notes
+
+- The two affordances are gated per FEATURE, not per platform: an admin can
+  switch the assistant on and leave SEO off, and each appears or does not on
+  its own.
+- `ai-degradation.test.ts`'s B2 group reads the STRIPPED source, because the
+  dialog's own comment has to name `ogImageUrl` to explain why it is absent —
+  the same rule `newsletter-signup.test.ts` states about its own forbidden
+  tokens.
+
+Tests: apps/web **1996 passing across 44 files**, five of them new; lint,
+typecheck, catalog completeness and `governance:check` green.
+
+### Owed
+
+B3 (translation) → B4 (summarization) → B5 (alt text) → B6 (quiz generation).
