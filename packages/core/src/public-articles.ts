@@ -357,6 +357,14 @@ export interface ArticleView {
   slug: string;
   excerpt: string | null;
   body: string | null;
+  /**
+   * 3-5 short takeaways, or an empty array (changes-29 B4).
+   *
+   * Always an ARRAY, never null: the page renders the block on non-empty, and
+   * a reader cannot tell "the column is null" from "the list is empty" — so
+   * neither should the type.
+   */
+  keyTakeaways: string[];
   coverImageUrl: string | null;
   videoUrl: string | null;
   isPremium: boolean;
@@ -447,6 +455,7 @@ export async function loadArticleBySlug(locale: string, slug: string): Promise<A
       slug: translation.slug,
       excerpt: null,
       body: null,
+      keyTakeaways: [],
       coverImageUrl: article.coverImageUrl,
       videoUrl: article.videoUrl,
       isPremium: article.isPremium,
@@ -485,6 +494,12 @@ export async function loadArticleBySlug(locale: string, slug: string): Promise<A
     slug: picked.slug,
     excerpt: picked.excerpt,
     body: picked.body,
+    // Parsed defensively rather than cast: the column is `Json?`, so a row
+    // written before this feature holds `null` and a row written by hand could
+    // hold anything. A non-string entry is DROPPED rather than rendered.
+    keyTakeaways: Array.isArray(picked.keyTakeaways)
+      ? picked.keyTakeaways.filter((item): item is string => typeof item === "string")
+      : [],
     coverImageUrl: article.coverImageUrl,
     videoUrl: article.videoUrl,
     isPremium: article.isPremium,

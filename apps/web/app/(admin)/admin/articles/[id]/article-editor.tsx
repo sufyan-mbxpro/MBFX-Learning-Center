@@ -68,6 +68,10 @@ import {
   type AiTranslateLabels,
 } from "../../_components/ai-translate-button.tsx";
 import {
+  TakeawaysField,
+  type TakeawaysLabels,
+} from "../../_components/takeaways-field.tsx";
+import {
   duplicateArticleAction,
   saveArticleAction,
   setArticleDeletedAction,
@@ -142,6 +146,7 @@ function blankTranslation(locale: string): TranslationDraft {
     twitterImageUrl: "",
     twitterImageAssetId: null,
     faqItems: [],
+    keyTakeaways: [],
     translationStatus: "DRAFT",
   };
 }
@@ -158,6 +163,7 @@ export function ArticleEditor({
   canDelete,
   canCreate,
   labels,
+  takeawaysLabels,
   ai,
 }: {
   article: ArticleData;
@@ -184,7 +190,10 @@ export function ArticleEditor({
     assistant?: { config: AiAssistantConfig; labels: AiAssistantLabels };
     seo?: { labels: AiSeoLabels };
     translate?: { labels: AiTranslateLabels };
+    /** B4's Generate. The FIELD is always drawn; only this half is optional. */
+    summarize?: boolean;
   };
+  takeawaysLabels: TakeawaysLabels;
 }) {
   const router = useRouter();
   const { run, pending } = useServerAction();
@@ -288,6 +297,13 @@ export function ArticleEditor({
           question: f.question,
           answer: f.answer,
         })),
+        // changes-29 B4. An empty list is sent as null, which the service
+        // stores as SQL NULL: "no takeaways" and "an empty list" must not be
+        // two states. Blank rows an editor left behind are dropped here.
+        keyTakeaways:
+          tr.keyTakeaways.filter((item) => item.trim().length > 0).length > 0
+            ? tr.keyTakeaways.map((item) => item.trim()).filter((item) => item.length > 0)
+            : null,
         // changes-29 B3. Sent only when the text came from AI and nothing has
         // been edited since; the service reads it as
         // `MACHINE_TRANSLATED` instead of `TRANSLATED`, and the AI path has no
@@ -523,6 +539,24 @@ export function ArticleEditor({
                 onChange={(e) => setTr({ excerpt: e.target.value })}
               />
             </Field>
+
+            {/* changes-29 B4. An ORDINARY content control that happens to have
+                a Generate button: with AI off it is a list an editor types,
+                and the public block renders identically either way. */}
+            <TakeawaysField
+              items={tr.keyTakeaways}
+              onChange={(keyTakeaways) => setTr({ keyTakeaways })}
+              labels={takeawaysLabels}
+              error={form.error("translation.keyTakeaways")}
+              {...(ai?.summarize
+                ? {
+                    ai: {
+                      source: { title: tr.title, content: tr.body, locale },
+                      entity: { type: "article", id: article.id },
+                    },
+                  }
+                : {})}
+            />
 
             <Field label={labels.body} error={form.error("translation.body")}>
               <RichTextEditor

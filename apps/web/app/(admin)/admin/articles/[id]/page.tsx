@@ -11,7 +11,12 @@ import { can, requireAnyPermission } from "@repo/rbac";
 import { routing } from "@repo/i18n/routing";
 import { getAiAvailability } from "@repo/ai";
 import { AdminPage } from "../../_components/admin-page.tsx";
-import { aiAssistantLabels, aiSeoLabels, aiTranslateLabels } from "../../_components/ai-labels.ts";
+import {
+  aiAssistantLabels,
+  aiSeoLabels,
+  aiTranslateLabels,
+  takeawaysLabels,
+} from "../../_components/ai-labels.ts";
 import { richTextLabels } from "../../_components/editor-labels.ts";
 import { ArticlesSubnav } from "../_components/articles-subnav.tsx";
 import { articlesSubnavItems } from "../_components/subnav-items.ts";
@@ -69,12 +74,14 @@ export default async function ArticleEditPage({ params }: PageProps<"/admin/arti
           ),
         }
       : undefined;
+  const summarize = canUseAi && availability.features.summarization;
   const ai =
-    assistant || seo || translate
+    assistant || seo || translate || summarize
       ? {
           ...(assistant ? { assistant } : {}),
           ...(seo ? { seo } : {}),
           ...(translate ? { translate } : {}),
+          ...(summarize ? { summarize: true } : {}),
         }
       : undefined;
 
@@ -119,6 +126,7 @@ export default async function ArticleEditPage({ params }: PageProps<"/admin/arti
     twitterImageUrl: tr.twitterImageUrl ?? "",
     twitterImageAssetId: tr.twitterImageAssetId,
     faqItems: tr.faqItems.map((f) => ({ id: f.id, question: f.question, answer: f.answer })),
+    keyTakeaways: tr.keyTakeaways,
     translationStatus: tr.translationStatus,
   }));
 
@@ -146,6 +154,12 @@ export default async function ArticleEditPage({ params }: PageProps<"/admin/arti
       />
       <ArticleEditor
         ai={ai}
+        // The takeaways control is drawn whether or not AI exists — only its
+        // Generate button is conditional — so its labels are not optional.
+        takeawaysLabels={takeawaysLabels(
+          (key) => t(key as "cancel"),
+          (key) => tAi(key as "assistantMenu"),
+        )}
         article={{
           id: detail.id,
           kind: detail.kind,

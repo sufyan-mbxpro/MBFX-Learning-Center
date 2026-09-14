@@ -8,7 +8,7 @@
 // NEWS articles need `news.manage`, ANALYSIS/TRADE_IDEA need `analysis.*`.
 // Same conditional-gate precedent as content.ts's publish check.
 import { revalidateTag } from "next/cache";
-import { ArticleKind, ContentStatus, TranslationStatus, db, type Prisma } from "@repo/db";
+import { ArticleKind, ContentStatus, DbNull, TranslationStatus, db, type Prisma } from "@repo/db";
 import { computeSourceHash, isTranslationOutdated } from "@repo/i18n";
 import { can, type Subject } from "@repo/rbac";
 import { parseVideoUrl } from "@repo/utils";
@@ -355,6 +355,15 @@ async function prepareArticleTranslation(
       twitterCard: input.twitterCard ?? null,
       twitterImageUrl: input.twitterImageUrl ?? null,
       twitterImageAssetId: input.twitterImageAssetId ?? null,
+      // changes-29 B4. An empty list is stored as NULL: "no takeaways" and "a
+      // list with nothing in it" must not be two states a reader can tell
+      // apart, because the public block renders on non-empty.
+      // `DbNull`, not `null`: for a nullable Json column Prisma distinguishes
+      // SQL NULL from the JSON value `null`, and a bare `null` does not
+      // typecheck. `DbNull` is the column being empty, which is what "no
+      // takeaways" means.
+      keyTakeaways:
+        input.keyTakeaways && input.keyTakeaways.length > 0 ? input.keyTakeaways : DbNull,
       sourceHash,
       // changes-29 B3. `MACHINE_TRANSLATED` only when the editor says this text
       // came from AI and has not been touched since; every other save — a human
@@ -956,6 +965,8 @@ export interface ArticleAdminDetail {
     twitterImageUrl: string | null;
     twitterImageAssetId: string | null;
     faqItems: { id: string; question: string; answer: string }[];
+    /** changes-29 B4. Always an array; the column's `null` is an empty list. */
+    keyTakeaways: string[];
     translationStatus: TranslationStatus;
   }[];
   legalTransitions: ContentStatus[];
@@ -1027,6 +1038,11 @@ export async function loadArticleAdminDetail(
       twitterImageUrl: t.twitterImageUrl,
       twitterImageAssetId: t.twitterImageAssetId,
       faqItems: t.faqItems.map((f) => ({ id: f.id, question: f.question, answer: f.answer })),
+      // Parsed, not cast: the column is `Json?`, so a pre-B4 row holds null and
+      // a hand-edited row could hold anything. A non-string entry is dropped.
+      keyTakeaways: Array.isArray(t.keyTakeaways)
+        ? t.keyTakeaways.filter((item): item is string => typeof item === "string")
+        : [],
       translationStatus: t.translationStatus,
     })),
     legalTransitions: ARTICLE_TRANSITIONS[row.status],

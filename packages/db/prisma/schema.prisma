@@ -1622,6 +1622,19 @@ model ArticleTranslation {
   // Sanitized HTML — every save path goes through sanitizeRichText (ADR-009).
   body    String? @db.LongText
 
+  /// `string[]`, 3-5 entries, each ≤160 chars (changes-29 B4).
+  ///
+  /// An ORDINARY content column with an ordinary editor control: no field
+  /// exists here only because AI does (ADR-097 / §2.2 #8). The Generate button
+  /// beside it is the optional half, which is what makes "the CMS keeps
+  /// working with AI off" structural rather than a promise — with AI off this
+  /// is a list an editor types.
+  ///
+  /// Json rather than a child table: it is an ordered list of short strings
+  /// with no identity of its own, read and written whole, and a
+  /// `ArticleTakeaway` table would buy nothing but a join.
+  keyTakeaways Json?
+
   seoTitle            String? @db.VarChar(70)
   seoDescription      String? @db.VarChar(180)
   ogImageUrl          String? @db.VarChar(500)

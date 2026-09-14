@@ -12,6 +12,7 @@ import type { AiAssistantAction, AiTone } from "@repo/contracts";
 import type { AiAssistantLabels } from "./ai-assistant.tsx";
 import type { AiSeoLabels } from "./ai-seo-dialog.tsx";
 import type { AiTranslateLabels } from "./ai-translate-button.tsx";
+import type { TakeawaysLabels } from "./takeaways-field.tsx";
 
 /** Resolves a key under the `admin.ai` namespace. */
 type Translate = (key: string) => string;
@@ -113,5 +114,28 @@ export function aiTranslateLabels(
     failed: t("assistantFailed"),
     done: t("translateDone"),
     reasons: aiReasonLabels((key) => t(key)),
+  };
+}
+
+/**
+ * B4's labels.
+ *
+ * The FIELD's own strings come from the `admin` namespace, not `admin.ai`:
+ * the takeaways list is an ordinary content control that happens to have a
+ * Generate button, and filing its label under AI would be the first step
+ * towards it disappearing when AI does (ADR-097 / §2.2 #8).
+ */
+export function takeawaysLabels(common: Translate, t: Translate): TakeawaysLabels {
+  return {
+    label: common("articleKeyTakeaways"),
+    hint: common("articleKeyTakeawaysHint"),
+    add: common("articleKeyTakeawayAdd"),
+    remove: common("articleKeyTakeawayRemove"),
+    placeholder: common("articleKeyTakeawayPlaceholder"),
+    generate: t("takeawaysGenerate"),
+    generating: t("assistantGenerating"),
+    failed: t("assistantFailed"),
+    done: t("takeawaysDone"),
+    reasons: aiReasonLabels(t),
   };
 }

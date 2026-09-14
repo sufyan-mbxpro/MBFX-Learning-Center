@@ -103,6 +103,17 @@ export const saveArticleTranslationSchema = z.object({
   faqItems: z.array(articleFaqItemSchema).max(20).optional(),
 
   /**
+   * 3-5 short takeaways, or null (changes-29 B4).
+   *
+   * The bounds are the schema's, not the prompt's: an AI suggestion and a
+   * hand-typed list are validated by the SAME rule, which is what makes the
+   * public block render identically whichever wrote it (ADR-097 / §2.2 #8).
+   * An empty array is normalised to null by the service, because "no
+   * takeaways" and "a list with nothing in it" must not be two states.
+   */
+  keyTakeaways: z.array(z.string().trim().min(1).max(160)).min(3).max(5).nullable().optional(),
+
+  /**
    * This locale's text came from AI and has not been edited since
    * (changes-29 B3).
    *

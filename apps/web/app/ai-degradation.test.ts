@@ -281,6 +281,47 @@ describe("B3 — a machine translation says so until a human reads it", () => {
   });
 });
 
+describe("B4 — the takeaways list is an ordinary field", () => {
+  const field = stripped(join(APP_ROOT, "(admin)", "admin", "_components", "takeaways-field.tsx"));
+  const editor = readFileSync(
+    join(APP_ROOT, "(admin)", "admin", "articles", "[id]", "article-editor.tsx"),
+    "utf8",
+  );
+  const articlePage = readFileSync(
+    join(APP_ROOT, "(public)", "[locale]", "news", "[slug]", "page.tsx"),
+    "utf8",
+  );
+
+  it("draws the FIELD unconditionally — only the Generate button is optional", () => {
+    // ADR-097 / §2.2 #8: no field exists only because AI does. With AI off
+    // this is a list an editor types.
+    expect(editor).toContain("<TakeawaysField");
+    expect(editor).not.toMatch(/ai\?\.summarize && \(\s*<TakeawaysField/);
+    expect(field).toContain("{ai && (");
+  });
+
+  it("renders no AI badge on the public block", () => {
+    // The proof of the same rule, one surface over: the page cannot tell where
+    // the words came from, so neither can a reader.
+    expect(articlePage).toContain("<KeyTakeaways");
+    expect(articlePage).not.toMatch(/KeyTakeaways[^>]*generated/);
+    expect(articlePage).not.toMatch(/KeyTakeaways[^>]*byAi/);
+  });
+
+  it("renders the block only when the list is non-empty", () => {
+    expect(articlePage).toContain("view.keyTakeaways.length > 0");
+  });
+
+  it("parses the model's answer with the form's own schema", () => {
+    expect(field).toContain("summarySuggestionSchema.parse");
+  });
+
+  it("writes nothing itself — the editor's Save persists the list", () => {
+    expect(field).not.toContain("Action(");
+    expect(field).toContain("onChange(result.keyTakeaways");
+  });
+});
+
 describe("the sealed key reaches no screen", () => {
   it("names apiKey only as a write-only form field, never as a rendered value", () => {
     for (const file of AI_SCREENS) {

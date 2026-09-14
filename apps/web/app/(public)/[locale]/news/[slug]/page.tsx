@@ -22,6 +22,7 @@ import { Section } from "@repo/ui/components/section";
 import { ArticleCards } from "../_components/article-list.tsx";
 import { ArticleSidebar } from "../_components/article-sidebar.tsx";
 import { FaqPanel } from "@repo/ui/components/faq-panel";
+import { KeyTakeaways } from "@repo/ui/components/key-takeaways";
 import { RichText } from "@repo/ui/components/rich-text";
 import { ListingHeader } from "../_components/listing-header.tsx";
 import { ShareRow } from "../_components/share-row.tsx";
@@ -268,6 +269,17 @@ export default async function ArticlePage({ params }: PageProps<"/[locale]/news/
                 </>
               )}
             </Reveal>
+
+            {/* changes-29 B4. Between the body and the FAQ: a takeaways block
+                is a summary of what was just read, not a new question. It is
+                the SAME component whether an editor typed the list or AI
+                filled it — which is the proof that no field here exists only
+                because AI does (ADR-097 / §2.2 #8). */}
+            {view.keyTakeaways.length > 0 && (
+              <Reveal variant="up">
+                <KeyTakeaways heading={t("news.keyTakeaways")} items={view.keyTakeaways} />
+              </Reveal>
+            )}
 
             {/* changes-07: the FAQ list, rendered as an accordion and mirrored
                 into the FAQPage JSON-LD above. Answers are sanitized on save

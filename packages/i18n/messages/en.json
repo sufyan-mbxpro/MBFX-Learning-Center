@@ -2276,10 +2276,17 @@
       "translateConfirmTitle": "Replace this translation?",
       "translateConfirmDescription": "The text in this locale is replaced by a machine translation. Nothing is saved until you save the article, so you can still discard it by leaving without saving.",
       "translateConfirm": "Translate",
-      "translateDone": "Translated — review it before saving"
+      "translateDone": "Translated — review it before saving",
+      "takeawaysGenerate": "Generate",
+      "takeawaysDone": "Takeaways written — review them before saving"
     },
     "machineTranslatedQueue": "Machine-translated, not yet reviewed",
-    "statusMACHINE_TRANSLATED": "Machine translated"
+    "statusMACHINE_TRANSLATED": "Machine translated",
+    "articleKeyTakeaways": "Key takeaways",
+    "articleKeyTakeawaysHint": "Three to five short lines, each under 160 characters. They render as a block on the article page; leave the list empty to render nothing.",
+    "articleKeyTakeawayAdd": "Add a takeaway",
+    "articleKeyTakeawayRemove": "Remove this takeaway",
+    "articleKeyTakeawayPlaceholder": "One thing a reader should leave with…"
   },
   "glossary": {
     "title": "Glossary",
@@ -2382,7 +2389,8 @@
     "categoryCurrent": "You are here",
     "categoryViewAll": "View all",
     "exploreTitle": "Keep exploring",
-    "exploreLead": "Other topics from the newsroom, and the tags running through them."
+    "exploreLead": "Other topics from the newsroom, and the tags running through them.",
+    "keyTakeaways": "Key takeaways"
   },
   "economicCalendar": {
     "title": "Economic calendar",

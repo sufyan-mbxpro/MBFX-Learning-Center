@@ -43,6 +43,15 @@ export type * from "./generated/client/models.ts";
 // separate exported function instead of one inline callback.
 export type { Prisma } from "./generated/client/client.ts";
 
+// The JSON-null sentinels, as VALUES (changes-29 B4).
+//
+// `Prisma` above is a type-only export, so `Prisma.DbNull` is not reachable
+// through it. A nullable `Json` column needs the distinction these two carry:
+// `DbNull` is the COLUMN being SQL NULL, `JsonNull` is the column holding the
+// JSON value `null`. Writing a bare `null` does not typecheck, and picking the
+// wrong one of the two is the kind of bug that only shows up in a reader.
+export { DbNull, JsonNull } from "./generated/client/internal/prismaNamespace.ts";
+
 // The starting CONTENT of every email template (Module 17, ADR-078 #5) — read
 // by `prisma/seed.ts` on a fresh database and by @repo/core's
 // `resetEmailTemplate()` when an admin reverts one.

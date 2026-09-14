@@ -43,6 +43,8 @@ export interface TranslationDraft {
   twitterImageUrl: string;
   twitterImageAssetId: string | null;
   faqItems: FaqDraft[];
+  /** 3-5 short takeaways (changes-29 B4). Empty means the block does not render. */
+  keyTakeaways: string[];
   translationStatus: string;
   /**
    * This draft's text came from AI and has not been edited since
