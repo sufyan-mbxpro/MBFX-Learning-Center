@@ -18626,6 +18626,18 @@ none, an unpublished lesson is not offered, and reading a source writes
 nothing), six new source guards. apps/web **2042 passing across 44 files**; all
 eight `check:*` scripts and `governance:check` green.
 
+### One repair worth recording
+
+`packages/contracts/src/ai.test.ts` was reading `seed.ts`, `en.json` and the
+prompt index across package boundaries — and `@repo/contracts` declares `zod`
+and nothing else on purpose, so it has no `@types/node` and `tsc --noEmit`
+refused the file. Vitest never noticed, because it does not typecheck; CI would
+have, one step earlier than the suite.
+
+The cross-file half moved to `apps/web/app/ai-registry.test.ts`, where every
+other cross-registry guard already lives. What stays in contracts is what the
+registry can answer about itself.
+
 ### changes-29 is complete
 
 A0–A9 and B1–B6 are all in. The tutor chatbot remains spec-only with no
