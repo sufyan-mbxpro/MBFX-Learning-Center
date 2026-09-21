@@ -27,7 +27,7 @@
     "@repo/typescript-config": "workspace:*",
     "@prisma/config": "7.10.0",
     "@testcontainers/mariadb": "^12.1.0",
-    "@types/node": "^24.13.3",
+    "@types/node": "^22.20.4",
     "dotenv": "^16.4.7",
     "eslint": "^9.39.5",
     "prisma": "7.10.0",

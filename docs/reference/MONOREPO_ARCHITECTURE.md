@@ -2,7 +2,7 @@
 
 > Revised 2026-08-31 per ADR-006 (single-app) and the Day-1 version sweep.
 
-**Stack:** Turborepo 2.10 + pnpm 11.24 · Node 24 LTS · Next.js 16.3 (App Router) · React 19.2 · TypeScript 6.0.3 · shadcn/ui · Tailwind CSS 4.3 · MariaDB (Prisma 7) · next-intl 4 · Better Auth
+**Stack:** Turborepo 2.10 + pnpm 11.24 · Node 22 LTS · Next.js 16.3 (App Router) · React 19.2 · TypeScript 6.0.3 · shadcn/ui · Tailwind CSS 4.3 · MariaDB (Prisma 7) · next-intl 4 · Better Auth
 
 **Scope now:** Web only — **one** Next.js app carrying both the public site and the admin portal, separated by route groups with their own root layouts (ADR-006).
 **Scope later:** Mobile (Expo) and desktop (Tauri/Electron) join as siblings of `apps/web` and reuse the same packages without touching app code.

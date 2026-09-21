@@ -19,7 +19,7 @@
     "@repo/eslint-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
     "@testcontainers/mariadb": "^12.1.0",
-    "@types/node": "^24.13.3",
+    "@types/node": "^22.20.4",
     "@vitest/coverage-v8": "^4.1.11",
     "dotenv": "^16.4.7",
     "eslint": "^9.39.5",

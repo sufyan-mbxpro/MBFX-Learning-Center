@@ -15,7 +15,7 @@ Paths used below (change them, but keep the shape):
 
 ## 1. Prerequisites
 
-- **Node.js 24.x LTS** (`engines: >=24`, `.nvmrc` = 24).
+- **Node.js 22.x LTS**, 22.13.0 or later (`engines: >=22.13.0`, `.nvmrc` = 22, ADR-145).
 - **pnpm via corepack**, at the version pinned in the root `package.json`
   `packageManager` field — never a globally installed pnpm of another version:
 

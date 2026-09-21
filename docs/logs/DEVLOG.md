@@ -23711,3 +23711,54 @@ and `/learn` render 200 on the dev server.
 
 **Still owed to Module 14:** E2E for the two new tab sections and the
 progress filters.
+
+## 2026-09-21 — Runtime moves to Node 22 LTS (ADR-145)
+
+**Shipped:**
+
+- The runtime floor is Node 22.13.0. That is the lowest version every
+  dependency in the lockfile accepts; `@inquirer/*` (`^22.13.0`) sets it.
+  - `engines.node`: `>=24.0.0` → `>=22.13.0`
+  - `.nvmrc`: `22`
+  - CI: `node-version: 22`
+- The range is left open above, so a machine still on 24 keeps working.
+- `@types/node`: `^24.13.3` → `^22.20.4`, in all eleven packages that
+  declare it. `undici-types` follows it, from 7.18.2 to 6.21.0.
+  - The lockfile was edited by hand, because pnpm 12.4.1 cannot run on the
+    dev machine (Smart App Control).
+  - The edit replaces the two package entries and every peer-suffix
+    reference. No other resolution moved.
+  - CI's `pnpm install --frozen-lockfile` is the check that the edit is
+    right.
+- Docs now state Node 22:
+  - `docs/memory/stack.md`
+  - `docs/ops/deploy.md`
+  - `docs/reference/MONOREPO_ARCHITECTURE.md`
+  - `docs/reference/MONOREPO_CONFIG.md`
+
+  `plan.md` and `docs/cms/00-reconciliation.md` are left alone as history.
+
+- No source code changed. A review found nothing that needs Node 23 or 24.
+  ADR-145 lists what was checked.
+
+**Decisions:** ADR-145. Node 22 reaches end of life in April 2027, a year
+before 24. The move back to 24+ is owed before then and is a pin change.
+
+**Tests:** all run on Node 22.23.2, with `@types/node` 22.20.4 installed.
+
+- The typecheck is clean in all 18 projects, including `next typegen`.
+- `apps/web` vitest: 2,760 pass.
+- `@repo/core`: 862 pass and 2 are skipped.
+  - `settings-audit.integration.test.ts` failed once, when Docker stopped
+    its Testcontainers container. Rerun alone, it passes (2).
+- `ui` 500, `contracts` 484, `utils` 346, `ai` 155, `email` 99, `theme` 84,
+  `auth` 48, `db` 41, `blocks` 33, `settings` 33, `rbac` 28, `i18n` 26 and
+  `secrets` 21 all pass.
+- `next build` (apps/web) succeeds.
+
+**Still owed:**
+
+- An e2e run on Node 22. This is the one path that uses
+  `--experimental-strip-types`.
+- A `pnpm install` with pnpm 12 on a machine that can run it.
+- The production server upgrade.

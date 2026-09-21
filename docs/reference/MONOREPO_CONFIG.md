@@ -46,7 +46,7 @@ certainly belong in this file now.
   "name": "forex-portal",
   "private": true,
   "packageManager": "pnpm@11.24.0",
-  "engines": { "node": ">=24.0.0" }, // Node 24 LTS "Krypton"; 22 is maintenance-only
+  "engines": { "node": ">=22.13.0" }, // Node 22 LTS "Jod" (ADR-145); EOL Apr 2027
   "scripts": {
     // One app. `turbo dev` boots it on :3000 — public at /, admin at /admin.
     "dev": "turbo dev",
@@ -451,7 +451,7 @@ SEED_ADMIN_PASSWORD=""
 ## 8. First run
 
 ```bash
-pnpm install                  # pnpm 11.24, Node 24 LTS
+pnpm install                  # pnpm 11.24, Node 22 LTS
 cp .env.example .env          # fill in DATABASE_URL and BETTER_AUTH_SECRET
 pnpm db:generate              # writes packages/db/src/generated/client
 pnpm db:migrate

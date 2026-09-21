@@ -33,7 +33,7 @@
     "@repo/eslint-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
     "@testcontainers/mariadb": "^12.1.0",
-    "@types/node": "^24.13.3",
+    "@types/node": "^22.20.4",
     "@types/sanitize-html": "^2.16.1",
     "eslint": "^9.39.5",
     "msw": "2.15.0",
