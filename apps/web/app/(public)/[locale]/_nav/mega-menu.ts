@@ -20,23 +20,26 @@
 // dropped: `resolveMegaMenuPanel` appends it to the last column, so adding a
 // page to the seed can never make it invisible in the header.
 import {
+  Activity,
   ArrowLeftRight,
   Calculator,
+  CalendarDays,
+  ChartCandlestick,
   Clock,
   Coins,
   Gauge,
   GitFork,
   Grid3x3,
+  Newspaper,
   Percent,
-  BadgeCheck,
+  Scale,
+  ShieldCheck,
+  TrendingUp,
   BookA,
-  Building2,
   GraduationCap,
   Headset,
   Layers,
   ListChecks,
-  Scale,
-  ShieldCheck,
   Video,
   type LucideIcon,
 } from "lucide-react";
@@ -80,26 +83,36 @@ export const MEGA_MENU_ICONS: Partial<Record<RouteKey, LucideIcon>> = {
   "learn-crypto-videos": Video,
   "learn-crypto-glossary": BookA,
   learn: Layers,
-  about: Building2,
-  "about-why-us": BadgeCheck,
-  "about-transparency": Scale,
-  "about-security": ShieldCheck,
-  "about-support": Headset,
-  // The eight tools (ADR-086). One glyph per tool rather than one for the
+  // Support is a row in the header, not a panel (ADR-109): the About section
+  // it replaces had five destinations and this has one, and a mega panel over
+  // a single page is a popup that says the page's own name.
+  support: Headset,
+  // The tools (ADR-086, ADR-135). One glyph per tool rather than one for the
   // section: the section bar under /tools lists all eight side by side, and a
   // row of identical icons is a row of no icons.
   "tool-position-size": Calculator,
   "tool-pip-value": Coins,
+  "tool-margin": Scale,
+  "tool-profit-loss": TrendingUp,
+  "tool-risk-reward": ShieldCheck,
   "tool-gain-loss": Percent,
   "tool-pivot-points": GitFork,
   "tool-market-hours": Clock,
   "tool-currency-converter": ArrowLeftRight,
   "tool-correlation": Grid3x3,
   "tool-risk-sentiment": Gauge,
+  // Not a tool, and in the panel anyway (ADR-115). It answers "when", which
+  // is what the Timing column is for.
+  "economic-calendar": CalendarDays,
+  // The market boards (ADR-136 §5) and the headline feed (changes-40): in the
+  // panel, not in the registry.
+  "live-rates": ChartCandlestick,
+  volatility: Activity,
+  "market-news": Newspaper,
 };
 
 /**
- * One school's panel, in the About panel's shape (ADR-076 §2): three headed
+ * One school's panel (ADR-076 §2): three headed
  * columns and a "view all" footer, so every mega panel in the header is the
  * same kind of object. Built per track from `LEARN_TRACK_ROUTE_KEYS` rather
  * than typed twice, so "Learn Crypto" cannot be left pointing at forex rows.
@@ -135,33 +148,7 @@ export const MEGA_MENU_PANELS = {
   "learn-forex": trackPanel("forex"),
   "learn-crypto": trackPanel("crypto"),
 
-  // Three columns and a footer row, no feature rail: the rail's only
-  // candidate here is the overview page, which the first column already
-  // lists, and a panel that says the same thing twice is worse than a
-  // simpler one. The rail stays in the API for the sections whose panels
-  // genuinely have promoted destinations.
-  about: {
-    columns: [
-      {
-        key: "company",
-        titleKey: "mega.about.company",
-        routeKeys: ["about", "about-why-us"],
-      },
-      {
-        key: "howWeWork",
-        titleKey: "mega.about.howWeWork",
-        routeKeys: ["about-transparency", "about-security"],
-      },
-      {
-        key: "help",
-        titleKey: "mega.about.help",
-        routeKeys: ["about-support"],
-      },
-    ],
-    viewAll: "about",
-  },
-
-  // The eight tools (ADR-086 §9), in About's shape (ADR-076 §2): three headed
+  // The eight tools (ADR-086 §9), in the shape ADR-076 §2 settled: three headed
   // columns grouped by what a reader is trying to DO, not by what each tool
   // reads. Someone opening this menu knows they want to size a trade; they do
   // not know, and should not need to know, that two of these need a rate.
@@ -170,19 +157,61 @@ export const MEGA_MENU_PANELS = {
       {
         key: "position",
         titleKey: "mega.tools.position",
-        routeKeys: ["tool-position-size", "tool-pip-value", "tool-gain-loss"],
+        // Six since changes-41 (ADR-135): margin, profit and risk are all
+        // questions asked while sizing a trade, which is what this column is.
+        routeKeys: [
+          "tool-position-size",
+          "tool-risk-reward",
+          "tool-margin",
+          "tool-pip-value",
+          "tool-profit-loss",
+          "tool-gain-loss",
+        ],
       },
       {
         key: "timing",
         titleKey: "mega.tools.timing",
-        routeKeys: ["tool-market-hours", "tool-pivot-points"],
+        // `economic-calendar` is here and is NOT a `TOOLS` member (ADR-115):
+        // it keeps its own URL, flag and vendor widget, and the column's
+        // heading is what makes it belong — market hours, pivot periods and a
+        // release schedule all answer "when".
+        //
+        // **`volatility` moved here in changes-40.** The owner asked for the
+        // panel to be balanced, and it was 6 / 3 / 5 — a middle column a
+        // third the height of its neighbours, with the panel's whole bottom
+        // half empty beneath it. Volatility is the one entry that reads
+        // equally well under either heading: "how far each pair has been
+        // moving" is a question about market CONDITIONS, which is what a
+        // reader is asking when they look at session hours. That leaves
+        // 6 / 4 / 5 with the new headline feed, and no row filed somewhere a
+        // reader would not look for it — which a forced 5 / 5 / 5 would have
+        // needed.
+        routeKeys: ["tool-market-hours", "tool-pivot-points", "economic-calendar", "volatility"],
       },
       {
         key: "rates",
         titleKey: "mega.tools.rates",
-        routeKeys: ["tool-currency-converter", "tool-correlation", "tool-risk-sentiment"],
+        // The market boards join the column that already reads prices
+        // (ADR-136 §5), and the headline feed joins them (changes-40): the
+        // owner asked for "Around the markets" here by name, and it belongs —
+        // this column is where a reader goes to find out what the market is
+        // doing rather than to calculate something about their own trade.
+        // Like the boards, it is NOT a `TOOLS` member.
+        routeKeys: [
+          "live-rates",
+          "tool-currency-converter",
+          "tool-correlation",
+          "tool-risk-sentiment",
+          "market-news",
+        ],
       },
     ],
+    // The footer the schools carry (changes-43): the owner asked for this
+    // panel to look like Learn Forex's, and the footer band is the visible
+    // difference. It used to be declared and never render (changes-33),
+    // because the key resolved only against CHILD rows and the seeded tree has
+    // no `tools` child; `resolveMegaMenuPanel` now also takes the panel's own
+    // top-level item, which IS `/tools`.
     viewAll: "tools",
   },
 } as const satisfies Partial<Record<RouteKey, MegaPanelSpec>>;
@@ -238,6 +267,12 @@ export interface ResolvedMegaPanel<T extends MegaResolvableItem> {
 export function resolveMegaMenuPanel<T extends MegaResolvableItem>(
   spec: MegaPanelSpec,
   children: readonly T[],
+  /**
+   * The top-level item that owns the panel. `viewAll` resolves against it
+   * when no child row carries the key: a section's footer usually points at
+   * the section itself, and the seed does not list a section as its own child.
+   */
+  parent?: T,
 ): ResolvedMegaPanel<T> {
   const byRouteKey = new Map<RouteKey, T>();
   const unclaimed: T[] = [];
@@ -284,6 +319,9 @@ export function resolveMegaMenuPanel<T extends MegaResolvableItem>(
     features,
     columns: columns.filter((column) => column.items.length > 0),
     strip: spec.strip,
-    viewAll: viewAllKey ? (byRouteKey.get(viewAllKey) ?? null) : null,
+    viewAll: viewAllKey
+      ? (byRouteKey.get(viewAllKey) ??
+        (parent && routeKeyForHref(parent.href) === viewAllKey ? parent : null))
+      : null,
   };
 }

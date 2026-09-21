@@ -1,7 +1,10 @@
-import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+import { expectNoSeriousAxeViolations } from "../axe.ts";
+import { activeLocales } from "../db.ts";
+import { waitForHydration } from "../hydration.ts";
 
-// changes-25 T10 — the eight tools as an anonymous visitor (ADR-086/087/088).
+// changes-25 T10 — the tools as an anonymous visitor (ADR-086/087/088; three
+// more since changes-41, ADR-135).
 //
 // One deep journey plus axe on every page, which is the shape testing.md asks
 // for ("prefer one deep journey over five shallow clicks"). Copy is not
@@ -13,6 +16,9 @@ import { expect, test, type Page } from "@playwright/test";
 const TOOL_PATHS = [
   "/tools/position-size",
   "/tools/pip-value",
+  "/tools/margin",
+  "/tools/profit-loss",
+  "/tools/risk-reward",
   "/tools/gain-loss",
   "/tools/pivot-points",
   "/tools/market-hours",
@@ -20,20 +26,6 @@ const TOOL_PATHS = [
   "/tools/correlation",
   "/tools/risk-sentiment",
 ];
-
-/** Serious and critical violations fail; everything else is advisory. */
-async function expectNoSeriousAxeViolations(page: Page) {
-  const results = await new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
-    .analyze();
-  const blocking = results.violations.filter(
-    (violation) => violation.impact === "serious" || violation.impact === "critical",
-  );
-  expect(
-    blocking.map((v) => `${v.id}: ${v.nodes.length} node(s) — ${v.help}`),
-    "serious/critical axe violations",
-  ).toEqual([]);
-}
 
 test.describe("the tools index", () => {
   test("lists every live tool and links each one", async ({ page }) => {
@@ -78,6 +70,12 @@ test.describe("the deep journey: size a trade, then read on", () => {
     page,
   }) => {
     await page.goto("/tools");
+    // A `next/link` clicked BEFORE hydration does nothing at all: Next's own
+    // handler intercepts the click and the router is not initialised yet, so
+    // the navigation is swallowed (the dev server logs "Router action
+    // dispatched before initialization"). The page simply stays where it was,
+    // which is how this read — a card that would not open.
+    await waitForHydration(page);
     await page.getByRole("link", { name: "Position Size Calculator" }).first().click();
     await expect(page).toHaveURL(/\/tools\/position-size$/);
 
@@ -125,6 +123,42 @@ test.describe("the deep journey: size a trade, then read on", () => {
   });
 });
 
+test.describe("changes-41: risk from three prices, and the reviews band", () => {
+  test("the risk calculator states the amount at risk and the ratio with no market data", async ({
+    page,
+  }) => {
+    await page.goto("/tools/risk-reward");
+    await waitForHydration(page);
+
+    // 1% of 5,000 is 50 and a 30/60-pip stop/target is 1 : 2.00 — both are
+    // pure arithmetic on what was typed, so they hold on the E2E database,
+    // which has no provider and therefore no default prices.
+    const atRisk = page.getByText("50.00 USD", { exact: false }).first();
+    const ratio = page.getByText("1 : 2.00").first();
+    await expect(async () => {
+      await page.getByLabel(/Account balance/).fill("5000");
+      await page.getByLabel("Risk per trade (%)").fill("1");
+      await page.getByLabel("Entry price").fill("1.10000");
+      await page.getByLabel("Stop loss").fill("1.09700");
+      await page.getByLabel("Take profit").fill("1.10600");
+      await expect(atRisk).toBeVisible({ timeout: 2000 });
+      await expect(ratio).toBeVisible({ timeout: 2000 });
+    }).toPass({ timeout: 30_000 });
+
+    // A take profit on the wrong side is named, never a negative ratio.
+    await page.getByLabel("Take profit").fill("1.09000");
+    await expect(page.getByText("needs to be above the entry")).toBeVisible();
+  });
+
+  test("links to the review page in a new tab, without an opener", async ({ page }) => {
+    await page.goto("/tools/margin");
+    const link = page.getByRole("link", { name: /Review us on Trustpilot/ });
+    await expect(link).toHaveAttribute("href", /^https:\/\//);
+    await expect(link).toHaveAttribute("target", "_blank");
+    await expect(link).toHaveAttribute("rel", /noopener/);
+  });
+});
+
 test.describe("a disabled tool is absent, not disabled (ADR-086 #5)", () => {
   test("an unregistered key 404s", async ({ page }) => {
     const response = await page.goto("/tools/margin-calculator");
@@ -139,7 +173,9 @@ test.describe("a disabled tool is absent, not disabled (ADR-086 #5)", () => {
 test.describe('ADR-088 #7 — never "real-time", never "live"', () => {
   // The score moves once per daily sweep. A disclaimer does not repair a word
   // that was false, so the word never appears.
-  for (const path of ["/tools/correlation", "/tools/risk-sentiment"]) {
+  // `/tools/profit-loss` joined in changes-41: its reference copy said
+  // "Real-Time Results", and the seed renames it. This is what keeps it renamed.
+  for (const path of ["/tools/correlation", "/tools/risk-sentiment", "/tools/profit-loss"]) {
     test(`${path} says neither word`, async ({ page }) => {
       await page.goto(path);
       // `main`, not `body`. ADR-088 #7 governs what the TOOL says about its
@@ -160,11 +196,20 @@ test.describe('ADR-088 #7 — never "real-time", never "live"', () => {
 });
 
 test.describe("RTL", () => {
+  // Turns itself on with the locale — see the same note in
+  // `about-section.spec.ts`. Hard-coded `/ar/...` had been failing since
+  // ADR-091 made only an ACTIVE locale servable.
   test("the widest surfaces do not push the page sideways in Arabic", async ({ page }) => {
+    // Inside the test — see the same note in `about-section.spec.ts`.
+    const rtl = activeLocales().find((locale) => locale.isRtl);
+    test.skip(
+      rtl === undefined,
+      "no RTL locale is active (ADR-091) — this runs on the PR that activates one",
+    );
     // The pivot table and the market-hours timeline are the two bands wider
     // than a phone; both scroll inside their own container instead.
     await page.setViewportSize({ width: 400, height: 900 });
-    for (const path of ["/ar/tools/pivot-points", "/ar/tools/market-hours"]) {
+    for (const path of [`/${rtl!.code}/tools/pivot-points`, `/${rtl!.code}/tools/market-hours`]) {
       await page.goto(path);
       await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
       const overflow = await page.evaluate(

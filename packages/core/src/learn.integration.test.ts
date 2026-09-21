@@ -926,6 +926,109 @@ describe("lesson detail", () => {
     expect(view!.previous).not.toBeNull();
   });
 
+  // ADR-127: a course and a lesson read in another language.
+  it("reads a course and a lesson in a human translation by ?lang=, never moving their address", async () => {
+    const { courseId, lessonId, slug } = await makeCourse();
+    const lessonSlug = (
+      await db.lessonTranslation.findFirstOrThrow({
+        where: { lessonId, locale: "en" },
+        select: { slug: true },
+      })
+    ).slug;
+    await db.courseTranslation.create({
+      data: {
+        courseId,
+        locale: "es",
+        title: "Curso en español",
+        slug: `${slug}-es`,
+        summary: "Resumen",
+        translationStatus: "OUTDATED",
+      },
+    });
+    await db.lessonTranslation.create({
+      data: {
+        lessonId,
+        locale: "es",
+        title: "Lección",
+        slug: `${lessonSlug}-es`,
+        content: "<p>Cuerpo</p>",
+        translationStatus: "MACHINE_TRANSLATED",
+      },
+    });
+
+    const course = await publicCourses.loadCourseBySlug("en", slug, "es");
+    expect(course?.title).toBe("Curso en español");
+    expect(course?.slug).toBe(slug);
+    expect(course?.readingLocale).toBe("es");
+    expect(course?.readingLanguages.map((l) => [l.locale, l.slug])).toEqual([
+      ["en", slug],
+      ["es", `${slug}-es`],
+    ]);
+    // The curriculum is navigation, and stays in the page's locale.
+    expect(course?.sections[0]?.lessons[0]?.slug).toBe(lessonSlug);
+
+    // The lesson's Spanish is a machine translation: not readable (ADR-097).
+    const machine = await publicCourses.loadLessonBySlug("en", slug, lessonSlug, "es");
+    expect(machine?.readingLocale).toBeNull();
+    expect(machine?.content).toBe("<p>Body.</p>");
+    expect(machine?.courseAlternates.map((a) => a.locale).sort()).toEqual(["en", "es"]);
+
+    await db.lessonTranslation.update({
+      where: { lessonId_locale: { lessonId, locale: "es" } },
+      data: { translationStatus: "TRANSLATED" },
+    });
+    const lesson = await publicCourses.loadLessonBySlug("en", slug, lessonSlug, "es");
+    expect(lesson?.title).toBe("Lección");
+    expect(lesson?.content).toBe("<p>Cuerpo</p>");
+    expect(lesson?.slug).toBe(lessonSlug);
+    expect(lesson?.contentLocale).toBe("es");
+  });
+
+  // changes-29 B3 reaches the course and lesson editors: an untouched AI
+  // translation saves as MACHINE_TRANSLATED, and a plain Save promotes it.
+  it("saves an AI translation as MACHINE_TRANSLATED until a human saves it", async () => {
+    const { courseId, lessonId } = await makeCourse();
+    const status = async () => ({
+      course: (
+        await db.courseTranslation.findUniqueOrThrow({
+          where: { courseId_locale: { courseId, locale: "es" } },
+        })
+      ).translationStatus,
+      lesson: (
+        await db.lessonTranslation.findUniqueOrThrow({
+          where: { lessonId_locale: { lessonId, locale: "es" } },
+        })
+      ).translationStatus,
+    });
+    const save = async (machineTranslated?: boolean) => {
+      await courses.saveCourse(editor, {
+        courseId,
+        meta: {},
+        translation: {
+          locale: "es",
+          title: "Curso",
+          ...(machineTranslated ? { machineTranslated } : {}),
+        },
+      });
+      await lessons.saveLesson(editor, {
+        lessonId,
+        meta: {},
+        translation: {
+          locale: "es",
+          title: "Lección",
+          content: "<p>Cuerpo</p>",
+          ...(machineTranslated ? { machineTranslated } : {}),
+        },
+        attachments: [],
+      });
+    };
+
+    await save(true);
+    expect(await status()).toEqual({ course: "MACHINE_TRANSLATED", lesson: "MACHINE_TRANSLATED" });
+    await save();
+    expect(await status()).toEqual({ course: "TRANSLATED", lesson: "TRANSLATED" });
+  });
+
   it("returns null for a lesson requested under the wrong course", async () => {
     const a = await makeCourse();
     const b = await makeCourse();

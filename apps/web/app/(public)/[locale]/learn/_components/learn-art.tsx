@@ -3,7 +3,8 @@
 //
 // One component stands between the pages and `LEARN_MEDIA` so the pattern's
 // guarantee is enforced in one place: a `null` entry returns `null`, the
-// caller's slot goes undefined, and `PageHero` falls back to its own tone. No
+// caller's slot renders nothing, and the masthead stands as a plain
+// `--secondary` band (ADR-117) rather than a broken image. No
 // page has to remember to check.
 //
 // `alt=""` on every piece, deliberately. These are backdrops — texture behind
@@ -13,7 +14,7 @@
 import Image from "next/image";
 
 import type { LearnTrackKey } from "@repo/contracts";
-import { LEARN_MEDIA, LEARN_TRACK_MEDIA, type LearnMediaKey } from "../_content/learn-media.ts";
+import { LEARN_MEDIA, LEARN_TRACK_BANNER, type LearnMediaKey } from "../_content/learn-media.ts";
 
 export function LearnBackdrop({
   slot,
@@ -32,12 +33,15 @@ export function LearnBackdrop({
       alt=""
       fill
       priority={priority}
-      // `unoptimized`, not `dangerouslyAllowSVG` in next.config: a few KB of
-      // generated vector has nothing for the optimizer to win, and the config
-      // flag would relax SVG handling for EVERY image the app serves,
-      // admin-entered cover URLs included, to buy that nothing. Same trade
-      // `NewsBackdrop` documents.
-      unoptimized
+      // SVG only (changes-33). These slots used to be generated vector
+      // exclusively, and `unoptimized` was the alternative to setting
+      // `dangerouslyAllowSVG` in next.config — which would relax SVG handling
+      // for EVERY image the app serves, admin-entered cover URLs included, to
+      // buy nothing on a few KB of vector. Now that the owner's photography
+      // fills most of them, an unconditional flag would also mean shipping a
+      // 1920px WebP to a phone. So the flag follows the FILE: vector stays
+      // unoptimized, raster goes through the optimizer and gets its srcset.
+      unoptimized={src.endsWith(".svg")}
       sizes="100vw"
       className="object-cover"
     />
@@ -47,8 +51,9 @@ export function LearnBackdrop({
 /**
  * A track's generated panel, used full-bleed as its school masthead
  * (ADR-065 §1). Same guarantee as `LearnBackdrop`: a track with no panel
- * returns `null` and `PageHero` falls back to its tone, so a third track can
- * be registered before its artwork exists without shipping a broken image.
+ * returns `null` and the masthead stands as a plain `--secondary` band
+ * (ADR-117), so a third track can be registered before its artwork exists
+ * without shipping a broken image.
  */
 export function LearnTrackBackdrop({
   track,
@@ -57,7 +62,7 @@ export function LearnTrackBackdrop({
   track: LearnTrackKey;
   priority?: boolean;
 }) {
-  const src = LEARN_TRACK_MEDIA[track];
+  const src = LEARN_TRACK_BANNER[track];
   if (!src) return null;
 
   return (
@@ -66,7 +71,7 @@ export function LearnTrackBackdrop({
       alt=""
       fill
       priority={priority}
-      unoptimized
+      unoptimized={src.endsWith(".svg")}
       sizes="100vw"
       className="object-cover"
     />

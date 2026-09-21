@@ -8,10 +8,10 @@
 // A delivery failure is RETURNED, never thrown. Sign-up must not fail because
 // a mail server did.
 import { EMAIL_TEMPLATES, type EmailBodyMode, type EmailTemplateKey } from "@repo/contracts";
-import { db } from "@repo/db";
+import { db, emailTemplateDefault } from "@repo/db";
 import { loadSetting } from "@repo/settings";
 import { CURATED_FONTS, loadActiveThemeTokens } from "@repo/theme";
-import type { EmailPalette } from "./layout.ts";
+import { absoluteUrl, type EmailPalette } from "./layout.ts";
 import { renderEmail } from "./render.ts";
 import { TRANSPORT_ID, loadTransportDriver } from "./transport.ts";
 
@@ -104,14 +104,23 @@ export interface EmailRenderContext {
 }
 
 export async function loadEmailRenderContext(): Promise<EmailRenderContext> {
-  const [tokens, siteName, fromless, logo, footerText, postalAddress] = await Promise.all([
+  const origin = process.env.NEXT_PUBLIC_SITE_URL || process.env.BETTER_AUTH_URL || "";
+  const [tokens, siteName, emailLogo, brandLogo, footerText, postalAddress] = await Promise.all([
     loadActiveThemeTokens("web"),
     loadSetting("site.name"),
-    Promise.resolve(process.env.NEXT_PUBLIC_SITE_URL ?? ""),
     loadSetting("email.logo"),
+    // The site's own light-ground logo, when no email-specific one is set:
+    // an email is always read on a light ground (the palette below), and the
+    // brand an admin uploaded in the theme editor should not need uploading
+    // twice to appear in a message (changes-46 #4).
+    db.brandAsset.findUnique({ where: { key: "logo_light" }, select: { url: true } }),
     loadSetting("email.footerText"),
     loadSetting("email.postalAddress"),
   ]);
+  const fromless = origin;
+  // ABSOLUTE, because a message has no page for a relative path to resolve
+  // against — the stored value is the upload path (`/uploads/…`).
+  const logo = absoluteUrl(emailLogo || brandLogo?.url || "", origin) ?? "";
   const resolvedSiteName = siteName ?? "";
   return {
     palette: {
@@ -136,6 +145,45 @@ export async function loadEmailRenderContext(): Promise<EmailRenderContext> {
   };
 }
 
+function findTemplate(key: string) {
+  return db.emailTemplate.findUnique({ where: { key }, include: { translations: true } });
+}
+
+/**
+ * The template row, restored from its code default when the row or its `en`
+ * content is missing (ADR-131).
+ *
+ * A template key is CODE (ADR-078 #5), so the registry can add one — as
+ * ADR-113 added `support.request` — on a database that was seeded before it
+ * existed. Without this, that send was a FAILED row saying "run the seed", and
+ * a visitor was told their message went. Restoring is create-only, exactly like
+ * the seed: an admin's edited content is never touched, and a template an admin
+ * switched OFF still exists and stays off.
+ */
+async function loadTemplate(key: EmailTemplateKey) {
+  const template = await findTemplate(key);
+  if (template?.translations.some((row) => row.locale === DEFAULT_EMAIL_LOCALE)) return template;
+
+  const fallback = emailTemplateDefault(key);
+  if (!fallback) return template;
+
+  await db.emailTemplate.upsert({ where: { key }, update: {}, create: { key } });
+  await db.emailTemplateTranslation.upsert({
+    where: { templateKey_locale: { templateKey: key, locale: DEFAULT_EMAIL_LOCALE } },
+    update: {},
+    create: {
+      templateKey: key,
+      locale: DEFAULT_EMAIL_LOCALE,
+      subject: fallback.subject,
+      preheader: fallback.preheader,
+      mode: "RICH",
+      bodyHtml: fallback.bodyHtml,
+      translationStatus: "TRANSLATED",
+    },
+  });
+  return findTemplate(key);
+}
+
 export async function sendTemplatedEmail(input: SendTemplatedEmailInput): Promise<DeliveryResult> {
   const locale = input.locale ?? DEFAULT_EMAIL_LOCALE;
   const isTest = input.isTest ?? false;
@@ -146,10 +194,7 @@ export async function sendTemplatedEmail(input: SendTemplatedEmailInput): Promis
     return record({ ...base, subject: "", status: "SUPPRESSED", reason: "email.enabled is off" });
   }
 
-  const template = await db.emailTemplate.findUnique({
-    where: { key: input.key },
-    include: { translations: true },
-  });
+  const template = await loadTemplate(input.key);
   if (!template) {
     return record({
       ...base,

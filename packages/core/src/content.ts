@@ -89,6 +89,23 @@ const PUBLISHING: ContentStatus[] = [ContentStatus.PUBLISHED, ContentStatus.SCHE
  * involved, which is the punctuality floor ADR-015 #6 accepted and ADR-071
  * inherited.
  */
+/**
+ * ADR-139 — the three flags a learning content save may carry, as the subset
+ * of an update's `data` the caller actually SENT. `undefined` leaves a column
+ * alone, exactly as every other meta field in these saves does.
+ */
+export function contentFlagsData(meta: {
+  isFeatured?: boolean;
+  isActive?: boolean;
+  isPremium?: boolean;
+}): { isFeatured?: boolean; isActive?: boolean; isPremium?: boolean } {
+  return {
+    ...(meta.isFeatured === undefined ? {} : { isFeatured: meta.isFeatured }),
+    ...(meta.isActive === undefined ? {} : { isActive: meta.isActive }),
+    ...(meta.isPremium === undefined ? {} : { isPremium: meta.isPremium }),
+  };
+}
+
 export function scheduledVisibilityOr(now: Date) {
   return [
     { status: ContentStatus.PUBLISHED },
@@ -494,6 +511,8 @@ export interface SaveGlossaryTranslationInput {
   faq?: GlossaryFaqItemInput[];
   seoTitle?: string | null;
   seoDescription?: string | null;
+  /** AI text untouched since (changes-29 B3) ⇒ saved `MACHINE_TRANSLATED`. */
+  machineTranslated?: boolean;
 }
 
 /**
@@ -568,6 +587,10 @@ export interface SaveGlossaryTermMeta {
   difficulty?: Difficulty;
   formula?: string | null;
   imageUrl?: string | null;
+  /** ADR-139 — the article's three flags. */
+  isFeatured?: boolean;
+  isActive?: boolean;
+  isPremium?: boolean;
 }
 
 export interface SaveGlossaryTermInput {
@@ -630,7 +653,11 @@ export async function saveGlossaryTerm(
     seoTitle: translation.seoTitle ?? null,
     seoDescription: translation.seoDescription ?? null,
     sourceHash,
-    translationStatus: TranslationStatus.TRANSLATED,
+    // changes-29 B3: MACHINE_TRANSLATED only while the AI text is untouched;
+    // any other save, a human's review included, writes TRANSLATED.
+    translationStatus: translation.machineTranslated
+      ? TranslationStatus.MACHINE_TRANSLATED
+      : TranslationStatus.TRANSLATED,
   };
 
   await db.$transaction(async (tx) => {
@@ -642,6 +669,7 @@ export async function saveGlossaryTerm(
       ...(meta.difficulty === undefined ? {} : { difficulty: meta.difficulty }),
       ...(meta.formula === undefined ? {} : { formula: meta.formula }),
       ...(meta.imageUrl === undefined ? {} : { imageUrl: meta.imageUrl }),
+      ...contentFlagsData(meta),
     };
     if (Object.keys(metaData).length > 0) {
       await tx.glossaryTerm.update({ where: { id: termId }, data: metaData });
@@ -940,6 +968,10 @@ export interface GlossaryTermAdminDetail {
   difficulty: Difficulty;
   formula: string | null;
   imageUrl: string | null;
+  /** ADR-139 — the article's three flags. */
+  isFeatured: boolean;
+  isActive: boolean;
+  isPremium: boolean;
   viewCount: number;
   publishedAt: Date | null;
   scheduledFor: Date | null;
@@ -995,6 +1027,9 @@ export async function loadGlossaryTermAdminDetail(
     difficulty: row.difficulty,
     formula: row.formula,
     imageUrl: row.imageUrl,
+    isFeatured: row.isFeatured,
+    isActive: row.isActive,
+    isPremium: row.isPremium,
     viewCount: row.viewCount,
     publishedAt: row.publishedAt,
     scheduledFor: row.scheduledFor,

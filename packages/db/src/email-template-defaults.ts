@@ -77,6 +77,33 @@ export const EMAIL_TEMPLATE_DEFAULTS: readonly EmailTemplateDefault[] = [
       "occasional deep dive from {{site.name}}.</p>" +
       '<p>You can <a href="{{unsubscribe.url}}">unsubscribe</a> at any time.</p>',
   },
+  // The support inbox's own copy of a visitor's message (ADR-113).
+  //
+  // The subject carries the visitor's, prefixed, so a reply keeps its thread
+  // and an inbox rule can match the prefix. `{{contact.email}}` is on its own
+  // line because that is how the reader replies: `sendTemplatedEmail` has no
+  // per-send reply-to override, and the template's stored `replyTo` is a
+  // fixed address, so the visitor's own is printed rather than smuggled into
+  // a header.
+  //
+  // **`{{contact.message}}` arrives with its paragraph breaks collapsed.**
+  // Every variable is escaped after the body is sanitised (`render.ts`), which
+  // is what makes a message containing markup safe, and it also means a
+  // newline is a newline in HTML — i.e. a space. The words are all there. The
+  // alternative is a template language that can loop, which ADR-078 #6
+  // deliberately refused.
+  {
+    key: "support.request",
+    subject: "Support request: {{contact.subject}}",
+    preheader: "From {{contact.name}} <{{contact.email}}>",
+    bodyHtml:
+      "<p><strong>{{contact.name}}</strong> sent a message through the " +
+      "{{site.name}} support form.</p>" +
+      '<p class="ed-tx-muted">Reply to: {{contact.email}}</p>' +
+      '<p class="ed-tx-muted">Subject: {{contact.subject}}</p>' +
+      '<p class="ed-tx-muted">Reading the site in: {{contact.locale}}</p>' +
+      "<p>{{contact.message}}</p>",
+  },
 ] as const;
 
 /** The default content for one key, or null when the key is not one of ours. */

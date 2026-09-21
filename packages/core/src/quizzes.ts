@@ -47,15 +47,19 @@ import type {
 import { answerValueSchema, isLearnTrack } from "@repo/contracts";
 import {
   CONTENT_TRANSITIONS,
+  contentFlagsData,
   createSlugRedirect,
   slugify,
   transitionContentStatus,
 } from "./content.ts";
+import { loadLocaleMeta } from "./locale-meta.ts";
 import { publicLessonWhere } from "./public-courses.ts";
+import { applyReadingLocale, type ReadingView } from "./reading-languages.ts";
 // `publicQuizWhere` lives in a leaf module so the content loaders can read it
 // without closing a cycle back through this file (ADR-084 #1).
 import { publicQuizWhere } from "./quiz-links.ts";
 import { recomputeCourseCompletion } from "./progress.ts";
+import { syncReferences } from "./cms/references.ts";
 import { recordAudit } from "./index.ts";
 
 /**
@@ -75,6 +79,25 @@ export class QuizNotAccessibleError extends Error {
   constructor() {
     super("No such quiz, or it is not publicly visible");
     this.name = "QuizNotAccessibleError";
+  }
+}
+
+/**
+ * A translation save that would change the quiz's STRUCTURE.
+ *
+ * `correctAnswer` is an index into the options and lives on the question, not
+ * the translation (ADR-058 #2), so every language shares one question set and
+ * one option count. A Spanish save that dropped a question would delete it for
+ * English readers, and one with a third option where English has two would
+ * grade against a different answer per language. Only the default locale
+ * shapes a quiz; any other locale translates the shape it is given.
+ */
+export class QuizTranslationStructureError extends Error {
+  constructor() {
+    super(
+      "A translation must keep the default language's questions and option counts. Change the structure in the default language.",
+    );
+    this.name = "QuizTranslationStructureError";
   }
 }
 
@@ -294,6 +317,13 @@ export interface QuizAdminDetail {
   track: string;
   isStandalone: boolean;
   category: string | null;
+  /** ADR-132 — the MediaAsset id and its URL, resolved for the upload field. */
+  coverAssetId: string | null;
+  /** ADR-139 — the article's three flags. */
+  isFeatured: boolean;
+  isActive: boolean;
+  isPremium: boolean;
+  coverUrl: string | null;
   visibility: string;
   translations: {
     locale: string;
@@ -331,6 +361,10 @@ export async function getQuizAdmin(
       isStandalone: true,
       track: true,
       category: true,
+      coverAssetId: true,
+      isFeatured: true,
+      isActive: true,
+      isPremium: true,
       visibility: true,
       translations: {
         select: {
@@ -360,6 +394,15 @@ export async function getQuizAdmin(
   });
   if (!quiz) return null;
 
+  // A second read rather than a join: `coverAssetId` is a plain String column
+  // (MediaAsset carries no back-relations — ADR-035), as on Course.
+  const cover = quiz.coverAssetId
+    ? await db.mediaAsset.findFirst({
+        where: { id: quiz.coverAssetId, deletedAt: null },
+        select: { url: true },
+      })
+    : null;
+
   return {
     id: quiz.id,
     status: quiz.status,
@@ -373,6 +416,11 @@ export async function getQuizAdmin(
     track: quiz.track,
     isStandalone: quiz.isStandalone,
     category: quiz.category,
+    coverAssetId: quiz.coverAssetId,
+    isFeatured: quiz.isFeatured,
+    isActive: quiz.isActive,
+    isPremium: quiz.isPremium,
+    coverUrl: cover?.url ?? null,
     visibility: quiz.visibility,
     translations: quiz.translations,
     attemptCount: quiz._count.attempts,
@@ -460,7 +508,11 @@ export async function saveQuiz(actor: Subject, input: QuizInput): Promise<void> 
   if (input.meta.track !== undefined) meta.track = input.meta.track;
   if (input.meta.isStandalone !== undefined) meta.isStandalone = input.meta.isStandalone;
   if (input.meta.category !== undefined) meta.category = input.meta.category;
+  if (input.meta.coverAssetId !== undefined) meta.coverAssetId = input.meta.coverAssetId;
   if (input.meta.visibility !== undefined) meta.visibility = input.meta.visibility;
+  Object.assign(meta, contentFlagsData(input.meta));
+
+  if (!isSource) await assertSameStructure(input, defaultLocale);
 
   const sourceHash = isSource
     ? computeSourceHash(`${input.translation.title}${input.translation.description ?? ""}`)
@@ -476,16 +528,37 @@ export async function saveQuiz(actor: Subject, input: QuizInput): Promise<void> 
 
   await db.$transaction(async (tx) => {
     await tx.quiz.update({ where: { id: input.quizId }, data: meta });
+
+    // ADR-132 — the cover is a ContentReference so deleteMedia()'s in-use
+    // guard protects it, exactly as a course cover is. Written with an empty
+    // list when the cover is cleared, so the reference goes with it.
+    if (input.meta.coverAssetId !== undefined) {
+      await syncReferences(
+        tx,
+        { sourceType: "QUIZ", sourceId: input.quizId },
+        input.meta.coverAssetId
+          ? [{ refType: "MEDIA", refId: input.meta.coverAssetId, field: "coverAssetId" }]
+          : [],
+      );
+    }
     await tx.quizTranslation.upsert({
       where: { quizId_locale: { quizId: input.quizId, locale } },
       update: fields,
       create: { quizId: input.quizId, locale, ...fields },
     });
 
-    const keptIds = input.questions.flatMap((question) => (question.id ? [question.id] : []));
-    await tx.quizQuestion.deleteMany({
-      where: { quizId: input.quizId, ...(keptIds.length > 0 ? { id: { notIn: keptIds } } : {}) },
-    });
+    // A translation save writes WORDS only: the question rows (type, order,
+    // points, correct answer) belong to the default locale, and
+    // `assertSameStructure` has already refused a set that differs from it.
+    if (isSource) {
+      const keptIds = input.questions.flatMap((question) => (question.id ? [question.id] : []));
+      await tx.quizQuestion.deleteMany({
+        where: {
+          quizId: input.quizId,
+          ...(keptIds.length > 0 ? { id: { notIn: keptIds } } : {}),
+        },
+      });
+    }
 
     for (const question of input.questions) {
       const core = {
@@ -494,15 +567,17 @@ export async function saveQuiz(actor: Subject, input: QuizInput): Promise<void> 
         points: question.points,
         correctAnswer: question.correctAnswer as Prisma.InputJsonValue,
       };
-      const questionId = question.id
-        ? (
-            await tx.quizQuestion.update({
-              where: { id: question.id },
-              data: core,
-              select: { id: true },
-            })
-          ).id
-        : (await tx.quizQuestion.create({ data: { quizId: input.quizId, ...core } })).id;
+      const questionId = !isSource
+        ? question.id!
+        : question.id
+          ? (
+              await tx.quizQuestion.update({
+                where: { id: question.id },
+                data: core,
+                select: { id: true },
+              })
+            ).id
+          : (await tx.quizQuestion.create({ data: { quizId: input.quizId, ...core } })).id;
 
       const translation = {
         prompt: question.prompt,
@@ -536,6 +611,31 @@ export async function saveQuiz(actor: Subject, input: QuizInput): Promise<void> 
     changes: { after: { locale, questions: input.questions.length } },
   });
   revalidateTag("content", { expire: 0 });
+}
+
+/**
+ * A non-default-locale save must name exactly the stored questions, in the
+ * stored order, each with the default locale's option count.
+ */
+async function assertSameStructure(input: QuizInput, defaultLocale: string): Promise<void> {
+  const stored = await db.quizQuestion.findMany({
+    where: { quizId: input.quizId },
+    orderBy: { sortOrder: "asc" },
+    select: {
+      id: true,
+      translations: { where: { locale: defaultLocale }, select: { options: true } },
+    },
+  });
+  const same =
+    stored.length === input.questions.length &&
+    stored.every((row, index) => {
+      const question = input.questions[index];
+      return (
+        question?.id === row.id &&
+        question.options.length === parseStringArray(row.translations[0]?.options).length
+      );
+    });
+  if (!same) throw new QuizTranslationStructureError();
 }
 
 export async function setQuizDeleted(
@@ -601,6 +701,7 @@ export async function duplicateQuiz(actor: Subject, quizId: string): Promise<str
         showAnswersAfter: source.showAnswersAfter,
         isStandalone: source.isStandalone,
         category: source.category,
+        coverAssetId: source.coverAssetId,
         status: ContentStatus.DRAFT,
         visibility: source.visibility,
         authorId: actor.id,
@@ -641,6 +742,14 @@ export async function duplicateQuiz(actor: Subject, quizId: string): Promise<str
       });
     }
 
+    // The copy uses the same picture, so it holds its own reference to it —
+    // otherwise deleting the original would leave the asset unguarded.
+    if (source.coverAssetId) {
+      await syncReferences(tx, { sourceType: "QUIZ", sourceId: created.id }, [
+        { refType: "MEDIA", refId: source.coverAssetId, field: "coverAssetId" },
+      ]);
+    }
+
     return created;
   });
 
@@ -679,8 +788,15 @@ export async function setQuizStatus(
  * progress is (ADR-056 #1). Which means this page stays static even though
  * what happens on it does not.
  */
-export async function loadQuizBySlug(locale: string, slug: string): Promise<QuizView | null> {
-  const { locales, defaultLocale } = await localeContext();
+export async function loadQuizBySlug(
+  locale: string,
+  slug: string,
+  readingLocale?: string,
+): Promise<PublicQuizView | null> {
+  const [{ locales, defaultLocale }, known] = await Promise.all([
+    localeContext(),
+    loadLocaleMeta(),
+  ]);
 
   const match = await db.quizTranslation.findFirst({
     where: { slug, quiz: publicQuizWhere() },
@@ -699,7 +815,15 @@ export async function loadQuizBySlug(locale: string, slug: string): Promise<Quiz
       isStandalone: true,
       category: true,
       updatedAt: true,
-      translations: { select: { locale: true, title: true, slug: true, description: true } },
+      translations: {
+        select: {
+          locale: true,
+          title: true,
+          slug: true,
+          description: true,
+          translationStatus: true,
+        },
+      },
       questions: {
         orderBy: { sortOrder: "asc" },
         select: {
@@ -718,8 +842,25 @@ export async function loadQuizBySlug(locale: string, slug: string): Promise<Quiz
   const t = pickTranslation(quiz.translations, locale, defaultLocale, locales);
   if (!t) return null;
 
+  // ADR-127 on a quiz. A language is offered only when EVERY question has its
+  // words too: a reader who chose Arabic must not meet an English question
+  // halfway through, and a question added in English after the translation was
+  // saved is exactly that. The fallback pick stays listed as the way back.
+  const complete = quiz.translations.filter(
+    (tr) =>
+      tr.locale === t.locale ||
+      quiz.questions.every((question) =>
+        question.translations.some((qt) => qt.locale === tr.locale),
+      ),
+  );
+  const { picked, ...reading } = applyReadingLocale(complete, t, readingLocale, known, locale);
+  const words = picked ?? t;
+  const questionLocale = reading.readingLocale ?? locale;
+
   const questions = quiz.questions.flatMap((question) => {
-    const qt = pickTranslation(question.translations, locale, defaultLocale, locales);
+    const qt = reading.readingLocale
+      ? (question.translations.find((row) => row.locale === reading.readingLocale) ?? null)
+      : pickTranslation(question.translations, questionLocale, defaultLocale, locales);
     if (!qt) return [];
     const options = parseStringArray(qt.options);
     // A question with fewer than two options is unanswerable. Dropped rather
@@ -743,8 +884,8 @@ export async function loadQuizBySlug(locale: string, slug: string): Promise<Quiz
   return {
     id: quiz.id,
     slug: t.slug,
-    title: t.title,
-    description: t.description,
+    title: words.title,
+    description: words.description,
     track,
     category: quiz.category,
     passingScore: quiz.passingScore,
@@ -755,14 +896,22 @@ export async function loadQuizBySlug(locale: string, slug: string): Promise<Quiz
     totalPoints: questions.reduce((sum, question) => sum + question.points, 0),
     questions,
     updatedAt: quiz.updatedAt.toISOString(),
+    ...reading,
   };
 }
 
-export async function getQuizBySlug(locale: string, slug: string): Promise<QuizView | null> {
+/** A quiz as its public page reads it: the contract view plus ADR-127's reading fields. */
+export type PublicQuizView = QuizView & ReadingView;
+
+export async function getQuizBySlug(
+  locale: string,
+  slug: string,
+  readingLocale?: string,
+): Promise<PublicQuizView | null> {
   "use cache";
   cacheTag("content");
   cacheLife({ revalidate: 300 });
-  return loadQuizBySlug(locale, slug);
+  return loadQuizBySlug(locale, slug, readingLocale);
 }
 
 /**
@@ -785,11 +934,34 @@ export async function loadStandaloneQuizzes(
       id: true,
       track: true,
       category: true,
+      coverAssetId: true,
       passingScore: true,
+      isFeatured: true,
+      isPremium: true,
+      publishedAt: true,
       translations: { select: { locale: true, title: true, slug: true, description: true } },
-      _count: { select: { questions: true } },
+      _count: {
+        select: { questions: true, attempts: { where: { completedAt: { not: null } } } },
+      },
     },
   });
+
+  // One read for every cover on the shelf. A deleted asset is excluded, so its
+  // quiz resolves to null and falls back to a generated panel, never a 404.
+  const coverIds = [
+    ...new Set(rows.flatMap((row) => (row.coverAssetId ? [row.coverAssetId] : []))),
+  ];
+  const coverUrls =
+    coverIds.length === 0
+      ? new Map<string, string>()
+      : new Map(
+          (
+            await db.mediaAsset.findMany({
+              where: { id: { in: coverIds }, deletedAt: null },
+              select: { id: true, url: true },
+            })
+          ).map((asset) => [asset.id, asset.url]),
+        );
 
   return rows.flatMap((row) => {
     const t = pickTranslation(row.translations, locale, defaultLocale, locales);
@@ -807,8 +979,13 @@ export async function loadStandaloneQuizzes(
         description: t.description,
         track: rowTrack,
         category: row.category,
+        coverUrl: row.coverAssetId ? (coverUrls.get(row.coverAssetId) ?? null) : null,
         questionCount: row._count.questions,
         passingScore: row.passingScore,
+        isFeatured: row.isFeatured,
+        isPremium: row.isPremium,
+        publishedAt: row.publishedAt?.toISOString() ?? null,
+        attemptCount: row._count.attempts,
       },
     ];
   });

@@ -9,20 +9,33 @@
 // text would render a raw identifier (ADR-044 #5's public counterpart).
 import { Sparkles } from "lucide-react";
 import { Link } from "@repo/i18n/navigation";
+import { cn } from "@repo/ui/lib/utils";
 
 export function TermOfTheDay({
   term,
   slug,
   explanation,
   labels,
+  className,
 }: {
   term: string;
   slug: string;
   explanation: string;
   labels: { eyebrow: string; readMore: string };
+  /**
+   * The home page's browse band passes `h-full` so the card fills its column
+   * (changes-35). `/glossary`'s masthead passes nothing and is unchanged — a
+   * card that is one of several stacked in a hero sizes to its own content.
+   */
+  className?: string;
 }) {
   return (
-    <article className="flex flex-col gap-2 rounded-xl border border-primary/20 bg-primary/5 p-5">
+    <article
+      className={cn(
+        "flex flex-col gap-2 rounded-xl border border-primary/20 bg-primary/5 p-5",
+        className,
+      )}
+    >
       <p className="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-primary-interactive uppercase">
         <Sparkles aria-hidden className="size-3.5" />
         {labels.eyebrow}
@@ -36,9 +49,11 @@ export function TermOfTheDay({
         </Link>
       </h2>
       <p className="text-sm text-muted-foreground">{explanation}</p>
+      {/* `mt-auto` only bites when a caller has made the card taller than its
+          content (the home band's `h-full`); in the masthead it is inert. */}
       <Link
         href={`/glossary/${slug}`}
-        className="link-underline w-fit text-sm font-medium text-primary-interactive"
+        className="link-underline mt-auto w-fit text-sm font-medium text-primary-interactive"
       >
         {labels.readMore}
       </Link>

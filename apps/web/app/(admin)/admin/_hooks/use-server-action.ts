@@ -16,6 +16,8 @@ export interface RunOptions {
   onDone?: () => void;
   /** Skip the router.refresh() (e.g. optimistic UIs that already rolled forward). */
   skipRefresh?: boolean;
+  /** Called after the failure toast — roll an optimistic UI back. */
+  onError?: () => void;
 }
 
 export function useServerAction() {
@@ -32,6 +34,7 @@ export function useServerAction() {
           options?.onDone?.();
         } catch (error) {
           toast.error(error instanceof Error ? error.message : String(error));
+          options?.onError?.();
         }
       });
     },

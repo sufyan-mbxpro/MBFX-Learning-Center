@@ -25,7 +25,11 @@
 // (ADR-078 #9). A subscription is not lost because a mail server was down.
 import { createHash, randomBytes } from "node:crypto";
 import { sendTemplatedEmail } from "@repo/email";
-import type { NewsletterSource, SubscriberFilter, SubscriberExportFilter } from "@repo/contracts";
+import type {
+  NewsletterPlacement,
+  SubscriberFilter,
+  SubscriberExportFilter,
+} from "@repo/contracts";
 import { db, SubscriberStatus } from "@repo/db";
 import { getSetting } from "@repo/settings";
 import { recordAudit } from "./index.ts";
@@ -90,7 +94,7 @@ export interface SubscribeInput {
   /** Already lower-cased and validated by `newsletterSubscribeSchema`. */
   email: string;
   locale: string;
-  source: NewsletterSource;
+  source: NewsletterPlacement;
 }
 
 /**
@@ -168,7 +172,7 @@ function isUniqueViolation(error: unknown): boolean {
 async function createOrRefreshPending(input: {
   email: string;
   locale: string;
-  source: NewsletterSource;
+  source: NewsletterPlacement;
   token: string;
   confirmExpiresAt: Date;
   now: Date;
@@ -197,6 +201,7 @@ async function createOrRefreshPending(input: {
       confirmTokenHash: hashToken(token),
       confirmExpiresAt,
       unsubscribedAt: null,
+      unsubscribedVia: null,
       lastConfirmSentAt: now,
     },
   });
@@ -245,6 +250,16 @@ export async function confirmSubscription(token: string): Promise<ConfirmResult>
   });
   if (updated.count === 0) return "invalid";
 
+  await sendWelcome(row);
+  return "confirmed";
+}
+
+/**
+ * Rotate the unsubscribe token and send the welcome that carries it — the
+ * tail every path to ACTIVE shares: a confirm click and a verified account's
+ * opt-in (ADR-124).
+ */
+async function sendWelcome(row: { id: string; email: string; locale: string }): Promise<void> {
   const unsubscribeToken = await rotateUnsubscribeToken(row.id);
   await sendTemplatedEmail({
     key: "newsletter.welcome",
@@ -260,8 +275,6 @@ export async function confirmSubscription(token: string): Promise<ConfirmResult>
       label: "Unsubscribe",
     },
   });
-
-  return "confirmed";
 }
 
 /**
@@ -303,6 +316,7 @@ export async function unsubscribe(token: string): Promise<UnsubscribeResult> {
     data: {
       status: SubscriberStatus.UNSUBSCRIBED,
       unsubscribedAt: new Date(),
+      unsubscribedVia: "subscriber",
       // A pending row that unsubscribes drops its confirm token too, so the
       // confirmation link in the inbox cannot resurrect it.
       confirmTokenHash: null,
@@ -310,6 +324,135 @@ export async function unsubscribe(token: string): Promise<UnsubscribeResult> {
     },
   });
   return "unsubscribed";
+}
+
+// ─── Consent given with an account (ADR-124) ─────────────────
+
+export type AccountOptInResult = "pending" | "active" | "unchanged" | "no_account";
+
+/**
+ * The sign-up checkbox: subscribe the address on a SIGNED-IN account.
+ *
+ * The caller passes a user id taken from the session and nothing else — the
+ * address is read from the account row, so this can never subscribe a mailbox
+ * the caller does not hold an account for.
+ *
+ * **The ticked box is the consent; the account's email verification is the
+ * confirmation.** ADR-080's double opt-in exists so nobody is on the list
+ * without proving the mailbox is theirs, and Better Auth is already sending
+ * exactly that proof — a second "confirm your subscription" email in the same
+ * minute would ask the reader to prove the same thing twice. So:
+ *
+ * - account not yet verified → a PENDING row with source `signup` and no
+ *   confirm token; `activateAccountSubscription` turns it ACTIVE when the
+ *   verification link is used (the 7-day pending purge still applies);
+ * - account already verified → ACTIVE now, and the welcome is sent.
+ *
+ * An ACTIVE row is left alone. A PENDING row from a form keeps its confirm
+ * token, so either proof confirms it. An UNSUBSCRIBED row opts in again, which
+ * is what ticking the box says.
+ *
+ * No audit row, for `subscribe()`'s reason: the actor IS the subscriber, and
+ * the row's own `source` and timestamps are the record.
+ */
+export async function subscribeAccount(input: {
+  userId: string;
+  locale: string;
+}): Promise<AccountOptInResult> {
+  const user = await db.user.findFirst({
+    where: { id: input.userId, deletedAt: null },
+    select: { id: true, email: true, emailVerified: true },
+  });
+  if (!user) return "no_account";
+
+  const email = user.email.trim().toLowerCase();
+  const existing = await db.newsletterSubscriber.findUnique({
+    where: { email },
+    select: { id: true, status: true },
+  });
+  if (existing?.status === SubscriberStatus.ACTIVE) return "unchanged";
+
+  const pending = {
+    locale: input.locale,
+    source: "signup",
+    status: SubscriberStatus.PENDING,
+    unsubscribedAt: null,
+    unsubscribedVia: null,
+  };
+
+  let id: string;
+  try {
+    if (existing) {
+      await db.newsletterSubscriber.update({ where: { id: existing.id }, data: pending });
+      id = existing.id;
+    } else {
+      const created = await db.newsletterSubscriber.create({
+        data: {
+          email,
+          ...pending,
+          // Minted and never handed out; `sendWelcome` rotates it on the way
+          // to ACTIVE, exactly as a confirm click does.
+          unsubscribeTokenHash: hashToken(newToken()),
+        },
+        select: { id: true },
+      });
+      id = created.id;
+    }
+  } catch (error) {
+    // A form submission for the same address landed first. Its row exists
+    // and its own confirmation is on the way.
+    if (isUniqueViolation(error)) return "pending";
+    throw error;
+  }
+
+  if (!user.emailVerified) return "pending";
+  await activate({ id, email, locale: input.locale }, user.id);
+  return "active";
+}
+
+/**
+ * Called when an account's email is verified: a `signup` subscription waiting
+ * on that proof becomes ACTIVE and linked to the account — ADR-080 #6's "link
+ * when the address is known to belong to the account", which is now.
+ *
+ * Only `source: "signup"` rows move. A PENDING row from a public form was
+ * asked to confirm through its own email, and verifying an account that
+ * shares the address is not a click on that link.
+ */
+export async function activateAccountSubscription(userId: string): Promise<boolean> {
+  const user = await db.user.findFirst({
+    where: { id: userId, deletedAt: null, emailVerified: true },
+    select: { id: true, email: true },
+  });
+  if (!user) return false;
+
+  const row = await db.newsletterSubscriber.findUnique({
+    where: { email: user.email.trim().toLowerCase() },
+    select: { id: true, email: true, locale: true, status: true, source: true },
+  });
+  if (!row || row.status !== SubscriberStatus.PENDING || row.source !== "signup") return false;
+
+  return activate(row, user.id);
+}
+
+/** PENDING → ACTIVE, matched on the status so two callers cannot both welcome. */
+async function activate(
+  row: { id: string; email: string; locale: string },
+  userId: string,
+): Promise<boolean> {
+  const updated = await db.newsletterSubscriber.updateMany({
+    where: { id: row.id, status: SubscriberStatus.PENDING },
+    data: {
+      status: SubscriberStatus.ACTIVE,
+      confirmedAt: new Date(),
+      confirmTokenHash: null,
+      confirmExpiresAt: null,
+      userId,
+    },
+  });
+  if (updated.count === 0) return false;
+  await sendWelcome(row);
+  return true;
 }
 
 // ─── Placement ───────────────────────────────────────────────
@@ -329,7 +472,7 @@ export async function unsubscribe(token: string): Promise<UnsubscribeResult> {
  * `getSetting` carries the frozen `settings:email` tag, so an admin toggling a
  * placement still invalidates it.
  */
-export async function isNewsletterPlacementEnabled(source: NewsletterSource): Promise<boolean> {
+export async function isNewsletterPlacementEnabled(source: NewsletterPlacement): Promise<boolean> {
   return (await getSetting(`newsletter.placements.${source}`)) !== false;
 }
 
@@ -541,6 +684,9 @@ export async function adminUnsubscribe(actor: { id: string }, id: string): Promi
     data: {
       status: SubscriberStatus.UNSUBSCRIBED,
       unsubscribedAt: new Date(),
+      // ADR-124: recorded so "Resubscribe" knows this stop was the list's
+      // own, not the reader's, and may be undone without a fresh opt-in.
+      unsubscribedVia: "admin",
       confirmTokenHash: null,
       confirmExpiresAt: null,
     },
@@ -553,6 +699,214 @@ export async function adminUnsubscribe(actor: { id: string }, id: string): Promi
     entityId: id,
     changes: { before: { status: row.status }, after: { status: "UNSUBSCRIBED" } },
   });
+}
+
+export type AdminResubscribeResult = "restored" | "invited" | "unchanged";
+
+/**
+ * "Resubscribe" — the restore beside `adminUnsubscribe` (ADR-124).
+ *
+ * **Which way it goes depends on who stopped the mail.** An unsubscribe the
+ * LIST made (`unsubscribedVia: "admin"`) on a row that had been confirmed is
+ * undone outright: the reader's consent and mailbox proof are both still on
+ * record, and the admin is reversing their own action — which is why the
+ * screen does not confirm it (code-style #7: restore is the undo). Anything
+ * else — the reader used their own unsubscribe link, the row predates the
+ * column, or it was never confirmed — goes back to PENDING with a fresh
+ * confirmation email. An administrator cannot put a reader who withdrew back
+ * on the list; only the reader's click can.
+ *
+ * **The unsubscribe token is kept on a restore**, so the link in every message
+ * that reader already holds keeps working (ADR-080 #2). The invitation path
+ * rotates it at confirm time, as every confirm does.
+ *
+ * `userId` is never touched: a link a hard erase nulled stays null.
+ */
+export async function adminResubscribe(
+  actor: { id: string },
+  id: string,
+): Promise<AdminResubscribeResult> {
+  const row = await db.newsletterSubscriber.findUnique({ where: { id }, select: RESTORE_SELECT });
+  if (!row || row.status !== SubscriberStatus.UNSUBSCRIBED) return "unchanged";
+
+  const result = await restoreOrInvite(row);
+  await recordAudit({
+    userId: actor.id,
+    action: "newsletter.resubscribe",
+    entityType: "NewsletterSubscriber",
+    entityId: id,
+    changes: {
+      before: { status: row.status, unsubscribedVia: row.unsubscribedVia },
+      after: { status: result === "restored" ? "ACTIVE" : "PENDING" },
+    },
+  });
+  return result;
+}
+
+const RESTORE_SELECT = {
+  id: true,
+  email: true,
+  locale: true,
+  status: true,
+  confirmedAt: true,
+  unsubscribedVia: true,
+  lastConfirmSentAt: true,
+  confirmTokenHash: true,
+  confirmExpiresAt: true,
+} as const;
+
+interface RestorableRow {
+  id: string;
+  email: string;
+  locale: string;
+  confirmedAt: Date | null;
+  unsubscribedVia: string | null;
+  lastConfirmSentAt: Date | null;
+  confirmTokenHash: string | null;
+  confirmExpiresAt: Date | null;
+}
+
+async function restoreOrInvite(row: RestorableRow): Promise<"restored" | "invited"> {
+  if (row.unsubscribedVia === "admin" && row.confirmedAt) {
+    await db.newsletterSubscriber.update({
+      where: { id: row.id },
+      data: { status: SubscriberStatus.ACTIVE, unsubscribedAt: null, unsubscribedVia: null },
+    });
+    return "restored";
+  }
+  await invite(row);
+  return "invited";
+}
+
+/**
+ * Put a row into PENDING with a fresh confirm token and send the confirmation
+ * — unless a still-usable one went out inside the cooldown, which is what
+ * stops a double-clicked admin button mail-bombing an inbox.
+ *
+ * "Still usable" matters: a confirmation that was already CLICKED (the token
+ * is null) or has expired is no reason to hold back a new one. Holding back on
+ * `lastConfirmSentAt` alone would leave a reader who confirmed and then
+ * unsubscribed a minute later in PENDING with no link that could ever confirm
+ * it.
+ */
+async function invite(
+  row: {
+    id: string;
+    email: string;
+    locale: string;
+    lastConfirmSentAt: Date | null;
+    confirmTokenHash: string | null;
+    confirmExpiresAt: Date | null;
+  },
+  extra: { source?: string } = {},
+): Promise<void> {
+  const now = new Date();
+  const outstanding = row.confirmTokenHash !== null && (row.confirmExpiresAt ?? now) > now;
+  const cooledDown =
+    !outstanding ||
+    !row.lastConfirmSentAt ||
+    now.getTime() - row.lastConfirmSentAt.getTime() >= CONFIRM_RESEND_COOLDOWN_MINUTES * 60 * 1000;
+  const token = newToken();
+
+  await db.newsletterSubscriber.update({
+    where: { id: row.id },
+    data: {
+      ...extra,
+      locale: row.locale,
+      status: SubscriberStatus.PENDING,
+      unsubscribedAt: null,
+      unsubscribedVia: null,
+      ...(cooledDown
+        ? {
+            confirmTokenHash: hashToken(token),
+            confirmExpiresAt: new Date(now.getTime() + CONFIRM_TOKEN_TTL_HOURS * 3_600_000),
+            lastConfirmSentAt: now,
+          }
+        : {}),
+    },
+  });
+  if (!cooledDown) return;
+
+  await sendTemplatedEmail({
+    key: "newsletter.confirm",
+    to: row.email,
+    locale: row.locale,
+    variables: { "confirm.url": newsletterLink("confirm", token, row.locale, origins()) },
+  });
+}
+
+export type AdminAddSubscriberResult = "invited" | "restored" | "already_active";
+
+/**
+ * "Add subscriber" (ADR-124). **The address is INVITED, not added**: the row
+ * is PENDING, source `admin`, and the reader gets the same confirmation email
+ * the public form sends. An administrator typing an address is precisely
+ * "someone subscribing a mailbox they do not own" — the case ADR-080 rejected
+ * single opt-in for. The admin's word is not the reader's consent, and a
+ * sending reputation does not care who typed the address.
+ *
+ * Not a membership oracle: the caller holds `newsletter.manage` and can read
+ * the whole list already, so the result names what happened. An UNSUBSCRIBED
+ * address goes through the Resubscribe rule, so "add" cannot route around it.
+ */
+export async function adminAddSubscriber(
+  actor: { id: string },
+  input: { email: string; locale: string },
+): Promise<AdminAddSubscriberResult> {
+  const existing = await db.newsletterSubscriber.findUnique({
+    where: { email: input.email },
+    select: RESTORE_SELECT,
+  });
+  if (existing?.status === SubscriberStatus.ACTIVE) return "already_active";
+
+  let id: string;
+  let result: AdminAddSubscriberResult;
+  if (existing?.status === SubscriberStatus.UNSUBSCRIBED) {
+    id = existing.id;
+    result = await restoreOrInvite(existing);
+  } else if (existing) {
+    // PENDING already: invite again (after the cooldown) in the admin's locale.
+    id = existing.id;
+    await invite({ ...existing, locale: input.locale }, { source: "admin" });
+    result = "invited";
+  } else {
+    try {
+      const created = await db.newsletterSubscriber.create({
+        data: {
+          email: input.email,
+          locale: input.locale,
+          source: "admin",
+          status: SubscriberStatus.PENDING,
+          unsubscribeTokenHash: hashToken(newToken()),
+        },
+        select: {
+          id: true,
+          email: true,
+          locale: true,
+          lastConfirmSentAt: true,
+          confirmTokenHash: true,
+          confirmExpiresAt: true,
+        },
+      });
+      id = created.id;
+      await invite(created);
+      result = "invited";
+    } catch (error) {
+      // Raced a public signup for the same address, whose own confirmation
+      // is already on its way.
+      if (isUniqueViolation(error)) return "invited";
+      throw error;
+    }
+  }
+
+  await recordAudit({
+    userId: actor.id,
+    action: "newsletter.add",
+    entityType: "NewsletterSubscriber",
+    entityId: id,
+    changes: { after: { email: input.email, result } },
+  });
+  return result;
 }
 
 /**
@@ -602,4 +956,65 @@ export async function purgeEmailDeliveries(now = new Date()): Promise<number> {
   const before = new Date(now.getTime() - DELIVERY_RETENTION_DAYS * 86_400_000);
   const { count } = await db.emailDelivery.deleteMany({ where: { createdAt: { lt: before } } });
   return count;
+}
+
+// ─── The subscriber record (changes-45) ──────────────────────
+
+export interface SubscriberDetail extends SubscriberRow {
+  unsubscribedVia: string | null;
+  lastConfirmSentAt: Date | null;
+  updatedAt: Date;
+  /** The linked account, if any (ADR-080 #6). Rendered as a link only for a
+   * viewer who may open user records; the screen decides that. */
+  account: { id: string; name: string } | null;
+  /** The newest mail sent TO this address, when the caller asks for it. */
+  deliveries: {
+    id: string;
+    templateKey: string;
+    subject: string;
+    status: string;
+    createdAt: Date;
+  }[];
+}
+
+/**
+ * One subscriber for `/admin/newsletter/[id]`. Null when absent (the screen
+ * 404s, security.md #7). `withDeliveries` is the caller's `email.log.view`:
+ * the delivery log has its own key, and holding `newsletter.view` does not
+ * grant a read of it.
+ */
+export async function loadSubscriberDetail(
+  id: string,
+  options: { withDeliveries: boolean },
+): Promise<SubscriberDetail | null> {
+  const row = await db.newsletterSubscriber.findUnique({
+    where: { id },
+    include: { user: { select: { id: true, name: true, deletedAt: true } } },
+  });
+  if (!row) return null;
+  const deliveries = options.withDeliveries
+    ? await db.emailDelivery.findMany({
+        where: { to: row.email },
+        orderBy: { createdAt: "desc" },
+        take: 20,
+        select: { id: true, templateKey: true, subject: true, status: true, createdAt: true },
+      })
+    : [];
+  return {
+    id: row.id,
+    email: row.email,
+    locale: row.locale,
+    status: row.status,
+    source: row.source,
+    userId: row.userId,
+    confirmedAt: row.confirmedAt,
+    unsubscribedAt: row.unsubscribedAt,
+    createdAt: row.createdAt,
+    unsubscribedVia: row.unsubscribedVia,
+    lastConfirmSentAt: row.lastConfirmSentAt,
+    updatedAt: row.updatedAt,
+    account:
+      row.user && row.user.deletedAt === null ? { id: row.user.id, name: row.user.name } : null,
+    deliveries,
+  };
 }

@@ -4,6 +4,12 @@
 // usage block has different names, there is no first-party token-count
 // endpoint, and cached input arrives nested. A normalising library would hide
 // exactly these differences, and ADR-100 needs them.
+//
+// Since ADR-120 it is also the driver for every OpenAI-COMPATIBLE vendor —
+// Gemini, Grok, DeepSeek, Mistral, OpenRouter and a custom gateway. What
+// differs between them is a handful of provider facts, and those arrive as
+// options from `AI_PROVIDER_PRESETS` rather than as branches on a kind here.
+import type { AiDiscoveredModel } from "@repo/contracts";
 import type { AiProviderKind } from "@repo/db";
 import OpenAI from "openai";
 
@@ -12,6 +18,54 @@ import type { AiChunk, AiDriver, AiRequest, AiResult, AiUsageCounts } from "../p
 interface OpenAiOptions {
   apiKey: string;
   baseUrl?: string | undefined;
+  /** Which kind the usage row records. Defaults to OPENAI. */
+  kind?: AiProviderKind;
+  maxTokensParam?: "max_tokens" | "max_completion_tokens";
+  streamUsageOption?: boolean;
+  /** A path that requires the key, for a gateway whose `/models` is public. */
+  keyCheckPath?: string | null;
+}
+
+/**
+ * The fields a compatible gateway MAY add to a `/models` entry. OpenAI's own
+ * list has none of them; OpenRouter has all of them. Read defensively, never
+ * required — a list that carries only ids is still a complete answer.
+ */
+interface ExtendedModel {
+  id: string;
+  name?: unknown;
+  display_name?: unknown;
+  context_length?: unknown;
+  top_provider?: { max_completion_tokens?: unknown } | null;
+  architecture?: { input_modalities?: unknown } | null;
+  pricing?: { prompt?: unknown; completion?: unknown } | null;
+}
+
+/** USD per token, as a string or number, → USD per million tokens. */
+function perMillion(value: unknown): number | null {
+  const n = typeof value === "string" ? Number(value) : value;
+  if (typeof n !== "number" || !Number.isFinite(n) || n < 0) return null;
+  // Rounded to the column's six places, so 0.000003 is 3 and not 2.9999999.
+  return Math.round(n * 1_000_000 * 1_000_000) / 1_000_000;
+}
+
+export function toDiscoveredModel(model: ExtendedModel): AiDiscoveredModel {
+  const label =
+    typeof model.name === "string" && model.name
+      ? model.name
+      : typeof model.display_name === "string" && model.display_name
+        ? model.display_name
+        : model.id;
+  const maxOut = model.top_provider?.max_completion_tokens;
+  const modalities = model.architecture?.input_modalities;
+  return {
+    modelId: model.id,
+    label: label.slice(0, 80),
+    maxOutputTokens: typeof maxOut === "number" && maxOut > 0 ? maxOut : null,
+    supportsVision: Array.isArray(modalities) ? modalities.includes("image") : null,
+    inputPricePerMTok: perMillion(model.pricing?.prompt),
+    outputPricePerMTok: perMillion(model.pricing?.completion),
+  };
 }
 
 function toMessages(req: AiRequest): OpenAI.Chat.ChatCompletionMessageParam[] {
@@ -56,7 +110,9 @@ function toUsage(usage: OpenAI.CompletionUsage | undefined): AiUsageCounts {
 }
 
 export function openAiDriver(options: OpenAiOptions): AiDriver {
-  const kind: AiProviderKind = "OPENAI";
+  const kind: AiProviderKind = options.kind ?? "OPENAI";
+  const maxTokensParam = options.maxTokensParam ?? "max_completion_tokens";
+  const streamUsageOption = options.streamUsageOption ?? true;
   const client = new OpenAI({
     apiKey: options.apiKey,
     ...(options.baseUrl ? { baseURL: options.baseUrl } : {}),
@@ -70,9 +126,9 @@ export function openAiDriver(options: OpenAiOptions): AiDriver {
       const response = await client.chat.completions.create(
         {
           model: req.modelId,
-          max_completion_tokens: req.maxOutputTokens,
+          [maxTokensParam]: req.maxOutputTokens,
           messages: toMessages(req),
-        },
+        } as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming,
         signal ? { signal } : {},
       );
       return {
@@ -85,13 +141,14 @@ export function openAiDriver(options: OpenAiOptions): AiDriver {
       const stream = await client.chat.completions.create(
         {
           model: req.modelId,
-          max_completion_tokens: req.maxOutputTokens,
+          [maxTokensParam]: req.maxOutputTokens,
           messages: toMessages(req),
           stream: true,
-          // Without this the final chunk carries no usage at all, and every
-          // streamed call would meter as free.
-          stream_options: { include_usage: true },
-        },
+          // Without this the final chunk carries no usage at all on OpenAI, and
+          // every streamed call would meter as free. A gateway that reports
+          // usage unasked and rejects unknown fields opts out in its preset.
+          ...(streamUsageOption ? { stream_options: { include_usage: true } } : {}),
+        } as OpenAI.Chat.ChatCompletionCreateParamsStreaming,
         signal ? { signal } : {},
       );
 
@@ -127,8 +184,23 @@ export function openAiDriver(options: OpenAiOptions): AiDriver {
 
     async test() {
       // Listing models proves the key and the host without spending anything,
-      // which is the cheapest honest test this provider offers.
+      // which is the cheapest honest test this provider offers — except on a
+      // gateway whose list is public, where the preset names a path that is not.
+      if (options.keyCheckPath) {
+        await client.get(options.keyCheckPath);
+        return;
+      }
       await client.models.list();
+    },
+
+    async listModels() {
+      const models: AiDiscoveredModel[] = [];
+      for await (const model of client.models.list()) {
+        models.push(toDiscoveredModel(model as unknown as ExtendedModel));
+      }
+      // Alphabetical: `created` is absent or zero on half the gateways, so a
+      // date order would be an order on some providers and noise on the rest.
+      return models.sort((a, b) => a.modelId.localeCompare(b.modelId));
     },
   };
 }

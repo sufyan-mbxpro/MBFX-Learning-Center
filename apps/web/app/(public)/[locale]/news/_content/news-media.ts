@@ -21,9 +21,16 @@ export type NewsImage = string | null;
 
 export const NEWS_MEDIA = {
   /** Behind the masthead's headline, under `PageHero`'s scrim. */
-  banner: "/news/banner.svg",
-  /** Behind the "browse by topic" band. */
-  topics: "/news/topics.svg",
+  banner: "/banners/news.webp",
+  /**
+   * /analysis' own masthead (changes-40). A second banner rather than `banner`
+   * reused: /news and /analysis are two destinations in the header, and the
+   * same photograph behind both makes the second look like a filtered view of
+   * the first. The archives keep `banner`, because that IS what they are.
+   */
+  analysisBanner: "/banners/analysis.webp",
+  /** Behind the "browse by topic" band — the owner's photography since changes-37. */
+  topics: "/banners/spare-digital.webp",
 } satisfies Record<string, NewsImage>;
 
 export type NewsMediaKey = keyof typeof NEWS_MEDIA;

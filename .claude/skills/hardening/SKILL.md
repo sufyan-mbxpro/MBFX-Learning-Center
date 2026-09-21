@@ -17,6 +17,45 @@ launches until this module's gate is green and signed off in DEVLOG.
 - OWASP ASVS L1 self-audit: IDOR probes on every `[id]` route,
   mass-assignment via contracts-only parsing, SSRF on media fetch.
 
+## Running the E2E suite
+
+`pnpm e2e` (root) or `pnpm --filter web e2e`. Prerequisites and the three
+things that used to make it unrunnable:
+
+- **Its own database.** `mbfx_e2e` is dropped, migrated, seeded and given its
+  fixtures on every run — never the dev database, which `provision.mts`
+  refuses by name. Creating it needs a privilege `MARIADB_USER` does not get
+  by default: `docker/mariadb-init/10-e2e-grants.sql` grants it on a fresh
+  volume, and an existing container needs that GRANT applied once by hand
+  (Prisma reports the gap as `P1010`).
+- **Provisioning runs from the web server's own command**, not `globalSetup`
+  — Playwright starts `webServer` first, so anything in `globalSetup` loses
+  the race to a server that cannot answer without a database. `globalSetup`
+  verifies instead.
+- **It coexists with `pnpm dev`.** The E2E server builds into `.next-e2e`
+  (`NEXT_DIST_DIR`), because Next 16 takes a dev lock per `distDir` and
+  refuses a second dev server sharing one.
+
+**Writing a spec: wait for hydration before acting.** Playwright's
+actionability is a DOM property, and server-rendered React satisfies it
+before any JavaScript has run. Use `e2e/hydration.ts` — `openAdminScreen`,
+`reloadAdminScreen`, `fillField` — rather than `page.goto` + `fill`. A click
+on an un-attached handler does nothing and a `fill` can CONCATENATE with the
+value React restores mid-operation; both read as bugs in the code under test.
+That mistake is what kept every admin spec `fixme` for months under the wrong
+diagnosis.
+
+**Scope a locator to the row or card it means.** `.first()` on a list of
+switches flips whichever record the query returned first, then asserts against
+the record you named — the most misleading way for a test to fail. Filter by
+something that identifies the subject (`[data-slot="card"]` + its own text, a
+`row` + its title).
+
+**`getByLabel` reads label TEXT, so `{ exact: true }` and ADR-077's required
+asterisk do not mix** — `<Field required>` draws a `*` inside the label, and
+`aria-hidden` keeps a screen reader from saying "star" but does not remove it
+from the text.
+
 ## Launch gate (all blocking)
 
 - CSP enforced after clean soak.

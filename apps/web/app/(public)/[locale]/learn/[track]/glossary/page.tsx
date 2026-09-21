@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { localizedPath } from "../../../../../_lib/seo.ts";
 import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { BookOpen } from "lucide-react";
@@ -45,7 +46,7 @@ export async function generateMetadata({
   return {
     title: (template ?? "%s").replace("%s", title),
     description: t("intro"),
-    alternates: { canonical: learnTrackGlossaryPath(track) },
+    alternates: { canonical: localizedPath(locale, learnTrackGlossaryPath(track)) },
   };
 }
 

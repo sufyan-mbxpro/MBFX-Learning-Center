@@ -63,5 +63,18 @@ export function echoDriver(): AiDriver {
       // driver answered, so "it works" never reads as "the key works".
       return Promise.resolve();
     },
+    listModels() {
+      // The seeded placeholder row, and nothing else.
+      return Promise.resolve([
+        {
+          modelId: "echo",
+          label: "Echo (placeholder output)",
+          maxOutputTokens: 4096,
+          supportsVision: true,
+          inputPricePerMTok: 0,
+          outputPricePerMTok: 0,
+        },
+      ]);
+    },
   };
 }

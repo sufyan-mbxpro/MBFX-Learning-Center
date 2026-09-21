@@ -105,8 +105,8 @@ describe("dashboard platform tiles", () => {
       "articles",
       "deliveries",
       "employees",
-      "flags",
       "newUsers",
+      "newsletter",
       "settings",
       "users",
     ]);

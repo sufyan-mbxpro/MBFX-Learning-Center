@@ -21,8 +21,8 @@ export default function GlossaryTermLoading() {
         <Container className="flex flex-col gap-5">
           <Skeleton className="h-4 w-56" />
           <div className="flex gap-1.5">
-            <Skeleton className="h-5 w-20 rounded-full" />
-            <Skeleton className="h-5 w-24 rounded-full" />
+            <Skeleton className="h-5 w-20 rounded-md" />
+            <Skeleton className="h-5 w-24 rounded-md" />
           </div>
           <Skeleton className="h-12 w-full max-w-lg" />
           <Skeleton className="h-6 w-full max-w-2xl" />

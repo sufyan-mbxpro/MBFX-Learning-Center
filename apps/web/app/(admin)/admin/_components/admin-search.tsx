@@ -4,43 +4,49 @@
 // (permission-filtered server-side, passed in) plus live server results
 // from searchAdminAction — every data section re-filtered by can() on the
 // server; the page index here is UX, not authorization.
+//
+// ADR-140 §5: drawn by `@repo/ui/components/command-palette`, the shape the
+// public palette shares. The page index is grouped by the SIDEBAR's own
+// sections with the sidebar's own glyphs, and shown in full while the box is
+// empty. No row prints its path any more — `/admin/users` under "Users" was
+// an identifier on screen (code-style #5), and for the same reason a role's
+// or a setting's KEY is not used as a description either.
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { SearchIcon } from "lucide-react";
+import {
+  BookOpen,
+  FileText,
+  IdCard,
+  SearchIcon,
+  Settings,
+  Shield,
+  UserRound,
+  type LucideIcon,
+} from "lucide-react";
 import { Button } from "@repo/ui/components/button";
 import { Kbd, KbdGroup } from "@repo/ui/components/kbd";
 import {
-  Command,
-  CommandCollection,
-  CommandDialog,
-  CommandEmpty,
-  CommandGroup,
-  CommandGroupLabel,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@repo/ui/components/command";
+  CommandPalette,
+  type CommandPaletteGroup,
+  type CommandPaletteItem,
+  type CommandPaletteLabels,
+} from "@repo/ui/components/command-palette";
 import { searchAdminAction } from "../_actions/search-actions.ts";
+import { ICONS } from "./admin-sidebar-nav.tsx";
 
-interface SearchItem {
-  value: string; // unique key
-  label: string;
-  sublabel: string | null;
+interface SearchItem extends CommandPaletteItem {
   href: string;
 }
 
-interface SearchGroup {
-  value: string; // group heading
-  items: SearchItem[];
+/** One sidebar section as the palette lists it. */
+export interface AdminSearchSection {
+  label: string;
+  entries: { href: string; label: string; icon: string; hint: string | null }[];
 }
 
-export interface AdminSearchLabels {
-  placeholder: string;
+export interface AdminSearchLabels extends CommandPaletteLabels {
   trigger: string;
-  title: string;
-  description: string;
   empty: string;
-  pages: string;
   users: string;
   roles: string;
   employees: string;
@@ -48,17 +54,19 @@ export interface AdminSearchLabels {
   glossary: string;
 }
 
+type RemoteHit = { id: string; label: string; sublabel: string | null; href: string };
+
 export function AdminSearch({
-  pages,
+  sections,
   labels,
 }: {
-  pages: { href: string; label: string }[];
+  sections: AdminSearchSection[];
   labels: AdminSearchLabels;
 }) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
-  const [remote, setRemote] = React.useState<SearchGroup[]>([]);
+  const [remote, setRemote] = React.useState<CommandPaletteGroup<SearchItem>[]>([]);
   // Client-only value with an SSR fallback — useSyncExternalStore re-renders
   // with the real platform right after hydration, no effect-setState needed.
   const isMac = React.useSyncExternalStore(
@@ -69,7 +77,9 @@ export function AdminSearch({
 
   React.useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key.toLowerCase() === "k" && (event.metaKey || event.ctrlKey)) {
+      // `key` is optional: Chrome dispatches a keydown with no `key` when a
+      // field is filled from autofill, and this listener sees every one.
+      if (event.key?.toLowerCase() === "k" && (event.metaKey || event.ctrlKey)) {
         event.preventDefault();
         setOpen((current) => !current);
       }
@@ -93,18 +103,16 @@ export function AdminSearch({
       try {
         const results = await searchAdminAction(q);
         if (seq !== requestSeq.current) return;
-        const sections: [string, SearchItem[]][] = [
-          [labels.users, results.users.map((hit) => toItem("user", hit))],
-          [labels.roles, results.roles.map((hit) => toItem("role", hit))],
-          [labels.employees, results.employees.map((hit) => toItem("employee", hit))],
-          [labels.settings, results.settings.map((hit) => toItem("setting", hit))],
-          [labels.glossary, results.glossary.map((hit) => toItem("term", hit))],
+        // Which sublabel is a DESCRIPTION: an email or a topic name reads as
+        // one; a role key or a setting key is an identifier and is dropped.
+        const sections: CommandPaletteGroup<SearchItem>[] = [
+          group("users", labels.users, UserRound, results.users, true),
+          group("roles", labels.roles, Shield, results.roles, false),
+          group("employees", labels.employees, IdCard, results.employees, true),
+          group("settings", labels.settings, Settings, results.settings, false),
+          group("glossary", labels.glossary, BookOpen, results.glossary, true),
         ];
-        setRemote(
-          sections
-            .filter(([, items]) => items.length > 0)
-            .map(([value, items]) => ({ value, items })),
-        );
+        setRemote(sections.filter((section) => section.items.length > 0));
       } catch {
         if (seq === requestSeq.current) setRemote([]);
       }
@@ -113,27 +121,31 @@ export function AdminSearch({
   }, [query, labels]);
 
   const q = query.trim().toLowerCase();
-  const matchingPages = pages.filter((page) => !q || page.label.toLowerCase().includes(q));
-  const groups: SearchGroup[] = [
-    ...(matchingPages.length > 0
-      ? [
-          {
-            value: labels.pages,
-            items: matchingPages.map((page) => ({
-              value: `page:${page.href}`,
-              label: page.label,
-              sublabel: page.href,
-              href: page.href,
-            })),
-          },
-        ]
-      : []),
-    ...(q ? remote : []),
-  ];
+  const pageGroups: CommandPaletteGroup<SearchItem>[] = sections
+    .map((section, index) => ({
+      id: `pages:${index}`,
+      label: section.label,
+      icon: FileText,
+      items: section.entries
+        .filter((entry) => !q || entry.label.toLowerCase().includes(q))
+        .map((entry) => ({
+          id: `page:${entry.href}`,
+          title: entry.label,
+          description: entry.hint,
+          icon: ICONS[entry.icon] ?? FileText,
+          href: entry.href,
+        })),
+    }))
+    .filter((section) => section.items.length > 0);
+  const groups = [...pageGroups, ...(q ? remote : [])];
 
-  const go = (item: SearchItem) => {
+  const close = () => {
     setOpen(false);
     setQuery("");
+  };
+
+  const go = (item: SearchItem) => {
+    close();
     router.push(item.href);
   };
 
@@ -155,45 +167,16 @@ export function AdminSearch({
           <Kbd>K</Kbd>
         </KbdGroup>
       </Button>
-      <CommandDialog
+      <CommandPalette
         open={open}
-        onOpenChange={(next) => {
-          setOpen(next);
-          if (!next) setQuery("");
-        }}
-        title={labels.title}
-        description={labels.description}
-      >
-        <Command
-          items={groups}
-          filteredItems={groups}
-          value={query}
-          onValueChange={setQuery}
-          itemToStringValue={(item) => (item as SearchItem).label}
-        >
-          <CommandInput placeholder={labels.placeholder} aria-label={labels.title} />
-          <CommandEmpty>{labels.empty}</CommandEmpty>
-          <CommandList>
-            {(group: SearchGroup) => (
-              <CommandGroup key={group.value} items={group.items}>
-                <CommandGroupLabel>{group.value}</CommandGroupLabel>
-                <CommandCollection>
-                  {(item: SearchItem) => (
-                    <CommandItem key={item.value} value={item} onClick={() => go(item)}>
-                      <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                      {item.sublabel && (
-                        <span className="max-w-40 shrink-0 truncate text-xs text-muted-foreground">
-                          {item.sublabel}
-                        </span>
-                      )}
-                    </CommandItem>
-                  )}
-                </CommandCollection>
-              </CommandGroup>
-            )}
-          </CommandList>
-        </Command>
-      </CommandDialog>
+        onOpenChange={(next) => (next ? setOpen(true) : close())}
+        query={query}
+        onQueryChange={setQuery}
+        groups={groups}
+        onSelect={go}
+        emptyText={labels.empty}
+        labels={labels}
+      />
     </>
   );
 }
@@ -202,9 +185,22 @@ function subscribeNever() {
   return () => {};
 }
 
-function toItem(
-  prefix: string,
-  hit: { id: string; label: string; sublabel: string | null; href: string },
-): SearchItem {
-  return { value: `${prefix}:${hit.id}`, label: hit.label, sublabel: hit.sublabel, href: hit.href };
+function group(
+  id: string,
+  label: string,
+  icon: LucideIcon,
+  hits: RemoteHit[],
+  describe: boolean,
+): CommandPaletteGroup<SearchItem> {
+  return {
+    id,
+    label,
+    icon,
+    items: hits.map((hit) => ({
+      id: `${id}:${hit.id}`,
+      title: hit.label,
+      description: describe ? hit.sublabel : null,
+      href: hit.href,
+    })),
+  };
 }

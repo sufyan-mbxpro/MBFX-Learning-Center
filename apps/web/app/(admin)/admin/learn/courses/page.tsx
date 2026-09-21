@@ -6,6 +6,7 @@ import { AdminPage } from "../../_components/admin-page.tsx";
 import { learnLabelMaps } from "../_lib/learn-labels.ts";
 import { NewCourseDialog } from "./courses-controls.tsx";
 import { CoursesTable, type CoursesTableLabels } from "./courses-table.tsx";
+import { formatDateTime } from "@repo/utils";
 
 // Courses admin list (Module 11, changes-11 PR 3.1). `requirePermission` here
 // is the screen's read gate; every WRITE re-gates in its own action
@@ -20,7 +21,6 @@ export default async function CoursesAdminPage() {
   ]);
 
   const maps = learnLabelMaps(t);
-  const dateFormat = new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" });
 
   const labels: CoursesTableLabels = {
     search: t("searchCourses"),
@@ -68,6 +68,7 @@ export default async function CoursesAdminPage() {
     <AdminPage
       title={t("learnCourses")}
       description={t("pageDesc.learnCourses")}
+      // ADR-140 §3: the primary create action sits on the title row, last.
       actions={
         can(subject, "courses.create") ? (
           <NewCourseDialog
@@ -102,9 +103,9 @@ export default async function CoursesAdminPage() {
           lessonCount: row.lessonCount,
           isExternal: row.externalUrl !== null,
           deleted: row.deletedAt !== null,
-          updatedAtLabel: dateFormat.format(row.updatedAt),
+          updatedAtLabel: formatDateTime(row.updatedAt),
           updatedAtSort: row.updatedAt.getTime(),
-          publishedAtLabel: row.publishedAt ? dateFormat.format(row.publishedAt) : null,
+          publishedAtLabel: row.publishedAt ? formatDateTime(row.publishedAt) : null,
         }))}
         trackKeys={[...LEARN_TRACK_KEYS]}
         statusKeys={Object.keys(maps.statuses)}

@@ -7,6 +7,9 @@ import {
   GitFork,
   Grid3x3,
   Percent,
+  Scale,
+  ShieldCheck,
+  TrendingUp,
   type LucideIcon,
 } from "lucide-react";
 import { TOOL_KEYS, type ToolKey } from "@repo/contracts";
@@ -21,6 +24,9 @@ import { TOOL_KEYS, type ToolKey } from "@repo/contracts";
 export const TOOL_ICONS = {
   "position-size": Calculator,
   "pip-value": Coins,
+  margin: Scale,
+  "profit-loss": TrendingUp,
+  "risk-reward": ShieldCheck,
   "gain-loss": Percent,
   "pivot-points": GitFork,
   "market-hours": Clock,

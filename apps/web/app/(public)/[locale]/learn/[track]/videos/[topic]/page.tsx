@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
+import { descriptionFrom, localizedPath, shareMetadata } from "../../../../../../_lib/seo.ts";
 import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { getVideoTopicBySlug, getVideoTopics } from "@repo/core";
 import { isLearnTrack, learnTrackPath, learnTrackVideosPath, LEARN_TRACKS } from "@repo/contracts";
+import { getServableLocales } from "@repo/i18n";
 import { getSetting, isFeatureVisible } from "@repo/settings";
 import { Badge } from "@repo/ui/components/badge";
 import { Container } from "@repo/ui/components/container";
@@ -14,6 +16,8 @@ import { VideoLinks } from "../../../_components/video-links.tsx";
 import { VideoPlayer } from "../../../_components/video-player.tsx";
 import { VideoRelated } from "../../../_components/video-related.tsx";
 import { categoryTone } from "../../../_lib/video-labels.ts";
+import { ReadingLanguageMenu } from "../../../../_components/reading-language-menu.tsx";
+import { readingLanguageOptions, readingLocaleFrom } from "../../../../_lib/reading-language.ts";
 
 // One video topic (changes-16 PR 8, ADR-068).
 //
@@ -31,26 +35,46 @@ import { categoryTone } from "../../../_lib/video-labels.ts";
 // when they are absent.
 export async function generateMetadata({
   params,
+  searchParams,
 }: PageProps<"/[locale]/learn/[track]/videos/[topic]">): Promise<Metadata> {
   const { locale, track, topic } = await params;
   setRequestLocale(locale);
   if (!isLearnTrack(track)) return {};
 
-  const [template, view] = await Promise.all([
+  const readingLocale = readingLocaleFrom(await searchParams);
+  const [template, view, tCommon] = await Promise.all([
     getSetting("seo.titleTemplate"),
-    getVideoTopicBySlug(locale, track, topic),
+    getVideoTopicBySlug(locale, track, topic, readingLocale),
+    getTranslations({ locale, namespace: "common" }),
   ]);
   if (!view) return {};
 
+  const canonical = localizedPath(locale, `${learnTrackVideosPath(track)}/${view.slug}`);
+
   return {
     title: (template ?? "%s").replace("%s", view.seoTitle || view.title),
-    description: view.seoDescription ?? view.summary ?? undefined,
-    alternates: { canonical: `${learnTrackVideosPath(track)}/${view.slug}` },
+    ...descriptionFrom(view.seoDescription, view.summary),
+    alternates: { canonical },
+    // changes-46 SEO check: no share card of its own, so Open Graph fell
+    // through to the root layout's (no `og:url`, no cover). The topic's cover
+    // is its card image, as a course's is.
+    ...(await shareMetadata({
+      locale,
+      siteName: tCommon("siteName"),
+      url: canonical,
+      title: view.seoTitle || view.title,
+      description: view.seoDescription || view.summary,
+      image: view.coverUrl,
+    })),
+    // ADR-127 #4: a `?lang=` reading view is never indexed. A conditional
+    // SPREAD, never `robots: undefined` (ADR-090).
+    ...(view.readingLocale ? { robots: { index: false, follow: true } } : {}),
   };
 }
 
 export default async function VideoTopicPage({
   params,
+  searchParams,
 }: PageProps<"/[locale]/learn/[track]/videos/[topic]">) {
   const { locale, track, topic } = await params;
   setRequestLocale(locale);
@@ -62,13 +86,25 @@ export default async function VideoTopicPage({
   ]);
   if (!coursesOn || !videosOn) notFound();
 
-  const [t, view] = await Promise.all([
+  const readingLocale = readingLocaleFrom(await searchParams);
+  const [t, tPublic, view, servableLocales] = await Promise.all([
     getTranslations({ locale, namespace: "learn" }),
-    getVideoTopicBySlug(locale, track, topic),
+    getTranslations({ locale, namespace: "public" }),
+    getVideoTopicBySlug(locale, track, topic, readingLocale),
+    getServableLocales(),
   ]);
   if (!view) notFound();
 
   const videosPath = learnTrackVideosPath(track);
+  // ADR-127: the topic's own words (title, summary, guide) only.
+  const readingOptions = readingLanguageOptions({
+    languages: view.readingLanguages,
+    contentLocale: view.contentLocale,
+    interfaceLocale: locale,
+    servable: servableLocales,
+    currentPath: `${videosPath}/${view.slug}`,
+    pathFor: (language) => `${videosPath}/${language.slug}`,
+  });
 
   // Related = the same category in the same school, this topic excluded.
   // Loaded through the SAME cached reader the shelf uses rather than a
@@ -113,18 +149,39 @@ export default async function VideoTopicPage({
             />
 
             <div className="flex flex-col gap-3">
-              {view.category && (
+              {(view.category || readingOptions.length > 1) && (
                 <div className="flex flex-wrap items-center gap-2">
                   {/* A link, not a chip: the category has a page, and this is
                       the reader's way back up to its siblings (D26). */}
-                  <a href={`${videosPath}/categories/${view.category.slug}`}>
-                    <Badge variant={categoryTone(view.category.slug)}>{view.category.name}</Badge>
-                  </a>
+                  {view.category && (
+                    <a href={`${videosPath}/categories/${view.category.slug}`}>
+                      <Badge variant={categoryTone(view.category.slug)}>{view.category.name}</Badge>
+                    </a>
+                  )}
+                  <div className="ms-auto">
+                    <ReadingLanguageMenu
+                      options={readingOptions}
+                      label={tPublic("readingLanguage")}
+                    />
+                  </div>
                 </div>
               )}
-              <h1 className="text-3xl font-semibold text-balance sm:text-4xl">{view.title}</h1>
+              {/* `lang`/`dir` follow the TRANSLATION on screen (ADR-127 #1). */}
+              <h1
+                lang={view.contentLocale}
+                dir={view.contentDirection}
+                className="text-3xl font-semibold text-balance sm:text-4xl"
+              >
+                {view.title}
+              </h1>
               {view.summary && (
-                <p className="text-lg text-muted-foreground text-pretty">{view.summary}</p>
+                <p
+                  lang={view.contentLocale}
+                  dir={view.contentDirection}
+                  className="text-lg text-muted-foreground text-pretty"
+                >
+                  {view.summary}
+                </p>
               )}
             </div>
           </div>
@@ -154,7 +211,9 @@ export default async function VideoTopicPage({
               </h2>
               {/* Already sanitized on save (security.md #8) — this renders it,
                   it does not clean it. */}
-              <RichText html={view.content} />
+              <div lang={view.contentLocale} dir={view.contentDirection}>
+                <RichText html={view.content} />
+              </div>
             </section>
           )}
 

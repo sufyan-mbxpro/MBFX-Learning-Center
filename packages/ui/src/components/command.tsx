@@ -73,12 +73,18 @@ function CommandDialog({
 
 function CommandInput({ className, ...props }: Autocomplete.Input.Props) {
   return (
-    <div data-slot="command-input-wrapper" className="flex items-center border-b px-3">
-      <SearchIcon aria-hidden className="me-2 size-4 shrink-0 opacity-50" />
+    // The ROW is the field (ADR-140 §5): the global `:focus-visible` ring drew
+    // an inset box inside it beside the glyph, so the input drops the ring and
+    // the row's bottom rule turns `--ring` while focus is inside.
+    <div
+      data-slot="command-input-wrapper"
+      className="flex items-center border-b px-3 focus-within:border-ring"
+    >
+      <SearchIcon aria-hidden className="me-2 size-4 shrink-0 text-muted-foreground" />
       <Autocomplete.Input
         data-slot="command-input"
         className={cn(
-          "flex h-11 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50",
+          "flex h-11 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50",
           className,
         )}
         {...props}

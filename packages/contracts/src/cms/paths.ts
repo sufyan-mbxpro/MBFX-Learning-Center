@@ -15,10 +15,20 @@ export const RESERVED_PATHS = [
   "analysis",
   "glossary",
   "economic-calendar",
-  // Coded route sections whose reservation lagged the route files:
-  // `about` landed with ADR-047 and `economic-calendar` with ADR-050.
-  // Both have children, and reserving the parent segment covers them.
-  "about",
+  // `about` and `markets` are NOT here any more (changes-33, ADR-109). The
+  // routes are gone, and this list is checked against the real route files
+  // in both directions — a reservation with nothing behind it is stale.
+  // Un-reserving them is also what makes the move WORK: `resolvePublicPage`
+  // returns not-found for a reserved segment BEFORE it looks at the redirect
+  // table, so `/about/support` could not have redirected to `/support` while
+  // `about` was still reserved.
+  //
+  // Support is the one page that survived that section (ADR-109), and
+  // `sitemap` and `legal` arrive with ADR-110. All three are reserved in the
+  // SAME PR as their routes, per the ADR-047 precedent.
+  "support",
+  "sitemap",
+  "legal",
   // The learn area (ADR-055, changes-11 PR 4.1). Reserved in the SAME PR that
   // lands the route, per the ADR-047 precedent: the segment has children
   // (`/learn/[course]/[lesson]`) and reserving the parent covers them.
@@ -32,22 +42,24 @@ export const RESERVED_PATHS = [
   // would shadow the screen a reset link points at.
   "forgot-password",
   "reset-password",
-  // Announced destinations whose section is still being built (ADR-081 #1).
-  // They are CODED routes rendering `ComingSoon`, not CMS pages: plan v2.2 had
-  // `/tools` down as a STATIC page, which ADR-042 cancelled, so a CMS page at
-  // either path would now shadow a real route.
+  // The tools area (ADR-081 #1, built out by ADR-086). A CODED route section,
+  // not a CMS page: plan v2.2 had `/tools` down as a STATIC page, which
+  // ADR-042 cancelled, so a CMS page here would now shadow a real route. It
+  // arrived beside `markets`, which ADR-109 has since withdrawn.
   //
   // Keep double quotes out of the comments in this block:
   // `check-reserved-paths.mjs` reads the array as TEXT and takes every quoted
   // run between the brackets for an entry, so a quoted phrase here becomes a
   // reservation with no route behind it.
   "tools",
-  "markets",
   // Newsletter confirm and unsubscribe (ADR-080, changes-21 F7). Reserved in
   // the SAME PR that lands the routes, per the ADR-047 precedent: the segment
   // has children, and a CMS page here would shadow the page an unsubscribe
   // link in an already-sent email points at.
   "newsletter",
+  // The learner profile page (ADR-123). Reserved in the SAME PR that lands
+  // the route, per the ADR-047 precedent.
+  "account",
   "admin",
   "api",
   "uploads",

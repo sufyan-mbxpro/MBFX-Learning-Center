@@ -16,6 +16,14 @@ config({ path: fileURLToPath(new URL("../../.env", import.meta.url)) });
 // Turbopack is the default bundler — no optimizePackageImports or
 // webpack-specific config needed (see docs/memory/decisions).
 const nextConfig: NextConfig = {
+  // Normally `.next`. The E2E harness sets it to something else so its own
+  // server can run while `pnpm dev` is up: Next 16 takes a dev lock at
+  // `<distDir>/lock` and REFUSES to start a second dev server sharing it
+  // ("Another next dev server is already running"), which would otherwise
+  // make `pnpm e2e` and `pnpm dev` mutually exclusive. It also keeps the two
+  // build caches apart, which they should be — the E2E server runs against a
+  // different database and a different origin.
+  ...(process.env.NEXT_DIST_DIR ? { distDir: process.env.NEXT_DIST_DIR } : {}),
   transpilePackages: [
     "@repo/ui",
     "@repo/theme",
@@ -32,6 +40,11 @@ const nextConfig: NextConfig = {
     // optimizer; admin-entered cover URLs render `unoptimized` instead of
     // allowlisting arbitrary hosts here.
     remotePatterns: [{ protocol: "https", hostname: "i.ytimg.com" }],
+    // ADR-130: one display quality, medium compression. Next's default of 75
+    // re-compressed uploads already stored at 85 and softened them visibly.
+    // With one entry every <Image> resolves to it, so no call site passes
+    // `quality`.
+    qualities: [85],
   },
   // ADR-004: required for "use cache"/cacheTag/cacheLife (packages/theme,
   // packages/rbac) to do anything at all — without this flag they're a
@@ -42,6 +55,15 @@ const nextConfig: NextConfig = {
     // cap is 1 MB; MAX_UPLOAD_BYTES (@repo/core media) is 5 MB, plus the
     // multipart overhead the installed docs say to leave room for.
     serverActions: { bodySizeLimit: "6mb" },
+    // changes-46 (ADR-144 §4): `/admin/:path*` runs through proxy.ts (the
+    // STAFF gate), and Next buffers a proxied request body only up to this
+    // limit — 10 MB by default — then hands the route handler a TRUNCATED
+    // body without failing. Every video over 10 MB therefore reached
+    // `/admin/api/uploads/media` as "Failed to parse body as FormData", while
+    // Settings → Media advertised a 100 MB video cap. Sized to that default
+    // cap plus multipart overhead; an admin who raises `media.maxBytes.video`
+    // past ~100 MB must raise this with it.
+    proxyClientMaxBodySize: "110mb",
     // ADR-006 (multiple root layouts) + Module 06's root layout living at a
     // dynamic [locale] segment are exactly the two cases Next's own
     // internationalization/not-found docs name as unable to compose a

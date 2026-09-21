@@ -175,3 +175,134 @@ export function seoScore(checks: SeoCheck[]): number {
   if (checks.length === 0) return 0;
   return Math.round((checks.filter((c) => c.passed).length / checks.length) * 100);
 }
+
+// ─── SEO report (changes-46 #3) ──────────────────────────────
+//
+// The analysis panel's shape on every module: two stat cards, then one
+// recommendation per CONCERN with a tone, then tips. `seoChecks` answers nine
+// yes/no questions; a reader of the panel wants four or five verdicts with a
+// reason each ("could be longer", "too long"), which pass/fail cannot carry.
+// Ids and reasons only — the sentences live in the catalogs, as above.
+
+export type SeoTone = "success" | "warning" | "error";
+
+export type SeoRecommendationId =
+  "title" | "description" | "keyword" | "keywordPlacement" | "structure" | "images" | "links";
+
+/** Where the focus keyword was looked for and not found. */
+export type SeoKeywordPlace = "title" | "description" | "opening";
+
+export interface SeoRecommendation {
+  id: SeoRecommendationId;
+  tone: SeoTone;
+  /** Which sentence to show: `missing`, `short`, `long`, `low`, `optimal`, … */
+  reason: string;
+  /** Interpolation values for that sentence. */
+  values: Record<string, number>;
+  /** `keywordPlacement` only: the places the keyword is absent from. */
+  missing?: SeoKeywordPlace[];
+}
+
+/** Word-count verdict under "Content length". */
+export type SeoLengthVerdict = "empty" | "short" | "fair" | "good";
+
+export interface SeoReport {
+  words: number;
+  readingMinutes: number;
+  lengthVerdict: SeoLengthVerdict;
+  recommendations: SeoRecommendation[];
+}
+
+/** Below `contentWords.min` is short; below this is fair; at or above it, good. */
+export const SEO_GOOD_LENGTH = 600;
+
+function lengthRecommendation(
+  id: "title" | "description",
+  value: string,
+  range: { min: number; max: number },
+): SeoRecommendation {
+  const length = value.trim().length;
+  const values = { length, min: range.min, max: range.max };
+  if (length === 0) return { id, tone: "error", reason: "missing", values };
+  if (length < range.min) return { id, tone: "warning", reason: "short", values };
+  if (length > range.max) return { id, tone: "warning", reason: "long", values };
+  return { id, tone: "success", reason: "optimal", values };
+}
+
+function countMatches(html: string, pattern: RegExp): number {
+  return (html.match(pattern) ?? []).length;
+}
+
+/**
+ * The whole panel, computed once. Keyword checks use the FIRST keyword, for
+ * the reason `seoChecks` gives.
+ */
+export function seoReport({ title, description, body, keywords }: SeoCheckInput): SeoReport {
+  const text = htmlToText(body);
+  const words = countWords(text);
+  const focus = keywords[0] ?? "";
+
+  const lengthVerdict: SeoLengthVerdict =
+    words === 0
+      ? "empty"
+      : words < SEO_THRESHOLDS.contentWords.min
+        ? "short"
+        : words < SEO_GOOD_LENGTH
+          ? "fair"
+          : "good";
+
+  const recommendations: SeoRecommendation[] = [
+    lengthRecommendation("title", title, SEO_THRESHOLDS.titleLength),
+    lengthRecommendation("description", description, SEO_THRESHOLDS.descriptionLength),
+  ];
+
+  if (focus === "") {
+    recommendations.push({ id: "keyword", tone: "warning", reason: "missing", values: {} });
+  } else {
+    const count = countOccurrences(text, focus);
+    // One decimal, as the reader sees it — "0.1%", never "0.0934%".
+    const density = words === 0 ? 0 : Math.round((count / words) * 1000) / 10;
+    const values = { density, count, min: OPTIMAL_DENSITY.min, max: OPTIMAL_DENSITY.max };
+    recommendations.push(
+      density < OPTIMAL_DENSITY.min
+        ? { id: "keyword", tone: "warning", reason: "low", values }
+        : density > OPTIMAL_DENSITY.max
+          ? { id: "keyword", tone: "warning", reason: "high", values }
+          : { id: "keyword", tone: "success", reason: "optimal", values },
+    );
+
+    const opening = text.split(/\s+/).slice(0, SEO_THRESHOLDS.firstParagraphWords).join(" ");
+    const missing: SeoKeywordPlace[] = [];
+    if (countOccurrences(title, focus) === 0) missing.push("title");
+    if (countOccurrences(description, focus) === 0) missing.push("description");
+    if (countOccurrences(opening, focus) === 0) missing.push("opening");
+    recommendations.push(
+      missing.length === 0
+        ? { id: "keywordPlacement", tone: "success", reason: "everywhere", values: {} }
+        : { id: "keywordPlacement", tone: "warning", reason: "missing", values: {}, missing },
+    );
+  }
+
+  const headings = countMatches(body, /<h[2-6]\b/gi);
+  recommendations.push(
+    headings === 0
+      ? { id: "structure", tone: "warning", reason: "none", values: { count: 0 } }
+      : { id: "structure", tone: "success", reason: "good", values: { count: headings } },
+  );
+
+  const images = countMatches(body, /<img\b/gi);
+  recommendations.push(
+    images === 0
+      ? { id: "images", tone: "warning", reason: "none", values: { count: 0 } }
+      : { id: "images", tone: "success", reason: "present", values: { count: images } },
+  );
+
+  const links = countMatches(body, /<a\b[^>]*\shref\s*=\s*["']\/(?!\/)/gi);
+  recommendations.push(
+    links === 0
+      ? { id: "links", tone: "warning", reason: "none", values: { count: 0 } }
+      : { id: "links", tone: "success", reason: "present", values: { count: links } },
+  );
+
+  return { words, readingMinutes: minutesForWords(words), lengthVerdict, recommendations };
+}

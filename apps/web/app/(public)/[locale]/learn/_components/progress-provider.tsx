@@ -114,12 +114,22 @@ export function ProgressProvider({
   // 19 Strict Mode double-invokes effects in development, which would fire two
   // touches; the ref makes that a no-op rather than two rows racing for the
   // same unique key.
+  //
+  // **There is deliberately no AbortController here (changes-39).** It used to
+  // abort in the cleanup, and under Strict Mode that cleanup runs BETWEEN the
+  // two invocations: the first run's request was aborted and the second run
+  // returned early on the ref, so nothing was ever fetched. `status` sat at
+  // `loading` for the life of the page — the "Mark this lesson complete"
+  // button stayed disabled (muted) — and the touch that records the visit
+  // never reached the server, so a signed-in reader's history stayed empty.
+  // A touch is a write that should land even if the reader navigates away,
+  // and a state update after unmount is a no-op in React 19, so there is
+  // nothing for an abort to protect.
   const started = useRef(false);
   useEffect(() => {
     if (started.current) return;
     started.current = true;
 
-    const controller = new AbortController();
     void (async () => {
       try {
         // A touch is a write that ALSO returns the full view, so a lesson page
@@ -129,20 +139,13 @@ export function ProgressProvider({
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ lessonId: touchLessonId, action: "touch" }),
-              signal: controller.signal,
             })
-          : await fetch(`${ENDPOINT}?course=${encodeURIComponent(courseId)}`, {
-              signal: controller.signal,
-            });
+          : await fetch(`${ENDPOINT}?course=${encodeURIComponent(courseId)}`);
         await apply(response);
       } catch {
-        // An aborted fetch is a navigation, not a failure — leaving the status
-        // at `loading` on an unmounting tree avoids a flash of the error state.
-        if (!controller.signal.aborted) setStatus("error");
+        setStatus("error");
       }
     })();
-
-    return () => controller.abort();
   }, [courseId, touchLessonId, apply]);
 
   const write = useCallback(

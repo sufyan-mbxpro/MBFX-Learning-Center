@@ -12,12 +12,21 @@
 // COUNTED, never zero-filled.** A zero is a claim that the market was neutral;
 // an exclusion is the truth, which is that we do not know.
 import {
+  VOLATILITY_BASELINE,
   correlationMatrix,
+  volatilityProfile,
   riskSentimentScore,
   type CorrelationMatrix,
   type RiskBand,
   type RiskComponentContribution,
+  type VolatilityProfile,
 } from "@repo/utils";
+import {
+  MARKET_BOARD_GROUPS,
+  MARKET_BOARD_GROUP_KEYS,
+  MARKET_BOARD_SYMBOLS,
+  type MarketBoardGroupKey,
+} from "@repo/contracts";
 import { db } from "@repo/db";
 import { cacheLife, cacheTag } from "next/cache";
 
@@ -332,4 +341,89 @@ export async function getCorrelationMatrices(
     };
   }
   return out;
+}
+
+// ─── Volatility (ADR-136 §3) ─────────────────────────────────
+
+export interface VolatilityRowView {
+  symbol: string;
+  displayName: string;
+  /** Decimals the instrument prints its prices in, for the ranges. */
+  decimals: number;
+  profile: VolatilityProfile;
+}
+
+export interface VolatilityGroupView {
+  key: MarketBoardGroupKey;
+  /** The instruments that reported, in the registry's order. */
+  rows: VolatilityRowView[];
+  /** Registry symbols with no active instrument or no bars, named rather than dropped. */
+  missing: string[];
+}
+
+export interface VolatilityBoardView {
+  groups: VolatilityGroupView[];
+  /** The newest bar behind any of it. */
+  asOf: string | null;
+}
+
+/**
+ * The volatility board: every registry group's instruments, profiled from
+ * their stored bars.
+ *
+ * **Ranges, not closes.** Unlike correlation this reads `high` and `low`,
+ * which is why ADR-087 #2 stores bars. An instrument whose symbol is in the
+ * registry but has no active row, or no bars, is listed in `missing` and never
+ * zero-filled (ADR-088 #5). A zero range is a claim that the market did not
+ * move.
+ */
+export async function getVolatilityBoard(): Promise<VolatilityBoardView> {
+  "use cache";
+  cacheTag(MARKET_CACHE_TAG);
+  cacheLife({ revalidate: 3600 });
+
+  const rows = await db.marketInstrument.findMany({
+    where: { symbol: { in: [...MARKET_BOARD_SYMBOLS] }, isActive: true },
+    select: {
+      symbol: true,
+      displayName: true,
+      decimals: true,
+      bars: {
+        orderBy: { date: "desc" },
+        take: VOLATILITY_BASELINE,
+        select: { date: true, high: true, low: true, close: true },
+      },
+    },
+  });
+  const bySymbol = new Map(rows.map((row) => [row.symbol, row]));
+
+  let newest: Date | null = null;
+  const groups = MARKET_BOARD_GROUP_KEYS.map((key): VolatilityGroupView => {
+    const reported: VolatilityRowView[] = [];
+    const missing: string[] = [];
+    for (const { symbol } of MARKET_BOARD_GROUPS[key]) {
+      const row = bySymbol.get(symbol);
+      if (!row || row.bars.length === 0) {
+        missing.push(symbol);
+        continue;
+      }
+      for (const bar of row.bars) if (!newest || bar.date > newest) newest = bar.date;
+      reported.push({
+        symbol: row.symbol,
+        displayName: row.displayName,
+        decimals: row.decimals,
+        // Oldest first, which is what the maths takes.
+        profile: volatilityProfile(
+          [...row.bars].reverse().map((bar) => ({
+            high: Number(bar.high),
+            low: Number(bar.low),
+            close: Number(bar.close),
+          })),
+        ),
+      });
+    }
+    return { key, rows: reported, missing };
+  });
+
+  return { groups, asOf: newest ? (newest as Date).toISOString() : null };
 }

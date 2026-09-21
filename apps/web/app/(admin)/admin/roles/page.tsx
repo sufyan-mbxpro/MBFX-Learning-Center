@@ -43,7 +43,7 @@ export default async function RolesPage() {
     <AdminPage
       title={t("roles")}
       description={t("rolesSubtitle")}
-
+      // ADR-140 §3: the primary create action sits on the title row, last.
       actions={
         canManage ? (
           <CreateRoleDialog

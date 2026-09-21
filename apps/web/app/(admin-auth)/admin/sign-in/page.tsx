@@ -1,8 +1,6 @@
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
-import { getBrandAssets } from "@repo/core";
-import { getSetting } from "@repo/settings";
-import { BrandLogo } from "@repo/ui/components/brand-logo";
+import { AdminAuthScreen } from "../_components/admin-auth-screen.tsx";
 import { AdminSignInForm } from "./admin-sign-in-form.tsx";
 
 // Staff credential screen (ADR-052). Posts to Better Auth's
@@ -14,51 +12,47 @@ import { AdminSignInForm } from "./admin-sign-in-form.tsx";
 // (ADR-043 #2) — the surface is staff-facing, so no non-English value is
 // owed and `check:catalog-completeness` stays silent about it.
 export default async function AdminSignInPage() {
-  const [t, siteName, brandAssets] = await Promise.all([
-    getTranslations("admin"),
-    getSetting("site.name"),
-    getBrandAssets(),
-  ]);
+  const t = await getTranslations("admin");
 
   return (
-    <main className="flex min-h-dvh flex-1 items-center justify-center bg-background p-6">
-      <div className="flex w-full max-w-sm flex-col gap-6">
-        <div className="flex justify-center">
-          <BrandLogo
-            light={brandAssets.logo_light?.url ?? null}
-            dark={brandAssets.logo_dark?.url ?? null}
-            alt={siteName ?? ""}
-            className="h-14"
-            fallback={<span className="text-lg font-semibold tracking-tight">{siteName}</span>}
-          />
-        </div>
-        <div className="flex flex-col gap-6 rounded-xl border bg-card p-8 shadow-card">
-          <div className="flex flex-col gap-1.5">
-            <h1 className="text-xl font-semibold">{t("signIn.title")}</h1>
-            <p className="text-sm text-muted-foreground">{t("signIn.description")}</p>
-          </div>
-          <AdminSignInForm
-            labels={{
-              email: t("signIn.email"),
-              password: t("signIn.password"),
-              showPassword: t("showPassword"),
-              hidePassword: t("hidePassword"),
-              submit: t("signIn.submit"),
-              failed: t("signIn.failed"),
-              notStaff: t("signIn.notStaff"),
-              resetDone: t("passwordReset.resetDone"),
-            }}
-          />
-          <p className="-mt-2 text-center text-sm">
-            <Link
-              href="/admin/forgot-password"
-              className="font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-            >
-              {t("passwordReset.forgotLink")}
-            </Link>
-          </p>
-        </div>
-      </div>
-    </main>
+    <AdminAuthScreen
+      title={t("signIn.title")}
+      description={t("signIn.description")}
+      footer={
+        // The way back for a learner who landed here (changes-45). It points
+        // at the PUBLIC screen, which is allowed — what ADR-052 forbids is the
+        // opposite direction. The target is under another root layout, so
+        // Next makes this a full document load on its own.
+        <p className="text-center text-sm">
+          <Link
+            href="/sign-in"
+            className="font-medium text-foreground underline underline-offset-4 hover:text-primary-interactive"
+          >
+            {t("signIn.userSignIn")}
+          </Link>
+        </p>
+      }
+    >
+      <AdminSignInForm
+        labels={{
+          email: t("signIn.email"),
+          password: t("signIn.password"),
+          showPassword: t("showPassword"),
+          hidePassword: t("hidePassword"),
+          submit: t("signIn.submit"),
+          failed: t("signIn.failed"),
+          notStaff: t("signIn.notStaff"),
+          resetDone: t("passwordReset.resetDone"),
+        }}
+      />
+      <p className="-mt-2 text-end text-sm">
+        <Link
+          href="/admin/forgot-password"
+          className="font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+        >
+          {t("passwordReset.forgotLink")}
+        </Link>
+      </p>
+    </AdminAuthScreen>
   );
 }

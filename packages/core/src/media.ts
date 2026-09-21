@@ -9,11 +9,12 @@
 // `resolveStorageDriver()`; nothing above the driver changes.
 import { randomBytes } from "node:crypto";
 import { mkdir, open, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { revalidateTag } from "next/cache";
 import { db, type MediaKind, type ReferenceSourceType } from "@repo/db";
 import {
   clampPageSize,
+  DEFAULT_MEDIA_CATEGORY,
   folderForCategory,
   categoryOfFolder,
   MEDIA_CATEGORIES,
@@ -22,6 +23,8 @@ import {
   type UploadPurpose,
 } from "@repo/contracts";
 import { getSetting } from "@repo/settings";
+import { optimizeImage, purposeIsOptimized, withExtension } from "./image-optimize.ts";
+import { compressVideo } from "./video-compress.ts";
 import { recordAudit } from "./index.ts";
 import { revalidatePageTags } from "./cms/revalidate.ts";
 
@@ -129,12 +132,33 @@ export function sniffImageType(bytes: Uint8Array): SniffedImage | UnsafeSvg | nu
 /** Every extension a magic-byte sniffer in this file can produce (ADR-034 §1). */
 export type MediaExtension = SniffedImage["extension"] | "mp4" | "webm" | "m4a" | "mp3" | "pdf";
 
-/** Random, extension-bearing object key — never derived from the client filename. */
-export function generateObjectKey(extension: MediaExtension): string {
-  return `${randomBytes(12).toString("hex")}.${extension}`;
+/**
+ * Random, extension-bearing object key — never derived from the client
+ * filename. Since ADR-144 §3 the key carries its library category as a
+ * storage PREFIX (`news/<random>.webp`), so the local driver files news
+ * uploads under `storage/uploads/news/` and course uploads under
+ * `storage/uploads/learn/`, and an S3 bucket gets the same prefixes. The
+ * category comes from the `MEDIA_CATEGORIES` registry only — never from a
+ * free-text folder sub-path, which an admin can rename after the fact.
+ *
+ * Without a category the key is flat, the shape every upload before ADR-144
+ * has, and which the pattern below still accepts so no existing URL moves.
+ */
+export function generateObjectKey(extension: MediaExtension, category?: MediaCategory): string {
+  const name = `${randomBytes(12).toString("hex")}.${extension}`;
+  return category ? `${category}/${name}` : name;
 }
 
-export const OBJECT_KEY_PATTERN = /^[a-f0-9]{24}\.(png|jpg|gif|webp|ico|svg|mp4|webm|m4a|mp3|pdf)$/;
+/**
+ * The ONLY keys storage will read, write or delete: an optional registered
+ * category, one slash, 24 hex characters and a known extension. Anchored at
+ * both ends and built from a closed alternation, so `..`, a backslash, a
+ * leading slash, a second segment and an unknown prefix all fail before any
+ * path is joined (ADR-144 §3, security.md #9).
+ */
+export const OBJECT_KEY_PATTERN = new RegExp(
+  `^(?:(?:${MEDIA_CATEGORIES.join("|")})/)?[a-f0-9]{24}\\.(?:png|jpg|gif|webp|ico|svg|mp4|webm|m4a|mp3|pdf)$`,
+);
 
 export interface StorageDriver {
   /** Persist bytes under `key`; returns the URL pages should embed. */
@@ -161,13 +185,19 @@ export interface StorageDriver {
 /**
  * Local-disk driver. Files live under UPLOADS_DIR (default
  * `<cwd>/storage/uploads`, git-ignored) and are served by the
- * `/uploads/[file]` route handler — never straight from the filesystem.
+ * `/uploads/[...key]` route handler — never straight from the filesystem.
  */
 export function createLocalDiskStorage(rootDir = uploadsRootDir()): StorageDriver {
   return {
     async put(key, bytes) {
-      await mkdir(rootDir, { recursive: true });
-      await writeFile(join(rootDir, key), bytes, { flag: "wx" });
+      // The writer refuses what the readers refuse: a key is joined to the
+      // root below, so it must never be able to name a path outside it.
+      if (!OBJECT_KEY_PATTERN.test(key)) throw new Error(`Refusing object key: ${key}`);
+      const target = join(rootDir, key);
+      // A prefixed key (ADR-144 §3) lands in its category's subfolder, which
+      // may not exist yet on this machine.
+      await mkdir(dirname(target), { recursive: true });
+      await writeFile(target, bytes, { flag: "wx" });
       return `/uploads/${key}`;
     },
     async get(key) {
@@ -209,13 +239,29 @@ export function createLocalDiskStorage(rootDir = uploadsRootDir()): StorageDrive
 }
 
 export function uploadsRootDir(): string {
+  // BLANK counts as unset, and `??` did not.
+  //
+  // `.env.example` ships `UPLOADS_DIR=""` — that empty string IS the
+  // documented default ("default <cwd>/storage/uploads"). But `??` only falls
+  // back on null/undefined, so the empty string went straight through, and
+  // `resolve("")` is the process's cwd. Every upload on a default install
+  // therefore landed in `apps/web/` instead of `storage/uploads`: untracked,
+  // outside the `storage/` .gitignore rule, one `git add -A` away from being
+  // committed, and inside the very directory the comment below is about
+  // keeping out of the server bundle. Found by two real uploads sitting in
+  // the app root.
+  //
+  // It kept WORKING, which is why it survived: the reader resolves the same
+  // wrong root as the writer, so files served fine from the wrong place.
+  const configured = process.env.UPLOADS_DIR?.trim();
   // turbopackIgnore: this never feeds a require()/import() — it only builds
   // a string for Node's fs calls below — but Turbopack's static analysis
   // can't tell that from a cwd()-relative resolve() and defensively traces
   // the whole project (public folder included) into the server bundle.
   return resolve(
-    /* turbopackIgnore: true */ process.env.UPLOADS_DIR ??
-      join(process.cwd(), "storage", "uploads"),
+    /* turbopackIgnore: true */ configured && configured.length > 0
+      ? configured
+      : join(process.cwd(), "storage", "uploads"),
   );
 }
 
@@ -243,7 +289,12 @@ export interface StoredImage {
 export interface StoreImageInput {
   bytes: Uint8Array;
   fileName: string;
-  purpose: UploadPurpose;
+  /**
+   * `"avatar"` is not an `UploadPurpose`: that enum is what an ADMIN upload
+   * may name, and it maps onto a permission gate. A learner's own picture is
+   * stored by `setOwnAvatar` alone, gated by the session (ADR-123).
+   */
+  purpose: UploadPurpose | "avatar";
   /**
    * Where in the library this lands (ADR-066 §4). Required, and never
    * inferred from `purpose` — that column picks the permission gate, not the
@@ -388,34 +439,122 @@ export interface StoreMediaInput extends StoreImageInput {
   allowedKinds?: MediaKind[];
 }
 
+// ─── Upload-time optimisation (ADR-130) ──────────────────────
+
+interface PreparedBytes {
+  bytes: Uint8Array;
+  mimeType: string;
+  extension: MediaExtension;
+  width: number | null;
+  height: number | null;
+  /**
+   * Present only when the bytes were re-encoded; spread into the audit row.
+   * An image records the WebP `quality` it landed on, a video the x264 `crf`.
+   */
+  optimizedFrom?: {
+    originalMimeType: string;
+    originalSize: number;
+    quality?: number;
+    crf?: number;
+  };
+}
+
+/**
+ * What actually goes to storage. The size cap and the sniff have already run
+ * on the bytes the uploader SENT, so a limit means the same thing whether or
+ * not this step shrinks the file afterwards.
+ */
+async function prepareStoredBytes(
+  sniffed: SniffedMedia,
+  bytes: Uint8Array,
+  purpose: string,
+): Promise<PreparedBytes> {
+  if (sniffed.kind === "IMAGE" && purposeIsOptimized(purpose)) {
+    const optimized = await optimizeImage(bytes, sniffed.extension);
+    if (optimized) {
+      return {
+        bytes: optimized.bytes,
+        mimeType: optimized.mimeType,
+        extension: optimized.extension,
+        width: optimized.width,
+        height: optimized.height,
+        optimizedFrom: {
+          originalMimeType: sniffed.mimeType,
+          originalSize: bytes.length,
+          quality: optimized.quality,
+        },
+      };
+    }
+  }
+  // ADR-144 §4 — only when `FFMPEG_PATH` is set, and only kept when smaller.
+  // Every failure inside comes back as null, so the original is stored.
+  if (sniffed.kind === "VIDEO") {
+    const compressed = await compressVideo(bytes, sniffed.extension, {
+      isMp4: (out) => sniffIsoBmff(out)?.kind === "VIDEO",
+    });
+    if (compressed) {
+      return {
+        bytes: compressed.bytes,
+        mimeType: compressed.mimeType,
+        extension: compressed.extension,
+        width: null,
+        height: null,
+        optimizedFrom: {
+          originalMimeType: sniffed.mimeType,
+          originalSize: bytes.length,
+          crf: compressed.crf,
+        },
+      };
+    }
+  }
+  // Never a reason to fail an upload: an unrecognised container simply has
+  // no dimensions, and the grid falls back to its aspect-ratio box.
+  const dimensions = sniffed.kind === "IMAGE" ? readImageDimensions(bytes) : null;
+  return {
+    bytes,
+    mimeType: sniffed.mimeType,
+    extension: sniffed.extension,
+    width: dimensions?.width ?? null,
+    height: dimensions?.height ?? null,
+  };
+}
+
+/** The display name, renamed to the stored format when the bytes were converted. */
+function storedFileName(original: string, stored: PreparedBytes, key: string): string {
+  const name = original.replace(/^.*[\\/]/, "").slice(0, 255);
+  if (!name) return key;
+  return stored.optimizedFrom ? withExtension(name, stored.extension) : name;
+}
+
 export async function storeMedia(
   actorId: string,
   input: StoreMediaInput,
 ): Promise<StoredMediaAsset> {
   const sniffed = await validateMediaUpload(input.bytes, input.allowedKinds);
-  const key = generateObjectKey(sniffed.extension);
-  const url = await resolveStorageDriver().put(key, input.bytes, sniffed.mimeType);
+  const stored = await prepareStoredBytes(sniffed, input.bytes, input.purpose);
+  const folder = input.folder ?? folderForCategory(input.category);
+  // The storage prefix follows the folder the row is filed under (an explicit
+  // folder must sit under a registered category), so the shelf and the disk
+  // agree about where a file belongs (ADR-144 §3).
+  const key = generateObjectKey(stored.extension, categoryOfFolder(folder) ?? input.category);
+  const url = await resolveStorageDriver().put(key, stored.bytes, stored.mimeType);
   // Display-only: keep the original name for the media list, trimmed to
   // the column width and stripped of path separators.
-  const fileName = input.fileName.replace(/^.*[\\/]/, "").slice(0, 255) || key;
-  const folder = input.folder ?? folderForCategory(input.category);
-  // Never a reason to fail an upload: an unrecognised container simply has
-  // no dimensions, and the grid falls back to its aspect-ratio box.
-  const dimensions = sniffed.kind === "IMAGE" ? readImageDimensions(input.bytes) : null;
+  const fileName = storedFileName(input.fileName, stored, key);
 
   const row = await db.mediaAsset.create({
     data: {
       key,
       url,
       fileName,
-      mimeType: sniffed.mimeType,
-      size: input.bytes.length,
+      mimeType: stored.mimeType,
+      size: stored.bytes.length,
       purpose: input.purpose,
       uploadedBy: actorId,
       kind: sniffed.kind,
       folder,
-      width: dimensions?.width ?? null,
-      height: dimensions?.height ?? null,
+      width: stored.width,
+      height: stored.height,
     },
   });
   await recordAudit({
@@ -426,18 +565,19 @@ export async function storeMedia(
     changes: {
       after: {
         key,
-        mimeType: sniffed.mimeType,
+        mimeType: stored.mimeType,
         size: row.size,
         purpose: input.purpose,
         kind: sniffed.kind,
         folder,
+        ...stored.optimizedFrom,
       },
     },
   });
   return {
     id: row.id,
     url,
-    mimeType: sniffed.mimeType,
+    mimeType: stored.mimeType,
     size: row.size,
     fileName,
     kind: sniffed.kind,
@@ -601,13 +741,24 @@ export interface StoredFileMeta {
  * in the route handler, which composes headers and decides nothing
  * (architecture.md #1).
  *
+ * `force` is the media library's Download button (changes-32): the ASK is an
+ * attachment, so the kind no longer decides. It is a separate argument rather
+ * than a widened kind test because the two questions are genuinely different
+ * — "is this a thing we embed" is a property of the file, "did someone press
+ * Download" is a property of the request — and collapsing them would make an
+ * image render as an attachment in every page that uses one.
+ *
  * Both filename forms are emitted, per RFC 6266: a quoted ASCII fallback for
  * old parsers and `filename*` (RFC 5987) for the real name. The fallback is
  * scrubbed of quotes, backslashes and control characters, because a filename
  * is attacker-adjacent input — it is whatever the uploader's file was called.
  */
-export function contentDispositionFor(kind: MediaKind, fileName: string): string | null {
-  if (kind !== "DOCUMENT") return null;
+export function contentDispositionFor(
+  kind: MediaKind,
+  fileName: string,
+  force = false,
+): string | null {
+  if (!force && kind !== "DOCUMENT") return null;
   // Everything outside printable ASCII goes, which is the header-injection
   // defense as well as the encoding one: CR and LF are below 0x20.
   const ascii = fileName.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "_");
@@ -1084,24 +1235,31 @@ export async function replaceMedia(
   if (!existing || existing.deletedAt) throw new MediaAssetNotFoundError(id);
 
   const sniffed = await validateMediaUpload(input.bytes, [existing.kind]);
-  const key = generateObjectKey(sniffed.extension);
-  const url = await resolveStorageDriver().put(key, input.bytes, sniffed.mimeType);
-  const fileName = input.fileName.replace(/^.*[\\/]/, "").slice(0, 255) || key;
+  // The row's own purpose decides, so a replaced logo keeps its container.
+  const stored = await prepareStoredBytes(sniffed, input.bytes, existing.purpose);
+  // Replacement bytes are a new key anyway (ADR-034 §3), so a row filed
+  // before ADR-144 moves into its category's prefix here; one whose folder
+  // names no category goes to `general`, the library's own default.
+  const key = generateObjectKey(
+    stored.extension,
+    categoryOfFolder(existing.folder) ?? DEFAULT_MEDIA_CATEGORY,
+  );
+  const url = await resolveStorageDriver().put(key, stored.bytes, stored.mimeType);
+  const fileName = storedFileName(input.fileName, stored, key);
   const oldKey = existing.key;
 
-  const dimensions = sniffed.kind === "IMAGE" ? readImageDimensions(input.bytes) : null;
   await db.mediaAsset.update({
     where: { id },
     data: {
       key,
       url,
       fileName,
-      mimeType: sniffed.mimeType,
-      size: input.bytes.length,
+      mimeType: stored.mimeType,
+      size: stored.bytes.length,
       // Re-read rather than kept: replacement bytes are a different image,
       // and stale intrinsics are worse than none (they size the tile wrong).
-      width: dimensions?.width ?? null,
-      height: dimensions?.height ?? null,
+      width: stored.width,
+      height: stored.height,
       version: { increment: 1 },
     },
   });
@@ -1114,14 +1272,21 @@ export async function replaceMedia(
     action: "media.replace",
     entityType: "mediaAsset",
     entityId: id,
-    changes: { after: { key, mimeType: sniffed.mimeType, size: input.bytes.length } },
+    changes: {
+      after: {
+        key,
+        mimeType: stored.mimeType,
+        size: stored.bytes.length,
+        ...stored.optimizedFrom,
+      },
+    },
   });
 
   return {
     id,
     url,
-    mimeType: sniffed.mimeType,
-    size: input.bytes.length,
+    mimeType: stored.mimeType,
+    size: stored.bytes.length,
     fileName,
     kind: existing.kind,
   };

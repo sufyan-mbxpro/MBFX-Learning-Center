@@ -15,6 +15,10 @@
 //      is what squeezed a lesson title to ~78px and wrapped it one word per
 //      line in a 16rem column — the reason the variant exists at all.
 //   4. A locked lesson is never a link, in any variant.
+//   5. (changes-33) The section header carries an ORDINAL and ONE accent. The
+//      ordinal is what makes three sections distinguishable at a glance, and
+//      the single accent is what stops the card tones from competing with the
+//      tonal vocabulary difficulty and lesson state already own.
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -115,6 +119,18 @@ describe("CurriculumList — the course outline is a timeline of play marks", ()
     expect(container.querySelector("ol")).not.toBeNull();
   });
 
+  it("indents the lessons under their section with a guide rule (changes-46)", () => {
+    // The owner could not tell a lesson from a section: both markers sat in
+    // the same column. Logical properties only, so RTL mirrors it.
+    const { container } = renderList();
+    const lessons = container.querySelector("[data-slot=curriculum-lessons]");
+    expect(lessons?.tagName).toBe("OL");
+    expect(lessons?.className).toMatch(/\bms-\d/);
+    expect(lessons?.className).toMatch(/\bps-\d/);
+    expect(lessons?.className).toContain("border-s-2");
+    expect(lessons?.className).not.toMatch(/\b(ml|pl|border-l)-/);
+  });
+
   it("never links a locked lesson", () => {
     renderList({
       sections: [{ ...SECTIONS[0]!, lessons: [{ ...SECTIONS[0]!.lessons[0]!, state: "locked" }] }],
@@ -176,6 +192,85 @@ describe("CurriculumList — the rail variant", () => {
     // drawn inside a panel.
     const { container } = renderList({ variant: "rail" });
     expect(container.firstElementChild?.className ?? "").not.toContain("rounded-xl");
+  });
+
+  it("draws each lesson as its own card, indented under its section (changes-39)", () => {
+    // A hairline between rows still read as one block at rail width.
+    renderList({ variant: "rail" });
+    const link = screen.getByRole("link", { name: /price-action-candlesticks/ });
+    const row = link.closest("li");
+    expect(row?.className).toContain("rounded-lg");
+    expect(row?.className).toContain("ring-1");
+    expect(row?.className).not.toContain("border-b");
+    // Logical inset, never `pl-` (code-style.md #3).
+    expect(row?.parentElement?.className).toMatch(/\bps-\d/);
+    expect(row?.parentElement?.className).toContain("gap-2");
+  });
+});
+
+describe("CurriculumList — the section header says which section it is (changes-33)", () => {
+  // The bug: three sections rendered as three identically-weighted white
+  // cards, and the only thing telling them apart was reading the titles. A
+  // curriculum is a SEQUENCE, which is what the timeline inside each card
+  // already says and what the headers above them did not.
+
+  it.each(["full", "rail"] as const)("numbers each section in %s", (variant) => {
+    const { container } = renderList({
+      variant,
+      sections: [
+        { ...SECTIONS[0]!, id: "a", title: "First" },
+        { ...SECTIONS[0]!, id: "b", title: "Second" },
+      ],
+      defaultOpenSectionIds: [],
+    });
+    const markers = [...container.querySelectorAll("[aria-hidden]")]
+      .map((el) => el.textContent?.trim())
+      .filter((text) => text === "1" || text === "2");
+    expect(markers).toEqual(["1", "2"]);
+  });
+
+  it("marks the ordinal aria-hidden — it is the title that names the section", () => {
+    const { container } = renderList({ defaultOpenSectionIds: [] });
+    const ordinal = [...container.querySelectorAll("span")].find(
+      (el) => el.textContent?.trim() === "1",
+    );
+    expect(ordinal?.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  it("uses ONE accent, never a hue per section and never a tonal status", () => {
+    // Two rules in one assertion. Cycling a hue per section would be
+    // decoration that looks like meaning; so would dressing the lesson COUNT
+    // as a status. This design system spends success/warning/info on
+    // difficulty and on lesson state, and a third unrelated use on the same
+    // pages is how a reader stops trusting any of them.
+    const { container } = renderList({
+      sections: [
+        { ...SECTIONS[0]!, id: "a" },
+        { ...SECTIONS[0]!, id: "b" },
+        { ...SECTIONS[0]!, id: "c" },
+      ],
+      defaultOpenSectionIds: [],
+    });
+    const html = container.innerHTML;
+    for (const tone of ["bg-success/", "bg-warning/", "bg-info/"]) {
+      expect(html, tone).not.toContain(tone);
+    }
+  });
+
+  it("shows the lesson count as a badge rather than as grey micro-type", () => {
+    const { container } = renderList({ defaultOpenSectionIds: [] });
+    const count = screen.getByText("2 lessons");
+    expect(count.getAttribute("data-slot")).toBe("badge");
+    // And it is not the smallest thing on the card any more.
+    expect(container.innerHTML).not.toContain("text-2xs font-medium tracking-caps");
+  });
+
+  it("gives the reading time a badge too, in both list variants", () => {
+    for (const variant of ["full", "rail"] as const) {
+      cleanup();
+      renderList({ variant });
+      expect(screen.getByText("42-min read").getAttribute("data-slot")).toBe("badge");
+    }
   });
 });
 

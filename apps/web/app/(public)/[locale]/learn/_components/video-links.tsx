@@ -18,6 +18,7 @@ import { ArrowUpRight, ExternalLink as ExternalIcon } from "lucide-react";
 
 import type { VideoTopicLinkView } from "@repo/contracts";
 import { Link } from "@repo/i18n/navigation";
+import { INTERACTIVE_CARD } from "@repo/ui/lib/surfaces";
 
 export function VideoLinks({
   links,
@@ -45,7 +46,7 @@ export function VideoLinks({
                 href={link.href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="group flex items-center justify-between gap-3 rounded-lg border bg-card px-4 py-3 text-sm font-medium transition-colors duration-(--duration-base) hover:border-primary/30 hover:text-primary-interactive focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+                className={`${INTERACTIVE_CARD} flex items-center justify-between gap-3 px-4 py-3 text-sm font-medium hover:text-primary-interactive focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none`}
               >
                 <span className="min-w-0 truncate">{link.label}</span>
                 <span className="flex shrink-0 items-center gap-1.5 text-muted-foreground">
@@ -59,7 +60,7 @@ export function VideoLinks({
             ) : (
               <Link
                 href={link.href}
-                className="group flex items-center justify-between gap-3 rounded-lg border bg-card px-4 py-3 text-sm font-medium transition-colors duration-(--duration-base) hover:border-primary/30 hover:text-primary-interactive focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+                className={`${INTERACTIVE_CARD} flex items-center justify-between gap-3 px-4 py-3 text-sm font-medium hover:text-primary-interactive focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none`}
               >
                 <span className="min-w-0 truncate">{link.label}</span>
                 {/* `rtl:rotate-180` — the arrow points along the reading

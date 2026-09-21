@@ -368,3 +368,199 @@ export async function removePermissionOverride(
   });
   invalidateSubjectTag(userId);
 }
+
+// ─── Admin user record (changes-45, ADR-142) ─────────────────
+
+export class SelfSessionRevokeError extends Error {
+  constructor() {
+    super("Signing yourself out everywhere is done from your own profile.");
+    this.name = "SelfSessionRevokeError";
+  }
+}
+
+/** The new address already belongs to another account (the unique index). */
+export class EmailInUseError extends Error {
+  constructor() {
+    super("That email address already belongs to another account.");
+    this.name = "EmailInUseError";
+  }
+}
+
+/**
+ * Changing someone's address is changing where their password-reset link
+ * goes, so it is an account takeover in two steps. The same strict `<` that
+ * `canAssignRole` applies to a role grant applies here to the target's
+ * highest role: an Editor can correct a learner's typo, not an Admin's address.
+ */
+export class EmailChangeForbiddenError extends Error {
+  constructor() {
+    super("You can only change the address of an account below your own role level.");
+    this.name = "EmailChangeForbiddenError";
+  }
+}
+
+export class NotImpersonatableError extends Error {
+  constructor() {
+    super("Only an active learner account can be entered.");
+    this.name = "NotImpersonatableError";
+  }
+}
+
+/**
+ * The "Edit details" dialog's write. Already authorised (`users.update`);
+ * a status change goes through `setUserStatus` so the last-super_admin guard
+ * and the session revocation it owns are not re-implemented here.
+ *
+ * changes-46 — the address. Checked BEFORE anything is written, so a refused
+ * address changes nothing else either:
+ *   - the target must rank below the actor (`EmailChangeForbiddenError`), a
+ *     super_admin excepted, and so is the actor's own row;
+ *   - the address must be free (`EmailInUseError`); the unique index is the
+ *     real guard, the pre-check is only what turns a race into the same error;
+ *   - a NEW address is unverified unless this same save says it is verified.
+ *     The dialog unticks "Email verified" the moment the address is edited,
+ *     so leaving it on is the admin vouching for the new address, not a
+ *     stale switch carried over from the old one.
+ * Nothing else is revoked: sessions stay, because the person did not change
+ * and the credential account is keyed by user id, not by address.
+ */
+export async function adminUpdateUser(
+  actor: Subject,
+  input: {
+    userId: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+    phone: string;
+    status: UserStatus;
+    emailVerified: boolean;
+  },
+): Promise<void> {
+  const before = await db.user.findFirstOrThrow({
+    where: { id: input.userId, deletedAt: null },
+    select: {
+      email: true,
+      name: true,
+      firstName: true,
+      lastName: true,
+      phone: true,
+      status: true,
+      emailVerified: true,
+      roles: { select: { role: { select: { level: true } } } },
+    },
+  });
+
+  const email = input.email.trim().toLowerCase();
+  const emailChanged = email !== before.email.toLowerCase();
+  if (emailChanged) {
+    const targetLevel = Math.max(0, ...before.roles.map((r) => r.role.level));
+    const outranks =
+      actor.id === input.userId ||
+      actor.roleKeys.includes("super_admin") ||
+      targetLevel < actor.maxRoleLevel;
+    if (!outranks) throw new EmailChangeForbiddenError();
+    const taken = await db.user.findFirst({
+      where: { email, id: { not: input.userId } },
+      select: { id: true },
+    });
+    if (taken) throw new EmailInUseError();
+  }
+
+  if (input.status !== before.status) await setUserStatus(actor, input.userId, input.status);
+
+  const lastName = input.lastName === "" ? null : input.lastName;
+  const after = {
+    ...(emailChanged ? { email } : {}),
+    name: [input.firstName, lastName].filter(Boolean).join(" "),
+    firstName: input.firstName,
+    lastName,
+    phone: input.phone === "" ? null : input.phone,
+    emailVerified: input.emailVerified,
+  };
+  try {
+    await db.user.update({ where: { id: input.userId }, data: after });
+  } catch (error) {
+    // P2002: another request took the address between the check and here.
+    if (emailChanged && (error as { code?: string }).code === "P2002") throw new EmailInUseError();
+    throw error;
+  }
+  await recordAudit({
+    userId: actor.id,
+    action: "users.update",
+    entityType: "user",
+    entityId: input.userId,
+    changes: {
+      before: {
+        ...(emailChanged ? { email: before.email } : {}),
+        name: before.name,
+        firstName: before.firstName,
+        lastName: before.lastName,
+        phone: before.phone,
+        emailVerified: before.emailVerified,
+      },
+      after,
+    },
+  });
+  invalidateSubjectTag(input.userId);
+}
+
+/** "Sign out everywhere" for someone else's account. Already authorised. */
+export async function revokeUserSessions(actor: Subject, userId: string): Promise<number> {
+  if (actor.id === userId) throw new SelfSessionRevokeError();
+  const { count } = await db.session.deleteMany({ where: { userId } });
+  await recordAudit({
+    userId: actor.id,
+    action: "users.sessionsRevoke",
+    entityType: "user",
+    entityId: userId,
+    changes: { after: { revoked: count } },
+  });
+  return count;
+}
+
+/**
+ * The start half of "Login as user" (ADR-142 §3): the target check and the
+ * audit row, written BEFORE the cookies move so a start that then fails still
+ * left a trace. The cookie swap is @repo/auth's `impersonateLearner`, which
+ * re-checks the target on its own read.
+ */
+export async function recordImpersonationStart(actor: Subject, userId: string): Promise<void> {
+  const target = await db.user.findUnique({
+    where: { id: userId },
+    select: { userType: true, deletedAt: true, status: true },
+  });
+  if (
+    !target ||
+    target.userType !== "LEARNER" ||
+    target.deletedAt !== null ||
+    target.status === UserStatus.SUSPENDED
+  ) {
+    throw new NotImpersonatableError();
+  }
+  await recordAudit({
+    userId: actor.id,
+    action: "users.impersonateStart",
+    entityType: "user",
+    entityId: userId,
+  });
+}
+
+/** The record page's "Email verified" switch. Already authorised (`users.update`). */
+export async function setUserEmailVerified(
+  actor: Subject,
+  userId: string,
+  emailVerified: boolean,
+): Promise<void> {
+  const before = await db.user.findFirstOrThrow({
+    where: { id: userId, deletedAt: null },
+    select: { emailVerified: true },
+  });
+  await db.user.update({ where: { id: userId }, data: { emailVerified } });
+  await recordAudit({
+    userId: actor.id,
+    action: "users.update",
+    entityType: "user",
+    entityId: userId,
+    changes: { before, after: { emailVerified } },
+  });
+}

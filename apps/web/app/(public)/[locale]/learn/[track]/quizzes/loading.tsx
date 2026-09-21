@@ -29,7 +29,7 @@ export default function QuizIndexLoading() {
           <Skeleton className="shimmer h-12 w-full max-w-2xl" />
           <Skeleton className="shimmer h-6 w-full max-w-xl" />
           <div className="pt-1">
-            <Skeleton className="shimmer h-12 w-44 rounded-full" />
+            <Skeleton className="shimmer h-12 w-44 rounded-md" />
           </div>
         </Container>
       </Section>
@@ -42,7 +42,7 @@ export default function QuizIndexLoading() {
         <Container className="flex flex-col gap-6">
           <div className="flex flex-wrap gap-1.5">
             {Array.from({ length: 4 }, (_, index) => (
-              <Skeleton key={index} className="shimmer h-8 w-28 rounded-full" />
+              <Skeleton key={index} className="shimmer h-8 w-28 rounded-md" />
             ))}
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

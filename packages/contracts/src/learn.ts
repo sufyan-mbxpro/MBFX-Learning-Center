@@ -204,22 +204,37 @@ export const createCourseSchema = z.object({
 });
 export type CreateCourseInput = z.infer<typeof createCourseSchema>;
 
-export const courseMetaSchema = z.object({
-  track: learnTrackSchema.optional(),
-  difficulty: courseDifficultySchema.optional(),
-  estimatedHours: z.int().min(0).max(999).nullable().optional(),
-  /** MediaAsset id, not a URL (ADR-055 #6). */
-  coverAssetId: idSchema.nullable().optional(),
-  /** An external course: the CTA points outward and the curriculum is optional. */
-  externalUrl: externalUrlSchema.nullable().optional(),
-  visibility: contentVisibilitySchema.optional(),
-  sortOrder: z.int().min(0).max(9999).optional(),
-  /**
-   * The course's final quiz (ADR-056 #7 / ADR-058 #1). `null` detaches — the
-   * picker's "No quiz" option, which is a value rather than a missing field.
-   */
-  finalQuizId: idSchema.nullable().optional(),
+/**
+ * ADR-139 — the article's three flags, on every learning content type.
+ * `isActive` joins the type's public rule (it hides without touching status),
+ * `isFeatured` is placement, `isPremium` is stored and labelled, not enforced.
+ * Each is optional, so a save that does not send one leaves it alone.
+ */
+export const contentFlagsSchema = z.object({
+  isFeatured: z.boolean().optional(),
+  isActive: z.boolean().optional(),
+  isPremium: z.boolean().optional(),
 });
+export type ContentFlagsInput = z.infer<typeof contentFlagsSchema>;
+
+export const courseMetaSchema = z
+  .object({
+    track: learnTrackSchema.optional(),
+    difficulty: courseDifficultySchema.optional(),
+    estimatedHours: z.int().min(0).max(999).nullable().optional(),
+    /** MediaAsset id, not a URL (ADR-055 #6). */
+    coverAssetId: idSchema.nullable().optional(),
+    /** An external course: the CTA points outward and the curriculum is optional. */
+    externalUrl: externalUrlSchema.nullable().optional(),
+    visibility: contentVisibilitySchema.optional(),
+    sortOrder: z.int().min(0).max(9999).optional(),
+    /**
+     * The course's final quiz (ADR-056 #7 / ADR-058 #1). `null` detaches — the
+     * picker's "No quiz" option, which is a value rather than a missing field.
+     */
+    finalQuizId: idSchema.nullable().optional(),
+  })
+  .extend(contentFlagsSchema.shape);
 export type CourseMetaInput = z.infer<typeof courseMetaSchema>;
 
 /**
@@ -242,6 +257,13 @@ export const courseTranslationSchema = z
     seoTitle: z.string().trim().max(70).nullable().optional(),
     seoDescription: z.string().trim().max(180).nullable().optional(),
     seoFocusKeyword: z.string().trim().max(100).nullable().optional(),
+    /**
+     * This locale's text came from AI and has not been edited since (changes-29
+     * B3, as `saveArticleTranslationSchema` has it). The save writes
+     * `MACHINE_TRANSLATED` instead of `TRANSLATED`, which keeps it off the public
+     * reading-language menu (ADR-127 #2) until a human's Save promotes it.
+     */
+    machineTranslated: z.boolean().optional(),
   })
   .refine((value) => value.slug === undefined || !isReservedCourseSlug(value.slug), {
     message: `slug is reserved (${RESERVED_COURSE_SLUGS.join(", ")}) and would shadow a route`,
@@ -324,30 +346,32 @@ export const lessonAttachmentsSchema = z.object({
 });
 export type LessonAttachmentsInput = z.infer<typeof lessonAttachmentsSchema>;
 
-export const lessonMetaSchema = z.object({
-  difficulty: courseDifficultySchema.optional(),
-  estimatedMinutes: z.int().min(0).max(6000).nullable().optional(),
-  /**
-   * Provider whitelist (YouTube/Vimeo/Dailymotion) is enforced in the service
-   * via @repo/utils `parseVideoUrl` — the contract only shapes it, exactly as
-   * `updateArticleMetaSchema.videoUrl` already does.
-   */
-  videoUrl: externalUrlSchema.nullable().optional(),
-  externalUrl: externalUrlSchema.nullable().optional(),
-  heroAssetId: idSchema.nullable().optional(),
-  completionRule: completionRuleSchema.optional(),
-  isRequired: z.boolean().optional(),
-  prerequisiteLessonId: idSchema.nullable().optional(),
-  /**
-   * The lesson's quiz (ADR-058 #1). Pairing it with
-   * `completionRule: "QUIZ_PASS"` is what makes passing complete the lesson;
-   * a quiz attached to a MANUAL lesson is simply extra practice, which is a
-   * legitimate thing to want and is why the two fields are independent.
-   */
-  quizId: idSchema.nullable().optional(),
-  visibility: contentVisibilitySchema.optional(),
-  sortOrder: z.int().min(0).max(9999).optional(),
-});
+export const lessonMetaSchema = z
+  .object({
+    difficulty: courseDifficultySchema.optional(),
+    estimatedMinutes: z.int().min(0).max(6000).nullable().optional(),
+    /**
+     * Provider whitelist (YouTube/Vimeo/Dailymotion) is enforced in the service
+     * via @repo/utils `parseVideoUrl` — the contract only shapes it, exactly as
+     * `updateArticleMetaSchema.videoUrl` already does.
+     */
+    videoUrl: externalUrlSchema.nullable().optional(),
+    externalUrl: externalUrlSchema.nullable().optional(),
+    heroAssetId: idSchema.nullable().optional(),
+    completionRule: completionRuleSchema.optional(),
+    isRequired: z.boolean().optional(),
+    prerequisiteLessonId: idSchema.nullable().optional(),
+    /**
+     * The lesson's quiz (ADR-058 #1). Pairing it with
+     * `completionRule: "QUIZ_PASS"` is what makes passing complete the lesson;
+     * a quiz attached to a MANUAL lesson is simply extra practice, which is a
+     * legitimate thing to want and is why the two fields are independent.
+     */
+    quizId: idSchema.nullable().optional(),
+    visibility: contentVisibilitySchema.optional(),
+    sortOrder: z.int().min(0).max(9999).optional(),
+  })
+  .extend(contentFlagsSchema.shape);
 export type LessonMetaInput = z.infer<typeof lessonMetaSchema>;
 
 export const lessonTranslationSchema = z.object({
@@ -361,6 +385,13 @@ export const lessonTranslationSchema = z.object({
   seoTitle: z.string().trim().max(70).nullable().optional(),
   seoDescription: z.string().trim().max(180).nullable().optional(),
   seoFocusKeyword: z.string().trim().max(100).nullable().optional(),
+  /**
+   * This locale's text came from AI and has not been edited since (changes-29
+   * B3, as `saveArticleTranslationSchema` has it). The save writes
+   * `MACHINE_TRANSLATED` instead of `TRANSLATED`, which keeps it off the public
+   * reading-language menu (ADR-127 #2) until a human's Save promotes it.
+   */
+  machineTranslated: z.boolean().optional(),
 });
 export type LessonTranslationInput = z.infer<typeof lessonTranslationSchema>;
 
@@ -649,17 +680,21 @@ export const quizQuestionSchema = z
   });
 export type QuizQuestionInput = z.infer<typeof quizQuestionSchema>;
 
-export const quizMetaSchema = z.object({
-  passingScore: z.number().int().min(1).max(100),
-  /** Null is unlimited, and is the default (D24). */
-  maxAttempts: z.number().int().min(1).max(50).nullable(),
-  showAnswersAfter: answerVisibilitySchema,
-  isStandalone: z.boolean(),
-  /** Required (ADR-065 §3): the quiz's URL segment, not a filter over one. */
-  track: quizTrackSchema,
-  category: z.string().trim().max(80).nullable(),
-  visibility: contentVisibilitySchema.optional(),
-});
+export const quizMetaSchema = z
+  .object({
+    passingScore: z.number().int().min(1).max(100),
+    /** Null is unlimited, and is the default (D24). */
+    maxAttempts: z.number().int().min(1).max(50).nullable(),
+    showAnswersAfter: answerVisibilitySchema,
+    isStandalone: z.boolean(),
+    /** Required (ADR-065 §3): the quiz's URL segment, not a filter over one. */
+    track: quizTrackSchema,
+    category: z.string().trim().max(80).nullable(),
+    /** MediaAsset id, not a URL (ADR-132, after ADR-055 #6). Null clears it. */
+    coverAssetId: idSchema.nullable().optional(),
+    visibility: contentVisibilitySchema.optional(),
+  })
+  .extend(contentFlagsSchema.shape);
 export type QuizMetaInput = z.infer<typeof quizMetaSchema>;
 
 export const quizTranslationSchema = z.object({
@@ -786,8 +821,21 @@ export interface QuizCardView {
   description: string | null;
   track: LearnTrackKey;
   category: string | null;
+  /**
+   * The editor's uploaded cover, resolved (ADR-132). Null means none was
+   * chosen, or its asset was deleted — the shelf then shows a generated panel.
+   */
+  coverUrl: string | null;
   questionCount: number;
   passingScore: number;
+  /** ADR-139 #3 — placement: first on the shelf, and the Featured view. */
+  isFeatured: boolean;
+  /** ADR-139 #4 — a marker on the card; nothing is gated. */
+  isPremium: boolean;
+  /** ISO. The shelf's Newest view. */
+  publishedAt: string | null;
+  /** Finished attempts, by anyone — an aggregate, for the Popular view (ADR-139 #5). */
+  attemptCount: number;
 }
 
 export interface QuizAttemptView {

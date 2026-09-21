@@ -19,13 +19,10 @@
 // nothing. A component whose answer is usually "no" cannot leave its spacing
 // to a caller that has already committed to it.
 import { useEffect, useState } from "react";
-import { LogIn } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { ROUTE_PATHS } from "@repo/contracts";
-import { Link } from "@repo/i18n/navigation";
-import { Button } from "@repo/ui/components/button";
 import { Container } from "@repo/ui/components/container";
 import { Section } from "@repo/ui/components/section";
+import { SaveProgressPrompt } from "./course-progress.tsx";
 
 export function QuizSignInPrompt({ className }: { className?: string }) {
   const t = useTranslations("learn");
@@ -52,20 +49,8 @@ export function QuizSignInPrompt({ className }: { className?: string }) {
   return (
     <Section spacing="sm">
       <Container>
-        <div
-          className={
-            className ??
-            "flex flex-wrap items-center gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4"
-          }
-        >
-          <LogIn aria-hidden className="size-4 shrink-0 text-primary-interactive" />
-          <p className="min-w-0 flex-1 text-sm">
-            <span className="font-semibold">{t("quizzes.guestTitle")}</span>{" "}
-            <span className="text-muted-foreground">{t("quizzes.guestBody")}</span>
-          </p>
-          <Button size="sm" variant="outline" render={<Link href={ROUTE_PATHS["sign-in"]} />}>
-            {t("progress.signInAction")}
-          </Button>
+        <div className={className}>
+          <SaveProgressPrompt title={t("quizzes.guestTitle")} body={t("quizzes.guestBody")} />
         </div>
       </Container>
     </Section>

@@ -33,15 +33,20 @@ export default async function RoleDetailPage({ params }: PageProps<"/admin/roles
   const editable = canManage && withinLevel;
 
   return (
+    // ADR-140 §3: a static heading; the record's name is a meta line beside
+    // the badges, not the h1.
     <AdminPage
-      title={role.name}
+      title={t("editorHeading.role")}
       description={t("pageDesc.roleDetail")}
       backHref="/admin/roles"
       backLabel={t("backToList")}
       meta={
-        <Badge variant={role.isSystem ? "secondary" : "outline"}>
-          {role.isSystem ? t("systemBadge") : t("customBadge")}
-        </Badge>
+        <>
+          <span className="text-xs text-muted-foreground">{role.name}</span>
+          <Badge variant={role.isSystem ? "secondary" : "outline"}>
+            {role.isSystem ? t("systemBadge") : t("customBadge")}
+          </Badge>
+        </>
       }
       actions={
         <>

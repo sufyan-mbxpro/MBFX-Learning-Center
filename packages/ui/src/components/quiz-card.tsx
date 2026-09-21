@@ -32,6 +32,7 @@
 import { Award, ListChecks, RotateCcw, Target } from "lucide-react";
 
 import { Badge } from "@repo/ui/components/badge";
+import { CardMarkers, type CardMarker } from "@repo/ui/components/card-markers";
 import { Button } from "@repo/ui/components/button";
 import { Skeleton, SkeletonButton, SkeletonText } from "@repo/ui/components/skeleton";
 import { cn } from "@repo/ui/lib/utils";
@@ -83,11 +84,11 @@ export function QuizCardSkeleton({ className }: { className?: string }) {
     <div
       aria-hidden
       className={cn(
-        "flex h-full min-w-0 flex-col rounded-2xl bg-card ring-1 ring-foreground/10",
+        "flex h-full min-w-0 flex-col rounded-lg bg-card ring-1 ring-foreground/10",
         className,
       )}
     >
-      <Skeleton className="aspect-video w-full rounded-none rounded-t-2xl" />
+      <Skeleton className="aspect-video w-full rounded-none rounded-t-lg" />
       <div className="flex flex-1 flex-col gap-2 p-5">
         <Skeleton className="h-5 w-40 max-w-full" />
         <SkeletonText lines={2} />
@@ -123,6 +124,7 @@ export function QuizCard({
   highlighted = false,
   labels,
   renderCover,
+  markers,
   className,
 }: {
   href: string;
@@ -153,6 +155,8 @@ export function QuizCard({
    * fallback, for the reason `CourseCard` documents: it would opt every cover
    * on the shelf out of `next/image` silently.
    */
+  /** ADR-139 — "Featured" / "Premium" over the cover's bottom-end corner. */
+  markers?: readonly CardMarker[];
   renderCover?: (args: { src: string; alt: string }) => React.ReactNode;
   className?: string;
 }) {
@@ -168,7 +172,7 @@ export function QuizCard({
         // selects `.group:hover`, which a named-only group never matches).
         // `.sheen` supplies position/overflow/isolation, `.card-hover` lifts
         // the ring, `.hover-lift` adds the rise — all three compose.
-        "group group/quiz card-hover hover-lift sheen flex h-full min-w-0 flex-col rounded-2xl bg-card ring-1 ring-foreground/10 hover:ring-primary/30",
+        "group group/quiz card-hover hover-lift sheen flex h-full min-w-0 flex-col rounded-lg bg-card ring-1 ring-foreground/10",
         // The active filter's colour, carried onto the cards it produced. A
         // chip that lights up over a grid of identical cards leaves the reader
         // to trust that the grid changed; this shows it.
@@ -179,7 +183,7 @@ export function QuizCard({
       {/* 16:9, fixed. A grid whose cards are different heights because one
           quiz has no artwork reads as broken rather than as varied — and here
           none can be missing, because the panels are code. */}
-      <div className="relative aspect-video w-full shrink-0 overflow-hidden rounded-t-2xl bg-muted">
+      <div className="relative aspect-video w-full shrink-0 overflow-hidden rounded-t-lg bg-muted">
         {coverUrl && renderCover ? (
           renderCover({ src: coverUrl, alt: "" })
         ) : (
@@ -224,6 +228,7 @@ export function QuizCard({
 
         {/* The verdict rides on the artwork rather than in the body, because
             it is the one thing a returning learner scans a grid for. */}
+        <CardMarkers markers={markers} />
         {progress?.passed && (
           <span className="absolute bottom-2.5 start-2.5">
             <Badge variant="success" className="shadow-sm backdrop-blur-sm">

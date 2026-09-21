@@ -384,6 +384,7 @@ export async function runMarketSync(subject: Subject): Promise<SyncResult> {
         synced: result.synced,
         barsWritten: result.barsWritten,
         skipped: result.skipped,
+        unsupported: result.unsupported.length,
         failures: result.failures.length,
       },
     },

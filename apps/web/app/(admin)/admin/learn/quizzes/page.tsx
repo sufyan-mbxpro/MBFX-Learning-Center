@@ -1,6 +1,6 @@
 import { getTranslations } from "next-intl/server";
 import { listQuizzesAdmin } from "@repo/core";
-import { humanizeKey } from "@repo/utils";
+import { formatDateTime, humanizeKey } from "@repo/utils";
 import { can, requirePermission } from "@repo/rbac";
 import { AdminPage } from "../../_components/admin-page.tsx";
 import { contentStatusLabels, trackLabels } from "../_lib/learn-labels.ts";
@@ -18,7 +18,6 @@ export default async function QuizzesAdminPage() {
   const [t, rows] = await Promise.all([getTranslations("admin"), listQuizzesAdmin()]);
 
   const statuses = contentStatusLabels(t);
-  const dateFormat = new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" });
 
   const labels: QuizzesTableLabels = {
     search: t("quizzes.searchPlaceholder"),
@@ -63,6 +62,7 @@ export default async function QuizzesAdminPage() {
     <AdminPage
       title={t("learnQuizzes")}
       description={t("pageDesc.learnQuizzes")}
+      // ADR-140 §3: the primary create action sits on the title row, last.
       actions={
         can(subject, "lessons.create") ? (
           <NewQuizDialog
@@ -101,7 +101,7 @@ export default async function QuizzesAdminPage() {
           usageCount: row.usedByLessons + row.usedByCourses,
           usageLabel: usageLabel(row.usedByLessons, row.usedByCourses, t),
           deleted: false,
-          updatedAtLabel: dateFormat.format(row.updatedAt),
+          updatedAtLabel: formatDateTime(row.updatedAt),
           updatedAtSort: row.updatedAt.getTime(),
         }))}
         statusKeys={Object.keys(statuses)}

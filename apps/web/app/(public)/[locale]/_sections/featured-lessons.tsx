@@ -23,6 +23,7 @@ import { Reveal } from "@repo/ui/components/reveal";
 import { Section } from "@repo/ui/components/section";
 import { SectionHeading } from "@repo/ui/components/section-heading";
 import type { SectionProps } from "./registry.ts";
+import { INTERACTIVE_CARD } from "@repo/ui/lib/surfaces";
 
 const DEFAULT_LIMIT = 3;
 
@@ -61,13 +62,15 @@ export async function FeaturedLessons({ locale, limit }: SectionProps) {
               <li key={lesson.id}>
                 <Link
                   href={`${learnTrackPath(course.track as LearnTrackKey)}/${course.slug}/${lesson.slug}`}
-                  className="card-hover flex h-full flex-col gap-2 rounded-xl border bg-card p-5 transition-colors duration-(--duration-base) hover:border-primary/25"
+                  className={`${INTERACTIVE_CARD} flex h-full flex-col gap-2 p-5`}
                 >
                   <span className="flex items-center gap-2 text-xs font-medium text-primary-interactive uppercase">
                     <PlayCircle aria-hidden className="size-4" />
                     {course.title}
                   </span>
-                  <span className="font-semibold">{lesson.title}</span>
+                  <span className="font-semibold transition-colors duration-(--duration-base) group-hover:text-primary-interactive">
+                    {lesson.title}
+                  </span>
                   {lesson.summary && (
                     <span className="line-clamp-2 text-sm text-muted-foreground">
                       {lesson.summary}

@@ -6,7 +6,7 @@
 // invisible until something reads it back and finds an array of nulls.
 import { z } from "zod";
 
-import { glossaryTrackSchema } from "./learn.ts";
+import { contentFlagsSchema, glossaryTrackSchema } from "./learn.ts";
 
 /** Mirrors `articleFaqItemSchema` deliberately — same shape, same caps. */
 export const glossaryFaqItemSchema = z.object({
@@ -34,21 +34,23 @@ export type GlossaryDifficultyInput = z.infer<typeof glossaryDifficultySchema>;
 // barrel export of a name is enough.
 
 /** Term-level fields — the ones on `GlossaryTerm` rather than its translations. */
-export const glossaryTermMetaSchema = z.object({
-  /** Null means UNFILED: the term is in the A–Z but under no topic. */
-  topicId: z.string().min(1).max(64).nullable().optional(),
-  track: glossaryTrackSchema.optional(),
-  difficulty: glossaryDifficultySchema.optional(),
-  /** Plain text, rendered in a `<code>`-ish block. Not rich text — it is a formula. */
-  formula: z.string().trim().max(500).nullable().optional(),
-  imageUrl: z
-    .string()
-    .trim()
-    .max(500)
-    .regex(/^(\/|https?:\/\/)/, "must be a path or URL")
-    .nullable()
-    .optional(),
-});
+export const glossaryTermMetaSchema = z
+  .object({
+    /** Null means UNFILED: the term is in the A–Z but under no topic. */
+    topicId: z.string().min(1).max(64).nullable().optional(),
+    track: glossaryTrackSchema.optional(),
+    difficulty: glossaryDifficultySchema.optional(),
+    /** Plain text, rendered in a `<code>`-ish block. Not rich text — it is a formula. */
+    formula: z.string().trim().max(500).nullable().optional(),
+    imageUrl: z
+      .string()
+      .trim()
+      .max(500)
+      .regex(/^(\/|https?:\/\/)/, "must be a path or URL")
+      .nullable()
+      .optional(),
+  })
+  .extend(contentFlagsSchema.shape);
 export type GlossaryTermMetaInput = z.infer<typeof glossaryTermMetaSchema>;
 
 /**
@@ -71,6 +73,13 @@ export const saveGlossaryTranslationSchema = z.object({
   faq: glossaryFaqSchema.optional(),
   seoTitle: z.string().trim().max(70).nullable().optional(),
   seoDescription: z.string().trim().max(180).nullable().optional(),
+  /**
+   * This locale's text came from AI and has not been edited since (changes-29
+   * B3, as `saveArticleTranslationSchema` has it). The save writes
+   * `MACHINE_TRANSLATED` instead of `TRANSLATED`, which keeps it off the public
+   * reading-language menu (ADR-127 #2) until a human's Save promotes it.
+   */
+  machineTranslated: z.boolean().optional(),
 });
 export type SaveGlossaryTranslationPayload = z.infer<typeof saveGlossaryTranslationSchema>;
 
@@ -109,6 +118,14 @@ export const glossaryTopicMetaSchema = z.object({
    * this is the boolean underneath.
    */
   isActive: z.boolean().optional(),
+  /**
+   * ADR-133 — a MediaAsset id, or null to clear it. Absent leaves the stored
+   * cover alone, which is how a save from a non-default locale behaves.
+   */
+  coverAssetId: z.string().min(1).max(64).nullable().optional(),
+  // ADR-139 — with `isActive` above, the article's three flags.
+  isFeatured: z.boolean().optional(),
+  isPremium: z.boolean().optional(),
 });
 export type GlossaryTopicMetaInput = z.infer<typeof glossaryTopicMetaSchema>;
 

@@ -15,6 +15,8 @@ import { CONTENT_LIFECYCLE_GROUPS } from "../src/permission-groups.ts";
 import { isSuperAdminOnlyPermission } from "../src/role-exclusions.ts";
 import defaultThemeTokens from "./default-theme-tokens.json" with { type: "json" };
 import homePageLayout from "./home-page-layout.json" with { type: "json" };
+import { SEED_ARTICLES } from "./seed-articles.ts";
+import { TOOL_HIGHLIGHTS } from "./seed-tool-highlights.ts";
 
 // The `home` page's published layout (Module 16, plan v2.2 PR 2.7) — the
 // four STATIC `home.sections` migrated to blocks (hero, newsletter, faq,
@@ -450,11 +452,33 @@ const SETTINGS = [
     true,
   ],
   ["general", "site.contactEmail", "hello@mbxpro.com", "STRING", "Contact email", true],
-  ["general", "site.supportEmail", "support@mbxpro.com", "STRING", "Support email", false],
+  // PUBLIC since ADR-131: `/support`'s Email card prints it and its contact
+  // form delivers to it, so it reaches a public page by design (security.md #12).
+  ["general", "site.supportEmail", "support@mbxpro.com", "STRING", "Support email", true],
   ["general", "site.defaultLocale", "en", "STRING", "Default language", true],
   ["general", "site.defaultTimezone", "UTC", "STRING", "Default timezone", true],
   ["general", "site.defaultThemeMode", "system", "SELECT", "Default colour mode", true],
-  ["general", "site.faviconUrl", "/favicon.ico", "IMAGE", "Favicon", true],
+  // changes-41 / ADR-135 — the "Share your experience" band's destination.
+  // Public: it is printed as a link on public pages (security.md #12). A new
+  // key, so the seed's `create` branch reaches an existing database too.
+  [
+    "general",
+    "site.reviewsUrl",
+    "https://www.trustpilot.com/review/mbfx.co",
+    "STRING",
+    "Reviews page (Trustpilot)",
+    true,
+  ],
+  // NOTE: there is deliberately no `site.faviconUrl` here (changes-36).
+  // The favicon is a BrandAsset, set in Theme → Logos & Favicons and read by
+  // `faviconIcons()` in both root layouts; this row was read by nothing, so
+  // an admin could fill it in, see "Saved", and change no page on the site.
+  // code-style.md #28 — a setting that is read by nothing does not ship.
+  // ADR-105 — STAFF idle timeout. Seeded "never" so installing this release
+  // changes nobody's behaviour until an admin chooses a duration. NOT public:
+  // how long before an unattended admin screen locks is operational detail a
+  // public page has no reason to serialise (security.md #12).
+  ["general", "security.adminSessionTimeout", "never", "SELECT", "Admin session timeout", false],
 
   // SEO
   ["seo", "seo.titleTemplate", "%s | MBX Pro", "STRING", "Title template", true],
@@ -470,24 +494,74 @@ const SETTINGS = [
       // `variant`/`limit` are optional (changes-03-plan.md §5.1): a section
       // with one sensible layout simply omits them. Every variant named here
       // is validated against HOME_SECTION_VARIANTS in @repo/contracts.
-      // The video rail opens the page, directly under the header — a
-      // full-bleed inverted band, so the first thing below the menu reads as
-      // a shelf of lessons rather than another card grid. The hero keeps the
-      // <h1> immediately after it.
-      { key: "learning_videos", enabled: true, order: 1, variant: "carousel", limit: 6 },
-      { key: "hero", enabled: true, order: 2, variant: "split" },
-      { key: "explore_platform", enabled: true, order: 3, variant: "carousel" },
-      { key: "feature_highlights", enabled: true, order: 4, variant: "grid", limit: 6 },
-      // News before analysis: "what happened" reads before "what we make of
-      // it", and the two are separate sections precisely so the homepage can
-      // make both promises distinctly (see latest-news.tsx).
-      { key: "latest_news", enabled: true, order: 5, variant: "split", limit: 5 },
-      { key: "latest_analysis", enabled: true, order: 6, variant: "standard", limit: 3 },
-      // changes-28: `cards`, not `chips`. A row of eight term pills under a
-      // two-line heading is a band whose heading is three times the height of
-      // its content — and a chip says nothing to the reader this band exists
-      // for. `cards` shows the plain-language line beside the term.
-      { key: "glossary_spotlight", enabled: true, order: 7, variant: "cards", limit: 8 },
+      // The hero opens the page — a full-bleed static band carrying the
+      // brand footage, the <h1>, and the quick-start panel across its bottom
+      // edge (changes-31).
+      { key: "hero", enabled: true, order: 1, variant: "split" },
+
+      // OFF, and not a leftover. The video rail opened this page for two
+      // years; the owner asked for the dynamic video content off the home
+      // page (2026-09-15) and the hero's own footage took the position. The
+      // component is still BUILT — `/learn` renders it with `variant: "grid"`,
+      // which is the surface the published rows were always really for — so
+      // the key stays here rather than moving to the stub list, and
+      // `check:home-sections` keeps matching it against HOME_SECTION_BUILT_KEYS.
+      //
+      // A database seeded before this change still holds an ENABLED row, and
+      // the homepage section composer is paused (ADR-038), so there is no
+      // screen on which to flip it. `VideoShowcase` therefore renders nothing
+      // for any variant but `grid` — see its own comment.
+      { key: "learning_videos", enabled: false, order: 2, variant: "grid", limit: 6 },
+      // changes-31 (ADR-103). Placed where the reference puts them — the
+      // marks a reader is asked to trust, then the figures that back the
+      // claim, both directly under the hero and before the page starts
+      // offering destinations.
+      //
+      // Seeded ENABLED, and that is not an oversight: each renders NOTHING
+      // until the owner fills its dataset (ADR-103 §3), so a second off
+      // switch would be a second reason for one absence. NOTE: like every
+      // homepage row these are create-only — an existing database needs
+      // `pnpm db:reset` to see them.
+      //
+      // changes-37 (ADR-121 §3): `trust_strip` is OFF at the owner's ask. The
+      // demo dataset fills it with five invented publication names, and a row
+      // of marks nobody can check reads as padding on a real page. The
+      // component, its dataset and ADR-103's empty-renders-nothing rule are
+      // untouched; re-enabling it is this one word once a real partner exists.
+      { key: "trust_strip", enabled: false, order: 3 },
+      // changes-39: `facts` is OFF at the owner's ask, the same way — four
+      // figures ("60K+ learners taught") the owner has not supplied, filled
+      // from the demo dataset. Off, not deleted: ADR-103's rule still stands.
+      { key: "facts", enabled: false, order: 4 },
+      { key: "explore_platform", enabled: true, order: 5, variant: "carousel" },
+      // changes-32: OFF at the owner's ask. "Built to be understood, not to
+      // impress" is six commitments about how the site teaches — true, and a
+      // band the reader scrolls past on the way to the material those
+      // commitments describe. The component and its catalog keys are kept, so
+      // re-enabling it is this one word. (It named `/about` as the better home
+      // for those claims; ADR-109 has since withdrawn that section, so the
+      // choice is now this band or nowhere.)
+      { key: "feature_highlights", enabled: false, order: 6, variant: "grid", limit: 6 },
+      // changes-35 (ADR-116 §2): ONE desk band, not two feeds. `desk` renders
+      // the lead NEWS story in a column of its own and a hairline-cut 2x2 of
+      // ANALYSIS beside it — different size, different shape, its own label,
+      // its own call to action. "What happened" and "what we make of it" stay
+      // distinguishable, which is what the old comment here actually required;
+      // two identical 3-up grids 400px apart was the weakest way to do it.
+      //
+      // `limit` is dropped: `desk` needs exactly one lead and exactly four
+      // analysis rows, and a number that changes neither is a knob that lies.
+      { key: "latest_news", enabled: true, order: 7, variant: "desk" },
+      // OFF on the HOME PAGE only. The component, every variant and /analysis
+      // itself are untouched — re-enabling this is one word, and the band
+      // above degrades to news-only if it is.
+      { key: "latest_analysis", enabled: false, order: 8, variant: "standard", limit: 3 },
+      // changes-35 (ADR-116 §1 band C): `feature`, not `cards`. Three columns
+      // — what the set is, the terms on a track, and the TERM OF THE DAY.
+      // `getTermOfTheDay` has been built since changes-11 and no home band had
+      // ever called it, so the day's term only ever appeared on `/glossary`,
+      // the page a reader reaches once they already know they want a glossary.
+      { key: "glossary_spotlight", enabled: true, order: 9, variant: "feature", limit: 8 },
 
       // The seven keys below are seeded but DISABLED, and that is the point:
       // nothing is built behind them, so enabling one renders the dashed
@@ -508,25 +582,65 @@ const SETTINGS = [
       { key: "learning_paths", enabled: false, order: 8, variant: "elevated", limit: 3 },
       { key: "forex_rates", enabled: false, order: 9, variant: "marquee" },
       { key: "economic_events", enabled: false, order: 10, limit: 5 },
-      // Live as of changes-25 T9. NOTE: this needs `pnpm db:reset` to appear in
-      // an existing database — the homepage rows are create-only.
-      { key: "popular_tools", enabled: true, order: 11, variant: "default", limit: 4 },
+      // Live as of changes-25 T9. OFF on the HOME PAGE since changes-35
+      // (ADR-116 §7): `in_practice`'s third column names three tools and links
+      // the rest, and a 4-up card grid here was the fourth grid of that shape
+      // on one page. The component and `/tools` are untouched.
+      { key: "popular_tools", enabled: false, order: 11, variant: "default", limit: 4 },
       { key: "featured_lessons", enabled: false, order: 12, variant: "default", limit: 3 },
       { key: "market_sentiment", enabled: false, order: 13 },
       { key: "trading_sessions", enabled: false, order: 14 },
 
+      // changes-35 (ADR-116 §1 band D). Three kinds of proof in one band: what
+      // a learner took from the material, a lesson they can watch now, and the
+      // instruments to try it. It is the first home band fed by THREE datasets
+      // and it degrades per COLUMN — three, two, one, or absent.
+      //
+      // Seeded ENABLED for the ADR-103 reason: a band that is absent when its
+      // data is missing needs no second off switch.
+      { key: "in_practice", enabled: true, order: 12 },
+
+      // OFF on the HOME PAGE since changes-35 (ADR-116 §7). The quotes feed
+      // `in_practice`'s first column now, one at a time on a dotted rail. The
+      // cost is simultaneity and it is stated in the ADR rather than hidden:
+      // re-enabling this row is one word, and `in_practice` degrades to two
+      // columns by design if it comes back.
+      { key: "testimonials", enabled: false, order: 13, limit: 3 },
+
       // changes-28 (ADR-093). Placed where the brief's screenshot puts it:
       // after the reading sections, before the newsletter ask — "here is where
       // else to find us" reads as a closing offer, not as a second header.
-      // Renders nothing until an admin activates a social link.
+      // Renders nothing until an admin activates a social link. changes-35
+      // took its video panel (ADR-116 §5), so it is one row now.
       { key: "connect", enabled: true, order: 14 },
 
-      { key: "newsletter", enabled: true, order: 15, variant: "full-width" },
-      { key: "faq", enabled: true, order: 16, variant: "accordion", limit: 6 },
-      // The page closes on a quote, above the risk disclaimer — the last thing
-      // a reader sees before the legal line. `single` is the day's quote.
+      // changes-35 (ADR-116 §6): questions BEFORE the ask. Answer the
+      // objection, then request the email address — which is also the order
+      // the reference closes in. `columns` is the two-column accordion under a
+      // centred heading; `limit` is dropped so all six pairs render, three a
+      // column.
+      { key: "faq", enabled: true, order: 15, variant: "columns" },
+      // OFF on the home page since changes-35 (owner, 2026-09-16): the
+      // subscribe ask is now the inline END of the `connect` band, which had a
+      // whole empty half after its video panel moved to `in_practice`. Two
+      // bands making the same ask in two different colours, one of them half
+      // empty, is what the merge removed.
+      //
+      // **Neither newsletter switch moved** (ADR-080 #5). The `newsletter`
+      // FLAG and `newsletter.placements.home` still decide whether signup
+      // exists and whether it is drawn on this page; `connect` reads both, and
+      // the form still submits `source: "home"`. This row is the third thing —
+      // whether the standalone BAND draws — and it no longer needs to.
+      { key: "newsletter", enabled: false, order: 16, variant: "full-width" },
+      // The page closes on a quote. `single` is the day's quote.
       { key: "quotes", enabled: true, order: 17, variant: "single" },
-      { key: "risk_disclaimer", enabled: true, order: 18 },
+      // OFF since changes-35 (owner, changes-34). The disclaimer is printed in
+      // full by the FOOTER's legal band, from `legal.riskDisclaimer` — the
+      // admin-editable setting ADR-110 gave it — so the home page was carrying
+      // a second, identical copy of it two elements above the first. One
+      // source, one place it renders. `RiskDisclaimer` is untouched and every
+      // other page's footer is unaffected.
+      { key: "risk_disclaimer", enabled: false, order: 18 },
     ],
     "JSON",
     "Homepage sections",
@@ -563,15 +677,30 @@ const SETTINGS = [
   [
     "layout",
     "footer.menuColumns",
-    // All three footer menus, in reading order — the footer is a sitemap,
-    // not a shortcut list. NOTE: the settings loop below never overwrites an
-    // existing VALUE, so a database seeded before this line was widened
-    // keeps its single column until it is reset (pre-launch DB policy) or
-    // this one row is deleted and re-seeded.
+    // All six footer menus, in reading order — the footer is a sitemap, not
+    // a shortcut list, and since changes-36 that means a column per school
+    // and a column for the Tools rows.
+    //
+    // **Six since changes-40, because Tools had outgrown one column.** It held
+    // fifteen rows against the next-longest column's six, so the footer was
+    // one tall stack beside four short ones and every row below the tenth sat
+    // under a fold of empty grid. Split by what a row IS rather than by where
+    // it appears in the header panel: a calculator takes numbers a reader
+    // types, a market page shows numbers the market made.
+    //
+    // NOTE: the settings loop below never overwrites an existing VALUE, so a
+    // database seeded before this line was widened keeps its old columns.
+    // `20260918090000_footer_tools_split_changes40` is what moves an existing
+    // install forward, bounded to a row still holding the previous seeded
+    // value — an admin who edited their columns keeps their version, and
+    // `footer_learn` stays in their database for exactly that case.
     [
-      { menuKey: "footer_learn", order: 1 },
-      { menuKey: "footer_markets", order: 2 },
-      { menuKey: "footer_company", order: 3 },
+      { menuKey: "footer_learn_forex", order: 1 },
+      { menuKey: "footer_learn_crypto", order: 2 },
+      { menuKey: "footer_tools", order: 3 },
+      { menuKey: "footer_tools_markets", order: 4 },
+      { menuKey: "footer_markets", order: 5 },
+      { menuKey: "footer_company", order: 6 },
     ],
     "JSON",
     "Footer menu columns (which menus, in which order)",
@@ -589,19 +718,78 @@ const SETTINGS = [
     "Header top bar (contact + promo)",
     true,
   ],
-  ["layout", "header.showSearch", false, "BOOLEAN", "Show search in header", true],
+  // ADR-108 — TRUE since changes-32. It was false while the control was a
+  // magnifying glass linking to `/news`; there is a real ⌘K search behind it
+  // now, and a site-wide search that ships switched off is a feature nobody
+  // finds. `20260915180000_enable_header_search_changes32` does the same for
+  // a database that already exists.
+  ["layout", "header.showSearch", true, "BOOLEAN", "Show search in header", true],
   ["layout", "footer.showPaymentBadges", false, "BOOLEAN", "Show payment badges in footer", true],
   // Badge IMAGES are admin uploads (ADR-017); this stores only the links, so
   // no third-party logo is ever committed to the repo.
   ["layout", "footer.appLinks", [], "JSON", "Footer app-store links", true],
 
-  // Legal
+  // Legal (changes-33). The owner's own wording, which is the regulator's
+  // wording: a forex risk disclaimer is the one paragraph in the footer
+  // somebody is required to be able to find. Two paragraphs separated by a
+  // blank line — the footer splits on it, because one 200-word block reads as
+  // boilerplate nobody meant to be read.
   [
     "legal",
     "legal.riskDisclaimer",
-    "All content is educational and does not constitute financial advice. Trading carries risk, and you may lose more than your initial deposit. Past performance does not indicate future results.",
+    'Trading Contracts for Difference (CFDs) and spread bets involves a high level of risk due to the use of leverage. These instruments may not be suitable for all investors, as they can result in rapid losses as well as potential gains. Before trading with MBFX Global Limited ("MBFX"), please ensure that you fully understand how CFDs and spread bets work and carefully consider whether you can afford to take the high risk of losing your money.\n\n' +
+      "MBFX Global Limited is incorporated in Saint Lucia under registration number 2023-00532. In line with its commitment to regulatory compliance and due diligence, MBFX adheres to international KYC standards and may not be able to extend certain services in jurisdictions where local regulations restrict such activities. These regions currently include Australia, the United States, Brazil, Curaçao, Indonesia, Sint Eustatius, Tahiti, Saipan, Turkey, Guinea-Bissau, Japan, Bonaire, East Timor, Liberia, Micronesia, Northern Mariana Islands, Jan Mayen, South Sudan, Svalbard, the UAE, and other regions with similar restrictions. For more details, please review our Privacy Policy.",
     "TEXT",
     "Risk disclaimer",
+    true,
+  ],
+  // Their OWN keys rather than two more sentences inside the disclaimer: the
+  // footer prints them as separate lines, a translator handles an address
+  // differently from a paragraph of risk prose, and either can be read alone
+  // by a page the disclaimer does not appear on. Empty is a legitimate value
+  // — an install that is not a registered company prints neither line.
+  [
+    "legal",
+    "legal.companyRegistration",
+    "2023-00532",
+    "STRING",
+    "Company registration number",
+    true,
+  ],
+  [
+    "legal",
+    "legal.registeredAddress",
+    "Ground Floor, Rodney Court Building, Rodney Bay, Gros Islet, Saint Lucia.",
+    "TEXT",
+    "Registered address",
+    true,
+  ],
+  // Legal documents (ADR-110). The value is a site-relative PATH, and the
+  // public address is `/legal/<doc>` — which does not move when an admin
+  // uploads a replacement.
+  //
+  // These point at COMMITTED files under `apps/web/public/legal/`, not at
+  // MediaAsset rows, for the reason the brand logos above record: a
+  // MediaAsset row asserts that bytes exist in the storage driver's root,
+  // which is git-ignored, so a seeded row 404s on a fresh checkout. An admin
+  // who uploads their own through the picker gets an `/uploads/<key>` value
+  // and the route serves it INLINE — the one deliberate exception to ADR-034
+  // §1's attachment default, and PDF-only.
+  ["legal", "legal.termsDocument", "/legal/terms.pdf", "DOCUMENT", "Terms (PDF)", true],
+  [
+    "legal",
+    "legal.privacyDocument",
+    "/legal/privacy.pdf",
+    "DOCUMENT",
+    "Privacy policy (PDF)",
+    true,
+  ],
+  [
+    "legal",
+    "legal.agreementDocument",
+    "/legal/agreement.pdf",
+    "DOCUMENT",
+    "Client agreement (PDF)",
     true,
   ],
   // News & Analysis (Module 15, ADR-015 #7 — module on/off is the news/
@@ -668,7 +856,7 @@ const SETTINGS = [
     "legal.copyrightNotice",
     // {year} is a rendering-time token (Module 08 owns substitution), not
     // resolved here — plan.md A6: "copyright line (translatable, {year} token)".
-    "© {year} MBX Pro. All rights reserved.",
+    "© {year} MBFX Global Limited. All rights reserved.",
     "STRING",
     "Copyright notice",
     true,
@@ -760,14 +948,17 @@ const FEATURE_FLAGS = [
   ["content", "videos", "Videos", true, "PUBLIC"],
   ["tools", "calculators", "Trading calculators", true, "PUBLIC"],
   ["tools", "currency_converter", "Currency converter", true, "PUBLIC"],
+  // Read by /tools/live-rates since ADR-136 §5. Seeded from Module 01 and read
+  // by nothing until then (code-style.md #28).
   ["market", "market_data", "Live market data", true, "PUBLIC"],
   ["market", "economic_calendar", "Economic calendar", true, "PUBLIC"],
-  ["market", "currency_strength", "Currency strength meter", false, "PREMIUM"],
-  ["community", "comments", "Article comments", false, "AUTHENTICATED"],
-  ["community", "forums", "Community forums", false, "AUTHENTICATED"],
-  ["account", "user_accounts", "User accounts", true, "PUBLIC"],
+  // ADR-144 §5 — `currency_strength`, `comments`, `forums`, `user_accounts`
+  // and `watchlists` were seeded since Module 01 and read by NO code, so they
+  // are gone (code-style.md #28); `20260920090000_all_flags_on_changes46`
+  // deletes them from an existing database. Every flag that remains is read by
+  // a page and is seeded ON: the flags screen was removed in the same change,
+  // so a flag seeded off would be one nobody could turn on.
   ["account", "progress_tracking", "Course progress tracking", true, "AUTHENTICATED"],
-  ["account", "watchlists", "Watchlists", false, "AUTHENTICATED"],
   ["account", "newsletter", "Newsletter signup", true, "PUBLIC"],
 ] as const;
 
@@ -937,6 +1128,49 @@ export async function seed(db: PrismaClient) {
   });
   console.log("  theme: mbx-pro-default (active)");
 
+  // Brand logos (changes-32). The theme shipped with colours and no marks, so
+  // every surface that renders `BrandLogo` fell through to its `fallback` —
+  // the site name as text — on a fresh install.
+  //
+  // These are STATIC files under `apps/web/public/brand/`, not MediaAsset
+  // rows, and the distinction is deliberate: a MediaAsset row asserts that
+  // bytes exist in the storage driver's root, which is git-ignored, so a row
+  // pointing at a file nobody checked out 404s in every picker that lists it
+  // (the same trap changes-28 recorded for the video-topic covers). A static
+  // path is the shape `seo.defaultOgImage` already seeds.
+  //
+  // `create`-only per slot: an admin who has uploaded their own logo through
+  // the theme editor keeps it through a re-seed. `mediaAssetId` stays null,
+  // which is exactly what it means — there is no library row to protect from
+  // deletion.
+  const BRAND_LOGOS = [
+    {
+      key: "logo_light",
+      url: "/brand/logo-light.png",
+      altText: "MBX Pro",
+      width: 833,
+      height: 309,
+    },
+    {
+      key: "logo_dark",
+      url: "/brand/logo-dark.png",
+      altText: "MBX Pro",
+      width: 832,
+      height: 309,
+    },
+  ];
+  let seededLogos = 0;
+  for (const logo of BRAND_LOGOS) {
+    const existing = await db.brandAsset.findUnique({
+      where: { key: logo.key },
+      select: { id: true },
+    });
+    if (existing) continue;
+    await db.brandAsset.create({ data: { ...logo, mimeType: "image/png" } });
+    seededLogos += 1;
+  }
+  console.log(`  brand logos: ${seededLogos} created`);
+
   // Settings
   for (const [groupName, key, value, type, label, isPublic] of SETTINGS) {
     await db.setting.upsert({
@@ -1046,41 +1280,75 @@ export async function seed(db: PrismaClient) {
       sortOrder: 3,
     },
     {
-      routeKey: "markets",
-      label: "Markets",
-      icon: "trending-up",
-      requiresFeature: "market_data",
-      sortOrder: 5,
-    },
-    {
       routeKey: "analysis",
       label: "Analysis",
       icon: "line-chart",
       requiresFeature: "analysis",
       sortOrder: 6,
     },
-    {
-      routeKey: "economic-calendar",
-      label: "Calendar",
-      icon: "calendar",
-      requiresFeature: "economic_calendar",
-      sortOrder: 7,
-    },
     { routeKey: "news", label: "News", icon: "newspaper", requiresFeature: "news", sortOrder: 8 },
+    // Support (ADR-109). A FLAT row where the About section was a tree of
+    // five: one page needs no dropdown, and a mega panel over a single
+    // destination is a popup that says the page's own name. No
+    // `requiresFeature` — it is a coded route that always exists.
+    {
+      routeKey: "support",
+      label: "Support",
+      icon: "headset",
+      requiresFeature: null,
+      sortOrder: 9,
+    },
   ];
 
-  // The row ADR-065 §4 replaced. Removed rather than left in place: an upsert
-  // seed never deletes, so without this a database seeded before ADR-065 keeps
-  // a third learning entry in the header pointing at the umbrella page. Its
-  // children go with it — there were none, but a future edit could add some.
+  // Rows a later decision replaced. An upsert seed never DELETES, so without
+  // this an existing database keeps them: the `learn` umbrella root ADR-065 §4
+  // replaced with one root per school, and the `markets` and `about` rows
+  // ADR-109 withdrew — the latter in the header, where it was a root with five
+  // children, AND in `footer_company`, where all six were flat rows.
+  //
+  // Deleting by routeKey is safe in exactly the way overwriting a settings
+  // VALUE is not: a menu row's `routeKey` has to exist in `ROUTE_PATHS` to
+  // resolve to a URL at all, and these no longer do. Leaving them would put
+  // unresolvable entries in the header and the footer, not preserve an
+  // admin's preference.
+  //
+  // `MenuTree` cascades on delete (schema.prisma), so removing a root takes
+  // its children with it; the `in` list below still names the About children
+  // explicitly because `footer_company` carried them as ROOTS of its own.
   const supersededLearnRoot = await db.menuItem.findFirst({
     where: { menuId: mainMenu.id, routeKey: "learn", parentId: null },
     select: { id: true },
   });
-  if (supersededLearnRoot) {
-    await db.menuItem.deleteMany({ where: { parentId: supersededLearnRoot.id } });
-    await db.menuItem.delete({ where: { id: supersededLearnRoot.id } });
-  }
+  if (supersededLearnRoot) await db.menuItem.delete({ where: { id: supersededLearnRoot.id } });
+
+  // The flat "Calendar" header row, which ADR-115 moved INTO the Tools tree.
+  //
+  // Scoped to [mainMenu, routeKey, parentId: null], and the scope is doing
+  // real work here in a way ADR-109's `deleteMany` did not need: unlike
+  // `markets` and `about`, this routeKey still resolves in `ROUTE_PATHS`, and
+  // two other rows share it — the `footer_markets` entry and the new Tools
+  // child. A broad delete would take both, and `upsertNavTree` would put the
+  // child back while the footer quietly lost a link.
+  const supersededCalendarRow = await db.menuItem.findFirst({
+    where: { menuId: mainMenu.id, routeKey: "economic-calendar", parentId: null },
+    select: { id: true },
+  });
+  if (supersededCalendarRow) await db.menuItem.delete({ where: { id: supersededCalendarRow.id } });
+
+  await db.menuItem.deleteMany({
+    where: {
+      routeKey: {
+        in: [
+          "markets",
+          "about",
+          "about-why-us",
+          "about-transparency",
+          "about-security",
+          "about-support",
+        ],
+      },
+    },
+  });
 
   for (const item of NAV) {
     const existing = await db.menuItem.findFirst({
@@ -1108,55 +1376,6 @@ export async function seed(db: PrismaClient) {
       create: { menuItemId: record.id, locale: "en", label: item.label },
     });
   }
-
-  // About section (ADR-047) — the one main-menu entry with children, and so
-  // the first consumer of the mega-menu panel (ADR-048). No requiresFeature:
-  // these five pages are coded routes that always exist, unlike the
-  // feature-gated areas above. `title` on each child is the one-line
-  // description the panel renders under the label.
-  const ABOUT_NAV = {
-    routeKey: "about",
-    label: "About",
-    icon: "building-2",
-    sortOrder: 8,
-    children: [
-      {
-        routeKey: "about",
-        label: "About MBX",
-        title: "Who we are and what we teach",
-        icon: "building-2",
-        sortOrder: 1,
-      },
-      {
-        routeKey: "about-why-us",
-        label: "Why MBX",
-        title: "Five reasons this is worth your time",
-        icon: "badge-check",
-        sortOrder: 2,
-      },
-      {
-        routeKey: "about-transparency",
-        label: "How we operate",
-        title: "Our data, our methods, our funding",
-        icon: "scale",
-        sortOrder: 3,
-      },
-      {
-        routeKey: "about-security",
-        label: "Security & trust",
-        title: "How we protect your account and data",
-        icon: "shield-check",
-        sortOrder: 4,
-      },
-      {
-        routeKey: "about-support",
-        label: "Support",
-        title: "Reach a human when you need one",
-        icon: "headset",
-        sortOrder: 5,
-      },
-    ],
-  };
 
   // The two schools (ADR-065 §4) — the header entries that replaced "Learn",
   // each with the same three surfaces under it. The panel's COMPOSITION lives
@@ -1255,38 +1474,60 @@ export async function seed(db: PrismaClient) {
     children: [
       {
         routeKey: "tool-position-size",
-        label: "Position size",
+        label: "Position size calculator",
         title: "How big a trade your risk allows",
         icon: "calculator",
         sortOrder: 1,
       },
       {
         routeKey: "tool-pip-value",
-        label: "Pip value",
+        label: "Pip calculator",
         title: "What one pip is worth to you",
         icon: "coins",
         sortOrder: 2,
       },
+      // changes-41 (ADR-135): the three calculators the reference carries.
+      {
+        routeKey: "tool-margin",
+        label: "Margin calculator",
+        title: "The deposit a position ties up",
+        icon: "scale",
+        sortOrder: 3,
+      },
+      {
+        routeKey: "tool-profit-loss",
+        label: "Profit & loss calculator",
+        title: "What a trade makes between two prices",
+        icon: "trending-up",
+        sortOrder: 4,
+      },
+      {
+        routeKey: "tool-risk-reward",
+        label: "Risk & reward calculator",
+        title: "Risk, reward and size from three prices",
+        icon: "shield-check",
+        sortOrder: 5,
+      },
       {
         routeKey: "tool-gain-loss",
-        label: "Gain & loss",
+        label: "Gain & loss calculator",
         title: "And what it takes to get back to even",
         icon: "percent",
-        sortOrder: 3,
+        sortOrder: 6,
       },
       {
         routeKey: "tool-pivot-points",
         label: "Pivot points",
         title: "Five methods, one table",
         icon: "git-fork",
-        sortOrder: 4,
+        sortOrder: 7,
       },
       {
         routeKey: "tool-market-hours",
         label: "Market hours",
         title: "Which sessions are open right now",
         icon: "clock",
-        sortOrder: 5,
+        sortOrder: 8,
       },
       {
         routeKey: "tool-currency-converter",
@@ -1294,21 +1535,64 @@ export async function seed(db: PrismaClient) {
         title: "And what a markup really costs",
         icon: "arrow-left-right",
         requiresFeature: "currency_converter",
-        sortOrder: 6,
+        sortOrder: 9,
       },
       {
         routeKey: "tool-correlation",
         label: "Correlation",
         title: "Which pairs move together",
         icon: "grid-3x3",
-        sortOrder: 7,
+        sortOrder: 10,
       },
       {
         routeKey: "tool-risk-sentiment",
         label: "Risk on / risk off",
         title: "Where the market has been leaning",
         icon: "gauge",
-        sortOrder: 8,
+        sortOrder: 11,
+      },
+      // The economic calendar, moved here from a flat header row (ADR-115).
+      // NOT a ninth member of `TOOLS`: it keeps `/economic-calendar`, its own
+      // flag and ADR-050's embedded widget, and has no config, no island and
+      // no `Tool` row. A menu is a list of destinations, and nothing about
+      // appearing in this panel requires being a registered tool — which is
+      // why `contracts/tools.test.ts` still reads `tool-*` keys only.
+      {
+        routeKey: "economic-calendar",
+        label: "Economic calendar",
+        title: "What is scheduled, and when",
+        icon: "calendar",
+        requiresFeature: "economic_calendar",
+        sortOrder: 12,
+      },
+      // The two market boards (ADR-136 §5). Like the calendar they are NOT
+      // `TOOLS` members: coded pages with no `Tool` row, so their route keys
+      // carry no `tool-` prefix.
+      {
+        routeKey: "live-rates",
+        label: "Live rates",
+        title: "Quotes for majors, minors, exotics and metals",
+        icon: "candlestick-chart",
+        requiresFeature: "market_data",
+        sortOrder: 13,
+      },
+      {
+        routeKey: "volatility",
+        label: "Volatility",
+        title: "How far each pair has been moving",
+        icon: "activity",
+        sortOrder: 14,
+      },
+      // "Around the markets" (changes-40) — the headline feed as a page of
+      // its own, on the same footing as the two boards above it: a framed
+      // vendor widget with our chrome and no `Tool` row.
+      {
+        routeKey: "market-news",
+        label: "Market news",
+        title: "Headlines from the major providers",
+        icon: "newspaper",
+        requiresFeature: "market_data",
+        sortOrder: 15,
       },
     ],
   };
@@ -1392,54 +1676,156 @@ export async function seed(db: PrismaClient) {
     }
   }
 
-  for (const tree of [...TRACK_NAV, ABOUT_NAV, TOOLS_NAV]) await upsertNavTree(tree);
+  for (const tree of [...TRACK_NAV, TOOLS_NAV]) await upsertNavTree(tree);
 
   // Footer menus — referenced by the footer.menuColumns setting (A6).
   //
-  // THREE columns, not one: every destination the header offers has a
-  // footer row too, so a visitor who has scrolled to the bottom never has
-  // to scroll back up to reach a section. The grouping mirrors how the
-  // header reads (Learn / Markets / Company), which is why `footer_company`
-  // repeats the About panel's five children rather than linking only /about.
+  // The footer is a SITEMAP: every destination the header offers has a footer
+  // row too, so a visitor who has scrolled to the bottom never has to scroll
+  // back up to reach a section. That sentence has been here since Module 08
+  // and stopped being TRUE twice — ADR-065 split Learn into two schools with
+  // four surfaces each, and ADR-086 put eight calculators behind one "Tools"
+  // link. Three columns carrying eight rows described a header that has
+  // thirty-three destinations in it (changes-36).
+  //
+  // So the grouping now mirrors the header's own top level: one column per
+  // school, one for the Tools panel, one for the reading surfaces, one for
+  // the company pages. `LINK_GRID_CLASS` in footer.tsx already answered for
+  // five — column COUNT has been data since it was written.
+  //
+  // **`footer_learn` is deliberately no longer seeded.** It is not deleted
+  // either: an existing database whose `footer.menuColumns` still names it
+  // (because the changes-36 migration's bounded WHERE did not match a value
+  // its admin had already edited) keeps a working three-column footer, and a
+  // fresh install simply never creates it. Seeding a menu that nothing lists
+  // is the same defect as seeding a setting nothing reads.
   //
   // `requiresFeature` is copied from the header row for the same route on
   // purpose: buildMenu prunes on the flag, so switching `courses` off
-  // empties the Learn column and the header entry together instead of
-  // leaving a dead link at the bottom of every page. The About rows carry
-  // no flag — they are coded routes that always exist (ADR-047).
+  // empties the school columns and the header entries together instead of
+  // leaving dead links at the bottom of every page. A column whose every row
+  // is pruned reserves no grid cell (footer.tsx filters on `items.length`),
+  // which is what keeps a flag-off section from leaving a titled hole. The
+  // Company rows carry no flag — they are coded routes that always exist.
+  const FOOTER_TRACK_MENUS = [
+    { track: "forex", name: "Learn Forex" },
+    { track: "crypto", name: "Learn Crypto" },
+  ].map(({ track, name }) => ({
+    key: `footer_learn_${track}`,
+    name,
+    // The school's four surfaces, in `LEARN_TRACK_SURFACES` order — the same
+    // sequence the section bar, the mega panel and the header tree read, so
+    // the footer cannot present them in an order nobody chose.
+    items: [
+      { routeKey: `learn-${track}`, label: "Courses", requiresFeature: "courses" },
+      { routeKey: `learn-${track}-videos`, label: "Videos", requiresFeature: "videos" },
+      { routeKey: `learn-${track}-quizzes`, label: "Quizzes", requiresFeature: "quizzes" },
+      { routeKey: `learn-${track}-glossary`, label: "Glossary", requiresFeature: "glossary" },
+    ],
+  }));
+
   const FOOTER_MENUS = [
+    ...FOOTER_TRACK_MENUS,
     {
-      key: "footer_learn",
-      name: "Learn",
+      // The header's Tools panel, in TWO columns since changes-40 — the rows
+      // are spelled out here for the reason TOOLS_NAV above is: `@repo/db`
+      // does not depend on `@repo/contracts`, and `contracts/tools.test.ts` is
+      // what keeps a `tool-*` key and a registered tool from drifting apart.
+      //
+      // The split is by what a row IS, not by which panel column it sits in:
+      // everything here takes numbers the READER supplies and works something
+      // out from them. That is also why the currency converter is here rather
+      // than with the rates — a reader converting 500 euros is doing
+      // arithmetic about their own money, not watching a market.
+      key: "footer_tools",
+      name: "Calculators",
       items: [
-        { routeKey: "learn", label: "Courses", requiresFeature: "courses" },
-        { routeKey: "glossary", label: "Glossary", requiresFeature: "glossary" },
-        { routeKey: "news", label: "News & Analysis", requiresFeature: "news" },
+        {
+          routeKey: "tool-position-size",
+          label: "Position size calculator",
+          requiresFeature: "calculators",
+        },
+        { routeKey: "tool-pip-value", label: "Pip calculator", requiresFeature: "calculators" },
+        { routeKey: "tool-margin", label: "Margin calculator", requiresFeature: "calculators" },
+        {
+          routeKey: "tool-profit-loss",
+          label: "Profit & loss calculator",
+          requiresFeature: "calculators",
+        },
+        {
+          routeKey: "tool-risk-reward",
+          label: "Risk & reward calculator",
+          requiresFeature: "calculators",
+        },
+        {
+          routeKey: "tool-gain-loss",
+          label: "Gain & loss calculator",
+          requiresFeature: "calculators",
+        },
+        {
+          routeKey: "tool-currency-converter",
+          label: "Currency converter",
+          requiresFeature: "currency_converter",
+        },
       ],
     },
     {
-      key: "footer_markets",
-      name: "Markets & Tools",
+      // The other half: pages that SHOW the market rather than calculate
+      // against it. Pivot points and the two relationship tools sit here and
+      // not with the calculators because none of them asks the reader for a
+      // price — they read the stored bars and report what happened.
+      key: "footer_tools_markets",
+      name: "Market data",
       items: [
-        { routeKey: "tools", label: "Trading Tools", requiresFeature: "calculators" },
-        { routeKey: "markets", label: "Live Rates", requiresFeature: "market_data" },
-        { routeKey: "analysis", label: "Market Analysis", requiresFeature: "analysis" },
+        { routeKey: "live-rates", label: "Live rates", requiresFeature: "market_data" },
+        { routeKey: "volatility", label: "Volatility", requiresFeature: "calculators" },
+        { routeKey: "tool-correlation", label: "Correlation", requiresFeature: "calculators" },
+        {
+          routeKey: "tool-risk-sentiment",
+          label: "Risk on / risk off",
+          requiresFeature: "calculators",
+        },
+        { routeKey: "tool-pivot-points", label: "Pivot points", requiresFeature: "calculators" },
+        { routeKey: "tool-market-hours", label: "Market hours", requiresFeature: "calculators" },
+        // The headline feed (changes-40), on the same footing as the boards.
+        { routeKey: "market-news", label: "Market news", requiresFeature: "market_data" },
+        // Listed here AND in the reading column below, which is not an
+        // oversight: a sitemap is meant to be findable from wherever a reader
+        // is looking, and the header does the same thing with `learn` (a row
+        // inside both school panels). ADR-115 put the calendar in the Tools
+        // menu; it is still a market page.
         {
           routeKey: "economic-calendar",
-          label: "Economic Calendar",
+          label: "Economic calendar",
           requiresFeature: "economic_calendar",
         },
+      ],
+    },
+    {
+      // Renamed from "Markets & Tools": the eight calculators moved to their
+      // own column, so what is left is the reading surfaces plus the two
+      // umbrella indexes.
+      key: "footer_markets",
+      name: "News & Markets",
+      items: [
+        { routeKey: "news", label: "News", requiresFeature: "news" },
+        { routeKey: "analysis", label: "Market analysis", requiresFeature: "analysis" },
+        {
+          routeKey: "economic-calendar",
+          label: "Economic calendar",
+          requiresFeature: "economic_calendar",
+        },
+        { routeKey: "tools", label: "All tools", requiresFeature: "calculators" },
+        { routeKey: "glossary", label: "Glossary", requiresFeature: "glossary" },
+        { routeKey: "learn", label: "All learning", requiresFeature: "courses" },
       ],
     },
     {
       key: "footer_company",
       name: "Company",
       items: [
-        { routeKey: "about", label: "About MBX", requiresFeature: null },
-        { routeKey: "about-why-us", label: "Why MBX", requiresFeature: null },
-        { routeKey: "about-transparency", label: "How We Operate", requiresFeature: null },
-        { routeKey: "about-security", label: "Security & Trust", requiresFeature: null },
-        { routeKey: "about-support", label: "Support", requiresFeature: null },
+        { routeKey: "support", label: "Support", requiresFeature: null },
+        { routeKey: "sitemap", label: "Sitemap", requiresFeature: null },
       ],
     },
   ] satisfies {
@@ -1486,9 +1872,71 @@ export async function seed(db: PrismaClient) {
       });
       footerItemCount += 1;
     }
+
+    // ─── A footer menu's rows are REPLACED, not merged (changes-40) ──────
+    //
+    // `rolePermission`'s discipline above, for the same reason: this file is
+    // the source of truth for the footer, `footer-sitemap.test.ts` asserts
+    // against THIS list rather than against the database, and until now a row
+    // that left a menu simply stayed in it for ever.
+    //
+    // It was not hypothetical. changes-40 moved eight rows out of
+    // `footer_tools` into `footer_tools_markets`, and a reseeded install drew
+    // both columns in full — the Calculators column still listing pivot
+    // points, correlation, the two market boards and the calendar, with
+    // "Market hours" appearing twice in one footer.
+    //
+    // Scoped to THIS menu, which is the whole safety of it: `economic-calendar`
+    // is deliberately in two footer menus and `learn-forex` is in two header
+    // trees, so a delete by routeKey alone would take the copy that belongs
+    // somewhere else. Cascades from `menuItem` handle the translations.
+    await db.menuItem.deleteMany({
+      where: {
+        menuId: footerMenu.id,
+        routeKey: { notIn: menu.items.map((item) => item.routeKey) },
+      },
+    });
   }
 
-  console.log(`  menu items: ${NAV.length + footerItemCount + 1 + ABOUT_NAV.children.length}`);
+  console.log(`  menu items: ${NAV.length + footerItemCount + 1}`);
+
+  // Redirects for the pages ADR-109 withdrew.
+  //
+  // `/about/support` → `/support` is a genuine MOVE and the one that matters:
+  // it was the only page in that section a reader arrives at with a question,
+  // and it is still here under a shorter address. The other four are NOT
+  // moves — nothing replaced them — and they go to `/support` rather than 404
+  // for the same reason `ComingSoon` was built (changes-22): a reader who
+  // followed a link from somewhere still deserves a page, and `/support` is
+  // the one thing this site can still offer someone who was looking for a
+  // company page. `/markets` goes to `/tools`, which is the market surface
+  // that actually exists.
+  //
+  // These work only because `about` and `markets` left RESERVED_PATHS in the
+  // same change: `resolvePublicPage` returns not-found for a reserved segment
+  // BEFORE it looks at this table.
+  //
+  // `create`-only per row: an admin who has since repointed one of these
+  // keeps their version.
+  const WITHDRAWN_ROUTES: [string, string][] = [
+    ["/about/support", "/support"],
+    ["/about", "/support"],
+    ["/about/why-us", "/support"],
+    ["/about/transparency", "/support"],
+    ["/about/security", "/support"],
+    ["/markets", "/tools"],
+  ];
+  let seededRedirects = 0;
+  for (const [fromPath, toPath] of WITHDRAWN_ROUTES) {
+    const existing = await db.redirect.findUnique({
+      where: { fromPath },
+      select: { id: true },
+    });
+    if (existing) continue;
+    await db.redirect.create({ data: { fromPath, toPath, statusCode: 301 } });
+    seededRedirects += 1;
+  }
+  console.log(`  redirects: ${seededRedirects} created`);
 
   // Article taxonomy (Module 15, ADR-015). Categories are required by
   // Article.categoryId, so the admin flow needs at least these to exist;
@@ -3228,6 +3676,93 @@ export async function seed(db: PrismaClient) {
     }
   }
 
+  // The News & Analysis corpus (changes-32). One sample article loaded the
+  // editor and left `/news` looking empty — the spotlight only renders above
+  // SPOTLIGHT_COUNT visible stories, the per-category bands come from
+  // `getCategoryDigests`, and `loadArticleFacets` drops a zero-count category
+  // (ADR-081 #3), so a single row exercised none of it.
+  //
+  // `create`-only, keyed on the translation slug, exactly like the sample
+  // above: a re-seed adds what is missing and never touches a row an editor
+  // has edited. See `seed-articles.ts` for what the corpus may and may not
+  // say — in short, it is illustrative and quotes nobody real.
+  const seedCategoryIds = new Map<string, string>();
+  for (const category of ARTICLE_CATEGORIES) {
+    const row = await db.articleCategoryTranslation.findUnique({
+      where: { locale_slug: { locale: "en", slug: category.slug } },
+      select: { categoryId: true },
+    });
+    if (row) seedCategoryIds.set(category.slug, row.categoryId);
+  }
+  const seedTagIds = new Map<string, string>();
+  for (const tag of await db.articleTagTranslation.findMany({
+    where: { locale: "en" },
+    select: { slug: true, tagId: true },
+  })) {
+    seedTagIds.set(tag.slug, tag.tagId);
+  }
+
+  let seededArticles = 0;
+  for (const article of SEED_ARTICLES) {
+    const categoryId = seedCategoryIds.get(article.categorySlug);
+    // A corpus entry naming a category the taxonomy above does not seed is a
+    // typo in the corpus, not a reason to create taxonomy behind the admin's
+    // back — skip it and let the count say so.
+    if (!categoryId) continue;
+    const exists = await db.articleTranslation.findUnique({
+      where: { locale_slug: { locale: "en", slug: article.slug } },
+      select: { id: true },
+    });
+    if (exists) continue;
+
+    const publishedAt = new Date(Date.now() - article.daysAgo * 24 * 60 * 60 * 1000);
+    const tagIds = article.tagSlugs
+      .map((slug) => seedTagIds.get(slug))
+      .filter((id): id is string => Boolean(id));
+
+    await db.article.create({
+      data: {
+        kind: article.kind,
+        status: "PUBLISHED",
+        publishedAt,
+        isActive: true,
+        isFeatured: article.isFeatured ?? false,
+        showRelated: true,
+        relatedCount: 3,
+        categoryId,
+        authorId: adminId,
+        tags: { create: tagIds.map((tagId) => ({ tagId })) },
+        translations: {
+          create: {
+            locale: "en",
+            title: article.title,
+            slug: article.slug,
+            excerpt: article.excerpt,
+            body: article.body.join(""),
+            seoTitle: article.seoTitle,
+            seoDescription: article.seoDescription,
+            focusKeywords: article.focusKeywords,
+            twitterCard: "summary_large_image",
+            translationStatus: "TRANSLATED",
+            ...(article.faq
+              ? {
+                  faqItems: {
+                    create: article.faq.map((item, index) => ({
+                      sortOrder: index,
+                      question: item.question,
+                      answer: item.answer,
+                    })),
+                  },
+                }
+              : {}),
+          },
+        },
+      },
+    });
+    seededArticles += 1;
+  }
+  if (seededArticles > 0) console.log(`  article corpus: ${seededArticles} created`);
+
   // Website builder (Module 16, plan v2.2 PR 2.7). The `home` row is the
   // CMS's owner of "/". Phase 1 (PR 1.1) seeded it as a DRAFT with an empty
   // layout and NO published version, so `[locale]/page.tsx` kept serving
@@ -3726,6 +4261,13 @@ export async function seed(db: PrismaClient) {
     ["GBP/JPY", "GBP", "JPY"],
     ["EUR/CHF", "EUR", "CHF"],
     ["AUD/JPY", "AUD", "JPY"],
+    // The Exotic group on /tools/live-rates and /tools/volatility (ADR-136 §4).
+    // Seeded so the volatility board has rows to fill once a provider is
+    // configured; with the MANUAL provider they report nothing, as every
+    // other instrument does.
+    ["USD/TRY", "USD", "TRY"],
+    ["USD/ZAR", "USD", "ZAR"],
+    ["USD/MXN", "USD", "MXN"],
   ];
 
   const OTHER_INSTRUMENTS: [string, string, string, string, string][] = [
@@ -3804,11 +4346,25 @@ export async function seed(db: PrismaClient) {
       " (provider: MANUAL, disabled)",
   );
 
-  // ─── The eight tools ─────────────────────────────────────────
+  // ─── The tools (eleven since changes-41, ADR-135) ───────────
   //
   // ADR-086 #1: the SET is code (TOOL_KEYS) and the CONTENT is data. These
   // rows are the starting content — every word below is admin-editable, and
   // none of the behaviour is.
+  //
+  // ─── Every tool has the same two sections (changes-40) ──────
+  //
+  // `intro` opens with a DEFINITION under its own `<h2>` — "What is a pip?",
+  // "What is margin?" — and `body` opens with "How to use this calculator"
+  // under another, with numbered steps. The owner's own pip page is the shape
+  // (mbfx.co/tools/pip-calculator: definition, then instructions, then the
+  // "why use this" cards `TOOL_HIGHLIGHTS` already seeds), and it is the right
+  // one: a reader arriving from a search result needs to know what the word
+  // means before the form means anything.
+  //
+  // They were headless paragraphs before, so a page that ADR-114 put side by
+  // side with its calculator read as two unlabelled blocks of prose. The
+  // explanations that follow keep their own `<h2>`s, unchanged.
 
   const id = (symbol: string) => instrumentIdBySymbol.get(symbol) ?? "";
   const currencyIds = MAJOR_CURRENCIES.map(([code]) => id(code)).filter(Boolean);
@@ -3821,6 +4377,9 @@ export async function seed(db: PrismaClient) {
     tagline: string;
     intro: string;
     body: string;
+    /** Every tool seeds three or four; an admin edits or adds the rest. */
+    faq?: { question: string; answer: string }[];
+    seoFocusKeyword?: string;
     config: unknown;
   }[] = [
     {
@@ -3829,19 +4388,52 @@ export async function seed(db: PrismaClient) {
       title: "Position Size Calculator",
       tagline: "Work out how big a trade can be before it risks more than you meant.",
       intro:
-        "<p>Decide what you are willing to lose first, and let the position size follow from it. " +
-        "Tell us your account balance, the share of it you are prepared to risk, and how far away " +
-        "your stop loss sits — and we will tell you how many units that allows.</p>",
+        "<h2>What is position size?</h2>" +
+        "<p>Position size is how much of a currency pair a trade buys or sells. It is the one part " +
+        "of a trade that is entirely yours to decide: the market decides whether the trade wins, and " +
+        "the size decides what it costs you when it loses.</p>" +
+        "<p>Sizing from risk means choosing that cost first — a share of your balance you are " +
+        "willing to lose — and letting the number of units follow from it, rather than trading a " +
+        "round lot and finding out afterwards what the lot was risking.</p>",
       body:
-        "<h2>About the Position Size Calculator</h2>" +
-        "<p>Position size is the one decision that is entirely yours. The market decides whether a " +
-        "trade wins; you decide how much it costs when it loses.</p>" +
-        "<p>The arithmetic is short. The amount at risk is your balance multiplied by your risk " +
-        "percentage. Divide that by the stop-loss distance in pips, and again by the value of one " +
-        "pip, and what is left is the position size that makes those two numbers agree.</p>" +
+        "<h2>How to use this calculator</h2>" +
+        "<ol>" +
+        "<li>Select your account currency</li>" +
+        "<li>Choose the currency pair you want to trade</li>" +
+        "<li>Enter your account balance and the share of it you are willing to risk</li>" +
+        "<li>Enter how far away your stop loss sits, in pips</li>" +
+        "<li>Read off the position size, and the amount at risk it is built from</li>" +
+        "</ol>" +
+        "<h2>How the figure is worked out</h2>" +
+        "<p>The amount at risk is your balance multiplied by your risk percentage. Divide that by " +
+        "the stop-loss distance in pips, and again by the value of one pip, and what is left is the " +
+        "position size that makes those two numbers agree.</p>" +
         "<p>When your account currency is not the pair's quote currency, one more step is needed: " +
         "the pip value has to be converted. We show that conversion rather than folding it away, " +
         "because it is the step most spreadsheets get wrong.</p>",
+      faq: [
+        {
+          question: "How much of my account should I risk on one trade?",
+          answer:
+            "Many traders keep it between 1% and 2% of the balance. The exact figure is yours to " +
+            "choose; what matters is choosing it before the trade and keeping it the same " +
+            "from one trade to the next.",
+        },
+        {
+          question: "Why does a wider stop loss give me a smaller position?",
+          answer:
+            "The amount you are willing to lose stays fixed. If the stop sits further away, each " +
+            "pip of that distance has to cost less, and the only way to make a pip cost less is " +
+            "to trade fewer units.",
+        },
+        {
+          question: "What is the difference between units and lots?",
+          answer:
+            "They measure the same thing. A standard lot is 100,000 units of the base currency, a " +
+            "mini lot 10,000 and a micro lot 1,000, so a result of 25,000 units is a quarter of a " +
+            "standard lot.",
+        },
+      ],
       config: {
         defaultAccountCurrency: "USD",
         defaultPairId: id("EUR/USD"),
@@ -3855,19 +4447,58 @@ export async function seed(db: PrismaClient) {
     {
       key: "pip-value",
       sortOrder: 1,
-      title: "Pip Value Calculator",
-      tagline: "What one pip is worth on your position, in your own currency.",
+      // Title and tagline are the owner's own reference page
+      // (mbfx.co/tools/pip-calculator), word for word — the treatment ADR-135
+      // already gave margin, profit and risk. The URL stays `/tools/pip-value`:
+      // the registry key is the segment (ADR-086 #3) and a title is data.
+      title: "Pip Calculator",
+      tagline:
+        "Calculate the value of a pip for any currency pair and trade size. Essential tool for " +
+        "risk management and position sizing.",
       intro:
-        "<p>A pip is the smallest ordinary move in a currency pair. What it is <em>worth</em> " +
-        "depends on how much you are trading and what currency your account is held in — which is " +
-        "why the same one-pip move can be ten dollars or nine euros.</p>",
+        "<h2>What is a pip?</h2>" +
+        "<p>A pip is the smallest price move a currency pair ordinarily makes. For most pairs that " +
+        "is the fourth decimal place, 0.0001. For pairs quoted in Japanese yen it is the second, " +
+        "0.01, because the yen is quoted to two decimal places rather than four.</p>" +
+        "<p>What a pip is <em>worth</em> is a different question. It depends on how much you are " +
+        "trading and what currency your account is held in, which is why the same one-pip move can " +
+        "be ten dollars or nine euros. That figure is what turns a stop-loss distance on a chart " +
+        "into an amount of money.</p>",
       body:
-        "<h2>About the Pip Value Calculator</h2>" +
-        "<p>For most pairs a pip is 0.0001. For pairs quoted in Japanese yen it is 0.01, because " +
-        "the yen is quoted to two decimal places rather than four.</p>" +
-        "<p>Multiply the pip size by your position size in units, and you have the value of a pip " +
-        "in the pair's quote currency. If your account is held in a different currency, that " +
-        "figure is converted at the current rate.</p>",
+        "<h2>How to use this calculator</h2>" +
+        "<ol>" +
+        "<li>Select your account currency</li>" +
+        "<li>Choose the currency pair you want to trade</li>" +
+        "<li>Enter your trade size in units, and read off the value of one pip</li>" +
+        "</ol>" +
+        "<h2>How the figure is worked out</h2>" +
+        "<p>Multiply the pip size for the pair by your position size in units, and you have the " +
+        "value of a pip in the pair's quote currency.</p>" +
+        "<p>If your account is held in a different currency, that figure is converted at the stored " +
+        "exchange rate, and the page prints the day that rate is from.</p>",
+      faq: [
+        {
+          question: "How much is one pip worth on a standard lot?",
+          answer:
+            "On a pair quoted in US dollars, such as EUR/USD, one pip on a standard lot of " +
+            "100,000 units is worth 10 US dollars. On other pairs it depends on the quote " +
+            "currency and on the currency your account is held in.",
+        },
+        {
+          question: "What is the difference between a pip and a pipette?",
+          answer:
+            "A pipette is a tenth of a pip. Many platforms quote prices to one extra decimal " +
+            "place, so EUR/USD moving from 1.10005 to 1.10015 has moved ten pipettes, which is " +
+            "one pip.",
+        },
+        {
+          question: "Why does the pip value change from day to day?",
+          answer:
+            "When your account currency is not the pair's quote currency, the pip value is " +
+            "converted at an exchange rate, and that rate moves. On a pair quoted in your own " +
+            "account currency, the pip value stays the same.",
+        },
+      ],
       config: {
         defaultAccountCurrency: "USD",
         defaultPairId: id("EUR/USD"),
@@ -3876,38 +4507,323 @@ export async function seed(db: PrismaClient) {
         accountCurrencyIds: currencyIds,
       },
     },
+    // ── changes-41 (ADR-135) ──────────────────────────────────
+    //
+    // Title, tagline and each "Understanding Margin" / "Trading Tips" /
+    // "Risk Management Tips" list are the owner's own reference pages
+    // (mbfx.co/tools/*), word for word. The rest is written to match the eight
+    // above. Nothing is carried over from those pages' footers: a regulatory
+    // number or a compensation scheme is a claim about a brokerage (ADR-047
+    // §2), never starting content for a calculator.
+    {
+      key: "margin",
+      sortOrder: 2,
+      title: "Margin Calculator",
+      tagline:
+        "Calculate the required margin for your trades based on instrument, trade size, and " +
+        "leverage. Essential for proper risk management and position sizing.",
+      intro:
+        "<h2>What is margin?</h2>" +
+        "<p>Margin is the deposit a position needs while it is open. It is not a fee and it is not " +
+        "what the trade can lose: it is your own money, set aside while the position is running and " +
+        "released when it closes.</p>" +
+        "<p>How much is set aside depends on the leverage you trade at. At 1:100 a 100,000-unit " +
+        "position ties up 1,000 units of the base currency; at 1:500 the same position ties up 200. " +
+        "What each pip costs you does not change with it.</p>",
+      body:
+        "<h2>How to use this calculator</h2>" +
+        "<ol>" +
+        "<li>Select your account currency</li>" +
+        "<li>Choose the currency pair and enter your trade size in units</li>" +
+        "<li>Enter your account balance and pick your leverage</li>" +
+        "<li>Read off the required margin, the free margin left, and your margin level</li>" +
+        "</ol>" +
+        "<h2>Understanding Margin</h2>" +
+        "<ul>" +
+        "<li><strong>Required Margin:</strong> The amount needed to open a position</li>" +
+        "<li><strong>Free Margin:</strong> Available funds for new positions</li>" +
+        "<li><strong>Margin Level:</strong> (Equity / Used Margin) &times; 100</li>" +
+        "<li><strong>Margin Call:</strong> Usually occurs at 100% margin level</li>" +
+        "</ul>" +
+        "<h2>How the figure is worked out</h2>" +
+        "<p>A position of 100,000 units is 100,000 of the pair's base currency. At 1:100 leverage " +
+        "the deposit is a hundredth of that: 1,000 of the base currency, converted into your " +
+        "account currency at the stored rate.</p>" +
+        "<p>Before a position is open, your equity is the same as your balance, so that is what the " +
+        "margin level here is measured against. Once a trade moves, its profit or loss moves your " +
+        "equity, and your margin level with it.</p>" +
+        "<p>Leverage changes the deposit, not the risk. A 50-pip move costs the same on a " +
+        "100,000-unit position at 1:50 as it does at 1:500.</p>",
+      faq: [
+        {
+          question: "What is the difference between margin and leverage?",
+          answer:
+            "Leverage is the ratio; margin is the money. At 1:100 leverage, every 100 units of " +
+            "position need 1 unit of margin set aside while the trade is open.",
+        },
+        {
+          question: "What is a margin call?",
+          answer:
+            "A warning that your equity has fallen close to the margin your open positions are " +
+            "using. The level it happens at is set by your broker, and a 100% margin level is a " +
+            "common one. Below a further level, positions can be closed for you.",
+        },
+        {
+          question: "Why does my account currency change the result?",
+          answer:
+            "Margin is worked out in the pair's base currency, because that is what a position is " +
+            "measured in. If your account is held in another currency, the deposit is converted " +
+            "at the stored exchange rate.",
+        },
+        {
+          question: "Does higher leverage mean more risk?",
+          answer:
+            "It means a smaller deposit, which lets you open a larger position with the same " +
+            "balance. The position size, not the leverage, decides what each pip costs you.",
+        },
+      ],
+      seoFocusKeyword: "margin calculator",
+      config: {
+        defaultAccountCurrency: "USD",
+        defaultPairId: id("EUR/USD"),
+        defaultUnits: 100000,
+        defaultBalance: 10000,
+        leverageOptions: [50, 100, 200, 400, 500],
+        defaultLeverage: 100,
+        pairIds,
+        accountCurrencyIds: currencyIds,
+      },
+    },
+    {
+      key: "profit-loss",
+      sortOrder: 3,
+      title: "Profit Calculator",
+      tagline:
+        "Calculate potential profit and loss for your forex trades before you enter the market. " +
+        "Essential tool for trade planning and risk management.",
+      intro:
+        "<h2>What is profit and loss on a forex trade?</h2>" +
+        "<p>A forex trade makes or loses the distance the price moved multiplied by the size of the " +
+        "position. The distance is measured in pips; the money is measured first in the pair's quote " +
+        "currency and then in yours.</p>" +
+        "<p>The same fifty-pip move is a few dollars on a micro lot and a few hundred on a standard " +
+        "one, which is why a result in pips and a result in money are two different answers to two " +
+        "different questions. A buy profits when the price rises and a sell when it falls.</p>",
+      body:
+        "<h2>How to use this calculator</h2>" +
+        "<ol>" +
+        "<li>Select your account currency</li>" +
+        "<li>Choose the currency pair you want to trade</li>" +
+        "<li>Select trade type (Buy/Sell)</li>" +
+        "<li>Enter lot size and open/close prices</li>" +
+        "<li>See your profit or loss update as you type</li>" +
+        "</ol>" +
+        "<h2>Trading Tips</h2>" +
+        "<ul>" +
+        "<li>Always calculate potential profit/loss before entering trades</li>" +
+        "<li>Use proper risk management with stop losses</li>" +
+        "<li>Consider the risk-reward ratio for each trade</li>" +
+        "<li>Factor in spread costs when calculating profits</li>" +
+        "</ul>" +
+        "<h2>How the figure is worked out</h2>" +
+        "<p>The difference between the close and the open price, multiplied by the position size in " +
+        "units, is the result in the pair's quote currency. On a buy, a higher close is a profit; on " +
+        "a sell, a lower one is.</p>" +
+        "<p>That figure is then converted into your account currency at the stored exchange rate. " +
+        "Spreads, commissions and swaps are not included, so a real trade will do slightly worse " +
+        "than the figure shown.</p>",
+      faq: [
+        {
+          question: "What is the difference between pips and profit?",
+          answer:
+            "A pip is a distance in price. Profit is that distance multiplied by the size of your " +
+            "position. Fifty pips on a micro lot and fifty pips on a standard lot are the same " +
+            "move and very different amounts of money.",
+        },
+        {
+          question: "How are sell trades calculated?",
+          answer:
+            "A sell profits when the price falls. The calculator reverses the sign for you, so a " +
+            "sell opened at 1.1050 and closed at 1.1000 shows a 50-pip profit.",
+        },
+        {
+          question: "Why are yen pairs different?",
+          answer:
+            "Yen pairs are quoted to two decimal places, so one pip is 0.01 rather than 0.0001. " +
+            "The calculator uses the right pip size for the pair you choose.",
+        },
+        {
+          question: "Does the result include spreads and fees?",
+          answer:
+            "No. It is the price move alone. Your broker's spread, commission and any overnight " +
+            "swap all come off it, so treat the figure as the best case for those prices.",
+        },
+      ],
+      seoFocusKeyword: "forex profit calculator",
+      config: {
+        defaultAccountCurrency: "USD",
+        defaultPairId: id("EUR/USD"),
+        defaultLots: 1,
+        pairIds,
+        accountCurrencyIds: currencyIds,
+      },
+    },
+    {
+      key: "risk-reward",
+      sortOrder: 4,
+      title: "Risk Calculator",
+      tagline:
+        "Calculate your trading risk, position size, and risk-reward ratio. Essential for proper " +
+        "risk management and consistent trading results.",
+      intro:
+        "<h2>What is risk-reward?</h2>" +
+        "<p>Risk is the distance from your entry to your stop loss, in money. Reward is the distance " +
+        "from your entry to your take profit, in the same money. The ratio between the two is what " +
+        "decides whether a strategy can survive being wrong more often than it is right.</p>" +
+        "<p>At 1:2 — a target paying twice what the stop costs — winning one trade in three roughly " +
+        "breaks even before costs. At 1:1 you have to be right more than half the time for the same " +
+        "result.</p>",
+      body:
+        "<h2>How to use this calculator</h2>" +
+        "<ol>" +
+        "<li>Select your account currency and the currency pair</li>" +
+        "<li>Enter your account balance and the share of it you are willing to risk</li>" +
+        "<li>Enter your entry, stop loss and take profit as prices, the way they appear on a chart</li>" +
+        "<li>Read off the amount at risk, the position size it allows, and the risk-reward ratio</li>" +
+        "</ol>" +
+        "<h2>Risk Management Tips</h2>" +
+        "<ul>" +
+        "<li><strong>2% Rule:</strong> Never risk more than 2% per trade</li>" +
+        "<li><strong>Risk:Reward:</strong> Aim for minimum 1:2 ratio</li>" +
+        "<li><strong>Position Size:</strong> Adjust based on stop loss distance</li>" +
+        "<li><strong>Consistency:</strong> Use same risk % for all trades</li>" +
+        "</ul>" +
+        "<h2>How the figures are worked out</h2>" +
+        "<p>The amount at risk is your balance multiplied by your risk percentage. The " +
+        "distance from the entry to the stop loss, in pips, sets how big a position that " +
+        "amount can carry.</p>" +
+        "<p>The distance from the entry to the take profit, divided by the distance to the stop, is " +
+        "the risk-reward ratio. A ratio of 1:2 means the target pays twice what the stop costs.</p>" +
+        "<p>A stop below the entry is read as a buy and a stop above it as a sell, so the take " +
+        "profit belongs on the other side.</p>",
+      faq: [
+        {
+          question: "What is the 2% rule?",
+          answer:
+            "A guideline that no single trade should be able to lose more than 2% of the account. " +
+            "At that size, a run of ten losing trades in a row still leaves more than 80% of the " +
+            "balance.",
+        },
+        {
+          question: "What does a 1:2 risk-reward ratio mean?",
+          answer:
+            "The take profit is twice as far from the entry as the stop loss. At that ratio, a " +
+            "strategy that wins one trade in three roughly breaks even before costs.",
+        },
+        {
+          question: "Why does the calculator say my take profit is on the wrong side?",
+          answer:
+            "The direction of the trade is read from the stop loss. If the stop is below the " +
+            "entry, the trade is a buy and the take profit must be above it. If the stop is above " +
+            "the entry, it is a sell and the take profit must be below it.",
+        },
+        {
+          question: "How is this different from the Position Size Calculator?",
+          answer:
+            "The Position Size Calculator takes a stop-loss distance in pips. This one takes " +
+            "prices and adds the take profit, so it can also show the reward and the ratio " +
+            "between the two.",
+        },
+      ],
+      seoFocusKeyword: "forex risk calculator",
+      config: {
+        defaultAccountCurrency: "USD",
+        defaultPairId: id("EUR/USD"),
+        defaultBalance: 10000,
+        defaultRiskPercent: 2,
+        minRiskPercent: 0.1,
+        maxRiskPercent: 10,
+        conservativeMaxPercent: 1,
+        moderateMaxPercent: 2,
+        minRecommendedRatio: 2,
+        pairIds,
+        accountCurrencyIds: currencyIds,
+      },
+    },
     {
       key: "gain-loss",
-      sortOrder: 2,
+      sortOrder: 5,
       title: "Gain & Loss Percentage Calculator",
       tagline: "Tell us one of the three figures and we will work out the other two.",
       intro:
-        "<p>Give us where you started and any one of: the amount you made or lost, the percentage, " +
-        "or where you ended up. We will fill in the rest — and tell you what it takes to get back " +
-        "to level.</p>",
+        "<h2>What is a gain or loss percentage?</h2>" +
+        "<p>A percentage gain or loss is the change in a balance measured against the balance it " +
+        "started from. That last part is what makes the two asymmetrical: a loss is measured against " +
+        "the larger balance you had, and the gain that would undo it is measured against the smaller " +
+        "one you are left with.</p>" +
+        "<p>Lose 50% and a 50% gain does not restore the account. You need 100%, because the gain is " +
+        "earned on what is left.</p>",
       body:
+        "<h2>How to use this calculator</h2>" +
+        "<ol>" +
+        "<li>Enter the balance you started from</li>" +
+        "<li>Enter any ONE of the other three: the amount made or lost, the percentage, or the " +
+        "balance you ended with</li>" +
+        "<li>Read off the two figures it fills in, and what it takes to get back to level</li>" +
+        "</ol>" +
         "<h2>About gains, losses, and getting back to even</h2>" +
-        "<p>Losses and gains are not symmetrical, and this is the tool that shows it. Lose 50% of " +
-        "an account and a 50% gain does not restore it: you need 100%, because the gain is earned " +
-        "on the smaller balance that is left.</p>" +
-        "<p>That asymmetry is the whole argument for position sizing. A string of small, survivable " +
-        "losses is recoverable arithmetic. A large one is not.</p>",
+        "<p>The asymmetry above is the whole argument for position sizing. A string of small, " +
+        "survivable losses is recoverable arithmetic. A large one is not.</p>" +
+        "<p>Nothing here needs a market rate, so this calculator answers the same way on a laptop " +
+        "with no connection at all.</p>",
+      faq: [
+        {
+          question: "Why doesn't a 50% gain recover a 50% loss?",
+          answer:
+            "The gain is earned on the smaller balance. 10,000 down 50% is 5,000, and 50% of " +
+            "5,000 is only 2,500, which leaves you at 7,500. Getting back to 10,000 takes a 100% " +
+            "gain.",
+        },
+        {
+          question: "How is the percentage worked out?",
+          answer:
+            "The change in the balance is divided by the balance you started from, then " +
+            "multiplied by 100. A move from 10,000 to 11,500 is a change of 1,500, which is 15%.",
+        },
+        {
+          question: "Do I need to fill in every field?",
+          answer:
+            "No. Enter the starting balance and any one of the other figures, and the calculator " +
+            "fills in the rest.",
+        },
+      ],
       config: { defaultStartBalance: 10000, decimals: 2 },
     },
     {
       key: "pivot-points",
-      sortOrder: 3,
+      sortOrder: 6,
       title: "Pivot Point Calculator",
       tagline: "Five methods, computed from the last completed period.",
       intro:
-        "<p>Pivot points turn one period's high, low, open and close into a set of levels for the " +
-        "next one. Pick an interval and a symbol and we will fill the figures in, or enter your " +
-        "own.</p>",
+        "<h2>What are pivot points?</h2>" +
+        "<p>A pivot point is a price worked out from the previous period's high, low and close, and " +
+        "used as the axis for the period that follows. The levels above it are read as resistance, " +
+        "the levels below it as support.</p>" +
+        "<p>They are arithmetic rather than a forecast: the same four numbers always give the same " +
+        "levels. That is also why they are watched — a great many traders are looking at exactly the " +
+        "same lines.</p>",
       body:
+        "<h2>How to use this calculator</h2>" +
+        "<ol>" +
+        "<li>Choose a symbol and an interval — daily, weekly, monthly or yearly</li>" +
+        "<li>The open, high, low and close of the last completed period are filled in for you where " +
+        "the platform has them; type your own over the top at any time</li>" +
+        "<li>Read the table: every method, side by side, for the same four prices</li>" +
+        "</ol>" +
         "<h2>About Pivot Points</h2>" +
         "<p>Five methods are offered, and they disagree with each other on purpose.</p>" +
-        "<p><strong>Floor</strong> is the classic: the pivot is the average of the high, the low " +
-        "and the close, and the supports and resistances are reflected around it.</p>" +
+        "<p><strong>Floor</strong> is the classic: the pivot is the average of the high, the low and " +
+        "the close, and the supports and resistances are reflected around it.</p>" +
         "<p><strong>Woodie</strong> weights the opening price double, so the pivot leans toward " +
         "where the period began rather than where it ended.</p>" +
         "<p><strong>Camarilla</strong> is the only method with four levels a side, and its levels " +
@@ -3919,6 +4835,28 @@ export async function seed(db: PrismaClient) {
         "<p>Levels are computed from the last COMPLETED period, never from one still trading. A " +
         "level recalculated every hour out of a half-formed bar is not a level anyone can plan " +
         "against.</p>",
+      faq: [
+        {
+          question: "Which pivot point method should I use?",
+          answer:
+            "There is no single right one. Floor pivots are the most widely watched, which is " +
+            "much of their value. The others weight the prices differently, and seeing all five " +
+            "side by side shows where they agree.",
+        },
+        {
+          question: "What do the support and resistance levels mean?",
+          answer:
+            "They are prices where traders watching the same levels may expect the market to " +
+            "pause or turn. They are worked out from arithmetic, not from a forecast, and the " +
+            "price is free to move straight through them.",
+        },
+        {
+          question: "Which interval should I pick?",
+          answer:
+            "Match it to how long you hold a trade. Daily pivots suit trades that open and close " +
+            "within the day; weekly and monthly pivots suit positions held for longer.",
+        },
+      ],
       config: {
         intervals: ["1D", "1W", "1M", "1Y"],
         defaultInterval: "1D",
@@ -3928,23 +4866,55 @@ export async function seed(db: PrismaClient) {
     },
     {
       key: "market-hours",
-      sortOrder: 4,
+      sortOrder: 7,
       title: "Forex Market Hours",
       tagline: "Which sessions are open right now, in your own timezone.",
       intro:
-        "<p>The currency market runs around the clock from Sydney's Sunday open to New York's " +
-        "Friday close, but it is not equally busy throughout. Four sessions overlap in turn, and " +
-        "the overlaps are where most of the volume is.</p>",
+        "<h2>When is the forex market open?</h2>" +
+        "<p>The currency market runs around the clock from Sydney's Sunday open to New York's Friday " +
+        "close. It has no single exchange and no opening bell: it is four regional sessions handing " +
+        "over to one another.</p>" +
+        "<p>It is not equally busy throughout. Where two sessions are open at once there are twice " +
+        "as many people trading the same pairs, and that is where most of the day's movement " +
+        "happens.</p>",
       body:
+        "<h2>How to use this page</h2>" +
+        "<ol>" +
+        "<li>Check the clock at the top — it is your own local time, read from your device</li>" +
+        "<li>See which sessions are open now, and how long each has left</li>" +
+        "<li>Look at the overlaps to find the busiest windows of your own day</li>" +
+        "</ol>" +
         "<h2>About the trading sessions</h2>" +
         "<p>All four session times are shown in the timezone you pick, and they follow daylight " +
-        "saving automatically — which is why London's hours shift against Tokyo's twice a year " +
-        "even though Tokyo never changes its clocks.</p>" +
+        "saving automatically — which is why London's hours shift against Tokyo's twice a year even " +
+        "though Tokyo never changes its clocks.</p>" +
         "<p>The busiest window is the London/New York overlap, when the two largest sessions are " +
         "open at once. The quietest is the gap between the New York close and the Tokyo open.</p>" +
-        "<p>The market is shut across the weekend. The gap is bounded by two local times, not by " +
-        "a UTC midnight, so it opens and closes at a different clock hour depending where you " +
-        "are reading this.</p>",
+        "<p>The market is shut across the weekend. The gap is bounded by two local times, not by a " +
+        "UTC midnight, so it opens and closes at a different clock hour depending where you are " +
+        "reading this.</p>",
+      faq: [
+        {
+          question: "Is the forex market open 24 hours a day?",
+          answer:
+            "On weekdays, yes. It opens with Sydney on Sunday evening in New York terms and " +
+            "closes with New York on Friday afternoon. Across the weekend it is shut.",
+        },
+        {
+          question: "What is the best time of day to trade?",
+          answer:
+            "Most activity happens where two sessions overlap, and the London and New York " +
+            "overlap is usually the busiest. Busier is not the same as better: more movement " +
+            "means more opportunity and more risk alike.",
+        },
+        {
+          question: "Why did the session times shift by an hour?",
+          answer:
+            "Daylight saving. London, New York and Sydney change their clocks on different " +
+            "dates and Tokyo does not change them at all, so the sessions move against each " +
+            "other and against your own clock a few times a year.",
+        },
+      ],
       config: {
         sessions: [
           {
@@ -3976,21 +4946,53 @@ export async function seed(db: PrismaClient) {
     },
     {
       key: "currency-converter",
-      sortOrder: 5,
+      sortOrder: 8,
       title: "Currency Converter",
       tagline: "Convert between currencies, and see what a markup really costs.",
       intro:
-        "<p>Convert any amount between the major currencies at the mid-market rate — and then see " +
-        "what a bank, an ATM, a card or an airport kiosk would typically hand you instead.</p>",
+        "<h2>What is the mid-market rate?</h2>" +
+        "<p>The mid-market rate is the midpoint between what buyers are offering for a currency and " +
+        "what sellers are asking for it. It is the rate quoted in the news, and it is the rate every " +
+        "other rate is measured against.</p>" +
+        "<p>It is also not a rate anybody will hand you. What a bank, an ATM, a card or an airport " +
+        "kiosk gives you is that rate less a markup, and the size of the markup is usually larger " +
+        "than people expect.</p>",
       body:
+        "<h2>How to use this converter</h2>" +
+        "<ol>" +
+        "<li>Pick the currency you are converting from and the one you want</li>" +
+        "<li>Enter the amount</li>" +
+        "<li>Read the mid-market result, then compare it with what each kind of provider would " +
+        "typically hand you</li>" +
+        "</ol>" +
         "<h2>About the rates you are shown</h2>" +
-        "<p>The mid-market rate is the midpoint between what buyers are offering and what sellers " +
-        "are asking. It is the rate quoted in the news, and it is not a rate you can get.</p>" +
-        "<p>The other four options apply a typical markup to that rate. They are estimates, not " +
-        "quotes, and they are not attributed to any named provider — what a particular bank or " +
-        "kiosk charges you on a particular day is between you and them. The figures exist to show " +
-        "the SHAPE of the cost, which is usually larger than people expect.</p>" +
+        "<p>The four comparison options apply a typical markup to the mid-market rate. They are " +
+        "estimates, not quotes, and they are not attributed to any named provider — what a " +
+        "particular bank or kiosk charges you on a particular day is between you and them. The " +
+        "figures exist to show the SHAPE of the cost.</p>" +
         "<p>Rates come from the last completed daily close, and the page says when that was.</p>",
+      faq: [
+        {
+          question: "Why is my bank's rate different from the one shown?",
+          answer:
+            "The converter shows the mid-market rate. A bank, card or kiosk adds a markup to it, " +
+            "sometimes as a visible fee and often built into a worse rate, so the amount you " +
+            "receive is lower.",
+        },
+        {
+          question: "How current are the rates?",
+          answer:
+            "They are taken from the last completed daily close, and the page prints the date. " +
+            "They are for reference and planning, not a quote you can deal at.",
+        },
+        {
+          question: "Are the provider comparisons real quotes?",
+          answer:
+            "No. They apply a typical markup for each kind of provider to show the shape of the " +
+            "cost. What a particular provider charges you on a particular day can be higher or " +
+            "lower.",
+        },
+      ],
       config: {
         currencyIds,
         defaultFrom: "USD",
@@ -4003,24 +5005,56 @@ export async function seed(db: PrismaClient) {
     },
     {
       key: "correlation",
-      sortOrder: 6,
+      sortOrder: 9,
       title: "Currency Correlation",
       tagline: "Which pairs move together, and which move apart.",
       intro:
-        "<p>Two positions in strongly correlated pairs are closer to one position than two. This " +
-        "grid shows how closely each pair has moved with the others over the window you pick.</p>",
+        "<h2>What is currency correlation?</h2>" +
+        "<p>Correlation measures how closely two pairs have moved together. At +1 they have moved in " +
+        "lockstep, at &minus;1 exactly opposite, and near 0 their day-to-day moves have had nothing " +
+        "to do with each other.</p>" +
+        "<p>It matters because two positions in strongly correlated pairs are closer to one position " +
+        "than to two. An account holding EUR/USD and GBP/USD is largely holding one bet against the " +
+        "dollar, at twice the size the position sizing assumed.</p>",
       body:
+        "<h2>How to use this grid</h2>" +
+        "<ol>" +
+        "<li>Pick a window — the number of trading days the figures are measured over</li>" +
+        "<li>Read a cell as the relationship between the pair on its row and the pair on its " +
+        "column</li>" +
+        "<li>Check the pairs you already hold against the one you are about to open</li>" +
+        "</ol>" +
         "<h2>What the numbers mean</h2>" +
-        "<p>Each cell is a correlation coefficient between −1 and +1. At +1 the two pairs have " +
-        "moved in lockstep; at −1 they have moved exactly opposite; near 0 their moves have been " +
-        "unrelated.</p>" +
         "<p>We correlate daily <em>returns</em>, not prices. That distinction matters more than it " +
         "sounds: two pairs that are both drifting upward will look correlated at the price level " +
         "even when their day-to-day moves have nothing to do with each other.</p>" +
-        "<p>A cell with too little history shows a dash rather than a number. A coefficient " +
-        "computed from a handful of days is not a small measurement, it is a wrong one.</p>" +
-        "<p>These figures describe a window that has already closed. They are updated once a day " +
-        "and are not a forecast.</p>",
+        "<p>A cell with too little history shows a dash rather than a number. A coefficient computed " +
+        "from a handful of days is not a small measurement, it is a wrong one.</p>" +
+        "<p>These figures describe a window that has already closed. They are updated once a day and " +
+        "are not a forecast.</p>",
+      faq: [
+        {
+          question: "What counts as a strong correlation?",
+          answer:
+            "As a rough guide, a figure above +0.7 or below −0.7 is strong, and one between " +
+            "−0.3 and +0.3 is weak. The sign tells you the direction: positive pairs have moved " +
+            "together, negative ones opposite.",
+        },
+        {
+          question: "Why do the numbers change between windows?",
+          answer:
+            "Correlations shift over time. A short window shows how two pairs have behaved " +
+            "recently; a long one shows the steadier relationship underneath. When the two " +
+            "disagree, the relationship is changing.",
+        },
+        {
+          question: "How can correlation help me manage risk?",
+          answer:
+            "Before opening a trade, check it against what you already hold. A new position in " +
+            "a pair strongly correlated with an open one adds to the same bet rather than " +
+            "spreading your risk.",
+        },
+      ],
       config: {
         windows: ["5d", "10d", "30d", "60d", "90d", "180d", "250d"],
         defaultWindow: "30d",
@@ -4029,26 +5063,59 @@ export async function seed(db: PrismaClient) {
     },
     {
       key: "risk-sentiment",
-      sortOrder: 7,
+      sortOrder: 10,
       title: "Risk-On / Risk-Off Meter",
       tagline: "Whether the market has been reaching for risk, or away from it.",
       intro:
-        "<p>A single score from 0 to 100, built from how a basket of markets has moved relative to " +
-        "its own recent history. High is risk-on; low is risk-off.</p>",
+        "<h2>What is risk-on and risk-off?</h2>" +
+        "<p>Risk-on and risk-off describe which way money has been moving. When investors are " +
+        "willing to take risk, money moves toward equities and the commodity currencies; when they " +
+        "are not, it moves toward gold, the yen and the franc.</p>" +
+        "<p>The meter is a single score from 0 to 100 built from how a basket of those markets has " +
+        "moved relative to its own recent history. High is risk-on; low is risk-off.</p>",
       body:
+        "<h2>How to read this meter</h2>" +
+        "<ol>" +
+        "<li>Read the score first: above the upper band is risk-on, below the lower one risk-off, " +
+        "and the middle is neither</li>" +
+        "<li>Look at the components to see which markets are carrying the score</li>" +
+        "<li>Check the date it was last worked out — it describes a day that has closed</li>" +
+        "</ol>" +
         "<h2>How the score is built</h2>" +
-        "<p>Each market in the basket is scored by where its latest move sits within its own " +
-        "recent range — its percentile rank. A market that usually moves half a percent and has " +
-        "just moved two ranks near the top of its own history, whatever the absolute number.</p>" +
+        "<p>Each market in the basket is scored by where its latest move sits within its own recent " +
+        "range — its percentile rank. A market that usually moves half a percent and has just moved " +
+        "two ranks near the top of its own history, whatever the absolute number.</p>" +
         "<p>Markets that rise when risk is being taken on — equity indices, commodity currencies — " +
-        "score as they rank. Markets that rise when risk is coming off — gold, the yen — have " +
-        "their rank flipped before it is counted. The weighted average of what is left is the " +
-        "score.</p>" +
-        "<p>A market with too little history is left out and counted, never filled in with a zero. " +
-        "A zero would be a claim that the market was neutral; leaving it out is the truth, which " +
-        "is that we do not know.</p>" +
+        "score as they rank. Markets that rise when risk is coming off — gold, the yen — have their " +
+        "rank flipped before it is counted. The weighted average of what is left is the score.</p>" +
+        "<p>A market with too little history is left out and counted, never filled in with a zero. A " +
+        "zero would be a claim that the market was neutral; leaving it out is the truth, which is " +
+        "that we do not know.</p>" +
         "<p>The score is updated once a day. It describes what has already happened, it is not a " +
         "forecast, and it is not a recommendation to do anything.</p>",
+      faq: [
+        {
+          question: "What does a score of 50 mean?",
+          answer:
+            "That the basket has been neither reaching for risk nor away from it. Its markets " +
+            "have moved roughly in line with their own recent history, or the risk-on and " +
+            "risk-off moves have cancelled each other out.",
+        },
+        {
+          question: "Why are gold and the yen counted the other way round?",
+          answer:
+            "They tend to rise when investors are moving away from risk. A strong day for gold " +
+            "or the yen is therefore read as a risk-off signal, so its rank is flipped before it " +
+            "counts toward the score.",
+        },
+        {
+          question: "Should I trade based on this meter?",
+          answer:
+            "It is a description of the mood the market has shown, not a signal. Use it as " +
+            "context alongside your own analysis and risk management, never as a reason to " +
+            "open a trade on its own.",
+        },
+      ],
       config: {
         components: [
           { instrumentId: id("SPX/USD"), weight: 3, direction: "risk-on" },
@@ -4079,6 +5146,7 @@ export async function seed(db: PrismaClient) {
         showRelated: true,
       },
     });
+    const highlights = TOOL_HIGHLIGHTS[tool.key] ?? [];
     await db.toolTranslation.upsert({
       where: { toolId_locale: { toolId: row.id, locale: "en" } },
       update: {},
@@ -4089,6 +5157,9 @@ export async function seed(db: PrismaClient) {
         tagline: tool.tagline,
         intro: tool.intro,
         body: tool.body,
+        highlights: highlights as never,
+        ...(tool.faq ? { faq: tool.faq } : {}),
+        ...(tool.seoFocusKeyword ? { seoFocusKeyword: tool.seoFocusKeyword } : {}),
         // The source locale is not a translation OF anything, so it is the
         // only one that is never OUTDATED. TRANSLATED is the settled state.
         translationStatus: "TRANSLATED",
@@ -4096,6 +5167,34 @@ export async function seed(db: PrismaClient) {
         seoDescription: tool.tagline,
       },
     });
+
+    // The highlights BACKFILL (ADR-114), bounded the way ADR-108's migration
+    // was: an existing row is filled only where the column is still NULL.
+    //
+    // NULL and `[]` are different facts here and the distinction is the whole
+    // guard. NULL is "this row predates the band"; `[]` is "an admin deleted
+    // every card", which is a decision, and a seed that overwrote it would
+    // put four cards back on a page someone deliberately cleared. The
+    // `update: {}` above is why this cannot just be another field up there.
+    const stored = await db.toolTranslation.findUnique({
+      where: { toolId_locale: { toolId: row.id, locale: "en" } },
+      select: { id: true, highlights: true, faq: true },
+    });
+    if (stored && stored.highlights === null) {
+      await db.toolTranslation.update({
+        where: { id: stored.id },
+        data: { highlights: highlights as never },
+      });
+    }
+    // The FAQ backfill (2026-09-18), bounded the same way: eight tools shipped
+    // with no FAQ, so an existing row is filled only while `faq` is still NULL.
+    // `[]` is an admin's deliberate "no questions" and is left alone.
+    if (stored && stored.faq === null && tool.faq) {
+      await db.toolTranslation.update({
+        where: { id: stored.id },
+        data: { faq: tool.faq },
+      });
+    }
   }
   console.log(`  tools: ${TOOL_SEEDS.length} (all enabled)`);
 
@@ -4281,6 +5380,8 @@ export async function seed(db: PrismaClient) {
     "summarization",
     "alt_text",
     "quiz_generation",
+    "form_fill",
+    "writing_studio",
   ];
 
   for (const key of AI_FEATURE_KEYS_SEED) {

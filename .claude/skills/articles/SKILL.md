@@ -142,3 +142,15 @@ acceptances plus its look-alike-host / traversal / wrong-scheme rejections.
 the frame rebuild, and the six ways a frame is dropped.
 `packages/ui/src/components/button.test.tsx`: no two intents resolve to the
 same classes. Keep all four green when touching any of the above.
+
+## Reading language (ADR-127, 2026-09-17)
+
+`?lang=` on the detail page swaps the article's OWN words into another
+translation while the chrome stays in the URL's locale — not the header's
+`LocaleSwitcher`, which changes the interface and lists served locales only.
+The readable set is `READABLE_TRANSLATION_STATUSES` in `@repo/core`
+`reading-languages.ts` (`TRANSLATED`, `OUTDATED`); a machine translation is
+never readable until a human Save promotes it (ADR-097). A reading view is
+`noindex` + canonical to the article. `ReadingLanguageMenu` is generic, and
+since the same day courses, lessons, video topics and glossary terms use it
+too — see the content skill's "Reading language" section.

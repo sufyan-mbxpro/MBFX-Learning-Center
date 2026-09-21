@@ -8,15 +8,17 @@
 // `/` inside the link text, so a screen reader reads "Learn, Advanced trading
 // strategies" instead of "Learn slash Advanced trading strategies".
 import { ChevronRight } from "lucide-react";
+import { getLocale } from "next-intl/server";
 import { Link } from "@repo/i18n/navigation";
 import { cn } from "@repo/ui/lib/utils";
+import { BreadcrumbJsonLd } from "../../_components/breadcrumb-json-ld.tsx";
 
 export interface BreadcrumbCrumb {
   href: string;
   label: string;
 }
 
-export function LearnBreadcrumb({
+export async function LearnBreadcrumb({
   learnLabel,
   learnHref,
   /** Intermediate crumbs between Learn and the current page — the course, on a
@@ -32,9 +34,12 @@ export function LearnBreadcrumb({
   className?: string;
 }) {
   const links = [{ href: learnHref, label: learnLabel }, ...trail];
+  const locale = await getLocale();
 
   return (
     <nav aria-label={learnLabel} className={cn("min-w-0", className)}>
+      {/* The trail the reader sees, as `BreadcrumbList` structured data. */}
+      <BreadcrumbJsonLd locale={locale} crumbs={[...links, { label: current }]} />
       <ol className="flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
         {links.map((crumb) => (
           <li key={crumb.href} className="flex items-center gap-1.5">

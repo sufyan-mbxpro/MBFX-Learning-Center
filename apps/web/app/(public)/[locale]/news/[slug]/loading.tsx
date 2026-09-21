@@ -25,7 +25,7 @@ export default function ArticleLoading() {
             <Skeleton className="aspect-video w-full rounded-lg" />
 
             <div className="flex flex-wrap items-center gap-4">
-              <Skeleton className="h-6 w-24 rounded-full" />
+              <Skeleton className="h-6 w-24 rounded-md" />
               <Skeleton className="h-4 w-28" />
               <Skeleton className="h-4 w-20" />
             </div>

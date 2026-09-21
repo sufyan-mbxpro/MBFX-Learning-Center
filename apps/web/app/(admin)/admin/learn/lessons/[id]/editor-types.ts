@@ -1,9 +1,10 @@
 // Shared shapes for the lesson editor (changes-11 PR 3.4).
 import type { ContentStatusLabels } from "../../../_components/editor/content-status-panel.tsx";
-import type { SeoAnalysisLabels } from "../../../_components/editor/seo-analysis.tsx";
 import type { RichTextLabels } from "../../../_components/rich-text-editor.tsx";
 import type { AttachmentDraft, ResourcesLabels } from "./_panels/resources-panel.tsx";
 import type { ObjectivesLabels } from "./_panels/objectives-panel.tsx";
+
+import type { ContentFlags } from "../../../_components/editor/content-flags-fields.tsx";
 
 export interface LessonTranslationDraft {
   locale: string;
@@ -16,6 +17,11 @@ export interface LessonTranslationDraft {
   seoDescription: string;
   seoFocusKeyword: string;
   translationStatus: string;
+  /**
+   * Untouched AI output (changes-29 B3). Set by "Translate", cleared by any
+   * edit to a translatable field; the save turns it into `MACHINE_TRANSLATED`.
+   */
+  machineTranslated?: boolean;
 }
 
 export interface LessonData {
@@ -24,6 +30,8 @@ export interface LessonData {
   courseId: string;
   courseTitle: string;
   courseSlug: string;
+  /** The course's track — the URL's second segment (ADR-065). */
+  courseTrack: string;
   status: string;
   difficulty: string;
   /** A string because it drives a number input; "" means "not set" → null. */
@@ -32,6 +40,8 @@ export interface LessonData {
   externalUrl: string;
   heroAssetId: string | null;
   heroUrl: string | null;
+  /** ADR-139 â€” Featured / Active / Premium, edited in the Display card. */
+  flags: ContentFlags;
   completionRule: string;
   quizId: string | null;
   isRequired: boolean;
@@ -74,6 +84,8 @@ export interface LessonEditorLabels {
   // Placement
   placementSection: string;
   placementSectionDescription: string;
+  displaySection: string;
+  displaySectionDescription: string;
   courseLabel: string;
   sectionLabel: string;
   prerequisiteLabel: string;
@@ -118,7 +130,6 @@ export interface LessonEditorLabels {
 
   // Nested panels
   status: ContentStatusLabels;
-  analysis: SeoAnalysisLabels;
   resources: ResourcesLabels;
   objectives: ObjectivesLabels;
   editor: RichTextLabels;

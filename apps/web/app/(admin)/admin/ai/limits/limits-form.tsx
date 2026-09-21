@@ -10,9 +10,13 @@
 //   2. **Changing a tier re-points every feature that falls back to it.** This
 //      is the one screen where a cost decision is made once and applies
 //      everywhere (ADR-099), so it states the blast radius beside each row.
+//
+// `variant="usage"` is the same form on `/admin/settings/ai` (ADR-120), which
+// sets the tiers together with the models they must name, so this form drops
+// its tier section there and saves the limits alone.
 import { useState } from "react";
 import { AlertTriangle, RotateCcw } from "lucide-react";
-import { aiLimitsSchema, type AiCapBehavior } from "@repo/contracts";
+import { aiLimitsSchema, aiUsageLimitsSchema, type AiCapBehavior } from "@repo/contracts";
 import type { AiLimitsView } from "@repo/core";
 import { Alert, AlertDescription, AlertTitle } from "@repo/ui/components/alert";
 import { Button } from "@repo/ui/components/button";
@@ -27,7 +31,11 @@ import {
 } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
 import { Switch } from "@repo/ui/components/switch";
-import { resetAiBudgetPeriodAction, saveAiLimitsAction } from "../../_actions/ai-actions.ts";
+import {
+  resetAiBudgetPeriodAction,
+  saveAiLimitsAction,
+  saveAiUsageLimitsAction,
+} from "../../_actions/ai-actions.ts";
 import { AdminSection } from "../../_components/admin-page.tsx";
 import { AdminCombobox } from "../../_components/combobox.tsx";
 import { useFieldErrors } from "../../_hooks/use-field-errors.ts";
@@ -78,12 +86,16 @@ export function LimitsForm({
   limits,
   modelOptions,
   labels,
+  variant = "full",
 }: {
   limits: AiLimitsView;
   /** Every enabled model's ID string, with its price in the label. */
   modelOptions: { value: string; label: string }[];
   labels: LimitsFormLabels;
+  /** `usage` omits the tier section and saves the limits alone. */
+  variant?: "full" | "usage";
 }) {
+  const withTiers = variant === "full";
   const { run, pending } = useServerAction();
 
   const [enabled, setEnabled] = useState(limits.enabled);
@@ -109,11 +121,18 @@ export function LimitsForm({
     modelHeavy,
   };
 
-  const form = useFieldErrors(aiLimitsSchema, values);
+  const form = useFieldErrors(withTiers ? aiLimitsSchema : aiUsageLimitsSchema, values);
 
   const save = () => {
     if (!form.validate()) return;
-    run(() => saveAiLimitsAction(values), { successMessage: labels.saved });
+    run(
+      () => {
+        if (withTiers) return saveAiLimitsAction(values);
+        const { modelLight: _l, modelStandard: _s, modelHeavy: _h, ...usage } = values;
+        return saveAiUsageLimitsAction(usage);
+      },
+      { successMessage: labels.saved },
+    );
   };
 
   const reset = () => {
@@ -221,57 +240,67 @@ export function LimitsForm({
             </Field>
           </div>
         </FieldGroup>
+
+        {!withTiers && (
+          <div className="flex justify-end">
+            <Button onClick={save} disabled={pending}>
+              {labels.save}
+            </Button>
+          </div>
+        )}
       </AdminSection>
 
-      <AdminSection title={labels.tiersSection}>
-        <p className="text-sm text-muted-foreground">{labels.tiersDescription}</p>
-        <FieldGroup>
-          <Field required invalid={form.invalid("modelLight")}>
-            <FieldLabel>{labels.tierLight}</FieldLabel>
-            <AdminCombobox
-              value={modelLight}
-              onValueChange={setLight}
-              options={tierOptions(modelLight)}
-            />
-            <FieldDescription>
-              {labels.tierLightHint} {labels.tierAffectsLight}
-            </FieldDescription>
-            <FieldError>{form.error("modelLight")}</FieldError>
-          </Field>
+      {withTiers && (
+        <AdminSection title={labels.tiersSection}>
+          <p className="text-sm text-muted-foreground">{labels.tiersDescription}</p>
+          <FieldGroup>
+            <Field required invalid={form.invalid("modelLight")}>
+              <FieldLabel>{labels.tierLight}</FieldLabel>
+              <AdminCombobox
+                value={modelLight}
+                onValueChange={setLight}
+                options={tierOptions(modelLight)}
+              />
+              <FieldDescription>
+                {labels.tierLightHint} {labels.tierAffectsLight}
+              </FieldDescription>
+              <FieldError>{form.error("modelLight")}</FieldError>
+            </Field>
 
-          <Field required invalid={form.invalid("modelStandard")}>
-            <FieldLabel>{labels.tierStandard}</FieldLabel>
-            <AdminCombobox
-              value={modelStandard}
-              onValueChange={setStandard}
-              options={tierOptions(modelStandard)}
-            />
-            <FieldDescription>
-              {labels.tierStandardHint} {labels.tierAffectsStandard}
-            </FieldDescription>
-            <FieldError>{form.error("modelStandard")}</FieldError>
-          </Field>
+            <Field required invalid={form.invalid("modelStandard")}>
+              <FieldLabel>{labels.tierStandard}</FieldLabel>
+              <AdminCombobox
+                value={modelStandard}
+                onValueChange={setStandard}
+                options={tierOptions(modelStandard)}
+              />
+              <FieldDescription>
+                {labels.tierStandardHint} {labels.tierAffectsStandard}
+              </FieldDescription>
+              <FieldError>{form.error("modelStandard")}</FieldError>
+            </Field>
 
-          <Field required invalid={form.invalid("modelHeavy")}>
-            <FieldLabel>{labels.tierHeavy}</FieldLabel>
-            <AdminCombobox
-              value={modelHeavy}
-              onValueChange={setHeavy}
-              options={tierOptions(modelHeavy)}
-            />
-            <FieldDescription>
-              {labels.tierHeavyHint} {labels.tierAffectsHeavy}
-            </FieldDescription>
-            <FieldError>{form.error("modelHeavy")}</FieldError>
-          </Field>
-        </FieldGroup>
+            <Field required invalid={form.invalid("modelHeavy")}>
+              <FieldLabel>{labels.tierHeavy}</FieldLabel>
+              <AdminCombobox
+                value={modelHeavy}
+                onValueChange={setHeavy}
+                options={tierOptions(modelHeavy)}
+              />
+              <FieldDescription>
+                {labels.tierHeavyHint} {labels.tierAffectsHeavy}
+              </FieldDescription>
+              <FieldError>{form.error("modelHeavy")}</FieldError>
+            </Field>
+          </FieldGroup>
 
-        <div className="flex justify-end">
-          <Button onClick={save} disabled={pending}>
-            {labels.save}
-          </Button>
-        </div>
-      </AdminSection>
+          <div className="flex justify-end">
+            <Button onClick={save} disabled={pending}>
+              {labels.save}
+            </Button>
+          </div>
+        </AdminSection>
+      )}
 
       <AdminSection title={labels.resetTitle}>
         <p className="text-sm text-muted-foreground">{labels.resetDescription}</p>

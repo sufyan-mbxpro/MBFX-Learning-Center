@@ -25,8 +25,10 @@ import {
   ExternalLink,
   FileText,
   FolderTree,
+  ImageIcon,
   Info,
   MoreHorizontal,
+  Plus,
   RotateCcw,
   Search,
   Trash2,
@@ -40,16 +42,30 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@repo/ui/components/dropdown-menu";
+import {
+  Field as UiField,
+  FieldContent,
+  FieldDescription,
+  FieldLabel,
+} from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
+import { Switch } from "@repo/ui/components/switch";
 import { Textarea } from "@repo/ui/components/textarea";
+import { htmlToBlockText } from "@repo/utils";
 import {
   saveVideoTopicAction,
   setVideoTopicDeletedAction,
   setVideoTopicStatusAction,
 } from "../../../_actions/video-actions.ts";
+import { AiFieldMenu, AiFillButton, type AiFillPatch } from "../../../_components/ai-fill.tsx";
 import { AdminCombobox } from "../../../_components/combobox.tsx";
 import { ContentStatusPanel } from "../../../_components/editor/content-status-panel.tsx";
+import { AiSeoButton } from "../../../_components/ai-seo-dialog.tsx";
 import { EditorSection, Field } from "../../../_components/editor/editor-section.tsx";
+import {
+  ContentFlagsSection,
+  type ContentFlags,
+} from "../../../_components/editor/content-flags-fields.tsx";
 import { SeoAnalysis } from "../../../_components/editor/seo-analysis.tsx";
 import { ImageUploadField } from "../../../_components/image-upload-field.tsx";
 import { RichTextEditor } from "../../../_components/rich-text-editor.tsx";
@@ -60,9 +76,19 @@ import {
 } from "../../../_components/status-badge.tsx";
 import { useFieldErrors } from "../../../_hooks/use-field-errors.ts";
 import { useServerAction } from "../../../_hooks/use-server-action.ts";
+import type { EditorAi } from "../../../_lib/editor-ai.ts";
+import { liveHref, storedSlug } from "../../../_lib/live-href.ts";
+import { TranslationControls } from "../../../_components/editor/translation-controls.tsx";
+import {
+  holdsHumanText,
+  mergeTranslationPatch,
+  textFields,
+} from "../../../_lib/machine-translation.ts";
 import { LinksPanel, type LinkDraft } from "./_panels/links-panel.tsx";
 import { VideosPanel, type VideoDraft } from "./_panels/videos-panel.tsx";
 import type { VideoEditorLabels, VideoTopicData, VideoTranslationDraft } from "./editor-types.ts";
+import { HeaderActions } from "../../../_components/header-actions.tsx";
+import { CategoryDialog } from "../(browse)/categories/category-dialog.tsx";
 
 /**
  * The sentinel for the category dropdown's empty option.
@@ -82,6 +108,17 @@ function CharCount({ value, max }: { value: string; max: number }) {
     </span>
   );
 }
+
+/** The words AI translation carries across. Never `slug` (a redirect is a human decision). */
+const TRANSLATABLE_TEXT = [
+  "title",
+  "summary",
+  "content",
+  "seoTitle",
+  "seoDescription",
+  "seoFocusKeyword",
+] as const satisfies readonly (keyof VideoTranslationDraft)[];
+const TRANSLATABLE_FIELDS = TRANSLATABLE_TEXT;
 
 function blankTranslation(locale: string): VideoTranslationDraft {
   return {
@@ -104,9 +141,11 @@ export function VideoEditor({
   defaultLocale,
   siteUrl,
   canUpdate,
+  canCreateCategory = false,
   canPublish,
   canDelete,
   labels,
+  ai,
 }: {
   topic: VideoTopicData;
   categoryOptions: { id: string; name: string }[];
@@ -114,9 +153,13 @@ export function VideoEditor({
   defaultLocale: string;
   siteUrl: string;
   canUpdate: boolean;
+  /** `lessons.create` — the category action's own gate on a create. */
+  canCreateCategory?: boolean;
   canPublish: boolean;
   canDelete: boolean;
   labels: VideoEditorLabels;
+  /** ADR-126. Absent when AI is off, the feature is off, or this person cannot spend. */
+  ai?: EditorAi;
 }) {
   const { run, pending } = useServerAction();
 
@@ -128,18 +171,70 @@ export function VideoEditor({
   );
   const [track, setTrack] = useState(topic.track);
   const [categoryId, setCategoryId] = useState<string | null>(topic.categoryId);
+  // Categories created from this editor (ADR-144 §2). The action's refresh
+  // brings them back in `categoryOptions` too; holding them here means the
+  // new row is selectable the moment the action returns, not a refresh later.
+  const [createdCategories, setCreatedCategories] = useState<{ id: string; name: string }[]>([]);
+  const [newCategoryOpen, setNewCategoryOpen] = useState(false);
+  const allCategories = useMemo(() => {
+    const ids = new Set(categoryOptions.map((c) => c.id));
+    return [...categoryOptions, ...createdCategories.filter((c) => !ids.has(c.id))];
+  }, [categoryOptions, createdCategories]);
+  const [showOnAllTracks, setShowOnAllTracks] = useState(topic.showOnAllTracks);
   const [visibility, setVisibility] = useState(topic.visibility);
   const [cover, setCover] = useState<{ id: string | null; url: string | null }>({
     id: topic.coverAssetId,
     url: topic.coverUrl,
   });
+  const [flags, setFlags] = useState<ContentFlags>(topic.flags);
   const [videos, setVideos] = useState<VideoDraft[]>(topic.videos);
   const [links, setLinks] = useState<LinkDraft[]>(topic.links);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   const draft = drafts[locale] ?? blankTranslation(locale);
+  // Merged from CURRENT state, not the last render: an AI patch and a keystroke
+  // in the same tick would otherwise overwrite each other (ADR-126 §4).
   const setDraft = (patch: Partial<VideoTranslationDraft>) =>
-    setDrafts((current) => ({ ...current, [locale]: { ...draft, ...patch } }));
+    setDrafts((current) => ({
+      ...current,
+      // changes-29 B3: an edit to a translatable field clears the machine flag.
+      [locale]: mergeTranslationPatch(
+        current[locale] ?? blankTranslation(locale),
+        patch,
+        TRANSLATABLE_FIELDS,
+      ),
+    }));
+
+  // ADR-126: the fillable fields as plain text — the review's "current" column,
+  // the empty test behind each default tick, and the prompt's context.
+  const aiFill = canUpdate ? ai?.fill : undefined;
+  const aiSeo = canUpdate ? ai?.seo : undefined;
+  const aiCurrent = {
+    title: draft.title,
+    summary: draft.summary,
+    content: htmlToBlockText(draft.content),
+    seoTitle: draft.seoTitle,
+    seoDescription: draft.seoDescription,
+    seoFocusKeyword: draft.seoFocusKeyword,
+  };
+  const applyFill = (patch: AiFillPatch) => {
+    const next: Partial<VideoTranslationDraft> = {};
+    for (const key of Object.keys(aiCurrent) as (keyof typeof aiCurrent)[]) {
+      const value = patch[key];
+      if (typeof value === "string") next[key] = value;
+    }
+    setDraft(next);
+  };
+  const fieldMenu = (field: keyof typeof aiCurrent) =>
+    aiFill ? (
+      <AiFieldMenu
+        config={aiFill}
+        field={field}
+        locale={locale}
+        current={aiCurrent}
+        onApply={(value) => setDraft({ [field]: value })}
+      />
+    ) : undefined;
 
   // Mirrors the contract's capability rule: a topic needs a video OR a body,
   // because a topic with neither is an empty page someone will find on the
@@ -152,14 +247,22 @@ export function VideoEditor({
     () => `/${locale}/learn/${track}/videos/${draft.slug || ""}`,
     [locale, track, draft.slug],
   );
+  const defaultSlug = storedSlug(topic.translations, defaultLocale);
+  const viewLiveHref = liveHref(
+    `/learn/${topic.track}/videos/${defaultSlug}`,
+    locale,
+    defaultLocale,
+  );
 
   const buildPayload = (): VideoTopicInput => ({
     topicId: topic.id,
     meta: {
       track: isLearnTrack(track) ? track : undefined,
       categoryId,
+      showOnAllTracks,
       coverAssetId: cover.id,
       visibility: visibility as VideoTopicInput["meta"]["visibility"],
+      ...flags,
     },
     translation: {
       locale,
@@ -170,6 +273,8 @@ export function VideoEditor({
       seoTitle: draft.seoTitle.trim() === "" ? null : draft.seoTitle.trim(),
       seoDescription: draft.seoDescription.trim() === "" ? null : draft.seoDescription.trim(),
       seoFocusKeyword: draft.seoFocusKeyword.trim() === "" ? null : draft.seoFocusKeyword.trim(),
+      // changes-29 B3: sent only while the words are untouched AI output.
+      ...(draft.machineTranslated ? { machineTranslated: true } : {}),
     },
     // The panels carry preview URLs the contract has no field for; strip
     // them rather than letting the schema drop them silently, so what is
@@ -203,91 +308,126 @@ export function VideoEditor({
     form.error("translation.content") ??
     (form.invalid("videos") ? labels.capabilityWarning : undefined);
 
+  // changes-44 #3: the record's state and language travel with the content,
+  // not on a row of their own above it.
+  const stateCluster = (
+    <>
+      <StatusBadge tone={statusTone(CONTENT_STATUS_TONE, topic.status)}>
+        {labels.statusLabels[topic.status] ?? topic.status}
+      </StatusBadge>
+      {topic.deleted && <StatusBadge tone="destructive">{labels.softDelete}</StatusBadge>}
+      {locales.length > 1 && (
+        <AdminCombobox
+          aria-label={labels.localeLabel}
+          size="sm"
+          className="w-24"
+          value={locale}
+          onValueChange={(next) => setLocale(next || locale)}
+          options={locales.map((code) => ({ value: code, label: code.toUpperCase() }))}
+        />
+      )}
+      <TranslationControls
+        translate={ai?.translate}
+        locale={locale}
+        defaultLocale={defaultLocale}
+        translationStatus={draft.translationStatus}
+        machineTranslated={draft.machineTranslated}
+        canUpdate={canUpdate}
+        entity={{ type: "video_topic", id: topic.id }}
+        sourceFields={textFields(drafts[defaultLocale], TRANSLATABLE_TEXT)}
+        wouldOverwrite={holdsHumanText(draft, TRANSLATABLE_TEXT)}
+        onApply={(translated) => setDraft({ ...translated, machineTranslated: true })}
+      />
+    </>
+  );
+
   return (
     <div className="flex min-w-0 flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <StatusBadge tone={statusTone(CONTENT_STATUS_TONE, topic.status)}>
-            {labels.statusLabels[topic.status] ?? topic.status}
-          </StatusBadge>
-          {topic.deleted && <StatusBadge tone="destructive">{labels.softDelete}</StatusBadge>}
-          {locales.length > 1 && (
-            <AdminCombobox
-              aria-label={labels.localeLabel}
-              size="sm"
-              className="w-24"
-              value={locale}
-              onValueChange={(next) => setLocale(next || locale)}
-              options={locales.map((code) => ({ value: code, label: code.toUpperCase() }))}
-            />
-          )}
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {topic.status === "PUBLISHED" && draft.slug && (
-            <Button
-              variant="outline"
-              size="sm"
+      {/* ADR-140 §3: the actions sit on the page heading's row. */}
+      <HeaderActions>
+        {topic.status === "PUBLISHED" && defaultSlug && (
+          <Button
+            variant="outline"
+            render={
+              <a href={`${siteUrl}${viewLiveHref}`} target="_blank" rel="noopener noreferrer" />
+            }
+          >
+            <ExternalLink data-icon="inline-start" aria-hidden />
+            {labels.viewLive}
+          </Button>
+        )}
+        {canUpdate && (
+          // Enabled while fields are wrong: pressing it names them (audit F-07).
+          <Button
+            loading={pending}
+            onClick={() => {
+              if (!form.validate()) return;
+              run(() => saveVideoTopicAction(buildPayload()), { successMessage: labels.saved });
+            }}
+          >
+            {labels.updateTopic}
+          </Button>
+        )}
+        {canDelete && (
+          <DropdownMenu>
+            <DropdownMenuTrigger
               render={
-                <a href={`${siteUrl}${publicPath}`} target="_blank" rel="noopener noreferrer" />
+                <Button variant="ghost" size="icon" aria-label={labels.openActions}>
+                  <MoreHorizontal aria-hidden />
+                </Button>
               }
-            >
-              <ExternalLink data-icon="inline-start" aria-hidden />
-              {labels.viewLive}
-            </Button>
-          )}
-          {canUpdate && (
-            // Enabled while fields are wrong: pressing it names them (audit F-07).
-            <Button
-              size="sm"
-              loading={pending}
-              onClick={() => {
-                if (!form.validate()) return;
-                run(() => saveVideoTopicAction(buildPayload()), { successMessage: labels.saved });
-              }}
-            >
-              {labels.updateTopic}
-            </Button>
-          )}
-          {canDelete && (
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <Button variant="ghost" size="icon-sm" aria-label={labels.openActions}>
-                    <MoreHorizontal aria-hidden />
-                  </Button>
-                }
-              />
-              <DropdownMenuContent align="end">
-                {topic.deleted ? (
-                  // Restore is NOT confirmed — it is the undo (ADR-044 #7).
-                  <DropdownMenuItem
-                    disabled={pending}
-                    onClick={() => run(() => setVideoTopicDeletedAction(topic.id, false))}
-                  >
-                    <RotateCcw aria-hidden data-icon="inline-start" />
-                    {labels.restore}
-                  </DropdownMenuItem>
-                ) : (
-                  <DropdownMenuItem
-                    variant="destructive"
-                    disabled={pending}
-                    onClick={() => setDeleteOpen(true)}
-                  >
-                    <Trash2 aria-hidden data-icon="inline-start" />
-                    {labels.softDelete}
-                  </DropdownMenuItem>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-        </div>
-      </div>
+            />
+            <DropdownMenuContent align="end">
+              {topic.deleted ? (
+                // Restore is NOT confirmed — it is the undo (ADR-044 #7).
+                <DropdownMenuItem
+                  disabled={pending}
+                  onClick={() => run(() => setVideoTopicDeletedAction(topic.id, false))}
+                >
+                  <RotateCcw aria-hidden data-icon="inline-start" />
+                  {labels.restore}
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem
+                  variant="destructive"
+                  disabled={pending}
+                  onClick={() => setDeleteOpen(true)}
+                >
+                  <Trash2 aria-hidden data-icon="inline-start" />
+                  {labels.softDelete}
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+      </HeaderActions>
 
       <div className="grid grid-cols-1 min-w-0 gap-4 lg:grid-cols-(--grid-2-1)">
         <div className="flex min-w-0 flex-col gap-4">
           <EditorSection
             title={labels.bodySection}
+            actions={
+              <>
+                {stateCluster}
+                {aiFill ? (
+                  <AiFillButton
+                    withOptions
+                    config={aiFill}
+                    locale={locale}
+                    current={aiCurrent}
+                    fieldLabels={{
+                      title: labels.titleLabel,
+                      summary: labels.summaryLabel,
+                      content: labels.contentLabel,
+                      seoTitle: labels.seoTitleLabel,
+                      seoDescription: labels.seoDescriptionLabel,
+                      seoFocusKeyword: labels.seoKeywordLabel,
+                    }}
+                    onApply={applyFill}
+                  />
+                ) : null}
+              </>
+            }
             description={labels.bodySectionDescription}
             icon={FileText}
             accent="primary"
@@ -295,7 +435,12 @@ export function VideoEditor({
             <Field
               id="video-title"
               label={labels.titleLabel}
-              adornment={<CharCount value={draft.title} max={255} />}
+              adornment={
+                <span className="flex items-center gap-1">
+                  {fieldMenu("title")}
+                  <CharCount value={draft.title} max={255} />
+                </span>
+              }
               required
               error={form.error("translation.title")}
             >
@@ -325,11 +470,16 @@ export function VideoEditor({
               id="video-summary"
               label={labels.summaryLabel}
               hint={labels.summaryHint}
-              adornment={<CharCount value={draft.summary} max={1000} />}
+              adornment={
+                <span className="flex items-center gap-1">
+                  {fieldMenu("summary")}
+                  <CharCount value={draft.summary} max={1000} />
+                </span>
+              }
               error={form.error("translation.summary")}
             >
               <Textarea
-                rows={3}
+                rows={4}
                 value={draft.summary}
                 disabled={!canUpdate}
                 onChange={(e) => setDraft({ summary: e.target.value })}
@@ -342,6 +492,9 @@ export function VideoEditor({
                 onChange={(html) => setDraft({ content: html })}
                 labels={labels.editor}
                 allowHtmlMode
+                {...(ai?.assistant && canUpdate
+                  ? { ai: { ...ai.assistant, config: { ...ai.assistant.config, locale } } }
+                  : {})}
               />
             </Field>
 
@@ -380,12 +533,50 @@ export function VideoEditor({
             description={labels.seoSectionDescription}
             icon={Search}
             accent="info"
+            actions={
+              // The article editor's review dialog, in the same place: the section
+              // header, because it fills the whole section. Absent when SEO AI is off.
+              aiSeo ? (
+                <AiSeoButton
+                  labels={aiSeo.labels}
+                  entity={{ type: "video_topic", id: topic.id }}
+                  keywords="single"
+                  current={{
+                    seoTitle: draft.seoTitle,
+                    seoDescription: draft.seoDescription,
+                    focusKeywords: draft.seoFocusKeyword,
+                  }}
+                  source={{
+                    title: draft.title,
+                    content: htmlToBlockText(draft.content),
+                    ...(draft.summary ? { excerpt: draft.summary } : {}),
+                    locale,
+                  }}
+                  onApply={(patch) =>
+                    setDraft({
+                      ...(patch.seoTitle !== undefined ? { seoTitle: patch.seoTitle } : {}),
+                      ...(patch.seoDescription !== undefined
+                        ? { seoDescription: patch.seoDescription }
+                        : {}),
+                      ...(patch.focusKeywords !== undefined
+                        ? { seoFocusKeyword: patch.focusKeywords }
+                        : {}),
+                    })
+                  }
+                />
+              ) : undefined
+            }
           >
             <Field
               id="video-seo-title"
               label={labels.seoTitleLabel}
               hint={labels.seoTitleHint}
-              adornment={<CharCount value={draft.seoTitle} max={70} />}
+              adornment={
+                <span className="flex items-center gap-1">
+                  {fieldMenu("seoTitle")}
+                  <CharCount value={draft.seoTitle} max={70} />
+                </span>
+              }
               error={form.error("translation.seoTitle")}
             >
               <Input
@@ -399,10 +590,17 @@ export function VideoEditor({
               id="video-seo-description"
               label={labels.seoDescriptionLabel}
               hint={labels.seoDescriptionHint}
-              adornment={<CharCount value={draft.seoDescription} max={180} />}
+              adornment={
+                <span className="flex items-center gap-1">
+                  {fieldMenu("seoDescription")}
+                  <CharCount value={draft.seoDescription} max={180} />
+                </span>
+              }
               error={form.error("translation.seoDescription")}
             >
-              <Input
+              <Textarea
+                rows={3}
+                maxLength={180}
                 value={draft.seoDescription}
                 disabled={!canUpdate}
                 onChange={(e) => setDraft({ seoDescription: e.target.value })}
@@ -414,6 +612,7 @@ export function VideoEditor({
               label={labels.seoKeywordLabel}
               hint={labels.seoKeywordHint}
               error={form.error("translation.seoFocusKeyword")}
+              adornment={fieldMenu("seoFocusKeyword")}
             >
               <Input
                 value={draft.seoFocusKeyword}
@@ -427,7 +626,6 @@ export function VideoEditor({
               description={draft.seoDescription || draft.summary}
               focusKeywords={draft.seoFocusKeyword || draft.title}
               body={draft.content}
-              labels={labels.analysis}
             />
           </EditorSection>
         </div>
@@ -449,6 +647,27 @@ export function VideoEditor({
             }
             labels={labels.status}
           />
+
+          {/* ADR-139 #6 put the three switches in this card's footer;
+              changes-44 #5 moved them to their own card before Info. */}
+          <EditorSection
+            title={labels.displaySection}
+            description={labels.displaySectionDescription}
+            icon={ImageIcon}
+            accent="warning"
+          >
+            <ImageUploadField
+              id="video-cover"
+              label={labels.coverLabel}
+              value={cover.url}
+              purpose="content"
+              category="learn"
+              disabled={!canUpdate}
+              onChange={(next) => setCover({ id: next?.id ?? null, url: next?.url ?? null })}
+              error={form.error("meta.coverAssetId")}
+              labels={labels.upload}
+            />
+          </EditorSection>
 
           <EditorSection
             title={labels.filingSection}
@@ -476,11 +695,36 @@ export function VideoEditor({
               />
             </Field>
 
+            {/* ADR-144 §2 — LISTING under the other school, not a second
+                address: the track above stays the one URL segment. Switch
+                first, on a horizontal Field (code-style.md #25). */}
+            <UiField orientation="horizontal">
+              <Switch
+                checked={showOnAllTracks}
+                disabled={!canUpdate}
+                onCheckedChange={setShowOnAllTracks}
+              />
+              <FieldContent>
+                <FieldLabel className="font-normal">{labels.showOnAllTracksLabel}</FieldLabel>
+                <FieldDescription className="text-xs">
+                  {labels.showOnAllTracksHint}
+                </FieldDescription>
+              </FieldContent>
+            </UiField>
+
             <Field
               id="video-category"
               label={labels.categoryLabel}
               hint={labels.categoryHint}
               error={form.error("meta.categoryId")}
+              adornment={
+                canUpdate && canCreateCategory ? (
+                  <Button variant="outline" size="xs" onClick={() => setNewCategoryOpen(true)}>
+                    <Plus data-icon="inline-start" aria-hidden />
+                    {labels.newCategory}
+                  </Button>
+                ) : undefined
+              }
             >
               <AdminCombobox
                 value={categoryId ?? NONE}
@@ -488,10 +732,23 @@ export function VideoEditor({
                 onValueChange={(next) => setCategoryId(!next || next === NONE ? null : next)}
                 options={[
                   { value: NONE, label: labels.categoryNone },
-                  ...categoryOptions.map((c) => ({ value: c.id, label: c.name })),
+                  ...allCategories.map((c) => ({ value: c.id, label: c.name })),
                 ]}
               />
             </Field>
+            {/* The categories screen's own dialog and action (ADR-144 §2):
+                one create path, one permission check, one audit row. Filing
+                the topic under what was just created is why it is here. */}
+            <CategoryDialog
+              open={newCategoryOpen}
+              onOpenChange={setNewCategoryOpen}
+              target={null}
+              locale={defaultLocale}
+              onSaved={(saved) => {
+                setCreatedCategories((list) => [...list, saved]);
+                setCategoryId(saved.id);
+              }}
+            />
 
             <Field
               id="video-visibility"
@@ -508,19 +765,10 @@ export function VideoEditor({
                 }))}
               />
             </Field>
-
-            <ImageUploadField
-              id="video-cover"
-              label={labels.coverLabel}
-              value={cover.url}
-              purpose="content"
-              category="learn"
-              disabled={!canUpdate}
-              onChange={(next) => setCover({ id: next?.id ?? null, url: next?.url ?? null })}
-              error={form.error("meta.coverAssetId")}
-              labels={labels.upload}
-            />
           </EditorSection>
+
+          {/* changes-44 #5: last of the settings, before the read-only Info card. */}
+          <ContentFlagsSection value={flags} onChange={setFlags} disabled={!canUpdate} />
 
           <EditorSection
             title={labels.infoSection}

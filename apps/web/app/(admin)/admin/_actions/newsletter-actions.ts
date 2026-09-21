@@ -18,8 +18,15 @@
 // never this table — so no public cache entry depends on a subscriber row.
 // Calling `revalidateTag("settings:email")` here would invalidate the email
 // settings of every reader to refresh one admin table.
-import { subscriberIdSchema } from "@repo/contracts";
-import { adminUnsubscribe, deleteSubscriber } from "@repo/core";
+import { adminAddSubscriberSchema, subscriberIdSchema } from "@repo/contracts";
+import {
+  adminAddSubscriber,
+  adminResubscribe,
+  adminUnsubscribe,
+  deleteSubscriber,
+  type AdminAddSubscriberResult,
+  type AdminResubscribeResult,
+} from "@repo/core";
 import { requirePermission } from "@repo/rbac";
 
 export async function unsubscribeSubscriberAction(input: unknown): Promise<void> {
@@ -32,4 +39,23 @@ export async function deleteSubscriberAction(input: unknown): Promise<void> {
   const subject = await requirePermission("newsletter.manage");
   const { id } = subscriberIdSchema.parse(input);
   await deleteSubscriber(subject, id);
+}
+
+/**
+ * The undo of `unsubscribeSubscriberAction` (ADR-124). Same key, because it is
+ * the same privilege pointed the other way. Whether it RESTORES or INVITES is
+ * core's decision — it depends on who unsubscribed the address — and the
+ * result tells the screen which message to show.
+ */
+export async function resubscribeSubscriberAction(input: unknown): Promise<AdminResubscribeResult> {
+  const subject = await requirePermission("newsletter.manage");
+  const { id } = subscriberIdSchema.parse(input);
+  return adminResubscribe(subject, id);
+}
+
+/** "Add subscriber": invites the address through double opt-in (ADR-124). */
+export async function addSubscriberAction(input: unknown): Promise<AdminAddSubscriberResult> {
+  const subject = await requirePermission("newsletter.manage");
+  const parsed = adminAddSubscriberSchema.parse(input);
+  return adminAddSubscriber(subject, parsed);
 }

@@ -16,8 +16,8 @@ minimumReleaseAge: 1440
 # `@node-rs/argon2` don't need an entry — Prisma 7's client has no
 # postinstall (schema generation is CLI-only, ADR-002) and argon2 ships
 # prebuilt per-platform binaries (`@node-rs/argon2-<platform>`), not a build
-# step. `sharp` is pre-approved for Module 07/11 even though nothing depends
-# on it yet. `cpu-features`/`protobufjs`/`ssh2` are testcontainers' (Module
+# step. `sharp` is a direct dependency of `@repo/core` since ADR-130 (upload-
+# time WebP encode), and Next's image optimizer uses it too. `cpu-features`/`protobufjs`/`ssh2` are testcontainers' (Module
 # 01) transitive deps for its optional SSH-tunneled Docker host support —
 # unused locally (plain Docker Desktop), and `cpu-features`/`ssh2`'s native
 # builds fail harmlessly without a C++ toolchain/Python, falling back to

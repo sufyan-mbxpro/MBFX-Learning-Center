@@ -501,6 +501,52 @@ describe("visibility rule (status × isActive × category × deletion)", () => {
     await articles.transitionArticle(editor, id, "DRAFT");
     expect(await publicArticles.loadArticleBySlug("en", slugRow.slug)).toBeNull();
   });
+
+  // ADR-127: reading an article in another language without changing the site's.
+  it("reads a human translation by ?lang=, and never a machine one", async () => {
+    const id = await publishedArticle();
+    const { slug } = await db.articleTranslation.findUniqueOrThrow({
+      where: { articleId_locale: { articleId: id, locale: "en" } },
+      select: { slug: true },
+    });
+
+    await articles.saveArticleTranslation(editor, {
+      articleId: id,
+      locale: "es",
+      title: "Traducido por máquina",
+      body: "<p>máquina</p>",
+      machineTranslated: true,
+    });
+    const machine = await publicArticles.loadArticleBySlug("en", slug, "es");
+    expect(machine?.locale).toBe("en");
+    expect(machine?.readingLocale).toBeNull();
+    expect(machine?.readingLanguages.map((l) => l.locale)).toEqual(["en"]);
+
+    // An editor's Save is the promotion (ADR-097), and it makes it readable.
+    await articles.saveArticleTranslation(editor, {
+      articleId: id,
+      locale: "es",
+      title: "Revisado por una persona",
+      body: "<p>persona</p>",
+    });
+    const reading = await publicArticles.loadArticleBySlug("en", slug, "es");
+    expect(reading?.locale).toBe("es");
+    expect(reading?.readingLocale).toBe("es");
+    expect(reading?.title).toBe("Revisado por una persona");
+    expect(reading?.body).toContain("persona");
+    expect(reading?.contentDirection).toBe("ltr");
+    expect(reading?.readingLanguages.map((l) => [l.locale, l.nativeName])).toEqual([
+      ["en", "English"],
+      ["es", "Español"],
+    ]);
+
+    // Without ?lang=, and with one that names nothing readable, the page is unchanged.
+    for (const lang of [undefined, "en", "ar"]) {
+      const view = await publicArticles.loadArticleBySlug("en", slug, lang);
+      expect(view?.locale).toBe("en");
+      expect(view?.readingLocale).toBeNull();
+    }
+  });
 });
 
 describe("categories & tags", () => {
@@ -604,6 +650,32 @@ describe("free-text search (`q`) — filters, but never widens visibility", () =
     });
     expect(page.total).toBe(1);
     expect(page.pageCount).toBe(1);
+  });
+
+  it("matches ANY word of the query, not the phrase as a whole (changes-45)", async () => {
+    const byTitle = await publish("Anyword bullion climbs");
+    const byExcerpt = await publish("Greenback steadies", "Anyword traders eye the zloty");
+    const neither = await publish("Plain copper note");
+
+    const hits = await search("anyword zloty");
+    expect(hits).toContain(byTitle);
+    expect(hits).toContain(byExcerpt);
+    expect(hits).not.toContain(neither);
+  });
+
+  it("ranks an article matching more of the words first (changes-45)", async () => {
+    // Published FIRST, so newest-first would put it last.
+    const both = await publish("Rankword platinum and rankother silver");
+    const one = await publish("Rankword platinum only");
+
+    const hits = await search("rankword rankother");
+    expect(hits.indexOf(both)).toBeLessThan(hits.indexOf(one));
+    expect(hits).toContain(one);
+  });
+
+  it("a query of only one-character words and wildcards finds nothing (changes-45)", async () => {
+    await publish("Wildcard guard entry");
+    expect(await search("% _ a")).toEqual([]);
   });
 
   it("omitting `q` is unfiltered — the option is additive", async () => {

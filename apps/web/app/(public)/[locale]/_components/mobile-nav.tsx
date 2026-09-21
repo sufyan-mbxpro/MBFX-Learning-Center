@@ -11,9 +11,28 @@
 // rows — and on a phone it opened a scrolling popover over the page rather
 // than a surface you can thumb through. The desktop panel's structure is
 // preserved: the same columns, in the same order, from the same registry.
+//
+// changes-43 gave it the owner's reference shape (mbfx.co's own mobile menu):
+// - a full-width panel on a phone with the brand and a close button at the top;
+// - one list of top-level rows, each with its glyph, where a section opens in
+//   place under a chevron;
+// - a divider, then Home and Sign in side by side and Join us full width.
+// The account actions sit at the bottom because that is where a thumb is, and
+// the header row has no room for them below sm.
 import { useId, useState } from "react";
-import { Menu } from "lucide-react";
+import {
+  BookA,
+  CalendarDays,
+  Calculator,
+  Headset,
+  LineChart,
+  Menu,
+  Newspaper,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import { useTranslations } from "next-intl";
+import { ACCOUNT_PATH } from "@repo/contracts";
 import { Link } from "@repo/i18n/navigation";
 import { Button } from "@repo/ui/components/button";
 import {
@@ -24,26 +43,58 @@ import {
 } from "@repo/ui/components/accordion";
 import {
   Sheet,
+  SheetClose,
   SheetContent,
   SheetHeader,
   SheetTitle,
   SheetTrigger,
 } from "@repo/ui/components/sheet";
-import { panelForHref, resolveMegaMenuPanel, type MegaResolvableItem } from "../_nav/mega-menu.ts";
+import { cn } from "@repo/ui/lib/utils";
+import {
+  MEGA_MENU_ICONS,
+  panelForHref,
+  resolveMegaMenuPanel,
+  routeKeyForHref,
+  type MegaResolvableItem,
+} from "../_nav/mega-menu.ts";
 import { ModeToggle } from "./mode-toggle.tsx";
+import { usePublicSession } from "./public-session.tsx";
 
 export interface MobileNavItem extends MegaResolvableItem {
   children: MegaResolvableItem[];
 }
 
-/** One destination row — icon box, label, and the one-line description when there is one. */
+type IconComponent = React.ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
+
+// Top-level rows whose route has no mega-menu glyph. The mega registry names
+// the destinations INSIDE a panel; a top-level row is the section itself.
+const SECTION_ICONS: Partial<Record<string, LucideIcon>> = {
+  glossary: BookA,
+  tools: Calculator,
+  analysis: LineChart,
+  news: Newspaper,
+  "economic-calendar": CalendarDays,
+  support: Headset,
+};
+
+function sectionIcon(href: string): IconComponent | undefined {
+  const key = routeKeyForHref(href);
+  if (!key) return undefined;
+  return MEGA_MENU_ICONS[key] ?? SECTION_ICONS[key];
+}
+
+/** A top-level row: glyph + label, the reference's plain list line. */
+const TOP_ROW =
+  "flex w-full items-center gap-4 rounded-lg px-2.5 py-3 text-base font-semibold text-foreground transition-colors duration-(--duration-base) hover:bg-muted focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none active:bg-muted";
+
+/** One destination row inside a section — icon box, label, and its one-line description. */
 function NavRow({
   item,
   icon: Icon,
   onNavigate,
 }: {
   item: MegaResolvableItem;
-  icon?: React.ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
+  icon?: IconComponent;
   onNavigate: () => void;
 }) {
   // Mirrors MegaMenuLink's hover treatment (ADR-051 §6) so the same
@@ -55,7 +106,7 @@ function NavRow({
   const content = (
     <>
       {Icon && (
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary-interactive transition-colors duration-(--duration-base) group-hover/row:bg-primary group-hover/row:text-primary-foreground group-active/row:bg-primary group-active/row:text-primary-foreground">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-primary-interactive transition-colors duration-(--duration-base) group-hover/row:bg-primary-solid group-hover/row:text-primary-solid-foreground group-active/row:bg-primary-solid group-active/row:text-primary-solid-foreground">
           <Icon aria-hidden className="size-4" />
         </span>
       )}
@@ -68,32 +119,93 @@ function NavRow({
     </>
   );
 
+  return <ItemLink item={item} className={className} onNavigate={onNavigate} content={content} />;
+}
+
+function ItemLink({
+  item,
+  className,
+  onNavigate,
+  content,
+}: {
+  item: MegaResolvableItem;
+  className: string;
+  onNavigate: () => void;
+  content: React.ReactNode;
+}) {
+  const newTab = item.openInNewTab ? { target: "_blank", rel: "noopener noreferrer" } : {};
   if (item.isExternal) {
     return (
-      <a
-        href={item.href}
-        className={className}
-        onClick={onNavigate}
-        {...(item.openInNewTab ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-      >
+      <a href={item.href} className={className} onClick={onNavigate} {...newTab}>
         {content}
       </a>
     );
   }
-
   return (
-    <Link
-      href={item.href}
-      className={className}
-      onClick={onNavigate}
-      {...(item.openInNewTab ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-    >
+    <Link href={item.href} className={className} onClick={onNavigate} {...newTab}>
       {content}
     </Link>
   );
 }
 
-export function MobileNav({ items, menuLabel }: { items: MobileNavItem[]; menuLabel: string }) {
+/** Home + the account entry points, the reference's footer block. */
+function AccountActions({ onNavigate }: { onNavigate: () => void }) {
+  const t = useTranslations("nav");
+  const session = usePublicSession();
+
+  // `loading` draws the anonymous pair's boxes so nothing jumps when the
+  // session answers, the same choice `AuthSlot` makes in the header.
+  const signedIn = session.status === "learner";
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="grid grid-cols-2 gap-3">
+        <Button
+          variant="secondary"
+          size="lg"
+          className="w-full bg-muted text-foreground hover:bg-accent"
+          render={<Link href="/" onClick={onNavigate} />}
+        >
+          {t("home")}
+        </Button>
+        {signedIn ? (
+          <Button
+            variant="outline"
+            size="lg"
+            className="w-full"
+            render={<Link href={ACCOUNT_PATH} onClick={onNavigate} />}
+          >
+            {t("myAccount")}
+          </Button>
+        ) : (
+          <Button
+            variant="outline"
+            size="lg"
+            className="w-full"
+            render={<Link href="/sign-in" onClick={onNavigate} />}
+          >
+            {t("signIn")}
+          </Button>
+        )}
+      </div>
+      {!signedIn && (
+        <Button size="lg" className="w-full" render={<Link href="/sign-up" onClick={onNavigate} />}>
+          {t("signUp")}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+export function MobileNav({
+  items,
+  menuLabel,
+  brand,
+}: {
+  items: MobileNavItem[];
+  menuLabel: string;
+  /** The header's own logo, so the open menu is visibly the same site. */
+  brand?: React.ReactNode;
+}) {
   const t = useTranslations("nav");
   const [open, setOpen] = useState(false);
   const appearanceId = useId();
@@ -111,19 +223,48 @@ export function MobileNav({ items, menuLabel }: { items: MobileNavItem[]; menuLa
             </Button>
           }
         />
-        {/* The Sheet owns its width (`w-3/4 sm:max-w-sm`) and its 24px
-            padding, so neither is restated here. The title names the dialog
-            for assistive tech only: on screen it would repeat the trigger's
-            "Open menu" as a heading over the menu it opened. */}
-        <SheetContent side="start" className="overflow-y-auto">
-          <SheetHeader className="sr-only">
-            <SheetTitle>{menuLabel}</SheetTitle>
+        {/* Full width on a phone, the reference's panel; a drawer from sm. The
+            corner close is replaced by one in the brand row, where the
+            reference has it and where it cannot sit on top of a row. */}
+        <SheetContent side="start" showCloseButton={false} className="w-full gap-0 p-0 sm:max-w-sm">
+          <SheetHeader className="sticky top-0 z-10 flex-row items-center justify-between gap-4 border-b border-border bg-background/95 px-5 py-4 backdrop-blur-md">
+            {/* The title names the dialog for assistive tech; on screen the
+                logo already says whose menu this is. */}
+            <SheetTitle className="sr-only">{menuLabel}</SheetTitle>
+            <Link href="/" onClick={close} className="flex min-w-0 items-center">
+              {brand}
+            </Link>
+            <SheetClose
+              render={
+                <Button variant="outline" size="icon" aria-label={t("closeMenu")}>
+                  <X aria-hidden className="size-5" />
+                </Button>
+              }
+            />
           </SheetHeader>
 
-          <nav className="flex flex-col gap-1" aria-label={menuLabel}>
+          <nav className="flex flex-col gap-1 px-3 py-4" aria-label={menuLabel}>
             {items.map((item) => {
+              const Icon = sectionIcon(item.href);
+              const glyph = Icon ? (
+                <Icon aria-hidden className="size-5 shrink-0 text-foreground" />
+              ) : null;
+
               if (item.children.length === 0) {
-                return <NavRow key={item.id} item={item} onNavigate={close} />;
+                return (
+                  <ItemLink
+                    key={item.id}
+                    item={item}
+                    className={TOP_ROW}
+                    onNavigate={close}
+                    content={
+                      <>
+                        {glyph}
+                        {item.label}
+                      </>
+                    }
+                  />
+                );
               }
 
               const panel = panelForHref(item.href);
@@ -135,16 +276,19 @@ export function MobileNav({ items, menuLabel }: { items: MobileNavItem[]; menuLa
                       FAQ — a rule under the sections and none under the plain
                       links beside them would read as two different lists. */}
                   <AccordionItem value={item.id} className="border-b-0">
-                    {/* px-2.5 = NavRow's own inset, so a section heading and
-                        a plain link start on the same line. */}
-                    <AccordionTrigger className="px-2.5 text-sm font-semibold">
-                      {item.label}
+                    <AccordionTrigger className={cn(TOP_ROW, "hover:no-underline")}>
+                      {/* The label grows, so the trigger's own chevron lands at the
+                          inline end and the glyph stays beside the words. */}
+                      <span className="flex flex-1 items-center gap-4">
+                        {glyph}
+                        {item.label}
+                      </span>
                     </AccordionTrigger>
                     {/* AccordionContent underlines every descendant link
                         ([&_a]:underline) — right for the FAQ prose it was built
                         for, wrong for a nav row. Overridden with the important
                         marker because the two selectors tie on specificity. */}
-                    <AccordionContent className="[&_a]:no-underline!">
+                    <AccordionContent className="ps-6 [&_a]:no-underline!">
                       <div className="flex flex-col gap-4 pb-2">
                         {resolved
                           ? resolved.columns.map((column) => (
@@ -173,20 +317,23 @@ export function MobileNav({ items, menuLabel }: { items: MobileNavItem[]; menuLa
             })}
           </nav>
 
-          {/* The theme toggle's home below sm (changes-21 D-2): the header
-              row hides it there. From sm up the header has room, so this row
-              hides instead of showing the same control twice. The group is
-              named by its visible label; the button keeps its own
-              "Toggle theme" name. px-2.5 = NavRow's inset. */}
-          <div
-            role="group"
-            aria-labelledby={appearanceId}
-            className="mt-4 flex items-center justify-between gap-3 border-t border-border px-2.5 pt-4 sm:hidden"
-          >
-            <span id={appearanceId} className="text-sm font-semibold text-foreground">
-              {t("appearance")}
-            </span>
-            <ModeToggle />
+          <div className="mt-auto flex flex-col gap-4 border-t border-border px-5 py-5">
+            {/* The theme toggle's home below sm (changes-21 D-2): the header
+                row hides it there. From sm up the header has room, so this row
+                hides instead of showing the same control twice. The group is
+                named by its visible label; the button keeps its own
+                "Toggle theme" name. */}
+            <div
+              role="group"
+              aria-labelledby={appearanceId}
+              className="flex items-center justify-between gap-3 sm:hidden"
+            >
+              <span id={appearanceId} className="text-sm font-semibold text-foreground">
+                {t("appearance")}
+              </span>
+              <ModeToggle />
+            </div>
+            <AccountActions onNavigate={close} />
           </div>
         </SheetContent>
       </Sheet>

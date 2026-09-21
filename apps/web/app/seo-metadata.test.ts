@@ -152,3 +152,154 @@ describe("the sitemap reads through the cache", () => {
     expect(src).not.toMatch(/loadGlossarySitemapEntries|loadArticleSitemapEntries/);
   });
 });
+
+/**
+ * The value text of every `<key>:` property — `robotsPropertyValues`, any key.
+ * Its OWN matches only: renaming the key to `robots:` and reusing the scanner
+ * would mix every real `robots` value into a description check.
+ */
+function propertyValues(src: string, key: string): string[] {
+  const renamed = src
+    .replace(/\brobots\s*:/g, "__robots__:")
+    .replace(new RegExp(String.raw`\b${key}\s*:`, "g"), "robots:");
+  return robotsPropertyValues(renamed);
+}
+
+const publicSources = () => sourceFiles(resolve(APP, "(public)"));
+
+describe("description never arrives as an undefined key", () => {
+  // Next merges `description` as `child ?? null`, so `description: x ??
+  // undefined` ERASED the site description whenever an entity had no SEO text
+  // — which, for glossary terms, was most of them. `descriptionFrom()` spreads.
+  it("in any public route", () => {
+    const offenders = publicSources()
+      .filter((path) =>
+        propertyValues(code(path), "description").some((value) => value.endsWith("undefined")),
+      )
+      .map(relative);
+    expect(offenders).toEqual([]);
+  });
+
+  it("and the scanner reads descriptions at all", () => {
+    const seen = publicSources().flatMap((path) => propertyValues(code(path), "description"));
+    expect(seen.length).toBeGreaterThan(5);
+  });
+});
+
+describe("hreflang goes through alternatesFor", () => {
+  // The loaders listed EVERY translation row, so an AI draft in `es` put
+  // `/es/...` in hreflang while `es` 404s. `alternatesFor` keeps served locales
+  // only; `advertisedAlternates` in @repo/core drops unreviewed rows.
+  it("in every route that reads a view's alternates", () => {
+    const readers = publicSources().filter((path) => code(path).includes("view.alternates"));
+    expect(readers.length).toBeGreaterThan(4);
+    const offenders = readers
+      .filter((path) => !code(path).includes("alternatesFor("))
+      .map(relative);
+    expect(offenders).toEqual([]);
+  });
+});
+
+describe("a canonical carries the locale", () => {
+  // `canonical: ROUTE_PATHS.tools` pointed `/es/tools` at the English page the
+  // day a second locale went live. Every path helper here is locale-less.
+  const LOCALE_LESS = /^(ROUTE_PATHS|GLOSSARY_|learnTrack\w*Path\(|toolPath\(|`\$\{learnTrack)/;
+
+  it("in every public route", () => {
+    const offenders = publicSources()
+      .filter((path) =>
+        propertyValues(code(path), "canonical").some((value) => LOCALE_LESS.test(value)),
+      )
+      .map(relative);
+    expect(offenders).toEqual([]);
+  });
+
+  it("and the listings have one at all", () => {
+    for (const route of ["news/page.tsx", "analysis/page.tsx"]) {
+      expect(code(resolve(APP, "(public)/[locale]", route))).toContain("listingMetadata(");
+    }
+    for (const route of ["news/category/[slug]/page.tsx", "news/tag/[slug]/page.tsx"]) {
+      expect(code(resolve(APP, "(public)/[locale]", route))).toContain("pagedCanonical(");
+    }
+  });
+});
+
+describe("share cards", () => {
+  it("the seeded default image exists", () => {
+    const seed = read(resolve(APP, "../../../packages/db/prisma/seed.ts"));
+    const match = seed.match(/"seo\.defaultOgImage",\s*"([^"]+)"/);
+    expect(match?.[1]).toBe("/og-default.png");
+    expect(() => readFileSync(resolve(APP, "../public/og-default.png"))).not.toThrow();
+  });
+
+  it("the public layout gives every page a card to inherit", () => {
+    const layout = code(PUBLIC_ROOT_LAYOUT);
+    expect(layout).toContain("defaultShareImage()");
+    expect(layout).toContain('twitter: { card: "summary_large_image" }');
+  });
+
+  it("every content DETAIL page builds its own card (changes-46)", () => {
+    // The glossary term and the video topic had none, so they inherited the
+    // layout's: no og:url, and a title carrying the site template.
+    const details = [
+      "(public)/[locale]/news/[slug]/page.tsx",
+      "(public)/[locale]/learn/[track]/[course]/page.tsx",
+      "(public)/[locale]/learn/[track]/[course]/[lesson]/page.tsx",
+      "(public)/[locale]/learn/[track]/videos/[topic]/page.tsx",
+      "(public)/[locale]/glossary/[slug]/page.tsx",
+      "(public)/[locale]/tools/[tool]/page.tsx",
+    ];
+    const missing = details.filter((rel) => !code(resolve(APP, rel)).includes("shareMetadata("));
+    expect(missing).toEqual([]);
+  });
+
+  it("a tool page carries structured data (changes-46)", () => {
+    const tool = code(resolve(APP, "(public)/[locale]/tools/[tool]/page.tsx"));
+    expect(tool).toContain('"@type": "WebApplication"');
+    expect(tool).toContain('"@type": "FAQPage"');
+  });
+
+  it("no page builds a partial openGraph by hand — Next replaces the layout's whole", () => {
+    const offenders = publicSources()
+      .filter((path) => /\bopenGraph\s*:/.test(code(path)))
+      .map(relative)
+      .filter((rel) => rel !== "(public)/[locale]/layout.tsx");
+    expect(offenders).toEqual([]);
+  });
+});
+
+describe("the home title is the brand once", () => {
+  it("does not run the site name through the title template", () => {
+    const home = code(resolve(APP, "(public)/[locale]/page.tsx"));
+    expect(home).not.toContain('getSetting("seo.titleTemplate")');
+    expect(home).toContain("title: siteName");
+  });
+});
+
+describe("the sitemap lists only pages that answer", () => {
+  const src = () => code(resolve(APP, "sitemap.ts"));
+
+  it("gates sections on the flags their pages 404 on", () => {
+    expect(src()).toContain("isFeatureVisible(flag, null)");
+    for (const flag of ["quizzes", "videos", "economic_calendar", "news", "glossary"]) {
+      expect(src()).toContain(`flags.${flag}`);
+    }
+  });
+
+  it("includes the section fronts and archives it used to leave out", () => {
+    for (const piece of [
+      '"/news"',
+      '"/analysis"',
+      "ROUTE_PATHS.glossary",
+      "articleCategoryPath(",
+      "articleTagPath(",
+      "/legal/",
+    ]) {
+      expect(src()).toContain(piece);
+    }
+  });
+
+  it("does not submit the noindex quiz runners", () => {
+    expect(src()).not.toMatch(/quizEntries|quizPages/);
+  });
+});

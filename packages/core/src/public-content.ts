@@ -6,8 +6,10 @@
 import { cacheLife, cacheTag } from "next/cache";
 import { db } from "@repo/db";
 import { pickTranslation, type LocaleFallbackInfo } from "@repo/i18n";
-import { htmlToText } from "@repo/utils";
+import { htmlLead } from "@repo/utils";
 import { scheduledVisibilityOr } from "./content.ts";
+import { loadLocaleMeta } from "./locale-meta.ts";
+import { advertisedAlternates, applyReadingLocale, type ReadingView } from "./reading-languages.ts";
 
 export interface GlossaryListEntry {
   termId: string;
@@ -64,7 +66,8 @@ async function localeContext(): Promise<LocaleContext> {
  * COUNT cannot disagree with the terms its page actually lists.
  */
 export function publicGlossaryTermWhere(now: Date = new Date()) {
-  return { OR: scheduledVisibilityOr(now), deletedAt: null };
+  // ADR-139 #2 — `isActive` hides a term without touching its status.
+  return { OR: scheduledVisibilityOr(now), deletedAt: null, isActive: true };
 }
 
 /**
@@ -113,7 +116,9 @@ export async function loadPublishedGlossary(locale: string): Promise<GlossaryLis
             : null;
         return { topicName: topic?.name ?? null, topicSlug: topic?.slug ?? null };
       })(),
-      simpleExplanation: htmlToText(picked.simpleExplanation),
+      // The LEAD, not the body: since changes-46 #1 this column holds the
+      // whole explanation, and the A–Z list prints it inline.
+      simpleExplanation: htmlLead(picked.simpleExplanation),
     });
   }
   return [...entries].sort((a, b) => a.term.localeCompare(b.term, locale));
@@ -126,7 +131,7 @@ export async function getPublishedGlossary(locale: string): Promise<GlossaryList
   return loadPublishedGlossary(locale);
 }
 
-export interface GlossaryTermView {
+export interface GlossaryTermView extends ReadingView {
   termId: string;
   locale: string;
   requestedLocaleMissing: boolean;
@@ -144,6 +149,8 @@ export interface GlossaryTermView {
   track: string | null;
   difficulty: string;
   formula: string | null;
+  /** The editor's Illustration — an uploaded asset path, or null. */
+  imageUrl: string | null;
   seoTitle: string | null;
   seoDescription: string | null;
   /** Every locale that has a translation, for hreflang alternates. */
@@ -163,8 +170,9 @@ export interface GlossaryTermView {
 export async function loadGlossaryTermBySlug(
   locale: string,
   slug: string,
+  readingLocale?: string,
 ): Promise<GlossaryTermView | null> {
-  const ctx = await localeContext();
+  const [ctx, known] = await Promise.all([localeContext(), loadLocaleMeta()]);
   const translation = await db.glossaryTermTranslation.findFirst({
     where: {
       slug,
@@ -190,9 +198,18 @@ export async function loadGlossaryTermBySlug(
   if (!translation) return null;
 
   const term = translation.glossaryTerm;
-  const picked = pickTranslation(term.translations, locale, ctx.defaultLocale, ctx.locales);
+  const fallbackPick = pickTranslation(term.translations, locale, ctx.defaultLocale, ctx.locales);
+  // ADR-127: a human-saved translation the reader chose replaces the pick.
+  // The slug below stays the fallback's, so a reading view never moves address.
+  const { picked, ...reading } = applyReadingLocale(
+    term.translations,
+    fallbackPick,
+    readingLocale,
+    known,
+    locale,
+  );
 
-  const alternates = term.translations.map((t) => ({ locale: t.locale, slug: t.slug }));
+  const alternates = advertisedAlternates(term.translations, ctx.defaultLocale);
 
   // Resolved through the same fallback chain the body uses: a topic name in
   // the wrong language on an RTL page is the bug ADR-007 exists to prevent,
@@ -212,6 +229,7 @@ export async function loadGlossaryTermBySlug(
     track: term.track,
     difficulty: term.difficulty as string,
     formula: term.formula,
+    imageUrl: term.imageUrl,
   };
 
   if (!picked) {
@@ -230,6 +248,7 @@ export async function loadGlossaryTermBySlug(
       seoTitle: null,
       seoDescription: null,
       alternates,
+      ...reading,
     };
   }
 
@@ -238,7 +257,7 @@ export async function loadGlossaryTermBySlug(
     locale: picked.locale,
     requestedLocaleMissing: false,
     term: picked.term,
-    slug: picked.slug,
+    slug: fallbackPick?.slug ?? translation.slug,
     simpleExplanation: picked.simpleExplanation,
     detailedExplanation: picked.detailedExplanation,
     advancedExplanation: picked.advancedExplanation,
@@ -248,6 +267,7 @@ export async function loadGlossaryTermBySlug(
     seoTitle: picked.seoTitle,
     seoDescription: picked.seoDescription,
     alternates,
+    ...reading,
   };
 }
 
@@ -271,11 +291,12 @@ function readPublicFaq(value: unknown): { question: string; answer: string }[] {
 export async function getGlossaryTermBySlug(
   locale: string,
   slug: string,
+  readingLocale?: string,
 ): Promise<GlossaryTermView | null> {
   "use cache";
   cacheTag("content");
   cacheLife({ revalidate: 300 });
-  return loadGlossaryTermBySlug(locale, slug);
+  return loadGlossaryTermBySlug(locale, slug, readingLocale);
 }
 
 /** Old-slug handling: the Redirect rows content.ts writes on slug changes. Returns the target path or null. */
@@ -381,12 +402,16 @@ export async function loadPopularGlossaryTerms(
   const entries = await loadPublishedGlossary(locale);
   const byViews = await db.glossaryTerm.findMany({
     where: publicGlossaryTermWhere(),
-    select: { id: true, viewCount: true },
+    select: { id: true, viewCount: true, isFeatured: true },
   });
   const views = new Map(byViews.map((t) => [t.id, t.viewCount]));
+  // ADR-139 #3 — an editor's featured terms lead the rail, then views.
+  const featured = new Set(byViews.filter((t) => t.isFeatured).map((t) => t.id));
 
   return [...entries]
     .sort((a, b) => {
+      const pick = Number(featured.has(b.termId)) - Number(featured.has(a.termId));
+      if (pick !== 0) return pick;
       const diff = (views.get(b.termId) ?? 0) - (views.get(a.termId) ?? 0);
       return diff !== 0 ? diff : a.term.localeCompare(b.term, locale);
     })

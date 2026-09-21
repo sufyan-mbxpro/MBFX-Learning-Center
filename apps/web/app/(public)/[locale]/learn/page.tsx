@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { localizedPath } from "../../../_lib/seo.ts";
 import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { getFeaturedVideoTopics, getLearnIndex } from "@repo/core";
@@ -49,7 +50,7 @@ export async function generateMetadata({
   return {
     title: (template ?? "%s").replace("%s", t("meta.indexTitle")),
     description: t("meta.indexDescription"),
-    alternates: { canonical: ROUTE_PATHS.learn },
+    alternates: { canonical: localizedPath(locale, ROUTE_PATHS.learn) },
   };
 }
 
@@ -112,12 +113,7 @@ export default async function LearnIndexPage({ params }: PageProps<"/[locale]/le
           learn pages were the exceptions. */}
       <Section spacing="md">
         <CtaBand title={t("index.ctaTitle")} description={t("index.ctaDescription")}>
-          <Button
-            size="lg"
-            shape="pill"
-            variant="secondary"
-            render={<Link href={ROUTE_PATHS.glossary} />}
-          >
+          <Button size="lg" variant="secondary" render={<Link href={ROUTE_PATHS.glossary} />}>
             {t("index.ctaAction")}
           </Button>
         </CtaBand>

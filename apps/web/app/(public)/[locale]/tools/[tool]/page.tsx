@@ -1,4 +1,7 @@
 import type { Metadata } from "next";
+import { descriptionFrom, jsonLd, localizedPath, shareMetadata } from "../../../../_lib/seo.ts";
+import { siteUrl } from "../../../../_lib/site-url.ts";
+import Image from "next/image";
 import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import {
@@ -22,9 +25,11 @@ import {
 import type { OhlcInterval } from "@repo/core";
 import { getSetting, isFeatureVisible } from "@repo/settings";
 import { RelatedStrip } from "../_components/related-strip.tsx";
+import { ReviewsBand } from "../../_components/reviews-band.tsx";
 import { ToolShell } from "../_components/tool-shell.tsx";
 import { ToolWidget } from "../_components/tool-widget.tsx";
-import { RiskDisclaimer } from "../../_sections/risk-disclaimer.tsx";
+import { PIVOT_AUTOFILL_LIMIT, pivotSymbols } from "../_components/pivot-symbols.ts";
+import { formatDate } from "@repo/utils";
 
 // One tool page (changes-25 T6, ADR-086 #9).
 //
@@ -48,16 +53,27 @@ export async function generateMetadata({
   setRequestLocale(locale);
   if (!isToolKey(tool)) return {};
 
-  const [page, template] = await Promise.all([
+  const [page, template, tCommon] = await Promise.all([
     getToolPage(locale, tool),
     getSetting("seo.titleTemplate"),
+    getTranslations({ locale, namespace: "common" }),
   ]);
   if (!page) return {};
 
+  const ownPath = localizedPath(locale, toolPath(tool));
   return {
     title: (template ?? "%s").replace("%s", page.seoTitle || page.title),
-    description: page.seoDescription ?? page.tagline ?? undefined,
-    alternates: { canonical: toolPath(tool) },
+    ...descriptionFrom(page.seoDescription, page.tagline),
+    alternates: { canonical: ownPath },
+    // The editor's Cover image is the masthead AND the share card.
+    ...(await shareMetadata({
+      locale,
+      siteName: tCommon("siteName"),
+      url: ownPath,
+      title: page.seoTitle || page.title,
+      description: page.seoDescription ?? page.tagline,
+      image: page.coverUrl,
+    })),
   };
 }
 
@@ -83,7 +99,7 @@ export default async function ToolPage({ params }: PageProps<"/[locale]/tools/[t
 
   const needs = TOOLS[key].needs;
 
-  const [instruments, related, snapshot] = await Promise.all([
+  const [instruments, curatedRelated, snapshot] = await Promise.all([
     // Only the tools that name instruments pay for them.
     needs === "none" ? Promise.resolve([]) : listActiveInstruments(),
     page.showRelated ? getToolRelated(locale, key, page.relatedCount) : Promise.resolve([]),
@@ -92,23 +108,44 @@ export default async function ToolPage({ params }: PageProps<"/[locale]/tools/[t
     needs === "none" ? Promise.resolve(null) : getRateSnapshot(),
   ]);
 
+  // "More about this" links only to routes that will answer (changes-46). The
+  // core read already applies each module's publish rule; the FLAG half is a
+  // viewer-scoped check a cached read cannot make, so it happens here, against
+  // the same anonymous subject the destination pages gate with.
+  const relatedFeatures = [...new Set(curatedRelated.map((item) => item.feature))];
+  const featureOn = new Map(
+    await Promise.all(
+      relatedFeatures.map(async (flag) => [flag, await isFeatureVisible(flag, null)] as const),
+    ),
+  );
+  const related = curatedRelated.filter((item) => featureOn.get(item.feature) === true);
+
   // The pivot calculator's autofill: the last COMPLETE period for each
   // interval it offers. Read here rather than in the island because it is a
   // database read, and because a cached page can pay for it once.
-  const autofill: Record<string, Awaited<ReturnType<typeof getOhlc>>> = {};
+  //
+  // Per SYMBOL as well as per interval (changes-46): the dropdown offers every
+  // configured instrument, so the periods have to follow the reader's pick.
+  // The symbols come from the same `pivotSymbols` the widget uses, so the two
+  // cannot disagree about what is offered.
+  const autofill: Record<string, Record<string, Awaited<ReturnType<typeof getOhlc>>>> = {};
   if (key === "pivot-points") {
     const intervals = Array.isArray((config as { intervals?: unknown }).intervals)
       ? ((config as { intervals: string[] }).intervals as OhlcInterval[])
       : (["1D", "1W", "1M", "1Y"] as OhlcInterval[]);
-    const defaultSymbolId = String((config as { defaultSymbolId?: unknown }).defaultSymbolId ?? "");
-    const symbol =
-      instruments.find((i) => i.id === defaultSymbolId)?.symbol ?? instruments[0]?.symbol ?? null;
-    if (symbol) {
-      const bars = await Promise.all(intervals.map((interval) => getOhlc(symbol, interval)));
-      intervals.forEach((interval, index) => {
-        autofill[interval] = bars[index] ?? null;
+    const symbols = pivotSymbols(config, instruments)
+      .options.slice(0, PIVOT_AUTOFILL_LIMIT)
+      .map((option) => option.symbol);
+    const bars = await Promise.all(
+      symbols.flatMap((symbol) => intervals.map((interval) => getOhlc(symbol, interval))),
+    );
+    symbols.forEach((symbol, s) => {
+      const periods: Record<string, Awaited<ReturnType<typeof getOhlc>>> = {};
+      intervals.forEach((interval, i) => {
+        periods[interval] = bars[s * intervals.length + i] ?? null;
       });
-    }
+      autofill[symbol] = periods;
+    });
   }
 
   // The two history-backed tools, each read once on the server so the island
@@ -157,36 +194,100 @@ export default async function ToolPage({ params }: PageProps<"/[locale]/tools/[t
     ? // `dataAsOf`, not `asOf`: neither a correlation grid nor a sentiment
       // score is a RATE, and saying so would be a small lie in a caption.
       t("common.dataAsOf", {
-        date: new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(new Date(asOfSource)),
+        date: formatDate(asOfSource, locale),
       })
     : null;
 
+  // Structured data (changes-46 SEO check: the tool pages carried none). A
+  // calculator is a `WebApplication` a reader uses in the browser, free; the
+  // FAQ the page draws is a `FAQPage`, only when it has entries — the rule the
+  // article and support pages follow. No `BreadcrumbList`: the page draws no
+  // visible trail, and the markup must describe navigation a reader can see.
+  const ownUrl = `${siteUrl()}${localizedPath(locale, toolPath(key))}`;
+  const structured = [
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      name: page.title,
+      url: ownUrl,
+      ...(page.seoDescription || page.tagline
+        ? { description: page.seoDescription || page.tagline }
+        : {}),
+      applicationCategory: "FinanceApplication",
+      operatingSystem: "Any",
+      isAccessibleForFree: true,
+      offers: { "@type": "Offer", price: 0, priceCurrency: "USD" },
+    },
+    ...(page.faq.length > 0
+      ? [
+          {
+            "@context": "https://schema.org",
+            "@type": "FAQPage",
+            mainEntity: page.faq.map((item) => ({
+              "@type": "Question",
+              name: item.question,
+              acceptedAnswer: { "@type": "Answer", text: item.answer },
+            })),
+          },
+        ]
+      : []),
+  ];
+
   return (
-    <ToolShell
-      title={page.title}
-      tagline={page.tagline}
-      intro={page.intro}
-      body={page.body}
-      faq={page.faq}
-      widget={
-        <ToolWidget
-          toolKey={key}
-          config={config}
-          instruments={instruments.map((i) => ({
-            id: i.id,
-            symbol: i.symbol,
-            displayName: i.displayName,
-            kind: i.kind,
-          }))}
-          snapshot={snapshot}
-          autofill={autofill}
-          correlation={correlation}
-          risk={risk}
-          asOfLabel={asOfLabel}
+    <>
+      {structured.map((graph) => (
+        <script
+          key={String(graph["@type"])}
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: jsonLd(graph) }}
         />
-      }
-      related={<RelatedStrip items={related} />}
-      disclaimer={<RiskDisclaimer />}
-    />
+      ))}
+      <ToolShell
+        title={page.title}
+        tagline={page.tagline}
+        intro={page.intro}
+        body={page.body}
+        faq={page.faq}
+        highlights={page.highlights}
+        // The editor's Cover image (Tools → Media). Present, it turns the
+        // masthead into ADR-117's photo band; absent, the brand fill stays.
+        // `alt=""` for the same reason as every masthead backdrop: texture
+        // behind a headline that already says what the page is.
+        backdrop={
+          page.coverUrl ? (
+            <Image
+              src={page.coverUrl}
+              alt=""
+              fill
+              priority
+              sizes="100vw"
+              className="object-cover"
+              unoptimized={page.coverUrl.endsWith(".svg")}
+            />
+          ) : undefined
+        }
+        widget={
+          <ToolWidget
+            toolKey={key}
+            config={config}
+            instruments={instruments.map((i) => ({
+              id: i.id,
+              symbol: i.symbol,
+              displayName: i.displayName,
+              kind: i.kind,
+            }))}
+            snapshot={snapshot}
+            autofill={autofill}
+            correlation={correlation}
+            risk={risk}
+            asOfLabel={asOfLabel}
+          />
+        }
+        // Default ground: the highlights above and the related strip below are
+        // both muted, so this band is what separates them.
+        reviews={<ReviewsBand />}
+        related={<RelatedStrip items={related} />}
+      />
+    </>
   );
 }

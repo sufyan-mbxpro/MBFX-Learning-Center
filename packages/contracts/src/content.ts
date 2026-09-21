@@ -213,6 +213,21 @@ export const publicArticleSearchSchema = z.object({
 });
 export type PublicArticleSearchInput = z.infer<typeof publicArticleSearchSchema>;
 
+// ─── Reading language (ADR-127) ───────────────────────────────
+//
+// `?lang=` on a public detail page: the language the item's OWN words are read
+// in, independent of the interface locale. Shaped like a locale code and
+// nothing more — whether a translation exists is the loader's question, and an
+// unusable value is ignored rather than rejected, so callers `safeParse`.
+export const readingLanguageSearchSchema = z.object({
+  lang: z
+    .string()
+    .trim()
+    .regex(/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$/)
+    .optional(),
+});
+export type ReadingLanguageSearchInput = z.infer<typeof readingLanguageSearchSchema>;
+
 /**
  * The closed class vocabulary the rich-text editor may emit (changes-10,
  * ADR-046). Mirrors the `.ed-*` rules in `@repo/ui`'s globals.css — that file
@@ -238,6 +253,13 @@ export const EDITORIAL_CLASSES = [
   "ed-hl-info",
   "ed-hl-danger",
   "ed-hl-muted",
+  // `body` and `display` are changes-40's names for the two families the
+  // theme owns; `sans` is `body`'s old name and stays allowed because
+  // articles saved before the rename carry it. Dropping it here would not
+  // rename anything — it would strip the class from the stored HTML the next
+  // time an editor pressed Save, silently reverting the author's choice.
+  "ed-ff-body",
+  "ed-ff-display",
   "ed-ff-sans",
   "ed-ff-serif",
   "ed-ff-mono",

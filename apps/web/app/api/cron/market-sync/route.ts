@@ -114,6 +114,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         synced: result.synced,
         barsWritten: result.barsWritten,
         skipped: result.skipped,
+        unsupported: result.unsupported.length,
         failures: result.failures.length,
       },
     },

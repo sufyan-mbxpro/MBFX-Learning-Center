@@ -319,3 +319,189 @@ describe("the OpenAI driver", () => {
     expect(estimate).toBeGreaterThan(2000);
   });
 });
+
+// ─── Model discovery and compatible gateways (ADR-120) ───────
+
+describe("model discovery", () => {
+  it("tests an Anthropic key with the Models API, never a billed message", async () => {
+    let listed = 0;
+    server.use(
+      http.get(`${BASE}/v1/models`, () => {
+        listed += 1;
+        return HttpResponse.json({ data: [], has_more: false, first_id: null, last_id: null });
+      }),
+    );
+    // No POST handler: a message sent by `test()` fails the suite on
+    // `onUnhandledRequest: "error"`.
+    await anthropicDriver({ apiKey: "k", baseUrl: BASE }).test();
+    expect(listed).toBe(1);
+  });
+
+  it("lists Anthropic models with their names, ceilings and vision support", async () => {
+    server.use(
+      http.get(`${BASE}/v1/models`, () =>
+        HttpResponse.json({
+          data: [
+            {
+              type: "model",
+              id: "claude-opus-5",
+              display_name: "Claude Opus 5",
+              created_at: "2026-01-01T00:00:00Z",
+              max_tokens: 128000,
+              max_input_tokens: 1000000,
+              capabilities: { image_input: { supported: true } },
+            },
+            {
+              type: "model",
+              id: "claude-haiku-4-5",
+              display_name: "Claude Haiku 4.5",
+              created_at: "2025-10-01T00:00:00Z",
+              max_tokens: null,
+              max_input_tokens: null,
+              capabilities: null,
+            },
+          ],
+          has_more: false,
+          first_id: "claude-opus-5",
+          last_id: "claude-haiku-4-5",
+        }),
+      ),
+    );
+
+    const models = await anthropicDriver({ apiKey: "k", baseUrl: BASE }).listModels();
+    expect(models).toEqual([
+      {
+        modelId: "claude-opus-5",
+        label: "Claude Opus 5",
+        maxOutputTokens: 128000,
+        supportsVision: true,
+        inputPricePerMTok: null,
+        outputPricePerMTok: null,
+      },
+      {
+        modelId: "claude-haiku-4-5",
+        label: "Claude Haiku 4.5",
+        maxOutputTokens: null,
+        supportsVision: null,
+        inputPricePerMTok: null,
+        outputPricePerMTok: null,
+      },
+    ]);
+  });
+
+  it("lists OpenAI-compatible models alphabetically, reading gateway extras when present", async () => {
+    server.use(
+      http.get(`${BASE}/models`, () =>
+        HttpResponse.json({
+          object: "list",
+          data: [
+            { id: "plain-model", object: "model", created: 0, owned_by: "x" },
+            {
+              id: "anthropic/claude-sonnet-5",
+              object: "model",
+              created: 0,
+              owned_by: "x",
+              name: "Anthropic: Claude Sonnet 5",
+              top_provider: { max_completion_tokens: 64000 },
+              architecture: { input_modalities: ["text", "image"] },
+              pricing: { prompt: "0.000002", completion: "0.00001" },
+            },
+          ],
+        }),
+      ),
+    );
+
+    const models = await openAiDriver({ apiKey: "k", baseUrl: BASE }).listModels();
+    expect(models.map((m) => m.modelId)).toEqual(["anthropic/claude-sonnet-5", "plain-model"]);
+    expect(models[0]).toEqual({
+      modelId: "anthropic/claude-sonnet-5",
+      label: "Anthropic: Claude Sonnet 5",
+      maxOutputTokens: 64000,
+      supportsVision: true,
+      // USD per token → per MILLION, without float noise.
+      inputPricePerMTok: 2,
+      outputPricePerMTok: 10,
+    });
+    expect(models[1]).toMatchObject({
+      label: "plain-model",
+      maxOutputTokens: null,
+      supportsVision: null,
+      inputPricePerMTok: null,
+    });
+  });
+
+  it("proves a key on the preset's check path when the model list is public", async () => {
+    let checked = false;
+    server.use(
+      http.get(`${BASE}/key`, ({ request: req }) => {
+        checked = req.headers.get("authorization") === "Bearer sk-or-k";
+        return HttpResponse.json({ data: { label: "k" } });
+      }),
+    );
+    await openAiDriver({ apiKey: "sk-or-k", baseUrl: BASE, keyCheckPath: "/key" }).test();
+    expect(checked).toBe(true);
+  });
+
+  it("maps a rejected key to a thrown error the classifier reads as provider_auth", async () => {
+    server.use(
+      http.get(`${BASE}/models`, () =>
+        HttpResponse.json({ error: { message: "bad key" } }, { status: 401 }),
+      ),
+    );
+    await expect(openAiDriver({ apiKey: "bad", baseUrl: BASE }).test()).rejects.toMatchObject({
+      status: 401,
+    });
+  });
+});
+
+describe("the OpenAI driver on a compatible gateway", () => {
+  it("sends max_tokens when the preset says so, and records the gateway's own kind", async () => {
+    let body: Record<string, unknown> = {};
+    server.use(
+      http.post(`${BASE}/chat/completions`, async ({ request: req }) => {
+        body = (await req.json()) as Record<string, unknown>;
+        return HttpResponse.json({
+          choices: [{ message: { content: "a" } }],
+          usage: { prompt_tokens: 1, completion_tokens: 1 },
+        });
+      }),
+    );
+
+    const driver = openAiDriver({
+      apiKey: "k",
+      baseUrl: BASE,
+      kind: "DEEPSEEK",
+      maxTokensParam: "max_tokens",
+    });
+    await driver.complete(request({ modelId: "deepseek-chat", maxOutputTokens: 321 }));
+    expect(driver.kind).toBe("DEEPSEEK");
+    expect(body.max_tokens).toBe(321);
+    expect(body.max_completion_tokens).toBeUndefined();
+  });
+
+  it("leaves stream_options out for a gateway that rejects unknown fields", async () => {
+    let body: Record<string, unknown> = {};
+    server.use(
+      http.post(`${BASE}/chat/completions`, async ({ request: req }) => {
+        body = (await req.json()) as Record<string, unknown>;
+        return sse([
+          'data: {"choices":[{"delta":{"content":"hi"}}],"usage":{"prompt_tokens":2,"completion_tokens":1}}\n\n',
+          "data: [DONE]\n\n",
+        ]);
+      }),
+    );
+
+    const chunks = [];
+    for await (const chunk of openAiDriver({
+      apiKey: "k",
+      baseUrl: BASE,
+      kind: "MISTRAL",
+      streamUsageOption: false,
+    }).stream(request({ modelId: "mistral-large-latest" }))) {
+      chunks.push(chunk);
+    }
+    expect(body).not.toHaveProperty("stream_options");
+    // Usage reported unasked is still metered.
+    expect(chunks.at(-1)?.usage?.outputTokens).toBe(1);
+  });
+});

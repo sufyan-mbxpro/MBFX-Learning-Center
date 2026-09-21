@@ -2,14 +2,17 @@ import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { loadGlossaryTermAdminDetail, listGlossaryTopics } from "@repo/core";
 import { LEARN_TRACK_KEYS } from "@repo/contracts";
-import { getActiveLocales } from "@repo/i18n";
+import { getAuthoringLocales } from "@repo/i18n";
 import { routing } from "@repo/i18n/routing";
 import { can, requirePermission } from "@repo/rbac";
-import { AdminPage } from "../../_components/admin-page.tsx";
+import { EditorPage } from "../../_components/admin-page.tsx";
 import { richTextLabels } from "../../_components/editor-labels.ts";
+import { loadEditorAi } from "../../_lib/editor-ai.ts";
 import { trackLabels } from "../../learn/_lib/learn-labels.ts";
 import { GlossaryEditor } from "./glossary-editor.tsx";
 import type { GlossaryEditorLabels } from "./editor-types.ts";
+import { mergeGlossaryProse, type GlossaryProseHeadings } from "./merge-prose.ts";
+import { formatDateTime } from "@repo/utils";
 
 // Glossary term editor (ADR-069). Read gate here; every write re-gates in its
 // own action (security.md #1).
@@ -17,15 +20,49 @@ export default async function GlossaryTermEditPage({ params }: PageProps<"/admin
   const subject = await requirePermission("glossary.view");
   const { id } = await params;
 
-  const [t, detail, topics, activeLocales] = await Promise.all([
+  const [t, detail, topics, authoringLocales, ai] = await Promise.all([
     getTranslations("admin"),
     loadGlossaryTermAdminDetail(id),
     listGlossaryTopics(),
-    getActiveLocales(),
+    getAuthoringLocales(),
+    // ADR-126: the "Generate with AI" bar, each field's menu, and the writing
+    // assistant on the Details body — each present only when available.
+    loadEditorAi(subject, {
+      module: "glossary_term",
+      entity: { type: "glossary_term", id },
+      contentKeys: ["glossary.update"],
+    }),
   ]);
   if (!detail) notFound();
 
-  const dateFormat = new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" });
+  // The public page's own section headings, in the translation's language
+  // where that catalog has them (an inactive locale's may not — ADR-091),
+  // English otherwise. The merged body is CONTENT in that language.
+  const tGlossaryEn = await getTranslations({
+    locale: routing.defaultLocale,
+    namespace: "glossary",
+  });
+  const localHeadings = new Map<string, GlossaryProseHeadings>();
+  await Promise.all(
+    detail.translations.map(async (tr) => {
+      const local = await getTranslations({ locale: tr.locale, namespace: "glossary" }).catch(
+        () => tGlossaryEn,
+      );
+      const pick = (key: "detailedHeading" | "advancedHeading" | "exampleHeading") =>
+        local.has(key) ? local(key) : tGlossaryEn(key);
+      localHeadings.set(tr.locale, {
+        detailed: pick("detailedHeading"),
+        advanced: pick("advancedHeading"),
+        example: pick("exampleHeading"),
+      });
+    }),
+  );
+  const headingsFor = (locale: string): GlossaryProseHeadings =>
+    localHeadings.get(locale) ?? {
+      detailed: tGlossaryEn("detailedHeading"),
+      advanced: tGlossaryEn("advancedHeading"),
+      example: tGlossaryEn("exampleHeading"),
+    };
 
   const statusLabels: Record<string, string> = {
     DRAFT: t("statusDraft"),
@@ -37,9 +74,6 @@ export default async function GlossaryTermEditPage({ params }: PageProps<"/admin
     ARCHIVED: t("statusArchived"),
     OUTDATED: t("statusOutdated"),
   };
-
-  const defaultTranslation =
-    detail.translations.find((tr) => tr.locale === routing.defaultLocale) ?? detail.translations[0];
 
   const labels: GlossaryEditorLabels = {
     updateTerm: t("glossaryEditor.updateTerm"),
@@ -59,17 +93,13 @@ export default async function GlossaryTermEditPage({ params }: PageProps<"/admin
     termLabel: t("termLabel"),
     slugLabel: t("slugLabel"),
     termUrl: t("postUrlLabel"),
-    simpleLabel: t("glossaryEditor.simpleLabel"),
-    simpleHint: t("glossaryEditor.simpleHint"),
-    detailedLabel: t("glossaryEditor.detailedLabel"),
-    detailedHint: t("glossaryEditor.detailedHint"),
-    advancedLabel: t("glossaryEditor.advancedLabel"),
-    advancedHint: t("glossaryEditor.advancedHint"),
-    exampleLabel: t("glossaryEditor.exampleLabel"),
-    exampleHint: t("glossaryEditor.exampleHint"),
+    detailsLabel: t("glossaryEditor.detailsLabel"),
+    detailsHint: t("glossaryEditor.detailsHint"),
 
     filingSection: t("glossaryEditor.filingSection"),
     filingSectionDescription: t("glossaryEditor.filingSectionDescription"),
+    displaySection: t("contentFlags.title"),
+    displaySectionDescription: t("contentFlags.description"),
     topicLabel: t("glossaryEditor.topicLabel"),
     topicHint: t("glossaryEditor.topicHint"),
     topicNone: t("glossaryEditor.topicNone"),
@@ -131,20 +161,6 @@ export default async function GlossaryTermEditPage({ params }: PageProps<"/admin
       confirm: t("confirm"),
       cancel: t("cancel"),
     },
-    analysis: {
-      score: t("seoScoreLabel"),
-      checks: {
-        titleLength: t("seoCheckTitleLength"),
-        descriptionLength: t("seoCheckDescriptionLength"),
-        focusKeywordInTitle: t("seoCheckKeywordInTitle"),
-        focusKeywordInDescription: t("seoCheckKeywordInDescription"),
-        focusKeywordInFirstParagraph: t("seoCheckKeywordEarly"),
-        contentLength: t("seoCheckContentLength"),
-        hasSubheadings: t("seoCheckSubheadings"),
-        hasImages: t("seoCheckImages"),
-        hasInternalLink: t("seoCheckInternalLink"),
-      },
-    },
     faq: {
       section: t("faqSection"),
       description: t("glossaryEditor.faqSectionDescription"),
@@ -181,8 +197,8 @@ export default async function GlossaryTermEditPage({ params }: PageProps<"/admin
   };
 
   return (
-    <AdminPage
-      title={defaultTranslation?.term || t("untitled")}
+    <EditorPage
+      title={t("editorHeading.glossaryTerm")}
       description={t("pageDesc.glossaryDetail")}
       backHref="/admin/glossary"
       backLabel={t("glossaryEditor.backToList")}
@@ -196,22 +212,28 @@ export default async function GlossaryTermEditPage({ params }: PageProps<"/admin
           difficulty: detail.difficulty,
           formula: detail.formula ?? "",
           imageUrl: detail.imageUrl,
+          flags: {
+            isFeatured: detail.isFeatured,
+            isActive: detail.isActive,
+            isPremium: detail.isPremium,
+          },
           viewCount: detail.viewCount,
-          publishedAt: detail.publishedAt ? dateFormat.format(detail.publishedAt) : null,
-          scheduledFor: detail.scheduledFor ? dateFormat.format(detail.scheduledFor) : null,
-          createdAt: dateFormat.format(detail.createdAt),
-          updatedAt: dateFormat.format(detail.updatedAt),
+          publishedAt: detail.publishedAt ? formatDateTime(detail.publishedAt) : null,
+          scheduledFor: detail.scheduledFor ? formatDateTime(detail.scheduledFor) : null,
+          createdAt: formatDateTime(detail.createdAt),
+          updatedAt: formatDateTime(detail.updatedAt),
           deleted: detail.deletedAt !== null,
           // The prefill ADR-069 exists to deliver: every stored field, in
           // every locale, reaching the form as its initial value.
+          //
+          // changes-46 #1: the four stored prose columns reach the ONE Details
+          // editor merged, under the headings the public page gives them, so
+          // the first Save of a legacy term keeps every word (merge-prose.ts).
           translations: detail.translations.map((tr) => ({
             locale: tr.locale,
             term: tr.term,
             slug: tr.slug,
-            simpleExplanation: tr.simpleExplanation,
-            detailedExplanation: tr.detailedExplanation ?? "",
-            advancedExplanation: tr.advancedExplanation ?? "",
-            exampleScenario: tr.exampleScenario ?? "",
+            details: mergeGlossaryProse(tr, headingsFor(tr.locale)),
             faq: tr.faq,
             seoTitle: tr.seoTitle ?? "",
             seoDescription: tr.seoDescription ?? "",
@@ -223,7 +245,7 @@ export default async function GlossaryTermEditPage({ params }: PageProps<"/admin
           id: topic.id,
           name: topic.name || t("untitled"),
         }))}
-        locales={activeLocales.map((l) => l.code)}
+        locales={authoringLocales.map((l) => l.code)}
         defaultLocale={routing.defaultLocale}
         siteUrl={process.env.NEXT_PUBLIC_SITE_URL ?? ""}
         canUpdate={can(subject, "glossary.update")}
@@ -231,7 +253,8 @@ export default async function GlossaryTermEditPage({ params }: PageProps<"/admin
         canDelete={can(subject, "glossary.delete")}
         canCreateTopic={can(subject, "glossary.create")}
         labels={labels}
+        {...(ai ? { ai } : {})}
       />
-    </AdminPage>
+    </EditorPage>
   );
 }

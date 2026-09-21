@@ -42,7 +42,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
           toast: "group toast border-border shadow-lg",
           title: "text-sm font-semibold",
           description: "text-sm text-muted-foreground",
-          actionButton: "bg-primary text-primary-foreground",
+          actionButton: "bg-primary-solid text-primary-solid-foreground",
           cancelButton: "bg-muted text-muted-foreground",
         },
       }}

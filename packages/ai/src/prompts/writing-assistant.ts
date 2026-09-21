@@ -9,13 +9,16 @@
 // admin.
 import type { AiPayload } from "@repo/contracts";
 
-import { asData, buildSystem, localeName, type BuiltPrompt } from "./shared.ts";
-
-const BASE =
-  "You are an editorial assistant for a forex and trading education website. You write clear, accurate, plain prose for adult learners. You never give personalised financial advice, never promise returns, and never invent statistics, quotations, or sources.";
-
-const FORMAT =
-  "Return PLAIN TEXT only. No HTML, no Markdown syntax, no headings markup, no code fences. Paragraphs separated by a blank line.";
+import {
+  EDITORIAL_BASE as BASE,
+  PLAIN_TEXT_FORMAT as FORMAT,
+  asData,
+  buildSystem,
+  localeName,
+  type BuiltPrompt,
+} from "./shared.ts";
+import { AUDIENCE_WORDS } from "./form-fill.ts";
+import { TONE_WORDS } from "./writing-studio.ts";
 
 const ACTION_INSTRUCTIONS: Record<string, string> = {
   draft:
@@ -30,28 +33,54 @@ const ACTION_INSTRUCTIONS: Record<string, string> = {
     "Correct grammar, spelling, punctuation and obvious typos in the supplied passage. Change nothing else — not the wording, not the tone, not the structure, not a single fact.",
 };
 
-const TONE_WORDS: Record<string, string> = {
-  professional: "professional and measured",
-  friendly: "friendly and direct, addressing the reader as 'you'",
-  concise: "as concise as the meaning allows",
-  plain: "plain, using everyday words in place of jargon wherever a plain word exists",
+const DRAFT_LENGTH_WORDS: Record<NonNullable<AssistantPayload["length"]>, string> = {
+  brief: "Keep it short: one or two paragraphs.",
+  standard: "Aim for a few solid paragraphs.",
+  in_depth:
+    "Go in depth: a thorough section with explanation and a clearly hypothetical worked example.",
 };
+
+const DRAFT_FORMAT_WORDS: Record<NonNullable<AssistantPayload["format"]>, string> = {
+  paragraphs: "Use paragraphs separated by a blank line.",
+  bullets: "Use a list: one point per line, each line starting with a hyphen and a space.",
+  single_line: "Write a single line with no line breaks.",
+};
+
+type AssistantPayload = AiPayload<"writing_assistant">;
 
 export function buildWritingAssistantPrompt(
   payload: AiPayload<"writing_assistant">,
   extraInstructions?: string | null,
 ): BuiltPrompt {
   const action = ACTION_INSTRUCTIONS[payload.action] ?? ACTION_INSTRUCTIONS.draft!;
-  const language = localeName(payload.locale);
+  // Grammar correction never changes language — a locale there would ask it to
+  // translate, which contradicts "change nothing else". An edit sent without a
+  // locale keeps the passage's own language; a draft has no passage, so it
+  // falls back to the site default.
+  const keepPassageLanguage =
+    payload.selection !== undefined && (payload.action === "fix_grammar" || !payload.locale);
+  const languageRule = keepPassageLanguage
+    ? "Write in the same language as the supplied passage."
+    : `Write in ${localeName(payload.locale)}.`;
 
-  const system = buildSystem(
-    [BASE, action, FORMAT, `Write in ${language}.`].join(" "),
-    extraInstructions,
-  );
+  const system = buildSystem([BASE, action, FORMAT, languageRule].join(" "), extraInstructions);
 
   const parts: string[] = [];
-  if (payload.action === "change_tone" && payload.tone) {
-    parts.push(`Requested tone: ${TONE_WORDS[payload.tone] ?? payload.tone}.`);
+  if ((payload.action === "change_tone" || payload.action === "draft") && payload.tone) {
+    parts.push(`Requested tone: ${TONE_WORDS[payload.tone]}.`);
+  }
+  // The draft dialog's steering. Other actions work on a passage whose reader
+  // and length are already set, so these would contradict their instruction.
+  if (payload.action === "draft") {
+    if (payload.audience) parts.push(`Write for ${AUDIENCE_WORDS[payload.audience]}.`);
+    if (payload.wordCount) {
+      parts.push(
+        `Length: about ${payload.wordCount} words — stay within ten percent of that, and never pad to reach it.`,
+      );
+    } else if (payload.length) {
+      parts.push(DRAFT_LENGTH_WORDS[payload.length]);
+    }
+    if (payload.format) parts.push(DRAFT_FORMAT_WORDS[payload.format]);
   }
   if (payload.instruction) {
     // The writer's own brief. Delimited like everything else a human typed: a

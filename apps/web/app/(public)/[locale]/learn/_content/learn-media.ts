@@ -25,13 +25,13 @@ export type LearnImage = string | null;
 /** Backdrops: full-bleed texture behind copy, never a framed image. */
 export const LEARN_MEDIA = {
   /** `/learn`'s masthead. */
-  banner: "/learn/banner.svg",
+  banner: "/banners/learn-hub.webp",
   /** `/learn/[course]`'s masthead, behind a course with no cover of its own. */
   courseBanner: "/learn/course-banner.svg",
   /** `/learn/[track]/quizzes`'s masthead. */
-  quizBanner: "/learn/quiz-banner.svg",
+  quizBanner: "/banners/quizzes.webp",
   /** `/learn/[track]/videos`'s masthead. */
-  videoBanner: "/learn/video-banner.svg",
+  videoBanner: "/banners/videos.webp",
 } satisfies Record<string, LearnImage>;
 
 export type LearnMediaKey = keyof typeof LEARN_MEDIA;
@@ -51,6 +51,25 @@ export type LearnMediaKey = keyof typeof LEARN_MEDIA;
 export const LEARN_TRACK_MEDIA: Record<LearnTrackKey, LearnImage> = {
   forex: "/learn/track-forex.svg",
   crypto: "/learn/track-crypto.svg",
+};
+
+/**
+ * A track's MASTHEAD backdrop — separate from `LEARN_TRACK_MEDIA` above, and
+ * deliberately (changes-33).
+ *
+ * The two slots had been one entry doing two jobs: a 4:3 card cover on the
+ * shelf, and the same file stretched full-bleed behind `/learn/[track]`'s
+ * headline. That worked while both were generated panels with nothing in them
+ * to crop badly. The owner's photography is 3:1 and has a subject, so a single
+ * file cannot be right for both: `object-cover` into a card box would crop the
+ * subject out, and a 4:3 cover across a 1920px masthead is upscaled.
+ *
+ * Same total-map typing as the covers, and for the same reason: registering a
+ * third track is a type error here until its banner exists.
+ */
+export const LEARN_TRACK_BANNER: Record<LearnTrackKey, LearnImage> = {
+  forex: "/banners/learn-forex.webp",
+  crypto: "/banners/learn-crypto.webp",
 };
 
 /**
@@ -83,12 +102,12 @@ export function isGeneratedCover(url: string): boolean {
 export const LEARN_TRACK_MEDIA_SIZE = { width: 1440, height: 900 } as const;
 
 /**
- * The quiz panels — what a quiz card shows where a course card shows a cover.
+ * The quiz panels — what a quiz card shows when its editor chose no cover.
  *
- * A quiz has no cover column and is never getting one: it is a set of
- * questions, not a publication, so there is no editor artwork for
- * `quizCoverUrl` to prefer over these. That makes the choice a pure function
- * of the quiz's own identity, and this is deliberately NOT keyed by track the
+ * Since ADR-132 a quiz CAN carry an uploaded cover (`Quiz.coverAssetId`), and
+ * `quizCoverUrl` prefers it. These panels are the fallback, and the choice
+ * among them is a pure function of the quiz's own identity — deliberately NOT
+ * keyed by track the
  * way `LEARN_TRACK_MEDIA` is — one school's shelf would then repeat a single
  * placeholder down the whole grid, which reads as a rendering fault rather
  * than as a house style.
@@ -104,18 +123,18 @@ export const QUIZ_PANELS = [
 ] as const;
 
 /**
- * The panel a quiz shows, chosen from its slug.
+ * The picture a quiz shows: the editor's uploaded cover when there is one
+ * (ADR-132), otherwise a panel chosen from its slug.
  *
- * Deterministic on purpose, and for the same reason the glossary's term of the
- * day is (D29): a picture that changes when nothing about the quiz changed
- * makes the page look unstable, and a stored column would be an editor chore
- * for a decision no editor has an opinion about.
+ * The fallback is deterministic on purpose, and for the same reason the
+ * glossary's term of the day is (D29): a picture that changes when nothing
+ * about the quiz changed makes the page look unstable.
  *
  * Always returns a string — unlike `courseCoverUrl`, there is no null case,
- * because the supply is code and cannot be empty.
+ * because the fallback supply is code and cannot be empty.
  */
-export function quizCoverUrl(slug: string): string {
-  return pickByHash(slug, QUIZ_PANELS);
+export function quizCoverUrl(slug: string, coverUrl: string | null = null): string {
+  return coverUrl ?? pickByHash(slug, QUIZ_PANELS);
 }
 
 /**

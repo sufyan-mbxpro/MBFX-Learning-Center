@@ -10,6 +10,7 @@ const syncDailyBars = vi.fn(async () => ({
   barsWritten: 7,
   failures: [] as { symbol: string; error: string }[],
   skipped: 0,
+  unsupported: [] as string[],
 }));
 const recordAudit = vi.fn(async () => {});
 const getSyncDueState = vi.fn(async () => ({
@@ -47,6 +48,7 @@ beforeEach(() => {
     barsWritten: 7,
     failures: [],
     skipped: 0,
+    unsupported: [] as string[],
   });
   getSyncDueState.mockResolvedValue({
     due: true,
@@ -119,6 +121,7 @@ describe("the sweep's side effects", () => {
       barsWritten: 0,
       failures: [{ symbol: "EUR/USD", error: "Provider rate-limited" }],
       skipped: 0,
+      unsupported: [] as string[],
     });
     await call("s3cret");
     expect(revalidateTag).not.toHaveBeenCalled();
@@ -140,6 +143,7 @@ describe("the sweep's side effects", () => {
       barsWritten: 0,
       failures: [{ symbol: "EUR/USD", error: "Provider rate-limited" }],
       skipped: 0,
+      unsupported: [] as string[],
     });
     const response = await call("s3cret");
     expect(response.status).toBe(200);

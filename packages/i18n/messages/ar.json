@@ -1,7 +1,12 @@
 {
   "common": {
     "siteName": "مركز MBX للتعلم",
-    "siteDescription": "تعليم فوركس مجاني وأدوات وتحليلات."
+    "siteDescription": "تعليم فوركس مجاني وأدوات وتحليلات.",
+    "pagination": {
+      "label": "ترقيم الصفحات",
+      "previous": "السابق",
+      "next": "التالي"
+    }
   },
   "home": {
     "placeholder": "الواجهة العامة — محتوى مؤقت أثناء البناء.",
@@ -43,9 +48,6 @@
     "exploreToolsTag": "الحاسبات",
     "exploreToolsTitle": "حاسبات التداول",
     "exploreToolsBody": "حجم الصفقة وقيمة النقطة والهامش والربح — تُحسب قبل الصفقة لا بعدها.",
-    "exploreCalendarTag": "التقويم",
-    "exploreCalendarTitle": "التقويم الاقتصادي",
-    "exploreCalendarBody": "كل إصدار يحرّك زوج العملات، مع درجة تأثيره والأرقام لحظة صدورها.",
     "exploreNewsTag": "الأخبار",
     "exploreNewsTitle": "أخبار السوق",
     "exploreNewsBody": "ماذا حدث ولماذا كان مهمًّا وما الذي يغيّره — مكتوبة لمن يتداول لا لمن يقرأ العناوين.",
@@ -150,7 +152,6 @@
     "newsletterLabel": "البريد الإلكتروني",
     "newsletterSubmit": "اشترك",
     "followUs": "تابعنا",
-    "riskDisclaimerLabel": "إخلاء مسؤولية المخاطر",
     "newsletterConsent": "نرسل أولًا رابط تأكيد. يمكنك إلغاء الاشتراك في أي وقت — ولا نرسل رسائل مزعجة أبدًا.",
     "newsletterSent": "اقتربنا — تحقق من بريدك وافتح رابط التأكيد.",
     "newsletterInvalid": "لا يبدو هذا عنوان بريد إلكتروني صحيحًا.",
@@ -173,9 +174,6 @@
     "kindAnalysis": "تحليل",
     "kindTradeIdea": "فكرة تداول",
     "empty": "لا يوجد شيء منشور هنا بعد.",
-    "previousPage": "السابق",
-    "nextPage": "التالي",
-    "paginationLabel": "ترقيم الصفحات",
     "minRead": "قراءة في {minutes} دقائق",
     "playVideo": "تشغيل الفيديو",
     "relatedTitle": "مقالات ذات صلة",
@@ -569,7 +567,6 @@
       "search": "Search…",
       "noMatches": "Nothing matches",
       "asOf": "Rates as of {date}.",
-      "staleAsOf": "Rates as of {date} — out of date, and shown for reference only.",
       "noRates": "No exchange rates are stored yet, so currency conversions are unavailable.",
       "noRateForPair": "No rate is stored for this currency pair.",
       "comingWithData": "This tool needs stored market data, which is not available on this site yet.",

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { listingMetadata } from "../../../_lib/seo.ts";
 import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { publicArticleSearchSchema } from "@repo/contracts";
@@ -10,20 +11,18 @@ import {
   isNewsletterPlacementEnabled,
 } from "@repo/core";
 import { getSetting, isFeatureVisible } from "@repo/settings";
-import { Container } from "@repo/ui/components/container";
 import { CtaBand } from "@repo/ui/components/cta-band";
 import { Reveal } from "@repo/ui/components/reveal";
 import { Section } from "@repo/ui/components/section";
 import { SectionHeading } from "@repo/ui/components/section-heading";
-import { ArticleCards } from "./_components/article-list.tsx";
+import { ArticleListing } from "./_components/article-listing.tsx";
 import { CategorySections } from "./_components/category-sections.tsx";
-import { ArticleSidebar } from "./_components/article-sidebar.tsx";
 import { NewsMasthead } from "./_components/news-masthead.tsx";
 import { NewsSpotlight } from "./_components/news-spotlight.tsx";
 import { NewsTopics } from "./_components/news-topics.tsx";
 import { NewsletterForm } from "../_components/newsletter-form.tsx";
 import { newsletterFormLabels } from "../_components/newsletter-labels.ts";
-import { NumberedPagination } from "./_components/numbered-pagination.tsx";
+import { SIGNED_OUT_ONLY_CLASS } from "../../../_lib/session-hint.ts";
 
 // ADR-042 (2026-09-07): the CMS switch that used to run ahead of this listing
 // is gone. Plan v2.2 §12 PR 4.4 had made `/news` a COLLECTION page resolved by
@@ -55,19 +54,30 @@ import { NumberedPagination } from "./_components/numbered-pagination.tsx";
 // another: `getSpotlightArticles` for the lead block, `getPublishedArticles`
 // for the paginated feed (excluding the spotlight's ids),
 // `getCategoryDigests` for the per-category bands, and `getArticleFacets`
-// feeding the tiles AND the sidebar from one materialisation.
-export async function generateMetadata({ params }: PageProps<"/[locale]/news">): Promise<Metadata> {
+// feeding the tiles, the sidebar AND the masthead's tag row from one
+// materialisation.
+export async function generateMetadata({
+  params,
+  searchParams,
+}: PageProps<"/[locale]/news">): Promise<Metadata> {
   const { locale } = await params;
   setRequestLocale(locale);
   const [t, template] = await Promise.all([
     getTranslations("news"),
     getSetting("seo.titleTemplate"),
   ]);
-  return { title: (template ?? "%s").replace("%s", t("title")) };
+  const search = await searchParams;
+  const parsed = publicArticleSearchSchema.safeParse({ q: search.q, page: search.page });
+  const { q, page = 0 } = parsed.success ? parsed.data : {};
+  return {
+    title: (template ?? "%s").replace("%s", t("title")),
+    description: t("latestLead"),
+    ...listingMetadata(locale, "/news", page, q),
+  };
 }
 
-/** The lead block's size — one large story plus two runners-up. */
-const SPOTLIGHT_COUNT = 3;
+/** The lead block's size — one large story plus three runners-up (changes-46). */
+const SPOTLIGHT_COUNT = 4;
 
 export default async function NewsPage({ params, searchParams }: PageProps<"/[locale]/news">) {
   const { locale } = await params;
@@ -118,10 +128,12 @@ export default async function NewsPage({ params, searchParams }: PageProps<"/[lo
   const spotlight = totalVisible > SPOTLIGHT_COUNT ? candidates : [];
   const spotlightIds = spotlight.map((entry) => entry.articleId);
 
-  // Only the section FRONT gets the composed bands. Page 2 of an archive is
-  // a different reading task — a reader who is paging has already chosen the
-  // chronological feed — and a search is a third one again.
-  const front = page === 0 && !q;
+  // The composed bands render on EVERY page of the feed (changes-43). They
+  // used to belong to page 1 only, so paging removed everything above the
+  // grid and the page visibly rebuilt itself, which is the "reload" the owner
+  // reported. Now a pager click changes the grid and nothing else. A search is
+  // still a different page: the reader asked a question.
+  const front = !q;
 
   const [result, digests] = await Promise.all([
     getPublishedArticles(locale, {
@@ -140,9 +152,10 @@ export default async function NewsPage({ params, searchParams }: PageProps<"/[lo
     front
       ? getCategoryDigests(locale, {
           kinds: ["NEWS"],
-          // Three across on the widest track the container gives a full-width
-          // band, so a row is never left with one orphan card.
-          perCategory: 3,
+          // Four across, matching the home page's platform cards (changes-36):
+          // a full-width band draws `ArticleCards` four to a row, and a count
+          // that fills exactly one row is never left with an orphan card.
+          perCategory: 4,
           categoryLimit: 4,
           // NOT excluding the spotlight's ids here, unlike the general feed
           // above — and this one was decided at the browser, having been
@@ -162,60 +175,51 @@ export default async function NewsPage({ params, searchParams }: PageProps<"/[lo
 
   return (
     <main className="flex flex-col">
-      <NewsMasthead />
+      <NewsMasthead
+        eyebrow={t("heroEyebrow")}
+        title={t("title")}
+        lead={t("intro")}
+        crumbs={[{ label: t("title") }]}
+      />
 
-      {/* The lead block belongs to the section FRONT: page 2 of an archive is
-          a different reading task, and repeating three stories the reader
-          already scrolled past is noise. The ids stay excluded either way. */}
-      {page === 0 && (
+      {/* On every page of the feed (changes-43), so paging swaps the grid
+          and leaves the page around it still. The ids stay excluded either
+          way. */}
+      {front && (
         <NewsSpotlight entries={spotlight} locale={locale} showAuthor={showAuthor !== false} />
       )}
 
-      {/* `id` on the Section, not the heading: the masthead's "browse" action
-          should land above the band rather than with its first row already
-          scrolled off. */}
       {/* Muted only when the spotlight is above it — the band is there to
           separate the two, and with nothing above it the tone would just be
-          the page's own background wearing a different name. */}
-      <Section id="latest" spacing="md" tone={spotlight.length > 0 ? "muted" : "default"}>
-        <Container className="grid grid-cols-1 gap-10 lg:grid-cols-(--grid-main-aside)">
-          <div className="flex flex-col gap-8">
-            {q ? (
-              <p className="text-sm text-muted-foreground">
-                {t("searchResults", { query: q, count: result.total })}
-              </p>
-            ) : (
-              <SectionHeading
-                eyebrow={t("latestEyebrow")}
-                title={t("latestTitle")}
-                lead={t("latestLead")}
-              />
-            )}
-            <Reveal variant="up">
-              <ArticleCards
-                entries={result.entries}
-                locale={locale}
-                variant="standard"
-                showAuthor={showAuthor !== false}
-              />
-            </Reveal>
-            <NumberedPagination
-              basePath="/news"
-              page={page}
-              pageCount={result.pageCount}
-              query={q}
-            />
-          </div>
-          <ArticleSidebar facets={facets} locale={locale} basePath="/news" query={q} />
-        </Container>
-      </Section>
+          the page's own background wearing a different name. The band itself
+          is `ArticleListing`, shared with /analysis and both archives. */}
+      <ArticleListing
+        locale={locale}
+        tone={spotlight.length > 0 ? "muted" : "default"}
+        heading={
+          <SectionHeading
+            eyebrow={t("latestEyebrow")}
+            title={t("latestTitle")}
+            lead={t("latestLead")}
+          />
+        }
+        entries={result.entries}
+        total={result.total}
+        page={page}
+        pageCount={result.pageCount}
+        paginationBasePath="/news"
+        searchBasePath="/news"
+        query={q}
+        facets={facets}
+        showAuthor={showAuthor !== false}
+      />
 
       <CategorySections digests={digests} locale={locale} showAuthor={showAuthor !== false} />
 
       <NewsTopics categories={facets.categories} />
 
       {newsletterFlag && newsletterPlaced && (
-        <Section id="subscribe" spacing="sm">
+        <Section id="subscribe" spacing="sm" className={SIGNED_OUT_ONLY_CLASS}>
           <Reveal variant="up">
             <CtaBand title={t("subscribeTitle")} description={t("subscribeBody")}>
               <div className="w-full sm:w-80">

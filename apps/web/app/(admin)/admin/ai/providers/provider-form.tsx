@@ -15,7 +15,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, Info, Plug, Trash2 } from "lucide-react";
-import { AI_PROVIDER_KINDS, aiProviderSchema } from "@repo/contracts";
+import { AI_PROVIDER_KINDS, AI_PROVIDER_PRESETS, aiProviderSchema } from "@repo/contracts";
 import type { AiProviderTestResult } from "@repo/core";
 import { Alert, AlertDescription, AlertTitle } from "@repo/ui/components/alert";
 import { Button } from "@repo/ui/components/button";
@@ -31,7 +31,6 @@ import {
 import { Input } from "@repo/ui/components/input";
 import { PasswordInput } from "@repo/ui/components/password-input";
 import { Switch } from "@repo/ui/components/switch";
-import { humanizeKey } from "@repo/utils";
 import {
   deleteAiProviderAction,
   saveAiProviderAction,
@@ -73,6 +72,8 @@ export interface ProviderFormLabels {
   secretMissingBody: string;
   echoTitle: string;
   echoBody: string;
+  /** kind → its catalog name (ADR-044 #5). */
+  kindLabels: Record<string, string>;
   /** reason → one catalog string. The taxonomy never renders raw. */
   reasonLabels: Record<string, string>;
 }
@@ -191,7 +192,7 @@ export function AiProviderForm({
               onValueChange={setKind}
               options={AI_PROVIDER_KINDS.map((value) => ({
                 value,
-                label: humanizeKey(value),
+                label: labels.kindLabels[value] ?? value,
               }))}
             />
           </Field>
@@ -210,7 +211,10 @@ export function AiProviderForm({
                 <Input
                   value={baseUrl}
                   onChange={(event) => setBaseUrl(event.target.value)}
-                  placeholder="https://api.anthropic.com"
+                  placeholder={
+                    AI_PROVIDER_PRESETS[kind as (typeof AI_PROVIDER_KINDS)[number]]
+                      ?.defaultBaseUrl ?? "https://"
+                  }
                 />
                 <FieldDescription>{labels.baseUrlHint}</FieldDescription>
                 <FieldError>{form.error("baseUrl")}</FieldError>

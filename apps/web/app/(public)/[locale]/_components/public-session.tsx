@@ -32,14 +32,39 @@
 // chip with nowhere to go. Display-only — the session is untouched, and
 // `/admin` still recognises it. Applied HERE, once, so every consumer inherits
 // it rather than each remembering to.
-import { createContext, useContext, useEffect, useState } from "react";
+//
+// ─── Refreshing after a change on the account page (ADR-125 §3) ──────────
+//
+// The read runs once per page load, so a picture or name changed on
+// `/account` would otherwise stay stale in the header until the next full
+// navigation — and past it, for as long as Better Auth's signed cookie cache
+// lives. `refresh()` re-reads with `disableCookieCache`, which also re-signs
+// that cookie from the fresh copy. It is a SEPARATE context so the session
+// value every consumer reads keeps its shape.
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
+
+import { rememberSession } from "../../../_lib/session-hint.ts";
 
 export type PublicSession =
   | { status: "loading" }
   | { status: "anonymous" }
-  | { status: "learner"; name: string; email: string; emailVerified: boolean };
+  | {
+      status: "learner";
+      name: string;
+      email: string;
+      emailVerified: boolean;
+      /** The avatar the profile page set (ADR-123), for the header menu's trigger. */
+      image: string | null;
+      /**
+       * A STAFF member is inside this learner's session (ADR-142 §3) — the
+       * session row carries `impersonatedBy`. Drives the "return to admin"
+       * banner; grants nothing.
+       */
+      impersonating: boolean;
+    };
 
 const PublicSessionContext = createContext<PublicSession>({ status: "loading" });
+const RefreshContext = createContext<() => Promise<void>>(async () => {});
 
 /**
  * The session as the public surface sees it.
@@ -53,47 +78,79 @@ export function usePublicSession(): PublicSession {
   return useContext(PublicSessionContext);
 }
 
+/** Re-read the session past the cookie cache (ADR-125 §3). A no-op outside the provider. */
+export function useRefreshPublicSession(): () => Promise<void> {
+  return useContext(RefreshContext);
+}
+
+type SessionPayload = {
+  session?: { impersonatedBy?: string | null };
+  user?: {
+    name?: string;
+    email?: string;
+    userType?: string;
+    emailVerified?: boolean;
+    image?: string | null;
+  };
+} | null;
+
+async function readSession(fresh: boolean): Promise<PublicSession> {
+  const url = fresh ? "/api/auth/get-session?disableCookieCache=true" : "/api/auth/get-session";
+  try {
+    const response = await fetch(url, {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    });
+    const payload = (response.ok ? await response.json() : null) as SessionPayload;
+    const signedIn = Boolean(payload?.user && payload.user.userType !== "STAFF");
+    // ADR-124 §3: the attribute the subscribe bands hide under, and the
+    // hint the next page's pre-paint script reads. Corrected here on
+    // every read, so a stale hint lasts one paint at most.
+    rememberSession(signedIn);
+    return payload?.user && signedIn
+      ? {
+          status: "learner",
+          name: payload.user.name ?? "",
+          email: payload.user.email ?? "",
+          // Better Auth returns this on the session user by default.
+          // ADR-079 #7's consequence applies: an unverified learner
+          // keeps full access, so nothing may ASSUME this is true —
+          // which is exactly why the nudge is a nudge.
+          emailVerified: payload.user.emailVerified === true,
+          image: typeof payload.user.image === "string" ? payload.user.image : null,
+          impersonating: typeof payload.session?.impersonatedBy === "string",
+        }
+      : { status: "anonymous" };
+  } catch {
+    // A failed session read resolves to anonymous, never to an error state.
+    // The worst outcome is a signed-in learner briefly seeing a sign-up
+    // prompt; the alternative — a stuck spinner in the header of every
+    // cached page — is worse and lasts longer.
+    rememberSession(false);
+    return { status: "anonymous" };
+  }
+}
+
 export function PublicSessionProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<PublicSession>({ status: "loading" });
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/auth/get-session", { headers: { Accept: "application/json" } })
-      .then((response) => (response.ok ? response.json() : null))
-      .then(
-        (
-          payload: {
-            user?: { name?: string; email?: string; userType?: string; emailVerified?: boolean };
-          } | null,
-        ) => {
-          if (cancelled) return;
-          setSession(
-            payload?.user && payload.user.userType !== "STAFF"
-              ? {
-                  status: "learner",
-                  name: payload.user.name ?? "",
-                  email: payload.user.email ?? "",
-                  // Better Auth returns this on the session user by default.
-                  // ADR-079 #7's consequence applies: an unverified learner
-                  // keeps full access, so nothing may ASSUME this is true —
-                  // which is exactly why the nudge is a nudge.
-                  emailVerified: payload.user.emailVerified === true,
-                }
-              : { status: "anonymous" },
-          );
-        },
-      )
-      // A failed session read resolves to anonymous, never to an error state.
-      // The worst outcome is a signed-in learner briefly seeing a sign-up
-      // prompt; the alternative — a stuck spinner in the header of every
-      // cached page — is worse and lasts longer.
-      .catch(() => {
-        if (!cancelled) setSession({ status: "anonymous" });
-      });
+    void readSession(false).then((next) => {
+      if (!cancelled) setSession(next);
+    });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  return <PublicSessionContext value={session}>{children}</PublicSessionContext>;
+  const refresh = useCallback(async () => {
+    setSession(await readSession(true));
+  }, []);
+
+  return (
+    <RefreshContext value={refresh}>
+      <PublicSessionContext value={session}>{children}</PublicSessionContext>
+    </RefreshContext>
+  );
 }

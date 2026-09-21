@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { localizedPath } from "../../../_lib/seo.ts";
 import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import {
@@ -6,7 +7,6 @@ import {
   CalendarClock,
   CalendarOff,
   ChartNoAxesCombined,
-  ExternalLink,
   Flame,
   Gauge,
   History,
@@ -16,10 +16,10 @@ import {
 } from "lucide-react";
 import { ROUTE_PATHS } from "@repo/contracts";
 import { Link } from "@repo/i18n/navigation";
-import { ECONOMIC_CALENDAR_ATTRIBUTION_URL, economicCalendarWidgetUrl } from "@repo/utils";
 import { getSetting, isFeatureVisible } from "@repo/settings";
 import { AmbientMotif } from "@repo/ui/components/ambient-motif";
 import { Button } from "@repo/ui/components/button";
+import { Card, CardContent } from "@repo/ui/components/card";
 import { CheckList } from "@repo/ui/components/check-list";
 import { Container } from "@repo/ui/components/container";
 import { CtaBand } from "@repo/ui/components/cta-band";
@@ -29,9 +29,10 @@ import { Section } from "@repo/ui/components/section";
 import { SectionHeading } from "@repo/ui/components/section-heading";
 import { SplitCallout } from "@repo/ui/components/split-callout";
 import { AccentCard } from "./_components/accent-card.tsx";
+import { CalendarBoard } from "./_components/calendar-board.tsx";
+import { CalendarBackdrop } from "./_components/calendar-media.tsx";
 import { CalendarMedia } from "./_components/calendar-media.tsx";
 import { CALENDAR_MEDIA } from "./_content/calendar-media.ts";
-import { RiskDisclaimer } from "../_sections/risk-disclaimer.tsx";
 
 export async function generateMetadata({
   params,
@@ -45,6 +46,7 @@ export async function generateMetadata({
   return {
     title: (template ?? "%s").replace("%s", t("title")),
     description: t("intro"),
+    alternates: { canonical: localizedPath(locale, ROUTE_PATHS["economic-calendar"]) },
   };
 }
 
@@ -76,7 +78,6 @@ export default async function EconomicCalendarPage({
     getTranslations("economicCalendar"),
     isFeatureVisible("analysis", null),
   ]);
-  const widgetUrl = economicCalendarWidgetUrl({ locale });
 
   // Ordered loudest → quietest, so the row itself reads as the scale.
   const impacts = [
@@ -124,10 +125,19 @@ export default async function EconomicCalendarPage({
 
   return (
     <main className="flex flex-col">
+      {/* changes-40: the same masthead every tool page has — `compact`, with
+          a photograph behind it. It used to be a full-height `brand` band with
+          a 4:3 picture in a column beside the words, which is a section FRONT's
+          shape; a reader arrives here to look at this week's releases, and the
+          widget was below the fold on a laptop. Supplying a `backdrop` resolves
+          `tone` to ADR-117's `photo`, so the band is `--secondary` with the
+          picture at full strength under the scrim. */}
       <PageHero
-        // No backdrop artwork on this hero, so the motif is the only
-        // texture in the band and runs at full arrangement ink.
-        motif={<AmbientMotif variant="chart" />}
+        size="compact"
+        backdrop={<CalendarBackdrop />}
+        // Dialled down: the backdrop already carries weight, as on every other
+        // photographic masthead.
+        motif={<AmbientMotif variant="chart" intensity={0.7} />}
         eyebrow={t("heroEyebrow")}
         title={t("title")}
         lead={t("intro")}
@@ -136,28 +146,20 @@ export default async function EconomicCalendarPage({
           <>
             {/* A same-page anchor, so `render` takes a plain <a>: @repo/i18n's
                 Link would locale-prefix a bare fragment. */}
-            <Button size="xl" shape="pill" variant="secondary" render={<a href="#calendar" />}>
+            <Button size="xl" render={<a href="#calendar" />}>
               {t("viewWeekAction")}
               <ArrowRight data-icon="inline-end" aria-hidden className="rtl:rotate-180" />
             </Button>
             {analysisEnabled && (
-              <Button
-                size="xl"
-                shape="pill"
-                variant="outline"
-                // The hero band is a --primary gradient, and every button
-                // variant is designed against --background. Riding on
-                // --primary-foreground is the one ink ADR-003 derives to be
-                // legible here (the About heroes do the same).
-                className="border-primary-foreground/40 bg-transparent text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground"
-                render={<Link href={ROUTE_PATHS.analysis} />}
-              >
+              // `inverted` is the class string this band used to spell out by
+              // hand (ADR-117): opacities of `--secondary-foreground`, the one
+              // ink ADR-003 derives readable on this fill.
+              <Button size="xl" variant="inverted" render={<Link href={ROUTE_PATHS.analysis} />}>
                 {t("readAnalysisAction")}
               </Button>
             )}
           </>
         }
-        media={<CalendarMedia src={CALENDAR_MEDIA.hero} alt={t("heroMediaAlt")} tone="onBrand" />}
       />
 
       <Section spacing="lg" id="calendar" className="scroll-mt-(--height-header)">
@@ -170,44 +172,36 @@ export default async function EconomicCalendarPage({
             />
           </Reveal>
 
-          {/* The vendor widget renders light-only (ADR-050 consequence 1), so
-              the frame is given an explicit light colour-scheme — that keeps
-              its own scrollbars and form controls consistent with what is
-              inside it instead of half-adopting our dark mode. */}
+          {/* The vendor swap (ADR-137). The calendar is TradingView's now, for
+              the reason ADR-136 gave the two market boards: it follows the
+              reader's colour mode, it takes filters we can drive from our own
+              chips, and it is the vendor already in `frame-src`. */}
           <Reveal variant="up" delay={80}>
-            <div className="overflow-hidden rounded-2xl bg-card shadow-md ring-1 ring-foreground/10">
-              <iframe
-                src={widgetUrl}
-                title={t("frameTitle")}
-                loading="lazy"
-                referrerPolicy="strict-origin-when-cross-origin"
-                className="h-180 w-full [color-scheme:light] sm:h-208 lg:h-232"
-              />
-            </div>
+            <CalendarBoard locale={locale} />
           </Reveal>
 
-          <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
-            <p>
-              {t("attribution")}{" "}
-              <a
-                href={ECONOMIC_CALENDAR_ATTRIBUTION_URL}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="link-underline hover:text-foreground"
-              >
-                MQL5
-              </a>
-            </p>
-            <a
-              href={widgetUrl}
-              target="_blank"
-              rel="noreferrer noopener"
-              className="link-underline inline-flex items-center gap-1.5 hover:text-foreground"
-            >
-              {t("openLabel")}
-              <ExternalLink aria-hidden className="size-3.5" />
-            </a>
-          </div>
+          {/* How to WORK the calendar, directly under the calendar (ADR-137
+              §4). Distinct from the "plan the week" callout further down: that
+              one is about trading around releases, this one is about the
+              control the reader is looking at — sorting, filtering, searching,
+              opening an event, and reading the flags. A tool's instructions
+              belong beside the tool, not four bands away. */}
+          <Reveal variant="up" delay={160}>
+            <Card>
+              <CardContent className="flex flex-col gap-4">
+                <h2 className="text-xl font-semibold tracking-tight">{t("usingTitle")}</h2>
+                <CheckList
+                  items={[
+                    t("usingSort"),
+                    t("usingFilter"),
+                    t("usingSearch"),
+                    t("usingDetail"),
+                    t("usingFlags"),
+                  ]}
+                />
+              </CardContent>
+            </Card>
+          </Reveal>
         </Container>
       </Section>
 
@@ -261,7 +255,7 @@ export default async function EconomicCalendarPage({
         title={t("howToTitle")}
         media={<CalendarMedia src={CALENDAR_MEDIA.howTo} alt={t("howToMediaAlt")} />}
         actions={
-          <Button size="lg" shape="pill" render={<a href="#calendar" />}>
+          <Button size="lg" render={<a href="#calendar" />}>
             {t("viewWeekAction")}
             <ArrowRight data-icon="inline-end" aria-hidden className="rtl:rotate-180" />
           </Button>
@@ -298,12 +292,7 @@ export default async function EconomicCalendarPage({
           <Container>
             <Reveal variant="up">
               <CtaBand title={t("ctaTitle")} description={t("ctaDescription")}>
-                <Button
-                  size="lg"
-                  shape="pill"
-                  variant="secondary"
-                  render={<Link href={ROUTE_PATHS.analysis} />}
-                >
+                <Button size="lg" variant="secondary" render={<Link href={ROUTE_PATHS.analysis} />}>
                   {t("ctaAction")}
                   <ArrowRight data-icon="inline-end" aria-hidden className="rtl:rotate-180" />
                 </Button>
@@ -312,8 +301,6 @@ export default async function EconomicCalendarPage({
           </Container>
         </Section>
       )}
-
-      <RiskDisclaimer />
     </main>
   );
 }

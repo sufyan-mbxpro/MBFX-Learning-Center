@@ -68,9 +68,9 @@ export function SectionNav({ items, ariaLabel }: { items: SectionNavItem[]; aria
                         // Hover carries a surface and a ring as well as ink
                         // (ADR-051 §6): next to a filled active pill, a hover
                         // that only changes text colour is invisible.
-                        "group flex items-center gap-2 rounded-full px-3 py-2 text-sm font-medium whitespace-nowrap ring-1 ring-transparent transition duration-(--duration-base) ease-(--ease-out-quint) focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
+                        "group flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium whitespace-nowrap ring-1 ring-transparent transition duration-(--duration-base) ease-(--ease-out-quint) focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
                         isActive
-                          ? "bg-primary text-primary-foreground shadow-sm"
+                          ? "bg-primary-solid text-primary-solid-foreground shadow-sm"
                           : "text-foreground hover:bg-background hover:shadow-sm hover:ring-primary/25",
                       )}
                     >

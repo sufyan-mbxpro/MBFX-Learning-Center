@@ -26,6 +26,7 @@ import {
   Info,
   MoreHorizontal,
   Search,
+  ImageIcon,
   SlidersHorizontal,
   SquareArrowOutUpRight,
   Trash2,
@@ -52,14 +53,21 @@ import {
 import { Input } from "@repo/ui/components/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@repo/ui/components/tabs";
 import { Textarea } from "@repo/ui/components/textarea";
+import { htmlToBlockText } from "@repo/utils";
 import {
   saveCourseAction,
   setCourseDeletedAction,
   setCourseStatusAction,
 } from "../../../_actions/learn-actions.ts";
+import { AiFieldMenu, AiFillButton, type AiFillPatch } from "../../../_components/ai-fill.tsx";
+import { AiSeoButton } from "../../../_components/ai-seo-dialog.tsx";
 import { AdminCombobox } from "../../../_components/combobox.tsx";
 import { ContentStatusPanel } from "../../../_components/editor/content-status-panel.tsx";
 import { EditorSection, Field } from "../../../_components/editor/editor-section.tsx";
+import {
+  ContentFlagsSection,
+  type ContentFlags,
+} from "../../../_components/editor/content-flags-fields.tsx";
 import { SeoAnalysis } from "../../../_components/editor/seo-analysis.tsx";
 import { ImageUploadField } from "../../../_components/image-upload-field.tsx";
 import { RichTextEditor } from "../../../_components/rich-text-editor.tsx";
@@ -70,12 +78,21 @@ import {
 } from "../../../_components/status-badge.tsx";
 import { useFieldErrors } from "../../../_hooks/use-field-errors.ts";
 import { useServerAction } from "../../../_hooks/use-server-action.ts";
+import type { EditorAi } from "../../../_lib/editor-ai.ts";
+import { liveHref, storedSlug } from "../../../_lib/live-href.ts";
+import { TranslationControls } from "../../../_components/editor/translation-controls.tsx";
+import {
+  holdsHumanText,
+  mergeTranslationPatch,
+  textFields,
+} from "../../../_lib/machine-translation.ts";
 import { CurriculumPanel, type CurriculumSectionView } from "./_panels/curriculum-panel.tsx";
 import {
   RecommendationsPanel,
   type RecommendationOption,
 } from "./_panels/recommendations-panel.tsx";
 import type { CourseData, CourseEditorLabels, CourseTranslationDraft } from "./editor-types.ts";
+import { HeaderActions } from "../../../_components/header-actions.tsx";
 
 function CharCount({ value, max }: { value: string; max: number }) {
   return (
@@ -86,6 +103,17 @@ function CharCount({ value, max }: { value: string; max: number }) {
     </span>
   );
 }
+
+/** The words AI translation carries across. Never `slug` (a redirect is a human decision). */
+const TRANSLATABLE_TEXT = [
+  "title",
+  "summary",
+  "description",
+  "seoTitle",
+  "seoDescription",
+  "seoFocusKeyword",
+] as const satisfies readonly (keyof CourseTranslationDraft)[];
+const TRANSLATABLE_FIELDS = TRANSLATABLE_TEXT;
 
 /** The paths that live on the SEO tab; every other field is on Details. */
 const SEO_PATHS = [
@@ -124,6 +152,7 @@ export function CourseEditor({
   canCreateLesson,
   canDeleteLesson,
   labels,
+  ai,
 }: {
   course: CourseData;
   sections: CurriculumSectionView[];
@@ -141,6 +170,8 @@ export function CourseEditor({
   canCreateLesson: boolean;
   canDeleteLesson: boolean;
   labels: CourseEditorLabels;
+  /** ADR-126. Absent when AI is off, the feature is off, or this person cannot spend. */
+  ai?: EditorAi;
 }) {
   const router = useRouter();
   const { run, pending } = useServerAction();
@@ -171,14 +202,62 @@ export function CourseEditor({
     id: course.coverAssetId,
     url: course.coverUrl,
   });
+  const [flags, setFlags] = useState<ContentFlags>(course.flags);
   const [recommendations, setRecommendations] = useState<string[]>(course.recommendations);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   const draft = drafts[locale] ?? blankTranslation(locale);
+  // Merged from CURRENT state, not the last render: an AI patch and a keystroke
+  // in the same tick would otherwise overwrite each other (ADR-126 §4).
   const setDraft = (patch: Partial<CourseTranslationDraft>) =>
-    setDrafts((current) => ({ ...current, [locale]: { ...draft, ...patch } }));
+    setDrafts((current) => ({
+      ...current,
+      // changes-29 B3: an edit to a translatable field clears the machine flag.
+      [locale]: mergeTranslationPatch(
+        current[locale] ?? blankTranslation(locale),
+        patch,
+        TRANSLATABLE_FIELDS,
+      ),
+    }));
 
-  const publicPath = useMemo(() => `/${locale}/learn/${draft.slug || ""}`, [locale, draft.slug]);
+  // ADR-126: the fillable fields as plain text — the review's "current" column,
+  // the empty test behind each default tick, and the prompt's context.
+  const aiFill = canUpdate ? ai?.fill : undefined;
+  const aiSeo = canUpdate ? ai?.seo : undefined;
+  const aiCurrent = {
+    title: draft.title,
+    summary: draft.summary,
+    description: htmlToBlockText(draft.description),
+    seoTitle: draft.seoTitle,
+    seoDescription: draft.seoDescription,
+    seoFocusKeyword: draft.seoFocusKeyword,
+  };
+  const applyFill = (patch: AiFillPatch) => {
+    const next: Partial<CourseTranslationDraft> = {};
+    for (const key of Object.keys(aiCurrent) as (keyof typeof aiCurrent)[]) {
+      const value = patch[key];
+      if (typeof value === "string") next[key] = value;
+    }
+    setDraft(next);
+  };
+  const fieldMenu = (field: keyof typeof aiCurrent) =>
+    aiFill ? (
+      <AiFieldMenu
+        config={aiFill}
+        field={field}
+        locale={locale}
+        current={aiCurrent}
+        onApply={(value) => setDraft({ [field]: value })}
+      />
+    ) : undefined;
+
+  const publicPath = useMemo(
+    () => `/${locale}/learn/${track}/${draft.slug || ""}`,
+    [locale, track, draft.slug],
+  );
+  // Stored track and slug, not the form's: an unsaved edit has no page yet.
+  const defaultSlug = storedSlug(course.translations, defaultLocale);
+  const viewLiveHref = liveHref(`/learn/${course.track}/${defaultSlug}`, locale, defaultLocale);
 
   // Built on every render rather than at submit, so the inline validation
   // reads EXACTLY what `saveCourseAction` will be sent (ADR-077).
@@ -192,6 +271,7 @@ export function CourseEditor({
       coverAssetId: cover.id,
       externalUrl: externalUrl.trim() === "" ? null : externalUrl.trim(),
       finalQuizId,
+      ...flags,
     },
     translation: {
       locale,
@@ -202,6 +282,8 @@ export function CourseEditor({
       seoTitle: draft.seoTitle.trim() === "" ? null : draft.seoTitle.trim(),
       seoDescription: draft.seoDescription.trim() === "" ? null : draft.seoDescription.trim(),
       seoFocusKeyword: draft.seoFocusKeyword.trim() === "" ? null : draft.seoFocusKeyword.trim(),
+      // changes-29 B3: sent only while the words are untouched AI output.
+      ...(draft.machineTranslated ? { machineTranslated: true } : {}),
     },
     recommendations,
   };
@@ -230,100 +312,136 @@ export function CourseEditor({
     await saveCourseAction(payload);
   };
 
+  // changes-44 #3: the record's state and language travel with the content,
+  // not on a row of their own above it.
+  const stateCluster = (
+    <>
+      <StatusBadge tone={statusTone(CONTENT_STATUS_TONE, course.status)}>
+        {labels.statusLabels[course.status] ?? course.status}
+      </StatusBadge>
+      {locales.length > 1 && (
+        <AdminCombobox
+          aria-label={labels.localeLabel}
+          size="sm"
+          className="w-24"
+          value={locale}
+          onValueChange={(next) => setLocale(next || locale)}
+          options={locales.map((code) => ({ value: code, label: code.toUpperCase() }))}
+        />
+      )}
+      <TranslationControls
+        translate={ai?.translate}
+        locale={locale}
+        defaultLocale={defaultLocale}
+        translationStatus={draft.translationStatus}
+        machineTranslated={draft.machineTranslated}
+        canUpdate={canUpdate}
+        entity={{ type: "course", id: course.id }}
+        sourceFields={textFields(drafts[defaultLocale], TRANSLATABLE_TEXT)}
+        wouldOverwrite={holdsHumanText(draft, TRANSLATABLE_TEXT)}
+        onApply={(translated) => setDraft({ ...translated, machineTranslated: true })}
+      />
+    </>
+  );
+
   return (
     <div className="flex min-w-0 flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <StatusBadge tone={statusTone(CONTENT_STATUS_TONE, course.status)}>
-            {labels.statusLabels[course.status] ?? course.status}
-          </StatusBadge>
-          {locales.length > 1 && (
-            <AdminCombobox
-              aria-label={labels.localeLabel}
-              size="sm"
-              className="w-24"
-              value={locale}
-              onValueChange={(next) => setLocale(next || locale)}
-              options={locales.map((code) => ({ value: code, label: code.toUpperCase() }))}
-            />
-          )}
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {course.status === "PUBLISHED" && draft.slug && (
-            <Button
-              variant="outline"
-              size="sm"
+      {/* ADR-140 §3: the actions sit on the page heading's row. */}
+      <HeaderActions>
+        {course.status === "PUBLISHED" && defaultSlug && (
+          <Button
+            variant="outline"
+            render={
+              <a href={`${siteUrl}${viewLiveHref}`} target="_blank" rel="noopener noreferrer" />
+            }
+          >
+            <ExternalLink data-icon="inline-start" aria-hidden />
+            {labels.viewLive}
+          </Button>
+        )}
+        {canUpdate && (
+          // Enabled while fields are wrong: pressing it names them (audit F-07).
+          <Button
+            loading={pending}
+            onClick={() => {
+              if (!validate()) return;
+              run(() => submitForm(), { successMessage: labels.saved });
+            }}
+          >
+            {labels.updateCourse}
+          </Button>
+        )}
+        {canDelete && (
+          <DropdownMenu>
+            <DropdownMenuTrigger
               render={
-                <a href={`${siteUrl}${publicPath}`} target="_blank" rel="noopener noreferrer" />
+                <Button variant="ghost" size="icon" aria-label={labels.openActions}>
+                  <MoreHorizontal aria-hidden />
+                </Button>
               }
-            >
-              <ExternalLink data-icon="inline-start" aria-hidden />
-              {labels.viewLive}
-            </Button>
-          )}
-          {canUpdate && (
-            // Enabled while fields are wrong: pressing it names them (audit F-07).
-            <Button
-              size="sm"
-              loading={pending}
-              onClick={() => {
-                if (!validate()) return;
-                run(() => submitForm(), { successMessage: labels.saved });
-              }}
-            >
-              {labels.updateCourse}
-            </Button>
-          )}
-          {canDelete && (
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <Button variant="ghost" size="icon-sm" aria-label={labels.openActions}>
-                    <MoreHorizontal aria-hidden />
-                  </Button>
-                }
-              />
-              <DropdownMenuContent align="end">
-                {/* Restore is the undo and is deliberately not confirmed
-                    (ADR-044 #7); the destructive direction is. */}
-                {course.deleted ? (
-                  <DropdownMenuItem
-                    disabled={pending}
-                    onClick={() => run(() => setCourseDeletedAction(course.id, false))}
-                  >
-                    <SquareArrowOutUpRight aria-hidden data-icon="inline-start" />
-                    {labels.restore}
-                  </DropdownMenuItem>
-                ) : (
-                  <DropdownMenuItem
-                    variant="destructive"
-                    disabled={pending}
-                    onClick={() => setDeleteOpen(true)}
-                  >
-                    <Trash2 aria-hidden data-icon="inline-start" />
-                    {labels.softDelete}
-                  </DropdownMenuItem>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-        </div>
-      </div>
+            />
+            <DropdownMenuContent align="end">
+              {/* Restore is the undo and is deliberately not confirmed
+                  (ADR-044 #7); the destructive direction is. */}
+              {course.deleted ? (
+                <DropdownMenuItem
+                  disabled={pending}
+                  onClick={() => run(() => setCourseDeletedAction(course.id, false))}
+                >
+                  <SquareArrowOutUpRight aria-hidden data-icon="inline-start" />
+                  {labels.restore}
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem
+                  variant="destructive"
+                  disabled={pending}
+                  onClick={() => setDeleteOpen(true)}
+                >
+                  <Trash2 aria-hidden data-icon="inline-start" />
+                  {labels.softDelete}
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+      </HeaderActions>
 
       <Tabs value={tab} onValueChange={(next) => setTab(String(next))}>
-        <TabsList>
-          <TabsTrigger value="details">{labels.tabDetails}</TabsTrigger>
-          <TabsTrigger value="curriculum">{labels.tabCurriculum}</TabsTrigger>
-          <TabsTrigger value="recommendations">{labels.tabRecommendations}</TabsTrigger>
-          <TabsTrigger value="seo">{labels.tabSeo}</TabsTrigger>
-        </TabsList>
+        {/* changes-44 #3: the course's state and language share the tab row. */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <TabsList>
+            <TabsTrigger value="details">{labels.tabDetails}</TabsTrigger>
+            <TabsTrigger value="curriculum">{labels.tabCurriculum}</TabsTrigger>
+            <TabsTrigger value="recommendations">{labels.tabRecommendations}</TabsTrigger>
+            <TabsTrigger value="seo">{labels.tabSeo}</TabsTrigger>
+          </TabsList>
+          <div className="flex flex-wrap items-center gap-2">{stateCluster}</div>
+        </div>
 
         <TabsContent value="details">
           <div className="grid grid-cols-1 min-w-0 gap-4 lg:grid-cols-(--grid-2-1)">
             <div className="flex min-w-0 flex-col gap-4">
               <EditorSection
                 title={labels.detailsSection}
+                actions={
+                  aiFill ? (
+                    <AiFillButton
+                      withOptions
+                      config={aiFill}
+                      locale={locale}
+                      current={aiCurrent}
+                      fieldLabels={{
+                        title: labels.titleLabel,
+                        summary: labels.summaryLabel,
+                        description: labels.descriptionLabel,
+                        seoTitle: labels.seoTitleLabel,
+                        seoDescription: labels.seoDescriptionLabel,
+                        seoFocusKeyword: labels.focusKeywordsLabel,
+                      }}
+                      onApply={applyFill}
+                    />
+                  ) : undefined
+                }
                 description={labels.detailsSectionDescription}
                 icon={SlidersHorizontal}
                 accent="primary"
@@ -332,7 +450,12 @@ export function CourseEditor({
                   label={labels.titleLabel}
                   required
                   error={form.error("translation.title")}
-                  adornment={<CharCount value={draft.title} max={255} />}
+                  adornment={
+                    <span className="flex items-center gap-1">
+                      {fieldMenu("title")}
+                      <CharCount value={draft.title} max={255} />
+                    </span>
+                  }
                 >
                   <Input
                     value={draft.title}
@@ -357,10 +480,15 @@ export function CourseEditor({
                   label={labels.summaryLabel}
                   hint={labels.summaryHint}
                   error={form.error("translation.summary")}
-                  adornment={<CharCount value={draft.summary} max={1000} />}
+                  adornment={
+                    <span className="flex items-center gap-1">
+                      {fieldMenu("summary")}
+                      <CharCount value={draft.summary} max={1000} />
+                    </span>
+                  }
                 >
                   <Textarea
-                    rows={3}
+                    rows={4}
                     value={draft.summary}
                     disabled={!canUpdate}
                     onChange={(e) => setDraft({ summary: e.target.value })}
@@ -376,6 +504,9 @@ export function CourseEditor({
                     onChange={(html) => setDraft({ description: html })}
                     labels={labels.editor}
                     allowHtmlMode
+                    {...(ai?.assistant && canUpdate
+                      ? { ai: { ...ai.assistant, config: { ...ai.assistant.config, locale } } }
+                      : {})}
                   />
                 </Field>
               </EditorSection>
@@ -399,6 +530,28 @@ export function CourseEditor({
                 }
                 labels={labels.status}
               />
+
+              {/* ADR-139 #6 put the three switches in this card's footer;
+                  changes-44 #5 moved them to their own card before Info. */}
+              <EditorSection
+                title={labels.displaySection}
+                description={labels.displaySectionDescription}
+                icon={ImageIcon}
+                accent="warning"
+              >
+                <ImageUploadField
+                  id="course-cover"
+                  label={labels.coverImageLabel}
+                  value={cover.url}
+                  purpose="content"
+                  category="learn"
+                  sourceType="COURSE"
+                  disabled={!canUpdate}
+                  error={form.error("meta.coverAssetId")}
+                  onChange={(next) => setCover({ id: next?.id ?? null, url: next?.url ?? null })}
+                  labels={labels.upload}
+                />
+              </EditorSection>
 
               <EditorSection
                 title={labels.settingsSection}
@@ -486,20 +639,10 @@ export function CourseEditor({
                     onChange={(e) => setExternalUrl(e.target.value)}
                   />
                 </Field>
-
-                <ImageUploadField
-                  id="course-cover"
-                  label={labels.coverImageLabel}
-                  value={cover.url}
-                  purpose="content"
-                  category="learn"
-                  sourceType="COURSE"
-                  disabled={!canUpdate}
-                  error={form.error("meta.coverAssetId")}
-                  onChange={(next) => setCover({ id: next?.id ?? null, url: next?.url ?? null })}
-                  labels={labels.upload}
-                />
               </EditorSection>
+
+              {/* changes-44 #5: last of the settings, before the read-only Info card. */}
+              <ContentFlagsSection value={flags} onChange={setFlags} disabled={!canUpdate} />
 
               <EditorSection
                 title={labels.infoSection}
@@ -557,12 +700,50 @@ export function CourseEditor({
               description={labels.seoSectionDescription}
               icon={Search}
               accent="info"
+              actions={
+                // The article editor's review dialog, in the same place: the section
+                // header, because it fills the whole section. Absent when SEO AI is off.
+                aiSeo ? (
+                  <AiSeoButton
+                    labels={aiSeo.labels}
+                    entity={{ type: "course", id: course.id }}
+                    keywords="single"
+                    current={{
+                      seoTitle: draft.seoTitle,
+                      seoDescription: draft.seoDescription,
+                      focusKeywords: draft.seoFocusKeyword,
+                    }}
+                    source={{
+                      title: draft.title,
+                      content: htmlToBlockText(draft.description),
+                      ...(draft.summary ? { excerpt: draft.summary } : {}),
+                      locale,
+                    }}
+                    onApply={(patch) =>
+                      setDraft({
+                        ...(patch.seoTitle !== undefined ? { seoTitle: patch.seoTitle } : {}),
+                        ...(patch.seoDescription !== undefined
+                          ? { seoDescription: patch.seoDescription }
+                          : {}),
+                        ...(patch.focusKeywords !== undefined
+                          ? { seoFocusKeyword: patch.focusKeywords }
+                          : {}),
+                      })
+                    }
+                  />
+                ) : undefined
+              }
             >
               <Field
                 label={labels.seoTitleLabel}
                 hint={labels.seoTitleHint}
                 error={form.error("translation.seoTitle")}
-                adornment={<CharCount value={draft.seoTitle} max={70} />}
+                adornment={
+                  <span className="flex items-center gap-1">
+                    {fieldMenu("seoTitle")}
+                    <CharCount value={draft.seoTitle} max={70} />
+                  </span>
+                }
               >
                 <Input
                   value={draft.seoTitle}
@@ -575,7 +756,12 @@ export function CourseEditor({
                 label={labels.seoDescriptionLabel}
                 hint={labels.seoDescriptionHint}
                 error={form.error("translation.seoDescription")}
-                adornment={<CharCount value={draft.seoDescription} max={180} />}
+                adornment={
+                  <span className="flex items-center gap-1">
+                    {fieldMenu("seoDescription")}
+                    <CharCount value={draft.seoDescription} max={180} />
+                  </span>
+                }
               >
                 <Textarea
                   rows={3}
@@ -589,6 +775,7 @@ export function CourseEditor({
                 label={labels.focusKeywordsLabel}
                 hint={labels.focusKeywordsHint}
                 error={form.error("translation.seoFocusKeyword")}
+                adornment={fieldMenu("seoFocusKeyword")}
               >
                 <Input
                   value={draft.seoFocusKeyword}
@@ -603,7 +790,6 @@ export function CourseEditor({
               description={draft.seoDescription || draft.summary}
               body={draft.description}
               focusKeywords={draft.seoFocusKeyword}
-              labels={labels.analysis}
             />
           </div>
         </TabsContent>

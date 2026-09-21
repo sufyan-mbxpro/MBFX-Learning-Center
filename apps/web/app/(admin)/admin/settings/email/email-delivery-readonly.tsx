@@ -1,7 +1,7 @@
 import { ServerCog } from "lucide-react";
 import type { EmailTransportView } from "@repo/core";
 import { Alert, AlertDescription } from "@repo/ui/components/alert";
-import { humanizeKey } from "@repo/utils";
+import { formatDateTime, humanizeKey } from "@repo/utils";
 import { EditorSection } from "../../_components/editor/editor-section.tsx";
 
 // What an admin WITHOUT `email.settings.manage` sees in place of the transport
@@ -44,11 +44,7 @@ export function EmailDeliveryReadOnly({
     [labels.username, transport.username ?? labels.notSet],
     [
       labels.lastVerified,
-      transport.lastVerifiedAt
-        ? new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(
-            transport.lastVerifiedAt,
-          )
-        : labels.never,
+      transport.lastVerifiedAt ? formatDateTime(transport.lastVerifiedAt) : labels.never,
     ],
   ];
 

@@ -30,6 +30,8 @@
     "db:seed": "pnpm --filter @repo/db seed",
     "db:studio": "pnpm --filter @repo/db studio",
     "db:reset": "pnpm --filter @repo/db reset",
+    "seed:live": "pnpm --filter @repo/core seed:live",
+    "seed:export-defaults": "pnpm --filter @repo/core seed:export-defaults",
     "ui:add": "pnpm --filter @repo/ui shadcn:add",
     "e2e": "pnpm --filter web e2e"
   },

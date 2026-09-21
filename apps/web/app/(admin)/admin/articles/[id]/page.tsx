@@ -7,21 +7,21 @@ import {
   loadArticleCategoriesAdmin,
   loadArticleTagsAdmin,
 } from "@repo/core";
-import { can, requireAnyPermission } from "@repo/rbac";
+import { can, canAny, requireAnyPermission } from "@repo/rbac";
 import { routing } from "@repo/i18n/routing";
 import { getAiAvailability } from "@repo/ai";
-import { AdminPage } from "../../_components/admin-page.tsx";
+import { EditorPage } from "../../_components/admin-page.tsx";
 import {
   aiAssistantLabels,
+  aiFillLabels,
   aiSeoLabels,
   aiTranslateLabels,
   takeawaysLabels,
 } from "../../_components/ai-labels.ts";
 import { richTextLabels } from "../../_components/editor-labels.ts";
-import { ArticlesSubnav } from "../_components/articles-subnav.tsx";
-import { articlesSubnavItems } from "../_components/subnav-items.ts";
 import { ArticleEditor } from "./article-editor.tsx";
 import type { TranslationDraft } from "./editor-types.ts";
+import { formatDateTime } from "@repo/utils";
 
 // Article editor v2 (changes-07 PRs 4–6). Rebuilt to the reference screen's
 // information architecture; the kind-specific and publish gates still live in
@@ -75,10 +75,26 @@ export default async function ArticleEditPage({ params }: PageProps<"/admin/arti
         }
       : undefined;
   const summarize = canUseAi && availability.features.summarization;
+  // ADR-126: the brief bar and the per-field menus. Also gated on the keys that
+  // can SAVE an article — the run route refuses anyone else, so a viewer would
+  // otherwise get a bar whose every press fails.
+  const fill =
+    canUseAi &&
+    availability.features.form_fill &&
+    canAny(subject, ["news.manage", "analysis.update"])
+      ? {
+          module: "article" as const,
+          entity: { type: "article", id: detail.id },
+          labels: aiFillLabels(tAiKey, (key) => t(key as "cancel")),
+          // The body's toolbar has the assistant's ✨; no second one by its label.
+          richHasAssistant: Boolean(assistant),
+        }
+      : undefined;
   const ai =
-    assistant || seo || translate || summarize
+    assistant || seo || translate || summarize || fill
       ? {
           ...(assistant ? { assistant } : {}),
+          ...(fill ? { fill } : {}),
           ...(seo ? { seo } : {}),
           ...(translate ? { translate } : {}),
           ...(summarize ? { summarize: true } : {}),
@@ -100,9 +116,6 @@ export default async function ArticleEditPage({ params }: PageProps<"/admin/arti
   const relatedOptions = candidates.rows
     .filter((row) => row.id !== detail.id && row.deletedAt === null)
     .map((row) => ({ id: row.id, title: row.title ?? t("untitled") }));
-
-  const enTitle = detail.translations.find((tr) => tr.locale === routing.defaultLocale)?.title;
-  const dateFormat = new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" });
 
   // DB nulls → "" at this boundary: the editor's fields are controlled inputs,
   // and the save maps "" back to null on the way out.
@@ -137,21 +150,23 @@ export default async function ArticleEditPage({ params }: PageProps<"/admin/arti
     PUBLISHED: t("statusPublished"),
     ARCHIVED: t("statusArchived"),
     OUTDATED: t("statusOutdated"),
-    TRANSLATED: t("statusPublished"),
+    TRANSLATED: t("statusTranslated"),
     NEEDS_REVIEW: t("statusInReview"),
+    MACHINE_TRANSLATED: t("statusMACHINE_TRANSLATED"),
   };
 
   return (
-    <AdminPage title={enTitle ?? t("untitled")} description={t("editPostDescription")}>
-      <ArticlesSubnav
-        items={articlesSubnavItems({
-          articles: t("articles"),
-          categories: t("articleCategories"),
-          tags: t("articleTags"),
-          media: t("websiteMedia"),
-          settings: t("settings"),
-        })}
-      />
+    // The editor is NOT a fourth tab (ADR-106): it carries a back link to the
+    // list it came from, not the section strip, which would have highlighted
+    // "Articles" while showing something that is not the article list.
+    // ADR-140 §3: a static heading ("Edit news"), never the record's title —
+    // the title is the editor's first field, one screen below.
+    <EditorPage
+      title={t(`editorHeading.article.${detail.kind}`)}
+      description={t("editPostDescription")}
+      backHref="/admin/articles"
+      backLabel={t("articles")}
+    >
       <ArticleEditor
         ai={ai}
         // The takeaways control is drawn whether or not AI exists — only its
@@ -177,8 +192,8 @@ export default async function ArticleEditPage({ params }: PageProps<"/admin/arti
           categoryId: detail.categoryId,
           source: detail.source,
           sourceUrl: detail.sourceUrl,
-          publishedAt: detail.publishedAt ? dateFormat.format(detail.publishedAt) : null,
-          updatedAt: dateFormat.format(detail.updatedAt),
+          publishedAt: detail.publishedAt ? formatDateTime(detail.publishedAt) : null,
+          updatedAt: formatDateTime(detail.updatedAt),
           deleted: detail.deletedAt !== null,
           tagIds: detail.tagIds,
           relatedArticleIds: detail.relatedArticleIds,
@@ -282,7 +297,7 @@ export default async function ArticleEditPage({ params }: PageProps<"/admin/arti
           postInfoDescription: t("postInfoSectionDescription"),
           kind: t("kind"),
           createdLabel: t("createdLabel"),
-          createdValue: dateFormat.format(detail.createdAt),
+          createdValue: formatDateTime(detail.createdAt),
           updatedLabel: t("updatedLabel"),
           idLabel: t("idLabel"),
           sourceLabel: t("sourceLabel"),
@@ -297,20 +312,6 @@ export default async function ArticleEditPage({ params }: PageProps<"/admin/arti
             densityTitle: t("keywordDensityLabel"),
             densityHint: t("keywordDensityHint"),
             densityEmpty: t("keywordDensityEmpty"),
-          },
-          analysis: {
-            score: t("seoScoreLabel"),
-            checks: {
-              titleLength: t("seoCheckTitleLength"),
-              descriptionLength: t("seoCheckDescriptionLength"),
-              focusKeywordInTitle: t("seoCheckKeywordInTitle"),
-              focusKeywordInDescription: t("seoCheckKeywordInDescription"),
-              focusKeywordInFirstParagraph: t("seoCheckKeywordEarly"),
-              contentLength: t("seoCheckContentLength"),
-              hasSubheadings: t("seoCheckSubheadings"),
-              hasImages: t("seoCheckImages"),
-              hasInternalLink: t("seoCheckInternalLink"),
-            },
           },
           faq: {
             section: t("faqSection"),
@@ -412,6 +413,6 @@ export default async function ArticleEditPage({ params }: PageProps<"/admin/arti
           },
         }}
       />
-    </AdminPage>
+    </EditorPage>
   );
 }

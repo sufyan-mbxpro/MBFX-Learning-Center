@@ -48,9 +48,12 @@ export async function GlossaryMasthead({
         title={t("title")}
         lead={t("intro")}
         actions={
-          // `secondary` rides on --primary-foreground, the one ink ADR-003
-          // derives to be legible on the `brand` tone this hero defaults to.
-          <Button size="xl" shape="pill" variant="secondary" render={<a href="#glossary-browse" />}>
+          // The band is `--secondary` now that it shows its photograph
+          // (ADR-117), so the default brand FILL is what carries the primary
+          // action — a small element with its own paired `--primary-foreground`
+          // ink, which is exactly what ADR-018 rule 5 allows and what the
+          // whole-band gradient never was.
+          <Button size="xl" render={<a href="#glossary-browse" />}>
             {t("heroBrowse")}
             {/* Down, not inline-end: this scrolls the page rather than
                 navigating, so it needs no RTL flip either. */}
@@ -60,9 +63,10 @@ export async function GlossaryMasthead({
       />
 
       {/* The two featured cards sit BELOW the hero rather than inside it. In
-          the hero they would ride on the brand fill, where their own
+          the hero they would ride on the band's own fill, where their
           `bg-primary/5` and `bg-info/5` surfaces are not contrast-checked
-          against that ground (ADR-018 #5). */}
+          against that ground (ADR-018 #5) — as true of the photographic
+          band ADR-117 gave this masthead as it was of the brand one. */}
       {featured && (
         <Section spacing="sm" tone="muted">
           <Container>

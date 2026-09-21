@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { alternatesFor, pagedCanonical } from "../../../../../_lib/seo.ts";
 import { notFound, permanentRedirect } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import {
@@ -10,32 +11,37 @@ import {
 } from "@repo/core";
 import { routing } from "@repo/i18n/routing";
 import { getSetting, isFeatureVisible } from "@repo/settings";
-import { Badge } from "@repo/ui/components/badge";
-import { Container } from "@repo/ui/components/container";
-import { Reveal } from "@repo/ui/components/reveal";
-import { Section } from "@repo/ui/components/section";
+import { SectionHeading } from "@repo/ui/components/section-heading";
 import { ArchiveTaxonomy } from "../../_components/archive-taxonomy.tsx";
-import { ArticleCards } from "../../_components/article-list.tsx";
-import { ListingCrumbs } from "../../_components/listing-crumbs.tsx";
-import { NumberedPagination } from "../../_components/numbered-pagination.tsx";
+import { ArticleListing } from "../../_components/article-listing.tsx";
+import { NewsMasthead } from "../../_components/news-masthead.tsx";
 
 export async function generateMetadata({
   params,
+  searchParams,
 }: PageProps<"/[locale]/news/tag/[slug]">): Promise<Metadata> {
   const { locale, slug } = await params;
+  const search = await searchParams;
+  const page = Math.max(0, Number.parseInt(String(search.page ?? "0"), 10) || 0);
   setRequestLocale(locale);
   const [view, template] = await Promise.all([
     getArticleTagBySlug(locale, slug),
     getSetting("seo.titleTemplate"),
   ]);
   if (!view) return {};
-  const languages = Object.fromEntries(
-    view.alternates.map((alt) => [
-      alt.locale,
-      articleTagPath(alt.locale, routing.defaultLocale, alt.slug),
-    ]),
-  );
-  return { title: (template ?? "%s").replace("%s", view.name), alternates: { languages } };
+  const alternates = await alternatesFor({
+    canonical: pagedCanonical(articleTagPath(locale, routing.defaultLocale, slug), page),
+    languages: view.alternates.map((alt) => ({
+      locale: alt.locale,
+      href: articleTagPath(alt.locale, routing.defaultLocale, alt.slug),
+    })),
+  });
+  const t = await getTranslations("news");
+  return {
+    title: (template ?? "%s").replace("%s", view.name),
+    description: t("archiveLatestTitle", { name: view.name }),
+    alternates,
+  };
 }
 
 // The tag archive, given the same treatment as the category archive (design
@@ -47,6 +53,13 @@ export async function generateMetadata({
 // with their real counts. Scoping them to this tag would give a category rail
 // whose numbers meant "articles in this category AND this tag", which is not
 // what a category card claims.
+//
+// changes-38: the page is the same shape as /news — `NewsMasthead` (which
+// carried the popular tags until changes-47; the sidebar marks this tag
+// current now), then `ArticleListing` with the
+// sidebar beside the cards. It had gone full width, which took search, the
+// category rail and the tag cloud away from the reader most likely to want
+// them.
 export default async function ArticleTagPage({
   params,
   searchParams,
@@ -84,35 +97,34 @@ export default async function ArticleTagPage({
 
   return (
     <main className="flex flex-col">
-      <Section tone="muted" spacing="sm">
-        <Container className="flex flex-col items-center gap-3 text-center">
-          <ListingCrumbs
-            crumbs={[{ label: t("title"), href: "/news" }, { label: view.name }]}
-            className="flex justify-center"
-          />
-          <p className="text-sm text-muted-foreground">{t("tagArchive")}</p>
-          <h1 className="text-display-sm font-semibold">{view.name}</h1>
-          <Badge variant="pill">{t("topicsCount", { count: result.total })}</Badge>
-        </Container>
-      </Section>
+      <NewsMasthead
+        eyebrow={t("tagArchive")}
+        title={view.name}
+        lead={t("topicsCount", { count: result.total })}
+        crumbs={[{ label: t("title"), href: "/news" }, { label: view.name }]}
+      />
 
-      <Section spacing="md">
-        <Container className="flex flex-col gap-8">
-          <Reveal variant="up">
-            <ArticleCards
-              entries={result.entries}
-              locale={locale}
-              showKind
-              showAuthor={showAuthor !== false}
-            />
-          </Reveal>
-          <NumberedPagination
-            basePath={`/news/tag/${slug}`}
-            page={page}
-            pageCount={result.pageCount}
+      <ArticleListing
+        locale={locale}
+        heading={
+          <SectionHeading
+            eyebrow={t("latestEyebrow")}
+            title={t("archiveLatestTitle", { name: view.name })}
           />
-        </Container>
-      </Section>
+        }
+        entries={result.entries}
+        total={result.total}
+        page={page}
+        pageCount={result.pageCount}
+        paginationBasePath={`/news/tag/${slug}`}
+        // An archive has no search of its own; the sidebar's box searches
+        // the section, the way it does from an article page's trail.
+        searchBasePath="/news"
+        facets={facets}
+        showKind
+        showAuthor={showAuthor !== false}
+        activeTagSlug={slug}
+      />
 
       <ArchiveTaxonomy categories={facets.categories} tags={facets.tags} activeTagSlug={slug} />
     </main>

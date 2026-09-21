@@ -161,7 +161,8 @@ export function ModelsTable({
     });
   };
 
-  const set = (patch: Partial<Draft>) => setDraft((current) => (current ? { ...current, ...patch } : current));
+  const set = (patch: Partial<Draft>) =>
+    setDraft((current) => (current ? { ...current, ...patch } : current));
 
   return (
     <AdminSection title={labels.title}>

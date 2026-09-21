@@ -15,13 +15,19 @@
 //      would put the author's markup on the admin origin.
 //   3. **The HTML textarea keeps `font-mono`.** Code-style #6's exception: the
 //      VALUE is code, read character by character.
-//   4. **Variables insert at the caret in whichever surface has focus.** In
-//      rich mode the body is Tiptap and owns its own selection, so insertion
-//      there appends rather than pretending to know the caret — the subject and
-//      the HTML textarea are plain controls and get real caret insertion.
+//   4. **A variable chip COPIES its token** (changes-46 #4). Inserting at a
+//      caret could only ever be right for the plain controls — Tiptap owns its
+//      own selection, so rich mode appended a paragraph at the end — and the
+//      owner asked for the clipboard. The author pastes where the caret is, in
+//      any of the three surfaces, and a toast (aria-live) says it worked.
+//   5. **The body is the ONE rich-text editor**, with the Visual / HTML tabs
+//      every other editor has, and its tab IS the stored body mode (Visual =
+//      RICH, wrapped in the brand shell; HTML = a whole document). The
+//      writing assistant rides on the same toolbar (ADR-129/138).
 import * as React from "react";
+import { Braces, Copy, Mail, MoreHorizontal, Send, Sparkles, Undo2, UserRound } from "lucide-react";
 import Link from "next/link";
-import { ArrowLeft, Braces, Mail, Send, Sparkles, Undo2, UserRound } from "lucide-react";
+import { toast } from "sonner";
 import { emailTemplateSaveSchema, type EmailBodyMode } from "@repo/contracts";
 import type { EmailTemplateDetail, EmailTranslationState } from "@repo/core";
 import { Badge } from "@repo/ui/components/badge";
@@ -35,8 +41,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@repo/ui/components/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@repo/ui/components/dropdown-menu";
 import { Input } from "@repo/ui/components/input";
-import { Textarea } from "@repo/ui/components/textarea";
+import type {
+  AiAssistantConfig,
+  AiAssistantLabels,
+} from "../../../../_components/ai-assistant.tsx";
+import { AdminPageHeading } from "../../../../_components/admin-page.tsx";
 import { AdminCombobox } from "../../../../_components/combobox.tsx";
 import { EditorSection, Field } from "../../../../_components/editor/editor-section.tsx";
 import { RichTextEditor, type RichTextLabels } from "../../../../_components/rich-text-editor.tsx";
@@ -54,6 +70,9 @@ const PREVIEW_URL = "/admin/api/email/preview";
 
 export interface EmailTemplateEditorLabels {
   backToList: string;
+  /** The static heading and its one line (ADR-140 §3). */
+  heading: string;
+  description: string;
   templatesTitle: string;
   critical: string;
   inactive: string;
@@ -64,13 +83,13 @@ export interface EmailTemplateEditorLabels {
   preheader: string;
   preheaderHint: string;
   body: string;
-  mode: string;
-  modeRich: string;
-  modeHtml: string;
   modeHtmlHint: string;
   variablesSection: string;
   variablesDescription: string;
-  insert: string;
+  copyVariable: string;
+  variableCopied: string;
+  copyFailed: string;
+  openActions: string;
   senderSection: string;
   senderDescription: string;
   fromName: string;
@@ -130,6 +149,7 @@ export function EmailTemplateEditor({
   canTest,
   labels,
   editorLabels,
+  ai,
 }: {
   template: EmailTemplateDetail;
   locales: { code: string; name: string }[];
@@ -140,6 +160,8 @@ export function EmailTemplateEditor({
   labels: EmailTemplateEditorLabels;
   /** Built on the server, the way every other RichTextEditor host does it. */
   editorLabels: RichTextLabels;
+  /** The toolbar writing assistant — ABSENT when AI is off (ADR-097 #6). */
+  ai?: { config: AiAssistantConfig; labels: AiAssistantLabels } | undefined;
 }) {
   const { run, pending } = useServerAction();
 
@@ -177,9 +199,6 @@ export function EmailTemplateEditor({
   const [previewWidth, setPreviewWidth] = React.useState<"desktop" | "mobile">("desktop");
 
   const previewFormRef = React.useRef<HTMLFormElement>(null);
-  const subjectRef = React.useRef<HTMLInputElement>(null);
-  const bodyRef = React.useRef<HTMLTextAreaElement>(null);
-  const lastFocused = React.useRef<"subject" | "body">("body");
 
   // Memoised so the `values` object below is stable between renders: the
   // fallback literal is a new object every time, and `useFieldErrors` re-runs
@@ -218,24 +237,17 @@ export function EmailTemplateEditor({
     // per character would be a request per character.
   }, [locale, refreshPreview]);
 
-  /** Insert at the caret of whichever plain control was last focused. */
-  const insertVariable = (name: string) => {
+  /** Copy a variable's token; the author pastes it wherever the caret is. */
+  const copyVariable = async (name: string) => {
     const token = `{{${name}}}`;
-    if (lastFocused.current === "subject") {
-      const element = subjectRef.current;
-      const at = element?.selectionStart ?? draft.subject.length;
-      patch({ subject: draft.subject.slice(0, at) + token + draft.subject.slice(at) });
-      return;
+    try {
+      await navigator.clipboard.writeText(token);
+      toast.success(labels.variableCopied.replace("{token}", token));
+    } catch {
+      // No clipboard (an insecure origin, a denied permission): say so rather
+      // than pretend, and name the token so it can be typed.
+      toast.error(labels.copyFailed.replace("{token}", token));
     }
-    if (draft.mode === "HTML") {
-      const element = bodyRef.current;
-      const at = element?.selectionStart ?? draft.bodyHtml.length;
-      patch({ bodyHtml: draft.bodyHtml.slice(0, at) + token + draft.bodyHtml.slice(at) });
-      return;
-    }
-    // Rich mode: Tiptap owns the selection, so this appends a paragraph rather
-    // than guessing a caret position it cannot see.
-    patch({ bodyHtml: `${draft.bodyHtml}<p>${token}</p>` });
   };
 
   const localeState = (code: string): EmailTranslationState =>
@@ -249,56 +261,70 @@ export function EmailTemplateEditor({
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex min-w-0 flex-col gap-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="-ms-2 self-start"
-            render={
-              <Link href="/admin/settings/email/templates">
-                <ArrowLeft aria-hidden className="rtl:rotate-180" />
-                {labels.backToList}
-              </Link>
-            }
-          />
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-xl font-semibold">{draft.subject || template.key}</h1>
+      {/* ADR-140 §3: the heading is static ("Edit email template"), never the
+          record's subject — the subject is the first field below, and the
+          actions share the title's row. */}
+      {/* `sticky`: the Save stays reachable down a long body, the way
+          `EditorPage` pins every content editor's row (changes-46 #4). */}
+      <AdminPageHeading
+        sticky
+        title={labels.heading}
+        description={labels.description}
+        backHref="/admin/settings/email/templates"
+        backLabel={labels.backToList}
+        meta={
+          <>
+            <span className="text-xs text-muted-foreground">{template.key}</span>
             {template.critical && <Badge variant="warning">{labels.critical}</Badge>}
             {!template.isActive && <Badge variant="secondary">{labels.inactive}</Badge>}
-          </div>
-          <p className="text-xs text-muted-foreground">{template.key}</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {canTest && (
-            <Button variant="outline" onClick={() => setTestOpen(true)}>
-              <Send aria-hidden />
-              {labels.testSend}
+          </>
+        }
+        actions={
+          <>
+            {/* The content editors' order: Cancel, the informational action,
+                the one primary Save, then the rarer ones behind "…". */}
+            <Button variant="ghost" render={<Link href="/admin/settings/email/templates" />}>
+              {labels.cancel}
             </Button>
-          )}
-          {canUpdate && (
-            <>
-              <Button
-                variant="outline"
-                className="text-destructive-interactive"
-                onClick={() => setResetOpen(true)}
-              >
-                <Undo2 aria-hidden />
-                {labels.reset}
+            {canTest && (
+              <Button variant="info" onClick={() => setTestOpen(true)}>
+                <Send data-icon="inline-start" aria-hidden />
+                {labels.testSend}
               </Button>
-              {/* ONE Save for the whole editor, in the header action row — the
-                  shape every other multi-section editor uses. It cannot sit at
-                  the end of a section (ADR-044 #8's usual placement) because the
-                  three sections are one form: a Save under "Content" would look
-                  like it left the sender overrides behind.
-                  Enabled while fields are wrong; pressing it names them (ADR-077). */}
-              <Button loading={pending} onClick={save}>
-                {labels.save}
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
+            )}
+            {canUpdate && (
+              <>
+                {/* ONE Save for the whole editor, in the header action row — the
+                    shape every other multi-section editor uses. It cannot sit at
+                    the end of a section (ADR-044 #8's usual placement) because the
+                    three sections are one form: a Save under "Content" would look
+                    like it left the sender overrides behind.
+                    Enabled while fields are wrong; pressing it names them (ADR-077). */}
+                <Button loading={pending} onClick={save}>
+                  {labels.save}
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={
+                      <Button variant="ghost" size="icon" aria-label={labels.openActions}>
+                        <MoreHorizontal aria-hidden />
+                      </Button>
+                    }
+                  />
+                  <DropdownMenuContent align="end">
+                    {/* Destructive: it discards this locale's edits. Confirmed
+                        (ADR-044 #7). */}
+                    <DropdownMenuItem variant="destructive" onClick={() => setResetOpen(true)}>
+                      <Undo2 aria-hidden data-icon="inline-start" />
+                      {labels.reset}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </>
+            )}
+          </>
+        }
+      />
 
       {locales.length > 1 && (
         <div className="flex flex-wrap items-center gap-2">
@@ -325,18 +351,6 @@ export function EmailTemplateEditor({
             description={labels.contentDescription}
             icon={Mail}
             accent="primary"
-            actions={
-              <AdminCombobox
-                aria-label={labels.mode}
-                className="w-40"
-                value={draft.mode}
-                onValueChange={(value) => patch({ mode: value as EmailBodyMode })}
-                options={[
-                  { value: "RICH", label: labels.modeRich },
-                  { value: "HTML", label: labels.modeHtml },
-                ]}
-              />
-            }
           >
             <Field
               label={labels.subject}
@@ -345,10 +359,8 @@ export function EmailTemplateEditor({
               error={form.error("subject")}
             >
               <Input
-                ref={subjectRef}
                 value={draft.subject}
                 readOnly={!canUpdate}
-                onFocus={() => (lastFocused.current = "subject")}
                 onChange={(event) => patch({ subject: event.target.value })}
               />
             </Field>
@@ -371,25 +383,17 @@ export function EmailTemplateEditor({
               hint={draft.mode === "HTML" ? labels.modeHtmlHint : undefined}
               error={form.error("bodyHtml")}
             >
-              {draft.mode === "HTML" ? (
-                <Textarea
-                  ref={bodyRef}
-                  // code-style #6's exception: the VALUE is code.
-                  className="min-h-96 font-mono text-xs"
-                  spellCheck={false}
-                  value={draft.bodyHtml}
-                  readOnly={!canUpdate}
-                  onFocus={() => (lastFocused.current = "body")}
-                  onChange={(event) => patch({ bodyHtml: event.target.value })}
-                />
-              ) : (
-                <RichTextEditor
-                  value={draft.bodyHtml}
-                  onChange={(html) => patch({ bodyHtml: html })}
-                  labels={editorLabels}
-                  mediaCategory="brand"
-                />
-              )}
+              <RichTextEditor
+                value={draft.bodyHtml}
+                onChange={(html) => patch({ bodyHtml: html })}
+                labels={editorLabels}
+                mediaCategory="brand"
+                // The tab is the stored mode: Visual renders inside the brand
+                // shell, HTML is the designer's whole document.
+                mode={draft.mode === "HTML" ? "html" : "visual"}
+                onModeChange={(next) => patch({ mode: next === "html" ? "HTML" : "RICH" })}
+                {...(ai && canUpdate ? { ai } : {})}
+              />
             </Field>
           </EditorSection>
 
@@ -406,10 +410,11 @@ export function EmailTemplateEditor({
                   type="button"
                   size="xs"
                   variant="outline"
-                  disabled={!canUpdate}
-                  title={`${labels.insert} — ${sample[name] ?? ""}`}
-                  onClick={() => insertVariable(name)}
+                  title={`${labels.copyVariable} — ${sample[name] ?? ""}`}
+                  aria-label={`${labels.copyVariable}: {{${name}}}`}
+                  onClick={() => void copyVariable(name)}
                 >
+                  <Copy data-icon="inline-start" aria-hidden />
                   {/* A variable name IS its literal text — it is typed into the
                       body verbatim — so `font-mono` is the same exception the
                       HTML textarea takes, not a raw identifier rendering. */}

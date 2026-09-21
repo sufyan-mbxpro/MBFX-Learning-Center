@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { localizedPath } from "../../../../../_lib/seo.ts";
 import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { getVideoCategories, getVideoTopics } from "@repo/core";
@@ -35,7 +36,7 @@ export async function generateMetadata({
   return {
     title: (template ?? "%s").replace("%s", title),
     description: t("videos.metaDescription"),
-    alternates: { canonical: learnTrackVideosPath(track) },
+    alternates: { canonical: localizedPath(locale, learnTrackVideosPath(track)) },
   };
 }
 

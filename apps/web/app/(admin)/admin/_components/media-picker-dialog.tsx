@@ -386,8 +386,12 @@ function MediaPickerBody({
         <>
           {/* Taller and one column wider than the dialog used to allow: at
               `max-h-96` the grid showed barely two rows, so paging through a
-              category meant scrolling a 24rem window inside a 48rem box. */}
-          <ul className="grid max-h-(--height-scroll-panel) grid-cols-2 gap-3 overflow-y-auto sm:grid-cols-3 lg:grid-cols-5">
+              category meant scrolling a 24rem window inside a 48rem box.
+              Half the viewport rather than 60%, though (changes-43): with the
+              header, tabs, search and recent strip above it, 60vh put the
+              dialog past a 768px-tall screen, and the dialog now caps itself
+              at the viewport, so the overflow became a second scrollbar. */}
+          <ul className="grid max-h-(--height-half-screen) grid-cols-2 gap-3 overflow-y-auto sm:grid-cols-3 lg:grid-cols-5">
             {browser.items.map((asset) => (
               <li key={asset.id}>
                 <AssetButton asset={asset} onPick={pick} />

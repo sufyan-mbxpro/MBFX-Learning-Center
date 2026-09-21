@@ -23,7 +23,8 @@ import { db } from "@repo/db";
 export interface CuratedFont {
   key: string;
   label: string;
-  category: "sans" | "mono";
+  /** `serif` is the display category added by ADR-102. */
+  category: "sans" | "serif" | "mono";
 }
 
 export const CURATED_FONTS: CuratedFont[] = [
@@ -39,6 +40,14 @@ export const CURATED_FONTS: CuratedFont[] = [
   { key: "lato", label: "Lato", category: "sans" },
   { key: "montserrat", label: "Montserrat", category: "sans" },
   { key: "poppins", label: "Poppins", category: "sans" },
+  // Display serifs (ADR-102). `fontDisplay` picks from these; nothing stops an
+  // admin picking a sans key there instead, which is what a site that wants no
+  // serif does. Fraunces is the default for its optical-size axis — the
+  // reference's headline is a display cut, and a text serif scaled to 64px
+  // looks thin and wide in exactly the way that headline does not.
+  { key: "fraunces", label: "Fraunces", category: "serif" },
+  { key: "playfair", label: "Playfair Display", category: "serif" },
+  { key: "cormorant", label: "Cormorant Garamond", category: "serif" },
   { key: "systemmono", label: "System Monospace", category: "mono" },
   { key: "jetbrainsmono", label: "JetBrains Mono", category: "mono" },
   { key: "firacode", label: "Fira Code", category: "mono" },
@@ -53,8 +62,11 @@ export function isCuratedFontKey(key: string): key is CuratedFontKey {
   return CURATED_FONT_KEYS.has(key);
 }
 
+// `system-ui` leads because it is what the owner's reference site (mbfx.co)
+// actually renders in (ADR-140 §1): Segoe UI on Windows, San Francisco on a
+// Mac. The named faces behind it cover browsers that predate the keyword.
 const SYSTEM_SANS_STACK =
-  '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+  'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
 const SYSTEM_MONO_STACK = '"Courier New", Courier, monospace';
 
 /**
@@ -103,6 +115,15 @@ export interface LayoutTokens {
   /** Curated font key (ADR-005), not a raw CSS font-stack. */
   fontSans: CuratedFontKey;
   fontMono: CuratedFontKey;
+  /**
+   * The public display face (ADR-102) — headings, the hero line, stat
+   * numerals, pull quotes. OPTIONAL, and absent means `fontSans`: every Theme
+   * row that exists predates this field, so requiring it would break saves it
+   * was never meant to touch (the same reason `baseFontSize` is optional in
+   * the contracts schema). The admin surface does not use it — code-style #6
+   * keeps the admin on one typeface.
+   */
+  fontDisplay?: CuratedFontKey;
   /** 13–16px, per SKILL.md. */
   baseFontSize: string;
 }
@@ -129,45 +150,81 @@ export type BrandOverrides = Partial<BrandColors>;
 // ─────────────────────────────────────────────────────────────
 
 export const DEFAULT_BRAND: BrandColors = {
-  // The reference's bronze. Its label ink is engine-derived (#1A1A1A,
-  // 6.01:1), NOT the reference's white (2.77:1) — ADR-072 §1.
-  primary: "#C28D5A",
+  // The owner's saved bronze (ADR-143). Its label ink is fixed white, by the
+  // owner's rule, not a contrast pick.
+  primary: "#C8986B",
   secondary: "#2A2A29",
-  // The AA-safe siblings of the reference's #3382E2/#E23C36: white labels
-  // clear 4.5:1 on these and not on those (ADR-072 §3).
-  success: "#2D72C7",
+  // `error` is the AA-safe sibling of the reference's #E23C36: white labels
+  // clear 4.5:1 on it (ADR-072 §3).
+  //
+  // ADR-142 (changes-45): NO BLUE. `success` was #2D72C7 and `info` #004284,
+  // so every "Published" badge, every confirmation and every tip on both
+  // surfaces was the one colour the site's palette does not contain. The
+  // owner's rule is "use the site's default colours": `success` is the brand
+  // bronze darkened until white clears 4.5:1 — the same value
+  // `--primary-solid` derives, and the owner's reference user page marks
+  // ACTIVE / APPROVED / Verified in exactly that fill — and `info` is a warm
+  // graphite from the neutral ramp, the reference's charcoal status chip.
+  success: "#936B44",
   error: "#D93A34",
   warning: "#FFA310",
-  info: "#004284",
+  info: "#5A524B",
   accent: "#EAE5DE",
 };
 
-/** Slate neutrals (ADR-072 §4). */
+/**
+ * Warm neutrals (ADR-101 §2, superseding ADR-072 §4's slate).
+ *
+ * The changes-31 reference shares our bronze `primary` almost exactly, so the
+ * whole colour delta between our surface and its was TEMPERATURE: slate is
+ * blue-biased at every step, and a bronze primary on it reads as a brown
+ * button on a grey site rather than as one material.
+ *
+ * `background` is the ivory ground and `surface` stays white on purpose: that
+ * 1.11:1 step is what separates a card from the page, which is why the public
+ * card can drop its resting shadow (ADR-101 §4). A lighter ivory was tried
+ * first and measured 1.04:1 — too small to separate anything, which would have
+ * put the border back to do the ground's job.
+ */
 export const DEFAULT_LIGHT_SURFACE: SurfacePalette = {
-  background: "#FFFFFF",
+  background: "#F7F3ED",
   surface: "#FFFFFF",
-  surfaceMuted: "#F1F5F9",
-  textPrimary: "#020817",
-  textSecondary: "#64748B",
-  textMuted: "#94A3B8",
-  borderLight: "#E2E8F0",
-  // The input border. The reference reuses its divider colour (1.23:1); no
-  // named slate step sits near 3:1 (400 = 2.56, 500 = 4.76), so this is the
-  // point on the slate ramp that clears 3:1 on BOTH background and muted.
-  borderMedium: "#7F8FA5",
+  surfaceMuted: "#F0EBE3",
+  textPrimary: "#1E1B18",
+  // The value the warm rotation constrained. The first candidate (`#77706A`)
+  // cleared the background at 4.64:1 and FAILED the muted surface at 4.32:1 —
+  // the exact pair the slate note this replaces was written about. Darkened
+  // until both pass (4.96 background, 4.62 muted) rather than lightening the
+  // muted surface, which is the tint the reference is actually made of.
+  textSecondary: "#6F6862",
+  // Captions only, and never the sole carrier of meaning. 3.20:1 on the
+  // background — better than the slate value it replaces (2.60:1 on white).
+  textMuted: "#8F877E",
+  borderLight: "#E6DFD4",
+  // The input border. Same derivation ADR-072 §4 recorded for slate, re-run on
+  // the warm ramp: the point that clears 3:1 on BOTH background (3.37) and the
+  // muted surface (3.14), so a field inside a muted panel also passes.
+  borderMedium: "#8C837A",
 };
 
-/** shadcn slate dark — the canonical partner of the light set above. */
+/**
+ * The warm ramp on a near-black espresso ground (ADR-101 §2).
+ *
+ * Derived, not copied: the reference has no dark mode, and ADR-008 makes mode
+ * the USER's and never the admin's, so a dark counterpart has to be reasoned
+ * out rather than left as the cool set under a warm light set.
+ */
 export const DEFAULT_DARK_SURFACE: SurfacePalette = {
-  background: "#020817",
-  surface: "#020817",
-  surfaceMuted: "#1E293B",
-  textPrimary: "#F8FAFC",
-  textSecondary: "#94A3B8",
-  textMuted: "#64748B",
-  borderLight: "#1E293B",
-  // 3:1 on the dark background, same derivation as the light value.
-  borderMedium: "#4F5E73",
+  background: "#14110F",
+  surface: "#1B1714",
+  surfaceMuted: "#241F1A",
+  textPrimary: "#F7F3EE",
+  textSecondary: "#A79E94",
+  textMuted: "#7E766C",
+  borderLight: "#2B251F",
+  // 3:1 on both the dark background (3.61) and its muted surface (3.13), same
+  // derivation as the light value.
+  borderMedium: "#756B60",
 };
 
 /**
@@ -176,10 +233,11 @@ export const DEFAULT_DARK_SURFACE: SurfacePalette = {
  * are the only defaults that need a dark counterpart; the four status colours
  * and the primary all survive the mode switch. Dark accent is the muted
  * surface because the reference says so in its own markup: its active and
- * hover nav states are `dark:bg-muted`.
+ * hover nav states are `dark:bg-muted` — which is why it moves with the muted
+ * surface when that surface goes warm (ADR-101 §2).
  */
 export const DEFAULT_DARK_BRAND_OVERRIDES: BrandOverrides = {
-  accent: "#1E293B",
+  accent: "#241F1A",
   secondary: "#E8E6E3",
 };
 
@@ -187,10 +245,14 @@ export const DEFAULT_LAYOUT: LayoutTokens = {
   // sm 4 / md 6 / lg 8 / xl 12 via @repo/ui's radius formula (ADR-072 §8).
   radiusBase: "6px",
   containerWidth: "1400px",
-  // ADR-072: Inter is the brand typeface (superseding ADR-039's Outfit).
-  // "system" and "outfit" stay selectable registry keys.
-  fontSans: "inter",
+  // ADR-140 §1: the operating system's UI face, which is what the owner's
+  // reference site renders in (it declares a webfont and applies it nowhere).
+  // Inter (ADR-072) and Outfit (ADR-039) stay selectable registry keys.
+  fontSans: "system",
   fontMono: "systemmono",
+  // ADR-140 §1 retires ADR-102's serif default: display type is the same
+  // system face, set bold. The slot stays, so a serif is one key away.
+  fontDisplay: "system",
   baseFontSize: "16px",
 };
 
@@ -316,7 +378,32 @@ function mixOver(color: string, background: string, amount: number): string {
  * 3.95–4.41:1 inside their own tonal chips.
  */
 export function deriveTonalInk(color: string, background: string, target = 4.5): string {
-  return deriveInteractive(color, mixOver(color, background, TONAL_TINT_CONTRACT), target);
+  const tinted = mixOver(color, background, TONAL_TINT_CONTRACT);
+
+  // BOTH surfaces, not just the tint.
+  //
+  // This used to delegate straight to `deriveInteractive(color, tinted)` on the
+  // reasoning quoted above: the tint is the harder surface, so an ink that
+  // clears it clears the page too. That held only while the page was PURE
+  // WHITE. Once the light ground became ivory (ADR-101), a near-white fill
+  // tints to something LIGHTER than the page, and the implication runs the
+  // other way — the fast-check contract found it immediately, at 4.4894:1
+  // against a 4.5 floor.
+  //
+  // So the search tests both rather than assuming which one is harder. That is
+  // correct for any background an admin can set, which is the property the
+  // contract is actually asserting.
+  const clears = (candidate: string) =>
+    contrastRatio(candidate, tinted) >= target && contrastRatio(candidate, background) >= target;
+
+  if (clears(color)) return color;
+
+  const direction = luminance(background) > 0.5 ? -1 : 1;
+  for (let step = 1; step <= 20; step++) {
+    const candidate = shade(color, direction * step * 0.04);
+    if (clears(candidate)) return candidate;
+  }
+  return direction < 0 ? "#1A1A1A" : "#FFFFFF";
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -362,12 +449,21 @@ export function tokensToCss({ brand, surface, layout, overrides }: ModeInput): s
     // Every *-interactive ink is tint-aware (ADR-073): legible on the page AND
     // inside its own tonal chip, up to TONAL_TINT_CONTRACT.
     "--primary": b.primary,
-    "--primary-foreground": readableOn(b.primary, onDark, onLight),
+    // ADR-143: text and icons ON a primary fill are always white, and do not
+    // follow the theme colour — the owner's rule, not a contrast pick.
+    "--primary-foreground": INK_LIGHT,
     "--primary-interactive": deriveTonalInk(b.primary, bg),
     // Derived, never admin-editable (ADR-003).
     "--primary-hover": shade(b.primary, -0.14),
     "--primary-active": shade(b.primary, -0.26),
     "--primary-subtle": shade(b.primary, 0.85),
+    // ADR-143 (superseding ADR-140 §6's fill): the SOLID button fill is the
+    // primary the admin SAVED, never a contrast-derived sibling — what the
+    // theme editor shows is what a button shows. The label is always white,
+    // at the owner's request, whatever contrast that gives on the fill.
+    "--primary-solid": b.primary,
+    "--primary-solid-foreground": INK_LIGHT,
+    "--primary-solid-hover": shade(b.primary, -0.12),
 
     "--secondary": b.secondary,
     "--secondary-foreground": readableOn(b.secondary, onDark, onLight),
@@ -376,11 +472,14 @@ export function tokensToCss({ brand, surface, layout, overrides }: ModeInput): s
     "--accent-foreground": readableOn(b.accent, onDark, onLight),
 
     "--success": b.success,
-    "--success-foreground": readableOn(b.success, onDark, onLight),
+    // ADR-143: ink on the brand status fills is fixed white, like primary —
+    // editing the theme colours never flips it. Warning (amber) keeps its
+    // contrast pick: white on a yellow is the one pairing nobody can read.
+    "--success-foreground": INK_LIGHT,
     "--success-interactive": deriveTonalInk(b.success, bg),
 
     "--destructive": b.error,
-    "--destructive-foreground": readableOn(b.error, onDark, onLight),
+    "--destructive-foreground": INK_LIGHT,
     "--destructive-interactive": deriveTonalInk(b.error, bg),
 
     "--warning": b.warning,
@@ -388,7 +487,7 @@ export function tokensToCss({ brand, surface, layout, overrides }: ModeInput): s
     "--warning-interactive": deriveTonalInk(b.warning, bg),
 
     "--info": b.info,
-    "--info-foreground": readableOn(b.info, onDark, onLight),
+    "--info-foreground": INK_LIGHT,
     "--info-interactive": deriveTonalInk(b.info, bg),
 
     // The focus ring is a graphical indicator, so 3:1 is the correct bar,
@@ -412,6 +511,20 @@ export function tokensToCss({ brand, surface, layout, overrides }: ModeInput): s
 
 export type IssueSeverity = "error" | "warning";
 
+/**
+ * What a check measured (changes-46). The editor turns this into a sentence
+ * from the catalog; `label` and `remedy` stay as the developer-facing English
+ * the tests and the audit trail read, never as the admin's message.
+ *
+ * - `surfaceText` — a text colour on a surface; rendered as-is, so it is
+ *   genuinely hard to read until it changes.
+ * - `border` — the input border on a surface (3:1, a graphical object).
+ * - `buttonLabel` — no label ink (white or near-black) is legible on a fill.
+ * - `linkText` — the raw swatch as link text. The renderer already swaps in
+ *   a derived ink (`rendered`), so this one needs NO action.
+ */
+export type ContrastIssueKind = "surfaceText" | "border" | "buttonLabel" | "linkText";
+
 export interface ContrastIssue {
   field: string;
   mode: "light" | "dark";
@@ -420,6 +533,58 @@ export interface ContrastIssue {
   required: number;
   severity: IssueSeverity;
   remedy?: string;
+  kind: ContrastIssueKind;
+  /**
+   * Which editor input holds `field`: a brand swatch (shared by both modes),
+   * one mode's surface palette, or a dark-mode brand override — which the
+   * editor does not expose, so an issue on one carries no suggestion.
+   */
+  palette: "brand" | "light" | "dark" | "darkOverride";
+  /** The colour currently in that input. */
+  current: string;
+  /** The surface field it was measured against (`linkText`/`surfaceText`/`border`). */
+  against?: "background" | "surfaceMuted";
+  /** `tooLight` or `tooDark` relative to what it was measured against. */
+  direction: "tooLight" | "tooDark";
+  /** `linkText` only: the ink the site actually renders instead. */
+  rendered?: string;
+  /**
+   * A value for the input that clears this check. Absent when the input is
+   * not one the editor exposes (a dark-mode override).
+   */
+  suggestion?: string;
+  /**
+   * `linkText` on a brand swatch: the suggestion clears this mode but newly
+   * fails the same check in the other one (see `flagCrossModeConflict`).
+   */
+  conflictsAcrossModes?: boolean;
+}
+
+/**
+ * Which way a failing colour is wrong, in the words a fix uses: on a light
+ * surface it is too light (the fix darkens it), on a dark one too dark. The
+ * same split `deriveInteractive` pushes along, so the words and the
+ * suggestion always agree.
+ */
+function directionOf(_color: string, against: string): "tooLight" | "tooDark" {
+  return luminance(against) > 0.5 ? "tooLight" : "tooDark";
+}
+
+const LABEL_INKS = ["#FFFFFF", "#1A1A1A"] as const;
+
+/**
+ * The nearest fill to `fill` that a label ink can be read on at `target` —
+ * darkened toward white labels or lightened toward near-black ones,
+ * whichever needs the smaller move. Pure; exported for the tests.
+ */
+export function suggestButtonFill(fill: string, target = 4.5): string {
+  const candidates = LABEL_INKS.map((ink) => deriveInteractive(fill, ink, target));
+  const distance = (hex: string) => {
+    const a = hexToRgb(hex);
+    const b = hexToRgb(fill);
+    return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  };
+  return [...candidates].sort((a, b) => distance(a) - distance(b))[0] ?? fill;
 }
 
 /**
@@ -448,10 +613,22 @@ export function validateMode(
   const bg = surface.background;
   const issues: ContrastIssue[] = [];
 
-  const blocking: Array<[string, string, string, string, number]> = [
+  const blocking: Array<[keyof SurfacePalette, string, string, string, number]> = [
     ["textPrimary", "Body text on background", surface.textPrimary, bg, 4.5],
     ["textSecondary", "Secondary text on background", surface.textSecondary, bg, 4.5],
     ["textPrimary", "Body text on muted surface", surface.textPrimary, surface.surfaceMuted, 4.5],
+    // The pair this list was MISSING, and the one the defaults failed.
+    // `--muted-foreground` on `--muted` is everywhere — a sub-nav's inactive
+    // tab, a `<kbd>`, a badge, any secondary line inside a muted tray — and
+    // checking secondary text only against the background quietly permitted
+    // all of it at 4.34:1.
+    [
+      "textSecondary",
+      "Secondary text on muted surface",
+      surface.textSecondary,
+      surface.surfaceMuted,
+      4.5,
+    ],
     ["borderMedium", "Input border on background", surface.borderMedium, bg, 3.0],
   ];
 
@@ -476,11 +653,21 @@ export function validateMode(
         required,
         severity: "warning",
         remedy: `Try ${suggested.toUpperCase()} instead — clears ${required}:1 here.`,
+        kind: field === "borderMedium" ? "border" : "surfaceText",
+        palette: mode,
+        current: fg.toUpperCase(),
+        against: background === bg ? "background" : "surfaceMuted",
+        direction: directionOf(fg, background),
+        suggestion: suggested.toUpperCase(),
       });
     }
   }
 
   const fills = ["primary", "success", "error", "warning", "info"] as const;
+  // A dark-mode override is its own stored value the editor does not expose;
+  // an issue on it names the swatch but offers nothing to apply.
+  const paletteOf = (key: string): ContrastIssue["palette"] =>
+    mode === "dark" && overrides && key in overrides ? "darkOverride" : "brand";
 
   // Flagged when BOTH the light and dark label inks fail — i.e. a true
   // mid-tone fill with no legible label color at all. Must use the same
@@ -499,6 +686,14 @@ export function validateMode(
         required: 4.5,
         severity: "warning",
         remedy: "No legible label colour exists on this fill. Darken or lighten it.",
+        kind: "buttonLabel",
+        palette: paletteOf(key),
+        current: fill.toUpperCase(),
+        // Relative to the ink it is nearest to reading with.
+        direction: luminance(fill) > 0.18 ? "tooLight" : "tooDark",
+        ...(paletteOf(key) === "brand"
+          ? { suggestion: suggestButtonFill(fill).toUpperCase() }
+          : {}),
       });
     }
   }
@@ -518,6 +713,15 @@ export function validateMode(
         required: 4.5,
         severity: "warning",
         remedy: `Links and inline text render as ${derived.toUpperCase()} instead. The swatch is unchanged for fills, borders, and charts.`,
+        kind: "linkText",
+        palette: paletteOf(key),
+        current: b[key].toUpperCase(),
+        against: "background",
+        direction: directionOf(b[key], bg),
+        rendered: derived.toUpperCase(),
+        ...(paletteOf(key) === "brand"
+          ? { suggestion: deriveInteractive(b[key], bg, 4.5).toUpperCase() }
+          : {}),
       });
     }
   }
@@ -534,8 +738,38 @@ export function validateTheme(
   const issues = [
     ...validateMode(brand, light, "light"),
     ...validateMode(brand, dark, "dark", darkOverrides),
-  ];
+  ].map((issue) => flagCrossModeConflict(issue, brand, light, dark, darkOverrides));
   return { issues, canSave: !issues.some((i) => i.severity === "error") };
+}
+
+/**
+ * A brand swatch is ONE value used in both modes, so a suggestion made for
+ * one mode is checked against the other (changes-46). For link text there is
+ * usually NO value that passes on both the ivory and the espresso page — the
+ * luminance windows do not overlap — so darkening `primary` to read on light
+ * makes it fail on dark. That is flagged, not hidden: link text is always
+ * compensated by the derived ink, so applying the value costs readability
+ * nowhere, but it moves the brand colour and moves the advisory to the other
+ * mode, and the admin should know that before pressing Apply.
+ */
+function flagCrossModeConflict(
+  issue: ContrastIssue,
+  brand: BrandColors,
+  light: SurfacePalette,
+  dark: SurfacePalette,
+  darkOverrides?: BrandOverrides,
+): ContrastIssue {
+  if (issue.palette !== "brand" || !issue.suggestion || issue.kind !== "linkText") return issue;
+  const otherMode = issue.mode === "light" ? "dark" : "light";
+  // The other mode renders the override when there is one, so the brand
+  // value cannot affect it there.
+  if (otherMode === "dark" && darkOverrides && issue.field in darkOverrides) return issue;
+  const otherBg = otherMode === "light" ? light.background : dark.background;
+  const before = contrastRatio(brand[issue.field as keyof BrandColors], otherBg);
+  const after = contrastRatio(issue.suggestion, otherBg);
+  return after < issue.required && before >= issue.required
+    ? { ...issue, conflictsAcrossModes: true }
+    : issue;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -599,10 +833,20 @@ export async function loadActiveThemeTokens(
   // emitting a var() reference to a font that no longer exists. ADR-039
   // made that fallback the brand typeface instead of the OS stack — a
   // broken key should land on the brand, not look like an unstyled page.
+  const fontSans = isCuratedFontKey(rawLayout.fontSans)
+    ? rawLayout.fontSans
+    : DEFAULT_LAYOUT.fontSans;
   const layout: LayoutTokens = {
     ...rawLayout,
-    fontSans: isCuratedFontKey(rawLayout.fontSans) ? rawLayout.fontSans : DEFAULT_LAYOUT.fontSans,
+    fontSans,
     fontMono: isCuratedFontKey(rawLayout.fontMono) ? rawLayout.fontMono : DEFAULT_LAYOUT.fontMono,
+    // ADR-102 §2: absent or unknown means the SANS, not the default display
+    // face. A row saved before this field existed must render exactly as it
+    // did, and silently promoting it to a serif would be a redesign nobody
+    // asked for — which is a different failure from the invalid-key fallback
+    // the two lines above make (there, a named-but-missing family would emit a
+    // var() reference to nothing).
+    fontDisplay: isCuratedFontKey(rawLayout.fontDisplay ?? "") ? rawLayout.fontDisplay : fontSans,
   };
 
   return { key: theme?.key ?? "default", brand, light, dark, overrides, layout };
@@ -631,11 +875,34 @@ export async function getActiveTheme(scope: "web" | "admin" = "web"): Promise<Re
   return loadActiveTheme(scope);
 }
 
+/**
+ * The admin portal's typeface (ADR-141). The owner's reference for the admin
+ * is its sister portal, which is set in Inter; the PUBLIC reference renders
+ * in the system face (ADR-140 §1). One `layoutTokens` row cannot say both, and
+ * the font controls are the paused Layout & Display tab (ADR-038), so no admin
+ * setting was ever deciding this — ADR-140's migration moved the admin with
+ * the public site as a side effect. The admin surfaces pin it here instead.
+ */
+export const ADMIN_FONT_SANS = "inter" satisfies CuratedFontKey;
+
+/** `theme` with the admin typeface in both text slots. Mono is untouched. */
+export function withAdminTypeface(t: ResolvedTheme): ResolvedTheme {
+  return {
+    ...t,
+    layout: { ...t.layout, fontSans: ADMIN_FONT_SANS, fontDisplay: ADMIN_FONT_SANS },
+  };
+}
+
 export function buildThemeStyleSheet(t: ResolvedTheme): string {
   const fontSans = resolveFontValue(t.layout.fontSans);
   const fontMono = resolveFontValue(t.layout.fontMono);
+  // ADR-102. `loadActiveThemeTokens` already resolved an absent slot to the
+  // sans key, so this never emits an empty value — but a ResolvedTheme handed
+  // in directly by a test or a preview would, hence the second fallback here
+  // rather than a non-null assertion.
+  const fontDisplay = resolveFontValue(t.layout.fontDisplay ?? t.layout.fontSans);
   return [
-    `:root{${t.lightCss}--brand-font-sans:${fontSans};--brand-font-mono:${fontMono};--brand-base-font-size:${t.layout.baseFontSize};}`,
+    `:root{${t.lightCss}--brand-font-sans:${fontSans};--brand-font-mono:${fontMono};--brand-font-display:${fontDisplay};--brand-base-font-size:${t.layout.baseFontSize};}`,
     `.dark{${t.darkCss}}`,
   ].join("");
 }

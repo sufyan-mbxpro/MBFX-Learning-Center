@@ -8,6 +8,7 @@ import {
   nowFraction,
   parseClockTime,
   sessionDaySegments,
+  sessionOverlaps,
   sessionState,
   timelineWindow,
   zoneOffsetMinutes,
@@ -254,5 +255,106 @@ describe("the timeline", () => {
     const w = timelineWindow(at, "UTC");
     expect(nowFraction(at, w)).toBeCloseTo(0.5, 6);
     expect(nowFraction(new Date("2026-01-15T12:00:00Z"), w)).toBeNull();
+  });
+});
+
+describe("sessionOverlaps (ADR-114 #4)", () => {
+  // A January instant: London is on GMT, New York on EST, Sydney on AEDT.
+  const at = new Date("2026-01-14T12:00:00Z");
+  const window = timelineWindow(at, "UTC");
+  const states = sessionState(SESSIONS, at, "UTC").sessions;
+
+  const label = (o: { names: [string, string] }) => o.names.join(" + ");
+
+  it("finds the London / New York window and gets its length right", () => {
+    const overlaps = sessionOverlaps(states, window, at.getTime());
+    const londonNewYork = overlaps.find((o) => label(o) === "London + New York");
+    expect(londonNewYork).toBeDefined();
+    // London closes 17:00 GMT; New York opens 08:00 EST = 13:00 GMT. Four hours.
+    expect(londonNewYork!.durationMinutes).toBe(4 * 60);
+    expect(new Date(londonNewYork!.start).toISOString()).toBe("2026-01-14T13:00:00.000Z");
+    expect(new Date(londonNewYork!.end).toISOString()).toBe("2026-01-14T17:00:00.000Z");
+  });
+
+  it("moves that window when the clocks do — the whole point of deriving it", () => {
+    // July: London on BST (+1), New York on EDT (-4). London now closes at
+    // 16:00 UTC and New York opens at 12:00 UTC, so the same overlap is an
+    // hour earlier and the SAME four hours long. A stored offset gets this
+    // wrong twice a year.
+    const july = new Date("2026-07-15T12:00:00Z");
+    const julyWindow = timelineWindow(july, "UTC");
+    const julyStates = sessionState(SESSIONS, july, "UTC").sessions;
+    const overlap = sessionOverlaps(julyStates, julyWindow, july.getTime()).find(
+      (o) => label(o) === "London + New York",
+    );
+    expect(overlap).toBeDefined();
+    expect(new Date(overlap!.start).toISOString()).toBe("2026-07-15T12:00:00.000Z");
+    expect(overlap!.durationMinutes).toBe(4 * 60);
+  });
+
+  it("marks the window containing `at` as active, and only that one", () => {
+    const overlaps = sessionOverlaps(states, window, at.getTime());
+    const active = overlaps.filter((o) => o.isActive);
+    // 12:00 UTC: London is open, New York is not (13:00), Tokyo closed at
+    // 09:00 UTC. Nothing overlaps at noon.
+    expect(active).toHaveLength(0);
+    const atThree = sessionOverlaps(states, window, Date.parse("2026-01-14T15:00:00Z"));
+    expect(atThree.filter((o) => o.isActive).map(label)).toEqual(["London + New York"]);
+  });
+
+  it("reads as a day: sorted by start", () => {
+    const overlaps = sessionOverlaps(states, window, at.getTime());
+    expect(overlaps.length).toBeGreaterThan(0);
+    const starts = overlaps.map((o) => o.start);
+    expect([...starts].sort((a, b) => a - b)).toEqual(starts);
+  });
+
+  it("clips every window to the viewer's own day", () => {
+    for (const overlap of sessionOverlaps(states, window, at.getTime())) {
+      expect(overlap.start).toBeGreaterThanOrEqual(window.dayStart);
+      expect(overlap.end).toBeLessThanOrEqual(window.dayEnd);
+      expect(overlap.end).toBeGreaterThan(overlap.start);
+    }
+  });
+
+  it("finds an overlap that straddles the viewer's midnight", () => {
+    // Asia/Tokyo as the viewer's zone puts the Sydney/Tokyo overlap inside
+    // the local day and pushes London's into the small hours — the case the
+    // three-candidate shift exists for.
+    const tokyoWindow = timelineWindow(at, "Asia/Tokyo");
+    const tokyoStates = sessionState(SESSIONS, at, "Asia/Tokyo").sessions;
+    const overlaps = sessionOverlaps(tokyoStates, tokyoWindow, at.getTime());
+    expect(overlaps.map(label)).toContain("Sydney + Tokyo");
+    for (const overlap of overlaps) {
+      expect(overlap.start).toBeGreaterThanOrEqual(tokyoWindow.dayStart);
+      expect(overlap.end).toBeLessThanOrEqual(tokyoWindow.dayEnd);
+    }
+  });
+
+  it("returns nothing for sessions that never meet", () => {
+    const apart = sessionState(
+      [
+        { name: "A", city: "A", timeZone: "UTC", open: "00:00", close: "06:00" },
+        { name: "B", city: "B", timeZone: "UTC", open: "12:00", close: "18:00" },
+      ],
+      at,
+      "UTC",
+    ).sessions;
+    expect(sessionOverlaps(apart, window, at.getTime())).toEqual([]);
+  });
+
+  it("pairs only — three open at once is three pairs, never one triple", () => {
+    const three = sessionState(
+      [
+        { name: "A", city: "A", timeZone: "UTC", open: "08:00", close: "18:00" },
+        { name: "B", city: "B", timeZone: "UTC", open: "09:00", close: "17:00" },
+        { name: "C", city: "C", timeZone: "UTC", open: "10:00", close: "16:00" },
+      ],
+      at,
+      "UTC",
+    ).sessions;
+    const overlaps = sessionOverlaps(three, window, at.getTime());
+    expect(overlaps.map(label).sort()).toEqual(["A + B", "A + C", "B + C"]);
+    for (const overlap of overlaps) expect(overlap.names).toHaveLength(2);
   });
 });

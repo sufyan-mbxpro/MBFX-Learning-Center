@@ -72,7 +72,7 @@ export function VideoTile({
   // so the rail does not reflow around it.
   if (playing && embedUrl) {
     return (
-      <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-secondary ring-1 ring-foreground/10">
+      <div className="relative aspect-video w-full overflow-hidden rounded-lg bg-secondary ring-1 ring-foreground/10">
         <iframe
           src={`${embedUrl}?autoplay=1`}
           title={title}
@@ -106,7 +106,7 @@ export function VideoTile({
   );
 
   const shell =
-    "group hover-lift sheen relative block aspect-video w-full overflow-hidden rounded-2xl bg-secondary ring-1 ring-foreground/10 transition-shadow duration-(--duration-base) hover:ring-primary/40";
+    "group hover-lift sheen relative block aspect-video w-full overflow-hidden rounded-lg bg-secondary ring-1 ring-foreground/10 transition-shadow duration-(--duration-base) hover:ring-primary/40";
 
   // No recording: one ordinary link over the whole tile. `text-white` and not
   // a token throughout the copy below — this ink sits on the scrim above, not

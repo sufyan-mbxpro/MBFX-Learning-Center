@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { activeLocales } from "../db.ts";
 
 // changes-09 PR 9 — the About section (ADR-047) and the mega menu (ADR-048),
 // as an anonymous visitor.
@@ -218,8 +219,26 @@ test.describe("the mega menu (ADR-048)", () => {
 });
 
 test.describe("RTL", () => {
+  // testing.md #4's RTL smoke, and it now TURNS ITSELF ON.
+  //
+  // It was hard-coded to `/ar/about` and had been failing since ADR-091 (the
+  // suite had not been run): only an ACTIVE locale is served, `ar` is seeded
+  // inactive, so that path correctly 404s and the public root layout says so.
+  // `fixme` would have been the easy answer and the wrong one — it would have
+  // to be remembered on the PR that activates a locale, which is the kind of
+  // thing nobody remembers. Asking the database which locales are RTL and
+  // servable means the gate starts running the day one is, and honestly
+  // skips with a reason until then.
   test("an RTL locale mirrors the section without horizontal overflow", async ({ page }) => {
-    await page.goto("/ar/about");
+    // Inside the test, not in the describe body: a describe body runs at
+    // COLLECTION time, before the web server's command has provisioned the
+    // database, so the query there failed the whole file before a test ran.
+    const rtl = activeLocales().find((locale) => locale.isRtl);
+    test.skip(
+      rtl === undefined,
+      "no RTL locale is active (ADR-091) — this runs on the PR that activates one",
+    );
+    await page.goto(`/${rtl!.code}/about`);
 
     await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
     const overflow = await page.evaluate(

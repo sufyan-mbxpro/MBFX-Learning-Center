@@ -1,6 +1,7 @@
 // The provider form's label bundle, built once and shared by the `new` and
 // `[id]` screens. A second copy of thirty `t()` calls is a second place for one
 // of them to be forgotten.
+import { AI_PROVIDER_KINDS } from "@repo/contracts";
 import type { ProviderFormLabels } from "./provider-form.tsx";
 
 /**
@@ -19,6 +20,7 @@ const REASON_KEYS = [
   "missing_key",
   "secret_unreadable",
   "content_too_large",
+  "model_no_vision",
   "provider_auth",
   "provider_rate_limit",
   "provider_timeout",
@@ -30,6 +32,8 @@ const REASON_KEYS = [
 export function providerFormLabels(t: Translator, tAi: Translator): ProviderFormLabels {
   const reasonLabels: Record<string, string> = {};
   for (const key of REASON_KEYS) reasonLabels[key] = tAi(`reasons.${key}`);
+  const kindLabels: Record<string, string> = {};
+  for (const kind of AI_PROVIDER_KINDS) kindLabels[kind] = tAi(`providerKinds.${kind}`);
 
   return {
     connectionTitle: tAi("providerEditTitle"),
@@ -62,6 +66,7 @@ export function providerFormLabels(t: Translator, tAi: Translator): ProviderForm
     secretMissingBody: tAi("providerSecretMissingBody"),
     echoTitle: tAi("providerEchoTitle"),
     echoBody: tAi("providerEchoBody"),
+    kindLabels,
     reasonLabels,
   };
 }

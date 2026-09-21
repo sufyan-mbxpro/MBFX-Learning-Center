@@ -247,3 +247,109 @@ export function riskSentimentScore(
 
   return { score, band, contributions, reporting };
 }
+
+// ─── Volatility (ADR-136 §3) ─────────────────────────────────
+
+export interface RangeBar {
+  high: number;
+  low: number;
+  close: number;
+}
+
+/** Sessions each timeframe averages over. Trading sessions, not calendar days: a forex bar does not exist on a Saturday. */
+export const VOLATILITY_WINDOWS = { daily: 1, weekly: 5, monthly: 22 } as const;
+
+export type VolatilityTimeframe = keyof typeof VOLATILITY_WINDOWS;
+
+/** The baseline "Average" is taken over, the same for every timeframe so Trend always compares against one ruler. */
+export const VOLATILITY_BASELINE = 66;
+
+export type VolatilityLevel = "low" | "medium" | "high" | "extreme";
+
+/** The reference's published bands, applied to a range in percent. */
+export const VOLATILITY_LEVELS = { mediumFrom: 0.5, highFrom: 1, extremeFrom: 2 } as const;
+
+/**
+ * One session's range as a share of its close: (high − low) ÷ close × 100.
+ *
+ * `null` for a bar that cannot be a real print: a non-positive close, a low
+ * above its high, or anything non-finite.
+ */
+export function rangePercent(bar: RangeBar): number | null {
+  const { high, low, close } = bar;
+  if (![high, low, close].every(Number.isFinite) || close <= 0 || low < 0 || high < low) {
+    return null;
+  }
+  return ((high - low) / close) * 100;
+}
+
+function validBars(bars: readonly RangeBar[]): RangeBar[] {
+  return bars.filter((bar) => rangePercent(bar) !== null);
+}
+
+/**
+ * The mean range % over the last `sessions` valid bars (bars OLDEST first).
+ *
+ * `null` below the window's own length (ADR-088 #3): an "average of 22
+ * sessions" computed from 9 is a different number wearing that label. A bad
+ * print is skipped rather than voiding the window, as `logReturns` does.
+ */
+export function meanRangePercent(bars: readonly RangeBar[], sessions: number): number | null {
+  if (sessions < 1) throw new RangeError("sessions must be at least 1");
+  const window = validBars(bars).slice(-sessions);
+  if (window.length < sessions) return null;
+  return window.reduce((sum, bar) => sum + rangePercent(bar)!, 0) / sessions;
+}
+
+/** The absolute distance from the lowest low to the highest high over the last `sessions` valid bars, or `null` below that length. */
+export function priceRange(bars: readonly RangeBar[], sessions: number): number | null {
+  if (sessions < 1) throw new RangeError("sessions must be at least 1");
+  const window = validBars(bars).slice(-sessions);
+  if (window.length < sessions) return null;
+  return Math.max(...window.map((bar) => bar.high)) - Math.min(...window.map((bar) => bar.low));
+}
+
+export function volatilityLevel(percent: number): VolatilityLevel {
+  if (percent >= VOLATILITY_LEVELS.extremeFrom) return "extreme";
+  if (percent >= VOLATILITY_LEVELS.highFrom) return "high";
+  if (percent >= VOLATILITY_LEVELS.mediumFrom) return "medium";
+  return "low";
+}
+
+export interface VolatilityReading {
+  /** Mean range % over the timeframe's window, or `null` below it. */
+  current: number | null;
+  /** Mean range % over the baseline, or `null` below it. */
+  average: number | null;
+  /** current − average in percentage points; `null` unless both exist. */
+  trend: number | null;
+  level: VolatilityLevel | null;
+}
+
+export interface VolatilityProfile {
+  timeframes: Record<VolatilityTimeframe, VolatilityReading>;
+  /** High − low over the last 1 / 5 / 22 sessions. */
+  ranges: Record<VolatilityTimeframe, number | null>;
+}
+
+/** Every timeframe's reading for one instrument, from bars OLDEST first. */
+export function volatilityProfile(
+  bars: readonly RangeBar[],
+  baseline: number = VOLATILITY_BASELINE,
+): VolatilityProfile {
+  const average = meanRangePercent(bars, baseline);
+  const keys = Object.keys(VOLATILITY_WINDOWS) as VolatilityTimeframe[];
+  const timeframes = {} as Record<VolatilityTimeframe, VolatilityReading>;
+  const ranges = {} as Record<VolatilityTimeframe, number | null>;
+  for (const key of keys) {
+    const current = meanRangePercent(bars, VOLATILITY_WINDOWS[key]);
+    timeframes[key] = {
+      current,
+      average,
+      trend: current !== null && average !== null ? current - average : null,
+      level: current === null ? null : volatilityLevel(current),
+    };
+    ranges[key] = priceRange(bars, VOLATILITY_WINDOWS[key]);
+  }
+  return { timeframes, ranges };
+}

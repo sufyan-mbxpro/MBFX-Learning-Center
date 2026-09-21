@@ -84,7 +84,7 @@ export function AssessmentCard({
   return (
     <section
       className={cn(
-        "flex flex-col gap-4 rounded-2xl border p-5 transition-colors duration-(--duration-base) sm:flex-row sm:items-center",
+        "flex flex-col gap-4 rounded-lg border p-5 transition-colors duration-(--duration-base) sm:flex-row sm:items-center",
         state === "passed" && "border-success/40 bg-success/5",
         state === "open" && "border-primary/25 bg-primary/5",
         // Muted ground rather than faded ink: the card is still fully

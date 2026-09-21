@@ -71,23 +71,32 @@ function PageHeaderSkeleton({
   );
 }
 
-/** A list screen: header, the 36px toolbar (search + filters), the table. */
+/**
+ * A list screen: header, the 36px toolbar (search + filters), the table.
+ *
+ * `header={false}` is for a list that sits under a LAYOUT which already draws
+ * the heading and a tab strip (ADR-106 #2, ADR-140 §4): the layout stays
+ * mounted across a tab click, so a skeleton that draws its own header shapes
+ * under the real one paints a second heading, and the tab reads as a reload.
+ */
 function TablePageSkeleton({
   label,
   rows = 8,
   columns = 5,
   filters = 1,
   actions = true,
+  header = true,
 }: {
   label?: string;
   rows?: number;
   columns?: number;
   filters?: number;
   actions?: boolean;
+  header?: boolean;
 }) {
   return (
     <Frame label={label}>
-      <PageHeaderSkeleton actions={actions} />
+      {header && <PageHeaderSkeleton actions={actions} />}
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2">
           <Skeleton className="h-9 w-full sm:w-64" />

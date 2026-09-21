@@ -37,7 +37,7 @@ export async function POST(request: Request): Promise<Response> {
   if (!parsed.success) {
     return new Response(document("This preview request was not valid."), {
       status: 400,
-      headers: previewHeaders(),
+      headers: previewHeaders(request),
     });
   }
 
@@ -46,16 +46,16 @@ export async function POST(request: Request): Promise<Response> {
     if (!rendered)
       return new Response(document("This template has no content yet."), {
         status: 404,
-        headers: previewHeaders(),
+        headers: previewHeaders(request),
       });
-    return new Response(rendered.html, { status: 200, headers: previewHeaders() });
+    return new Response(rendered.html, { status: 200, headers: previewHeaders(request) });
   } catch (error) {
     // A render error is the useful answer here: a missing required variable or
     // a non-http URL is exactly what an author needs to be told, and as a 500
     // it would arrive as an empty frame. Status 200 so the frame renders it.
     return new Response(document(error instanceof Error ? error.message : String(error)), {
       status: 200,
-      headers: previewHeaders(),
+      headers: previewHeaders(request),
     });
   }
 }
@@ -69,11 +69,16 @@ async function readInput(request: Request): Promise<unknown> {
   return Object.fromEntries([...form.entries()].filter(([, value]) => typeof value === "string"));
 }
 
-function previewHeaders(): Headers {
+function previewHeaders(request: Request): Headers {
+  // The site's OWN origin joins `img-src` (changes-46 #4). The renderer now
+  // makes the logo absolute against it, and a sandboxed document has an
+  // opaque origin, so `'self'` would match nothing — and on a plain-http
+  // install (every dev machine) `https:` does not cover it either, which is
+  // how the logo was missing from the preview while a real send had it.
+  const origin = new URL(request.url).origin;
   return new Headers({
     "Content-Type": "text/html; charset=utf-8",
-    "Content-Security-Policy":
-      "sandbox; default-src 'none'; img-src https: data:; style-src 'unsafe-inline'",
+    "Content-Security-Policy": `sandbox; default-src 'none'; img-src https: data: ${origin}; style-src 'unsafe-inline'`,
     // A staff-scoped render of unsaved content.
     "Cache-Control": "no-store",
     // Framed by the editor on the same origin, and by nothing else. Every

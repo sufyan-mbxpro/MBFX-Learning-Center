@@ -68,7 +68,7 @@ function HotspotMap({
     >
       <div
         aria-hidden
-        className="w-full overflow-hidden rounded-2xl bg-muted/60 p-4 ring-1 ring-foreground/5"
+        className="w-full overflow-hidden rounded-lg bg-muted/60 p-4 ring-1 ring-foreground/5"
       >
         <div className="relative w-full">
           {mapSlot ?? <div className="aspect-2/1 w-full" />}

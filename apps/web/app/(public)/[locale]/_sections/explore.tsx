@@ -16,9 +16,11 @@
 import { getTranslations } from "next-intl/server";
 import { ArrowRight } from "lucide-react";
 
+import { ROUTE_PATHS } from "@repo/contracts";
 import { Link } from "@repo/i18n/navigation";
 import { isFeatureVisible } from "@repo/settings";
 import { Badge } from "@repo/ui/components/badge";
+import { Button } from "@repo/ui/components/button";
 import { Carousel } from "@repo/ui/components/carousel";
 import { Container } from "@repo/ui/components/container";
 import { Reveal } from "@repo/ui/components/reveal";
@@ -29,7 +31,6 @@ import { cn } from "@repo/ui/lib/utils";
 import { HomeMedia } from "../_components/home-media.tsx";
 import { HOME_MEDIA } from "../_content/home-media.ts";
 import {
-  DESTINATION_BAR_CLASS,
   DESTINATION_ICON_CLASS,
   DESTINATION_ICON_HOVER_CLASS,
   destinationHref,
@@ -78,49 +79,48 @@ function DestinationCard({
         // its own position/overflow/isolation — the classes here would be
         // redundant, but they also document what the surface needs if the
         // sheen is ever dropped.
-        "card-hover hover-lift sheen relative isolate flex h-full flex-col overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/10 hover:ring-primary/25",
+        "card-hover hover-lift sheen relative isolate flex h-full flex-col overflow-hidden rounded-lg bg-card ring-1 ring-foreground/10",
       )}
     >
-      {/* Top rule sweeping from the inline start — `start-0` + `w-0` →
-          `w-full` so it runs the correct way in RTL with no [dir] rule.
-          Every animated property lives on a CHILD, never on the card:
-          `.card-hover` declares its own `transition-property` and, sitting
-          later in `@layer utilities` than Tailwind's generated classes, it
-          beats any transition utility written in the class attribute — a
-          hover transform on the card itself would jump rather than glide. */}
-      <span
-        aria-hidden
-        className={cn(
-          "pointer-events-none absolute top-0 start-0 z-20 h-1 w-0 transition-(--transition-size) duration-(--duration-slow) ease-(--ease-out-quint) group-hover:w-full",
-          DESTINATION_BAR_CLASS[tone],
-        )}
+      {/* changes-35 (ADR-116 §4): four across, not three, so the slot is
+          ~330px on a 1400px page rather than ~430px. `sizes` is what decides
+          which variant the optimizer serves — left at the 30vw default it
+          would ship every card roughly a third more pixels than it paints. */}
+      <HomeMedia
+        src={HOME_MEDIA[destination.key]}
+        icon={Icon}
+        tone={tone}
+        sizes="(max-width: 640px) 82vw, (max-width: 1024px) 58vw, 23vw"
+        className="w-full"
       />
 
-      <HomeMedia src={HOME_MEDIA[destination.key]} icon={Icon} tone={tone} className="w-full" />
-
-      <div className="flex flex-1 flex-col gap-3 p-6">
+      <div className="flex flex-1 flex-col gap-2.5 p-5">
         {/* `relative z-10` is load-bearing, not decoration. The negative
             margin lifts this row over the media's bottom edge, but the card
             sets `isolate` and the media paints after it in document order —
             without a stacking position of its own the icon badge renders
             UNDER the artwork and only its bottom half is visible. */}
-        <div className="relative z-10 -mt-12 flex items-end justify-between gap-3">
+        <div className="relative z-10 -mt-10 flex items-end justify-between gap-3">
           {/* The badge that ties the card's two halves together, and the
               reason the media carries no bottom radius. */}
           <span
             className={cn(
-              "flex size-12 items-center justify-center rounded-xl shadow-sm ring-4 ring-card transition-colors duration-(--duration-base) ease-(--ease-out-quint)",
+              "flex size-10 items-center justify-center rounded-xl shadow-sm ring-4 ring-card transition-transform duration-(--duration-base) ease-(--ease-out-quint)",
               DESTINATION_ICON_CLASS[tone],
               DESTINATION_ICON_HOVER_CLASS[tone],
             )}
           >
-            <Icon aria-hidden className="size-6" />
+            <Icon aria-hidden className="size-5" />
           </span>
           <Badge variant="pill">{copy.tag}</Badge>
         </div>
 
-        <h3 className="text-lg font-semibold text-balance text-foreground">{copy.title}</h3>
-        <p className="flex-1 text-sm leading-relaxed text-pretty text-muted-foreground">
+        <h3 className="text-base font-semibold text-balance text-foreground">{copy.title}</h3>
+        {/* Two lines at four across. The body is a card's promise, not its
+            documentation — the destination page is where the third sentence
+            belongs, and an unclamped one made the tallest card set the height
+            of every card in the row. */}
+        <p className="line-clamp-2 flex-1 text-sm leading-relaxed text-pretty text-muted-foreground">
           {copy.body}
         </p>
 
@@ -186,27 +186,41 @@ export async function Explore({ locale, variant = "carousel", limit }: SectionPr
   });
 
   return (
-    <Section spacing="lg" className="relative isolate overflow-hidden">
-      {/* The ambient wash is its own element rather than a class on Section:
-          Section composes its tone (`bg-background`) with `className` through
-          `cn`, and twMerge treats `bg-glow-primary` as a `bg-*` utility that
-          conflicts with it. A dedicated layer is what the footer already does
-          for the same reason, and it also lets the two backdrops carry
-          different opacities. */}
-      <span aria-hidden className="bg-glow-primary pointer-events-none absolute inset-0 -z-10" />
-      <span
-        aria-hidden
-        className="bg-dot-grid pointer-events-none absolute inset-0 -z-10 opacity-12 [mask-image:linear-gradient(to_bottom,black,transparent_75%)]"
-      />
+    // changes-35 (ADR-116 §4): `sm`, not `lg`. The composition is the owner's
+    // ("the first The platform section is perfect"); its HEIGHT was not. Every
+    // band pays its padding twice — this one's bottom plus the next one's top
+    // — so a step down the scale is worth roughly double what it reads as.
+    <Section spacing="sm">
+      {/* changes-31 / ADR-101 §6: the ambient wash and dot grid are gone.
+          Bands separate by TONE down the page now — a muted band, an inverted
+          band, the default ground — which is how the reference does it, and
+          four bands each painting their own glow was four arguments against a
+          design whose whole case is restraint. The utilities stay in
+          globals.css for the surfaces that still use them. */}
       <Container className="flex flex-col gap-(--section-gap)">
-        <SectionHeading
-          eyebrow={t("exploreEyebrow")}
-          title={t("exploreTitle")}
-          lead={t("exploreLead")}
-        />
+        {/* The reference's band header: the heading at the inline start and the
+            "view all" control on the same baseline at the end, rather than the
+            button taking a line of its own under the track. `items-end` is what
+            puts the button on the LEAD's baseline instead of the h2's. */}
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <SectionHeading
+            eyebrow={t("exploreEyebrow")}
+            title={t("exploreTitle")}
+            lead={t("exploreLead")}
+          />
+          {/* `/sitemap`, and it is the only honest target. The reference's
+              "View All Properties" goes to the full listing; this band's cards
+              are SECTIONS, and the one page that lists every section for a
+              person is the reader's sitemap (ADR-110). `/learn` would be one
+              of the eight cards promoted over the other seven. */}
+          <Button variant="outline" render={<Link href={ROUTE_PATHS.sitemap} />}>
+            {t("exploreAll")}
+            <ArrowRight data-icon="inline-end" aria-hidden className="rtl:rotate-180" />
+          </Button>
+        </div>
         <Reveal variant="up">
           {variant === "grid" ? (
-            <ul className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {cards.map((card, index) => (
                 <li key={shown[index]?.key}>{card}</li>
               ))}
@@ -216,6 +230,13 @@ export async function Explore({ locale, variant = "carousel", limit }: SectionPr
               label={t("exploreCarouselLabel")}
               previousLabel={t("exploreCarouselPrevious")}
               nextLabel={t("exploreCarouselNext")}
+              // Four across, and the controls are the reference's: two arrows
+              // centred under the track. A dot rail under a shelf is one
+              // control per destination that nobody counts, and it was the
+              // widest thing in the band (ADR-116 §4).
+              itemClassName="w-41/50 sm:w-29/50 lg:w-(--width-slide-4)"
+              controls="arrows"
+              controlsAlign="center"
               slideLabels={shown.map((destination) =>
                 t(`explore${catalogKey(destination.key)}Title` as "exploreLearnTitle"),
               )}

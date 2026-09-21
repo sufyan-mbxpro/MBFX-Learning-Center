@@ -7,23 +7,20 @@
 // Files come from @fontsource packages (OFL-1.1, real font binaries pulled
 // through the same supply-chain-guarded registry as every other dep) —
 // next/font/local inlines and self-hosts them at build; no runtime request
-// ever leaves our origin. `preload: false` everywhere EXCEPT Inter: ten
+// ever leaves our origin. `preload: false` everywhere: ten
 // families are declared but only the one the active theme references is
-// ever used, so eager-preloading all of them would be nine wasted
-// downloads per visit. Inter is the exception because ADR-072 made it the
-// default — it is the family essentially every render actually uses, so
-// preloading it saves a FOUT rather than wasting a request.
+// ever used. Inter was preloaded while it was the default (ADR-072); ADR-140
+// made the default the system face, which has no file, so preloading Inter
+// would now be a wasted request on every visit.
 import localFont from "next/font/local";
 
-// The brand typeface (ADR-072, superseding ADR-039's Outfit) —
-// DEFAULT_LAYOUT.fontSans resolves to `var(--font-inter)`, so this
-// declaration is what every surface renders in unless a theme row names
-// another curated family.
+// The brand typeface under ADR-072, and still a curated key after ADR-140
+// moved the default to the system face.
 const inter = localFont({
   src: "../../node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2",
   weight: "100 900",
   variable: "--font-inter",
-  preload: true,
+  preload: false,
   fallback: ["sans-serif"],
 });
 
@@ -107,6 +104,40 @@ const poppins = localFont({
   fallback: ["sans-serif"],
 });
 
+// The display serifs (ADR-102). `fontDisplay` picks from these; a site that
+// wants no serif points that slot at a sans key instead.
+//
+// Each is the WEIGHT-axis subset, not the all-axes file. Fraunces also carries
+// an optical-size axis browsers would apply for free, but only from a 121 KB
+// file against 36.6 KB for weight alone — 84 KB on a public route, more than
+// Inter's whole face, for an effect no reader can name (ADR-102 §1).
+//
+// `preload: false` like every non-Inter family: the file is requested only if
+// the rendered --brand-font-display actually points at it.
+const fraunces = localFont({
+  src: "../../node_modules/@fontsource-variable/fraunces/files/fraunces-latin-wght-normal.woff2",
+  weight: "100 900",
+  variable: "--font-fraunces",
+  preload: false,
+  fallback: ["serif"],
+});
+
+const playfair = localFont({
+  src: "../../node_modules/@fontsource-variable/playfair-display/files/playfair-display-latin-wght-normal.woff2",
+  weight: "400 900",
+  variable: "--font-playfair",
+  preload: false,
+  fallback: ["serif"],
+});
+
+const cormorant = localFont({
+  src: "../../node_modules/@fontsource-variable/cormorant-garamond/files/cormorant-garamond-latin-wght-normal.woff2",
+  weight: "300 700",
+  variable: "--font-cormorant",
+  preload: false,
+  fallback: ["serif"],
+});
+
 const jetbrainsmono = localFont({
   src: "../../node_modules/@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2",
   weight: "100 800",
@@ -155,6 +186,9 @@ export const curatedFontVariables = [
   lato.variable,
   montserrat.variable,
   poppins.variable,
+  fraunces.variable,
+  playfair.variable,
+  cormorant.variable,
   jetbrainsmono.variable,
   firacode.variable,
   ibmplexmono.variable,

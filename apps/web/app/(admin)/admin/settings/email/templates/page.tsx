@@ -5,6 +5,7 @@ import { can, requirePermission } from "@repo/rbac";
 import { SettingsScreen } from "../../_components/settings-screen.tsx";
 import { loadSettingsIndex } from "../../_components/settings-shared.ts";
 import { EmailTemplatesTable, type EmailTemplatesTableLabels } from "./templates-table.tsx";
+import { formatDateTime } from "@repo/utils";
 
 // The email templates list (Module 17, ADR-078 #5).
 //
@@ -21,8 +22,6 @@ export default async function EmailTemplatesPage() {
     getActiveLocales(),
   ]);
   const rows = await listEmailTemplates(locales.map((locale) => locale.code));
-
-  const dateFormat = new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" });
 
   const labels: EmailTemplatesTableLabels = {
     search: t("email.searchTemplates"),
@@ -79,7 +78,7 @@ export default async function EmailTemplatesPage() {
           isActive: row.isActive,
           subject: row.subject,
           locales: row.locales,
-          updatedAtLabel: row.updatedAt ? dateFormat.format(row.updatedAt) : null,
+          updatedAtLabel: row.updatedAt ? formatDateTime(row.updatedAt) : null,
           updatedAtSort: row.updatedAt?.getTime() ?? 0,
         }))}
         canUpdate={can(subject, "email.templates.update")}

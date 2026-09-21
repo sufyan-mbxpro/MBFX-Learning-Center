@@ -1,11 +1,12 @@
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getVideoTopicAdmin, listVideoCategoriesAdmin } from "@repo/core";
-import { getActiveLocales } from "@repo/i18n";
+import { getAuthoringLocales } from "@repo/i18n";
 import { routing } from "@repo/i18n/routing";
 import { can, requirePermission } from "@repo/rbac";
-import { AdminPage } from "../../../_components/admin-page.tsx";
+import { EditorPage } from "../../../_components/admin-page.tsx";
 import { richTextLabels } from "../../../_components/editor-labels.ts";
+import { loadEditorAi } from "../../../_lib/editor-ai.ts";
 import {
   contentStatusLabels,
   trackLabels,
@@ -14,6 +15,7 @@ import {
 } from "../../_lib/learn-labels.ts";
 import { VideoEditor } from "./video-editor.tsx";
 import type { VideoEditorLabels } from "./editor-types.ts";
+import { formatDateTime } from "@repo/utils";
 
 // Video topic editor (changes-16 PR 6, ADR-068).
 //
@@ -25,20 +27,23 @@ export default async function VideoTopicEditPage({
   const subject = await requirePermission("lessons.view");
   const { id } = await params;
 
-  const [t, detail, categories, activeLocales] = await Promise.all([
+  const [t, detail, categories, authoringLocales, ai] = await Promise.all([
     getTranslations("admin"),
     getVideoTopicAdmin(id),
     listVideoCategoriesAdmin(),
-    getActiveLocales(),
+    getAuthoringLocales(),
+    // ADR-126: the "Generate with AI" bar, each field's ✨ menu, and the
+    // writing assistant on the body. `lessons.update` because a video topic
+    // saves on the lesson keys (ADR-068 §3).
+    loadEditorAi(subject, {
+      module: "video_topic",
+      entity: { type: "video_topic", id },
+      contentKeys: ["lessons.update"],
+    }),
   ]);
   if (!detail) notFound();
-
-  const dateFormat = new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" });
   const statusLabels = contentStatusLabels(t);
   const tracks = trackLabels(t);
-
-  const defaultTranslation =
-    detail.translations.find((tr) => tr.locale === routing.defaultLocale) ?? detail.translations[0];
 
   const labels: VideoEditorLabels = {
     updateTopic: t("videoEditor.updateTopic"),
@@ -66,12 +71,19 @@ export default async function VideoTopicEditPage({
 
     filingSection: t("videoEditor.filingSection"),
     filingSectionDescription: t("videoEditor.filingSectionDescription"),
+    displaySection: t("contentFlags.title"),
+    displaySectionDescription: t("contentFlags.description"),
     trackLabel: t("trackLabel"),
     trackHint: t("videoEditor.trackHint"),
     categoryLabel: t("videos.categoryLabel"),
     categoryHint: t("videoEditor.categoryHint"),
     categoryNone: t("videos.uncategorised"),
-    visibilityLabel: t("visibilityLabel"),
+    newCategory: t("videoEditor.newCategory"),
+    showOnAllTracksLabel: t("videoEditor.showOnAllTracksLabel"),
+    showOnAllTracksHint: t("videoEditor.showOnAllTracksHint"),
+    // `admin.visibility`, as the course and lesson editors read it — there is
+    // no `admin.visibilityLabel`, so this rendered as the raw key.
+    visibilityLabel: t("visibility"),
     coverLabel: t("videoEditor.coverLabel"),
 
     seoSection: t("seoSection"),
@@ -113,20 +125,6 @@ export default async function VideoTopicEditPage({
       confirmArchiveBody: t("videoEditor.confirmArchiveBody"),
       confirm: t("confirm"),
       cancel: t("cancel"),
-    },
-    analysis: {
-      score: t("seoScoreLabel"),
-      checks: {
-        titleLength: t("seoCheckTitleLength"),
-        descriptionLength: t("seoCheckDescriptionLength"),
-        focusKeywordInTitle: t("seoCheckKeywordInTitle"),
-        focusKeywordInDescription: t("seoCheckKeywordInDescription"),
-        focusKeywordInFirstParagraph: t("seoCheckKeywordEarly"),
-        contentLength: t("seoCheckContentLength"),
-        hasSubheadings: t("seoCheckSubheadings"),
-        hasImages: t("seoCheckImages"),
-        hasInternalLink: t("seoCheckInternalLink"),
-      },
     },
     videos: {
       section: t("videoEditor.videosSection"),
@@ -193,8 +191,8 @@ export default async function VideoTopicEditPage({
   };
 
   return (
-    <AdminPage
-      title={defaultTranslation?.title || t("untitled")}
+    <EditorPage
+      title={t("editorHeading.videoTopic")}
       description={t("pageDesc.videoDetail")}
       backHref="/admin/learn/videos"
       backLabel={t("videoEditor.backToList")}
@@ -207,11 +205,17 @@ export default async function VideoTopicEditPage({
           categoryId: detail.categoryId,
           coverAssetId: detail.coverAssetId,
           coverUrl: detail.coverUrl,
+          flags: {
+            isFeatured: detail.isFeatured,
+            isActive: detail.isActive,
+            isPremium: detail.isPremium,
+          },
+          showOnAllTracks: detail.showOnAllTracks,
           visibility: detail.visibility,
-          publishedAt: detail.publishedAt ? dateFormat.format(detail.publishedAt) : null,
-          scheduledFor: detail.scheduledFor ? dateFormat.format(detail.scheduledFor) : null,
-          createdAt: dateFormat.format(detail.createdAt),
-          updatedAt: dateFormat.format(detail.updatedAt),
+          publishedAt: detail.publishedAt ? formatDateTime(detail.publishedAt) : null,
+          scheduledFor: detail.scheduledFor ? formatDateTime(detail.scheduledFor) : null,
+          createdAt: formatDateTime(detail.createdAt),
+          updatedAt: formatDateTime(detail.updatedAt),
           deleted: detail.deletedAt !== null,
           // Every stored field, in every locale, reaching the form as its
           // initial value — the prefill rule ADR-069 exists to enforce.
@@ -240,14 +244,18 @@ export default async function VideoTopicEditPage({
           legalTransitions: detail.legalTransitions,
         }}
         categoryOptions={categories.map((c) => ({ id: c.id, name: c.name || t("untitled") }))}
-        locales={activeLocales.map((l) => l.code)}
+        locales={authoringLocales.map((l) => l.code)}
         defaultLocale={routing.defaultLocale}
         siteUrl={process.env.NEXT_PUBLIC_SITE_URL ?? ""}
         canUpdate={can(subject, "lessons.update")}
+        // The inline "New category" (ADR-144 §2) runs the categories screen's
+        // own action, which gates a create on `lessons.create`.
+        canCreateCategory={can(subject, "lessons.create")}
         canPublish={can(subject, "lessons.publish")}
         canDelete={can(subject, "lessons.delete")}
         labels={labels}
+        {...(ai ? { ai } : {})}
       />
-    </AdminPage>
+    </EditorPage>
   );
 }

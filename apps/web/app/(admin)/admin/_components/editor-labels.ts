@@ -42,7 +42,8 @@ export function richTextLabels(translate: (key: string) => string): RichTextLabe
     placeholder: translate("editorPlaceholder"),
     fontFamily: translate("editorFontFamily"),
     fonts: {
-      sans: translate("editorFontSans"),
+      body: translate("editorFontBody"),
+      display: translate("editorFontDisplay"),
       serif: translate("editorFontSerif"),
       mono: translate("editorFontMono"),
     },

@@ -13,12 +13,29 @@
 // is a HARD erase, because an erasure request is not satisfied by a
 // `deletedAt` (ADR-080 #7). Both confirm (ADR-044 #7), and the delete's
 // description says which of the two the reader is about to do.
+//
+// **Resubscribe is the third, and it does not confirm** (ADR-124,
+// code-style #7): restore is the undo, and gating it makes the destructive
+// path harder to reverse. It replaces Unsubscribe on an unsubscribed row
+// rather than sitting beside a disabled copy of it. **Add subscriber** lives
+// in the table's own toolbar (ADR-106) and invites through double opt-in.
 import * as React from "react";
-import { MailX, MoreHorizontal, Trash2, UserMinus } from "lucide-react";
+import Link from "next/link";
+import { MailX, MoreHorizontal, Plus, Trash2, UserMinus, UserPlus } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
+import { toast } from "sonner";
+import { adminAddSubscriberSchema } from "@repo/contracts";
 import { Button } from "@repo/ui/components/button";
 import { ConfirmDialog } from "@repo/ui/components/confirm-dialog";
 import { DataTable, type DataTableLabels } from "@repo/ui/components/data-table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@repo/ui/components/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,16 +44,22 @@ import {
   DropdownMenuTrigger,
 } from "@repo/ui/components/dropdown-menu";
 import { Empty, EmptyDescription, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
+import { Field, FieldError, FieldGroup, FieldLabel } from "@repo/ui/components/field";
 import { FilterBarRow } from "@repo/ui/components/filter-bar";
+import { Input } from "@repo/ui/components/input";
 import { useSearchParams } from "next/navigation";
 import {
+  addSubscriberAction,
   deleteSubscriberAction,
+  resubscribeSubscriberAction,
   unsubscribeSubscriberAction,
 } from "../_actions/newsletter-actions.ts";
 import { AdminCombobox } from "../_components/combobox.tsx";
 import { StatusBadge, type StatusTone } from "../_components/status-badge.tsx";
+import { useFieldErrors } from "../_hooks/use-field-errors.ts";
 import { useServerAction } from "../_hooks/use-server-action.ts";
-import { useUrlFilters } from "../_hooks/use-url-filters.ts";
+import { useUrlFilters, useUrlFiltersPending } from "../_hooks/use-url-filters.ts";
+import { HeaderActions } from "../_components/header-actions.tsx";
 
 export interface SubscriberTableRow {
   id: string;
@@ -91,8 +114,23 @@ export interface SubscribersLabels {
   deleteBody: string;
   deleteConfirm: string;
   deletedToast: string;
+  resubscribeAction: string;
+  restoredToast: string;
+  invitedToast: string;
+  addAction: string;
+  addTitle: string;
+  addDescription: string;
+  addEmail: string;
+  addLocale: string;
+  addSubmit: string;
+  alreadyActiveToast: string;
   cancel: string;
   saveFailed: string;
+}
+
+export interface SubscriberLocaleOption {
+  value: string;
+  label: string;
 }
 
 /** The table's controlled props it does not get to drive here. */
@@ -123,15 +161,27 @@ function RowActions({ row, labels }: { row: SubscriberTableRow; labels: Subscrib
           }
         />
         <DropdownMenuContent align="end">
-          <DropdownMenuItem
-            // Already unsubscribed: the action is a no-op in core, and
-            // offering it would suggest something is left to do.
-            disabled={row.status === "UNSUBSCRIBED"}
-            onClick={() => setConfirmUnsubscribe(true)}
-          >
-            <UserMinus aria-hidden />
-            {labels.unsubscribeAction}
-          </DropdownMenuItem>
+          {row.status === "UNSUBSCRIBED" ? (
+            // The undo, so no ConfirmDialog. Core decides whether this
+            // restores the row or sends a fresh confirmation, and says which.
+            <DropdownMenuItem
+              onClick={() =>
+                run(async () => {
+                  const result = await resubscribeSubscriberAction({ id: row.id });
+                  if (result === "restored") toast.success(labels.restoredToast);
+                  else if (result === "invited") toast.success(labels.invitedToast);
+                })
+              }
+            >
+              <UserPlus aria-hidden />
+              {labels.resubscribeAction}
+            </DropdownMenuItem>
+          ) : (
+            <DropdownMenuItem onClick={() => setConfirmUnsubscribe(true)}>
+              <UserMinus aria-hidden />
+              {labels.unsubscribeAction}
+            </DropdownMenuItem>
+          )}
           <DropdownMenuSeparator />
           <DropdownMenuItem variant="destructive" onClick={() => setConfirmDelete(true)}>
             <Trash2 aria-hidden />
@@ -177,10 +227,100 @@ function RowActions({ row, labels }: { row: SubscriberTableRow; labels: Subscrib
   );
 }
 
+function AddSubscriberDialog({
+  open,
+  onOpenChange,
+  locales,
+  labels,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  locales: SubscriberLocaleOption[];
+  labels: SubscribersLabels;
+}) {
+  const { run, pending } = useServerAction();
+  const [email, setEmail] = React.useState("");
+  const [locale, setLocale] = React.useState(locales[0]?.value ?? "en");
+
+  // ADR-077: the action's own schema, so the dialog and the server refuse the
+  // same address for the same reason.
+  const input = { email, locale };
+  const fields = useFieldErrors(adminAddSubscriberSchema, input);
+
+  const changeOpen = (next: boolean) => {
+    if (!next) {
+      fields.reset();
+      setEmail("");
+    }
+    onOpenChange(next);
+  };
+
+  const submit = () => {
+    if (!fields.validate()) return;
+    run(
+      async () => {
+        const result = await addSubscriberAction(input);
+        if (result === "already_active") toast.info(labels.alreadyActiveToast);
+        else if (result === "restored") toast.success(labels.restoredToast);
+        else toast.success(labels.invitedToast);
+      },
+      { onDone: () => changeOpen(false) },
+    );
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={changeOpen}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{labels.addTitle}</DialogTitle>
+          <DialogDescription>{labels.addDescription}</DialogDescription>
+        </DialogHeader>
+        <FieldGroup>
+          <Field invalid={fields.invalid("email")} required>
+            <FieldLabel>{labels.addEmail}</FieldLabel>
+            <Input
+              type="email"
+              autoComplete="off"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") submit();
+              }}
+            />
+            <FieldError>{fields.error("email")}</FieldError>
+          </Field>
+          {/* One active locale today (ADR-007), so this is usually a single
+              choice. It stays because the confirmation email is written in it,
+              and a second locale going live should not need a change here. */}
+          <Field invalid={fields.invalid("locale")} required>
+            <FieldLabel>{labels.addLocale}</FieldLabel>
+            <AdminCombobox
+              value={locale}
+              onValueChange={(next) => setLocale(next || locale)}
+              options={locales}
+            />
+            <FieldError>{fields.error("locale")}</FieldError>
+          </Field>
+        </FieldGroup>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => changeOpen(false)} disabled={pending}>
+            {labels.cancel}
+          </Button>
+          {/* Enabled while empty: pressing it names the field (ADR-077). */}
+          <Button onClick={submit} loading={pending}>
+            {labels.addSubmit}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function SubscribersTable({
   rows,
   nextCursor,
   sources,
+  locales,
   canManage,
   canExport,
   labels,
@@ -188,11 +328,14 @@ export function SubscribersTable({
   rows: SubscriberTableRow[];
   nextCursor: string | null;
   sources: { value: string; label: string }[];
+  locales: SubscriberLocaleOption[];
   canManage: boolean;
   canExport: boolean;
   labels: SubscribersLabels;
 }) {
+  const [addOpen, setAddOpen] = React.useState(false);
   const setParams = useUrlFilters();
+  const pending = useUrlFiltersPending();
   const params = useSearchParams();
   const status = params.get("status") ?? "";
   const source = params.get("source") ?? "";
@@ -216,8 +359,15 @@ export function SubscribersTable({
         header: labels.emailCol,
         meta: { label: labels.emailCol },
         enableHiding: false,
+        // The address opens the subscriber's record (changes-45), the way a
+        // name opens a user's.
         cell: ({ row }) => (
-          <span className="block max-w-80 truncate font-medium">{row.original.email}</span>
+          <Link
+            href={`/admin/newsletter/${row.original.id}`}
+            className="block max-w-80 truncate font-medium hover:text-primary-interactive hover:underline"
+          >
+            {row.original.email}
+          </Link>
         ),
       },
       {
@@ -351,7 +501,18 @@ export function SubscribersTable({
       {/* The table renders even with no rows, because the filters live in its
           toolbar: an empty state that replaced the table would take the search
           box with it, leaving whoever filtered to nothing no way back. */}
+      {/* ADR-140 §3: the primary action sits on the page heading's row, not in
+          the table toolbar; the dialog it opens stays owned here. Absent, not
+          disabled, without `newsletter.manage`; the action re-checks anyway. */}
+      {canManage && (
+        <HeaderActions>
+          <Button onClick={() => setAddOpen(true)}>
+            <Plus data-icon="inline-start" aria-hidden /> {labels.addAction}
+          </Button>
+        </HeaderActions>
+      )}
       <DataTable
+        pending={pending}
         data={rows}
         columns={columns}
         labels={tableLabels}
@@ -379,6 +540,14 @@ export function SubscribersTable({
           </Empty>
         }
       />
+      {canManage && (
+        <AddSubscriberDialog
+          open={addOpen}
+          onOpenChange={setAddOpen}
+          locales={locales}
+          labels={labels}
+        />
+      )}
       {nextCursor && (
         <div className="flex justify-center">
           <Button variant="outline" onClick={() => setParams({ cursor: nextCursor })}>

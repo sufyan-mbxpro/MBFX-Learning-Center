@@ -14,7 +14,7 @@
 // SearchInput at the 36px filter-row size, and the pager as a px-4 py-3
 // footer INSIDE the bordered table block (summary at the start, controls at
 // the end), exactly where the reference draws it.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   flexRender,
   getCoreRowModel,
@@ -109,6 +109,15 @@ export interface DataTableProps<TData, TValue> {
   getRowId?: (row: TData) => string;
   /** Renders skeleton rows in place of data while the server round-trips. */
   isLoading?: boolean;
+  /**
+   * The NEXT page (or sort, or filter) is on its way while these rows are
+   * still the right ones to show (changes-44 #1). The rows stay and dim, a
+   * thin bar sweeps the table's top edge, and when it lands the table brings
+   * its own top back into view if that had scrolled away. Pass the admin's
+   * `useUrlFiltersPending()`. Unlike `isLoading`, nothing is replaced by a
+   * skeleton — the swap is what used to read as a page reload.
+   */
+  pending?: boolean;
   /** Offer these page sizes in a picker (requires `labels.pageSize`). */
   pageSizeOptions?: number[];
   /** Richer empty state (icon + CTA); falls back to `labels.noResults`. */
@@ -121,6 +130,18 @@ export interface DataTableProps<TData, TValue> {
    * above the table is the layout this prop exists to replace.
    */
   filters?: React.ReactNode;
+  /**
+   * The screen's PRIMARY action — "New tag", "New course" — rendered at the
+   * START of the toolbar's end cluster, before export and the column picker
+   * (ADR-106).
+   *
+   * It used to sit in a `flex justify-end` row of its own above the table,
+   * which is a row of page carrying one button and a lot of nothing. Same
+   * reasoning as `filters` one prop up: the controls that act on a table
+   * belong in the table's toolbar, and a screen that renders its own action
+   * bar above the table is the layout this prop exists to replace.
+   */
+  actions?: React.ReactNode;
   /**
    * Row density. Admin lists default to `compact`, the reference's Users
    * Directory (ADR-072 §9); pass `default` for a roomier table.
@@ -157,13 +178,38 @@ export function DataTable<TData, TValue>({
   exportFileName,
   getRowId,
   isLoading = false,
+  pending = false,
   pageSizeOptions,
   emptyState,
   filters,
+  actions,
   density = "compact",
 }: DataTableProps<TData, TValue>) {
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+
+  // After a pending change lands, bring the table's top back into view — but
+  // only when it has scrolled up under the header. A reader who paged with
+  // the table's top on screen is already looking at the new rows, and a jump
+  // there would be the reload feeling this exists to remove.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const wasPending = useRef(false);
+  useEffect(() => {
+    if (pending) {
+      wasPending.current = true;
+      return;
+    }
+    if (!wasPending.current) return;
+    wasPending.current = false;
+    const root = rootRef.current;
+    if (!root) return;
+    const headerOffset = parseFloat(getComputedStyle(root).scrollMarginTop) || 0;
+    if (root.getBoundingClientRect().top >= headerOffset) return;
+    root.scrollIntoView({
+      block: "start",
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+    });
+  }, [pending]);
 
   // Debounced search: keystrokes land locally and reach the server callback
   // (usually a URL/router write) at most once per pause.
@@ -214,7 +260,7 @@ export function DataTable<TData, TValue>({
   };
 
   return (
-    <div className="flex flex-col gap-3">
+    <div ref={rootRef} className="flex scroll-mt-(--height-header) flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2" data-slot="data-table-toolbar">
         <SearchInput
           size="sm"
@@ -229,6 +275,11 @@ export function DataTable<TData, TValue>({
             to `sm` to match the search beside them. */}
         <ControlSizeProvider size="sm">{filters}</ControlSizeProvider>
         <div className="ms-auto flex flex-wrap items-center gap-2">
+          {/* First in the end cluster, so the one action a screen exists to
+              offer sits closest to the table's own controls and does not
+              move when a selection appears (ADR-106). `sm` matches the
+              36px toolbar the search and the filters already use. */}
+          {actions && <ControlSizeProvider size="sm">{actions}</ControlSizeProvider>}
           {selectedRows.length > 0 && (
             <span className="text-sm text-muted-foreground" data-slot="data-table-selected-count">
               {labels.selectedCount(selectedRows.length)}
@@ -279,10 +330,24 @@ export function DataTable<TData, TValue>({
       </div>
 
       <div
-        className="overflow-hidden rounded-md border bg-card text-card-foreground"
-        aria-busy={isLoading || undefined}
+        className="relative overflow-hidden rounded-md border bg-card text-card-foreground"
+        aria-busy={isLoading || pending || undefined}
+        data-pending={pending ? "" : undefined}
       >
-        <Table density={density}>
+        {pending && (
+          <div
+            aria-hidden
+            data-slot="data-table-progress"
+            className="progress-sweep absolute inset-x-0 top-0 z-10 h-0.5"
+          />
+        )}
+        <Table
+          density={density}
+          className={cn(
+            "transition-opacity duration-(--duration-base)",
+            pending && "pointer-events-none opacity-60",
+          )}
+        >
           {/* The reference's dense admin lists fill the header band, which
               also keeps changes-08 #7: a header never reads as a row. */}
           <TableHeader className="bg-muted/50">

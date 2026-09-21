@@ -1,7 +1,7 @@
 import { getTranslations } from "next-intl/server";
 import { listUsers } from "@repo/core";
 import { can, requirePermission } from "@repo/rbac";
-import { humanizeKey } from "@repo/utils";
+import { formatDate, humanizeKey } from "@repo/utils";
 import { userStatusFilterSchema, userTypeFilterSchema } from "@repo/contracts";
 import { UsersTable } from "./users-table.tsx";
 import { AdminPage } from "../_components/admin-page.tsx";
@@ -51,8 +51,8 @@ export default async function UsersPage({ searchParams }: PageProps<"/admin/user
       <UsersTable
         rows={result.rows.map((r) => ({
           ...r,
-          createdAt: r.createdAt.toISOString().slice(0, 10),
-          lastLoginAt: r.lastLoginAt?.toISOString().slice(0, 10) ?? "",
+          createdAt: formatDate(r.createdAt),
+          lastLoginAt: r.lastLoginAt ? formatDate(r.lastLoginAt) : "",
           // changes-08 #2: role keys are identifiers, so they render as
           // words — `super_admin` reads "Super Admin".
           roles: r.roleKeys.map((key) => humanizeKey(key)).join(", "),

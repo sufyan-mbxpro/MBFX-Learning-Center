@@ -153,6 +153,17 @@ describe("Page skeletons announce once or not at all", () => {
     expect(screen.queryByRole("status")).toBeNull();
   });
 
+  // ADR-140 §4: under a layout that draws the heading, the list skeleton
+  // draws only the toolbar and table — a second header shape is the "reload".
+  it("a table skeleton under a layout-drawn heading draws no header", () => {
+    const withHeader = render(<TablePageSkeleton />);
+    expect(withHeader.container.querySelector('[data-slot="skeleton-heading"]')).not.toBeNull();
+    cleanup();
+    const bare = render(<TablePageSkeleton header={false} />);
+    expect(bare.container.querySelector('[data-slot="skeleton-heading"]')).toBeNull();
+    expect(bare.container.querySelector('[data-slot="skeleton-table"]')).not.toBeNull();
+  });
+
   it("the page loader without a label is a decorative mark with no text", () => {
     const { container } = render(<PageLoader />);
     expect(container.firstElementChild?.getAttribute("aria-hidden")).toBe("true");
@@ -175,7 +186,7 @@ describe("Card skeletons sit beside their cards", () => {
     const root = container.firstElementChild;
     expect(root?.getAttribute("aria-hidden")).toBe("true");
     expect(tokens(root)).toEqual(
-      expect.arrayContaining(["rounded-2xl", "bg-card", "ring-1", "ring-foreground/10"]),
+      expect.arrayContaining(["rounded-lg", "bg-card", "ring-1", "ring-foreground/10"]),
     );
   });
 });

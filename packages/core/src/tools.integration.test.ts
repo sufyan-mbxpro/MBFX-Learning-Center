@@ -132,7 +132,7 @@ describe("saveTool", () => {
   });
 
   it("refuses a key the registry does not know", async () => {
-    await expect(tools.saveTool(subject, saveInput({ key: "margin" }))).rejects.toThrow(
+    await expect(tools.saveTool(subject, saveInput({ key: "not-a-tool" }))).rejects.toThrow(
       /not a registered tool/,
     );
   });
@@ -366,6 +366,111 @@ describe("mixed relations (ADR-086 #4)", () => {
   });
 });
 
+describe("getToolRelated only links what a reader can open (changes-46)", () => {
+  // The owner found "More about this" on /tools/pivot-points linking to a
+  // "Page not found": the list built `/analysis/<slug>` (there is no such
+  // route — every article is at /news/[slug]) and the curated half checked
+  // `deletedAt` alone, so an unpublished or switched-off target stayed listed.
+  afterEach(async () => {
+    await db.articleTranslation.deleteMany();
+    await db.article.deleteMany();
+    await db.articleCategory.deleteMany();
+    await db.glossaryTermTranslation.deleteMany();
+    await db.glossaryTerm.deleteMany();
+  });
+
+  async function seedArticles() {
+    const category = await db.articleCategory.create({
+      data: {
+        sortOrder: 1,
+        translations: { create: { locale: "en", name: "Risk", slug: "risk" } },
+      },
+    });
+    const article = (slug: string, data: Record<string, unknown>) =>
+      db.article.create({
+        data: {
+          kind: "ANALYSIS",
+          status: "PUBLISHED",
+          publishedAt: new Date(),
+          isActive: true,
+          categoryId: category.id,
+          ...data,
+          translations: {
+            create: { locale: "en", title: slug, slug, translationStatus: "TRANSLATED" },
+          },
+        },
+      });
+    return {
+      live: await article("live-analysis", {}),
+      draft: await article("draft-analysis", { status: "DRAFT", publishedAt: null }),
+      inactive: await article("inactive-analysis", { isActive: false }),
+      future: await article("future-analysis", {
+        status: "SCHEDULED",
+        publishedAt: null,
+        scheduledFor: new Date(Date.now() + 86_400_000),
+      }),
+    };
+  }
+
+  it("drops a curated target that is unpublished, inactive or not yet due", async () => {
+    const rows = await seedArticles();
+    const term = await db.glossaryTerm.create({
+      data: {
+        status: "DRAFT",
+        translations: {
+          create: {
+            locale: "en",
+            term: "Hidden",
+            slug: "hidden",
+            simpleExplanation: "<p>x</p>",
+            translationStatus: "TRANSLATED",
+          },
+        },
+      },
+    });
+    await tools.saveTool(
+      subject,
+      saveInput({
+        relatedCount: 1,
+        related: [
+          { targetType: "article", targetId: rows.draft.id },
+          { targetType: "article", targetId: rows.inactive.id },
+          { targetType: "article", targetId: rows.future.id },
+          { targetType: "glossary", targetId: term.id },
+          { targetType: "article", targetId: rows.live.id },
+        ],
+      }),
+    );
+
+    const items = await tools.getToolRelated("en", "gain-loss", 1);
+    expect(items.map((item) => item.title)).toEqual(["live-analysis"]);
+  });
+
+  it("links an ANALYSIS article at /news/[slug], the route that serves it", async () => {
+    const rows = await seedArticles();
+    await tools.saveTool(
+      subject,
+      saveInput({ related: [{ targetType: "article", targetId: rows.live.id }] }),
+    );
+    const [item] = await tools.getToolRelated("en", "gain-loss", 1);
+    expect(item?.href).toBe("/news/live-analysis");
+    // The page drops it when `analysis` is off — the flag /news/[slug] checks.
+    expect(item?.feature).toBe("analysis");
+  });
+
+  it("tops up from public rows only", async () => {
+    await seedArticles();
+    await tools.saveTool(subject, saveInput({ related: [] }));
+    const items = await tools.getToolRelated("en", "gain-loss", 6);
+    const titles = items.map((item) => item.title);
+    expect(titles).toContain("live-analysis");
+    expect(titles).not.toContain("draft-analysis");
+    expect(titles).not.toContain("inactive-analysis");
+    expect(titles).not.toContain("future-analysis");
+    expect(items.every((item) => !item.href.startsWith("/analysis/"))).toBe(true);
+  });
+});
+
 describe("reads", () => {
   it("lists a tool with its curated count", async () => {
     await tools.saveTool(
@@ -394,7 +499,7 @@ describe("reads", () => {
 
   it("refuses to load an unregistered key rather than returning null", async () => {
     // null means "no row"; an unknown key is a programming error one level up.
-    await expect(tools.loadTool("margin")).rejects.toThrow(/not a registered tool/);
+    await expect(tools.loadTool("not-a-tool")).rejects.toThrow(/not a registered tool/);
   });
 
   it("returns null for a registered key with no row yet", async () => {

@@ -2,7 +2,8 @@
 
 // One settings section = ONE form = ONE Save (changes-02). Fields render
 // by registry type (SKILL.md: STRING/TEXT/NUMBER/BOOLEAN/JSON/IMAGE/COLOR/
-// SELECT) plus the widget hints in @repo/contracts (timezone / locale /
+// SELECT, and DOCUMENT since ADR-110) plus the widget hints in
+// @repo/contracts (timezone / locale /
 // select dropdowns). Only changed keys are submitted; the server validates
 // every entry before writing any, so a bad field saves nothing.
 //
@@ -12,6 +13,7 @@
 // here either, just as it is not judged there.
 import * as React from "react";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { ArrowRight } from "lucide-react";
 import { z } from "zod";
 import {
@@ -20,6 +22,7 @@ import {
   SETTING_SELECT_OPTIONS,
   SETTING_WIDGETS,
   isKnownSettingKey,
+  megabyteChoices,
   type SettingFieldDef,
   type SettingKey,
 } from "@repo/contracts";
@@ -40,6 +43,7 @@ import { Input } from "@repo/ui/components/input";
 import { Textarea } from "@repo/ui/components/textarea";
 import { updateSettingsAction } from "../_actions/admin-actions.ts";
 import { ImageUploadField, type ImageUploadLabels } from "../_components/image-upload-field.tsx";
+import { DocumentPickerField } from "../_components/document-picker-field.tsx";
 import { AdminCombobox } from "../_components/combobox.tsx";
 import { useFieldErrors } from "../_hooks/use-field-errors.ts";
 import { useServerAction } from "../_hooks/use-server-action.ts";
@@ -167,6 +171,12 @@ export function SettingsGroupForm({
   labels: SettingsGroupLabels;
 }) {
   const { run, pending } = useServerAction();
+  // The SELECT option names only (ADR-105 #7). Every other string on this
+  // screen still arrives in `labels` from the server component — these are
+  // read here for the reason `AdminCombobox` reads its two: the alternative
+  // is a catalog entry per option threaded through the props of a form that
+  // does not know which keys it is rendering.
+  const t = useTranslations("admin");
   const initial = React.useMemo(
     () => Object.fromEntries(settings.map((s) => [s.key, initialText(s)])),
     [settings],
@@ -245,6 +255,9 @@ export function SettingsGroupForm({
     setting.type === "TEXT" ||
     setting.type === "JSON" ||
     setting.type === "IMAGE" ||
+    // A document row is a filename plus three buttons — it does not fit a
+    // half-row any better than an image preview does.
+    setting.type === "DOCUMENT" ||
     // Structured list/object editors are tables of sub-fields, not one
     // control — they never fit a half-row.
     Boolean(SETTING_FIELDS[setting.key as SettingKey]);
@@ -260,6 +273,19 @@ export function SettingsGroupForm({
       <span className="text-xs text-muted-foreground">{humanizeKey(setting.key)}</span>
     </>
   );
+
+  /**
+   * A SELECT option's words (ADR-105 #7). ADR-044 #5's two-step — catalog
+   * key first, `humanizeKey()` second — applied one level below the setting
+   * label, where the form had been printing the stored value verbatim.
+   * Survivable for `light`/`dark`/`system`; meaningless for `2`.
+   */
+  const optionLabel = (key: string, option: string) => {
+    const catalogKey = `settingOptions.${key}.${option}`;
+    return t.has(catalogKey as "settingsTitle")
+      ? t(catalogKey as "settingsTitle")
+      : humanizeKey(option);
+  };
 
   /** One control for one text-backed setting. Its Field supplies id and aria. */
   const renderControl = (setting: SettingFieldData) => {
@@ -277,6 +303,29 @@ export function SettingsGroupForm({
       );
     }
 
+    // changes-46: an upload cap is chosen in MB and stored in bytes, so the
+    // option VALUE is the byte count the action already expects and only the
+    // label speaks megabytes. `megabyteChoices` keeps a stored size that is
+    // not on the list, so opening the screen never changes a cap by itself.
+    if (widget === "megabytes") {
+      const stored = Number(value);
+      const options = megabyteChoices(
+        setting.key as SettingKey,
+        value !== "" && Number.isFinite(stored) ? stored : null,
+      ).map((choice) => ({
+        value: String(choice.bytes),
+        label: t("settingMegabytes", { size: choice.megabytes }),
+      }));
+      return (
+        <AdminCombobox
+          value={value}
+          onValueChange={(v) => setValue(setting.key, v)}
+          placeholder={labels.selectPlaceholder}
+          options={options}
+        />
+      );
+    }
+
     const selectOptions: { value: string; label: string }[] | null =
       widget === "timezone"
         ? timezoneOptions(value).map((z) => ({ value: z, label: z.replaceAll("_", " ") }))
@@ -285,7 +334,7 @@ export function SettingsGroupForm({
           : widget === "select" || setting.type === "SELECT"
             ? (SETTING_SELECT_OPTIONS[setting.key as SettingKey] ?? []).map((o) => ({
                 value: o,
-                label: o,
+                label: optionLabel(setting.key, o),
               }))
             : null;
 
@@ -403,6 +452,24 @@ export function SettingsGroupForm({
       );
     }
 
+    if (setting.type === "DOCUMENT") {
+      // Its own Field (label, required mark, message), like the image widget
+      // — so it is not wrapped in another; the badges sit beneath it.
+      return (
+        <div key={setting.key} className={cn("flex flex-col gap-2", rowClass(setting))}>
+          <DocumentPickerField
+            label={setting.label}
+            description={setting.description ?? undefined}
+            value={text[setting.key] ?? ""}
+            required={refusesEmpty(setting)}
+            error={form.error(setting.key)}
+            onChange={(next) => setValue(setting.key, next)}
+          />
+          <div className="flex flex-wrap items-center gap-2">{badges(setting)}</div>
+        </div>
+      );
+    }
+
     if (setting.type === "IMAGE") {
       // The image widget is its own Field (label, required mark, message), so
       // it is not wrapped in another; the badges sit beneath it.
@@ -455,7 +522,14 @@ export function SettingsGroupForm({
         submit();
       }}
     >
-      {settings.map((setting) => renderRow(setting))}
+      {/* changes-38: typed inputs first, then the file pickers. Legal read
+          terms PDF, privacy PDF, agreement PDF, then the copyright line —
+          seed order, and a picker between two text boxes. A stable partition,
+          so every other group keeps its seeded order. */}
+      {[
+        ...settings.filter((setting) => setting.type !== "DOCUMENT"),
+        ...settings.filter((setting) => setting.type === "DOCUMENT"),
+      ].map((setting) => renderRow(setting))}
       {/* changes-08 #3: Save at the inline-END of the section. The
           dirty-field summary reads BEFORE it (start-aligned) so the button
           keeps the corner every other confirming action in the admin uses.

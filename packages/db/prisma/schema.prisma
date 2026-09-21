@@ -114,6 +114,9 @@ model User {
   // the newsletter link is: a deleted staff account must not delete the spend
   // record it caused, and spend history outlives the person who spent it.
   aiUsage        AiUsage[]
+  // ADR-123 — the profile page's "recent reading". Cascades like progress:
+  // it is a learner's own activity, not a record anyone else needs kept.
+  articleReads   ArticleRead[]
 
   @@unique([email])
   @@index([userType, status])
@@ -397,6 +400,12 @@ enum SettingType {
   IMAGE
   COLOR
   SELECT
+  // changes-33 / ADR-110. A file that is not an image: today the three legal
+  // documents, whose value is a site-relative path to a PDF. Kept distinct
+  // from IMAGE rather than widened into it, because the two render different
+  // controls (a preview thumbnail says nothing about a 40-page agreement) and
+  // accept different bytes.
+  DOCUMENT
 }
 
 model Setting {
@@ -765,6 +774,12 @@ model Course {
   // transaction as the lesson write, so /learn costs one read rather than N.
   lessonCount    Int               @default(0)
   status         ContentStatus     @default(DRAFT)
+  // ADR-139 — the article's three flags. `isActive` is part of the public
+  // rule (hides without touching status); `isFeatured` is placement only;
+  // `isPremium` is stored and labelled, not enforced.
+  isFeatured     Boolean           @default(false)
+  isActive       Boolean           @default(true)
+  isPremium      Boolean           @default(false)
   visibility     FeatureVisibility @default(PUBLIC)
   sortOrder      Int               @default(0)
   authorId       String?
@@ -890,6 +905,12 @@ model Lesson {
   quizId               String?
   sortOrder            Int               @default(0)
   status               ContentStatus     @default(DRAFT)
+  // ADR-139 — the article's three flags. `isActive` is part of the public
+  // rule (hides without touching status); `isFeatured` is placement only;
+  // `isPremium` is stored and labelled, not enforced.
+  isFeatured           Boolean           @default(false)
+  isActive             Boolean           @default(true)
+  isPremium            Boolean           @default(false)
   visibility           FeatureVisibility @default(PUBLIC)
   authorId             String?
   publishedAt          DateTime?
@@ -976,19 +997,25 @@ model LessonAttachment {
 // path sets it inside the same transaction that resolves the lesson, so it
 // cannot drift.
 model LessonProgress {
-  id          String               @id @default(cuid())
-  userId      String
-  lessonId    String
-  courseId    String
-  status      LessonProgressStatus @default(IN_PROGRESS)
-  completedAt DateTime?
-  createdAt   DateTime             @default(now())
-  updatedAt   DateTime             @updatedAt
+  id           String               @id @default(cuid())
+  userId       String
+  lessonId     String
+  courseId     String
+  status       LessonProgressStatus @default(IN_PROGRESS)
+  completedAt  DateTime?
+  // ADR-134 — the last time the learner OPENED this lesson. Moved by every
+  // visit (`touchLesson`), which `updatedAt` is not: the touch's upsert leaves
+  // an existing row untouched on purpose, so it never downgrades a completion.
+  // A last-read marker like ArticleRead.readAt (ADR-123 §2), not a view log.
+  lastViewedAt DateTime             @default(now())
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
 
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
 
   @@unique([userId, lessonId]) // makes "mark complete" idempotent
+  @@index([userId, lastViewedAt]) // /account/progress: recently read lessons
   @@index([userId, courseId]) // course page: one indexed read
   @@index([lessonId, status]) // analytics: drop-off per lesson
   @@map("lesson_progress")
@@ -1074,8 +1101,18 @@ model Quiz {
   // GlossaryTerm.category, and it reaches the screen through a label map, never
   // raw (ADR-044 #5's public counterpart).
   category         String?          @db.VarChar(80)
+  // ADR-132 — the editor's cover, a MediaAsset id like Course.coverAssetId
+  // (ADR-055 #6). Null falls back to the generated panel `quizCoverUrl` picks
+  // from the slug, so a quiz nobody gave a picture still has one.
+  coverAssetId     String?
 
   status       ContentStatus     @default(DRAFT)
+  // ADR-139 — the article's three flags. `isActive` is part of the public
+  // rule (hides without touching status); `isFeatured` is placement only;
+  // `isPremium` is stored and labelled, not enforced.
+  isFeatured   Boolean           @default(false)
+  isActive     Boolean           @default(true)
+  isPremium    Boolean           @default(false)
   visibility   FeatureVisibility @default(PUBLIC)
   authorId     String?
   publishedAt  DateTime?
@@ -1218,6 +1255,12 @@ model GlossaryTerm {
   formula      String?       @db.Text
   imageUrl     String?       @db.VarChar(500)
   status       ContentStatus @default(DRAFT)
+  // ADR-139 — the article's three flags. `isActive` is part of the public
+  // rule (hides without touching status); `isFeatured` is placement only;
+  // `isPremium` is stored and labelled, not enforced.
+  isFeatured   Boolean       @default(false)
+  isActive     Boolean       @default(true)
+  isPremium    Boolean       @default(false)
   viewCount    Int           @default(0)
   authorId     String?
   publishedAt  DateTime?
@@ -1246,11 +1289,18 @@ model GlossaryTerm {
 // EXACTLY. That is the point: it is a proven pattern in this repo, so there is
 // nothing new to design and the admin screens are the same shape.
 model GlossaryTopic {
-  id        String   @id @default(cuid())
-  isActive  Boolean  @default(true)
-  sortOrder Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(cuid())
+  isActive     Boolean  @default(true)
+  // ADR-139 — with `isActive` above, the article's three flags.
+  isFeatured   Boolean  @default(false)
+  isPremium    Boolean  @default(false)
+  sortOrder    Int      @default(0)
+  // ADR-133 — the editor's cover, a MediaAsset id like Quiz.coverAssetId
+  // (ADR-132). Belongs to the topic, not a language. Null falls back to the
+  // glossary's own topic artwork, so a topic nobody gave a picture has one.
+  coverAssetId String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   translations GlossaryTopicTranslation[]
   terms        GlossaryTerm[]
@@ -1383,19 +1433,29 @@ model VideoTopic {
   // cannot cascade into content. `ContentReference` is the integrity index.
   coverAssetId String?
 
-  status       ContentStatus     @default(DRAFT)
-  visibility   FeatureVisibility @default(PUBLIC)
-  authorId     String?
-  publishedAt  DateTime?
+  status          ContentStatus     @default(DRAFT)
+  // ADR-139 — the article's three flags. `isActive` is part of the public
+  // rule (hides without touching status); `isFeatured` is placement only;
+  // `isPremium` is stored and labelled, not enforced.
+  isFeatured      Boolean           @default(false)
+  isActive        Boolean           @default(true)
+  isPremium       Boolean           @default(false)
+  // ADR-144 §2 — also LISTED on every other school's video index and
+  // category pages. `track` stays the one canonical address: those listings
+  // link to it, and the topic under any other track still 404s.
+  showOnAllTracks Boolean           @default(false)
+  visibility      FeatureVisibility @default(PUBLIC)
+  authorId        String?
+  publishedAt     DateTime?
   // ADR-071 — the instant this row becomes public. Nullable: only a SCHEDULED
   // row carries one, and moving to PUBLISHED or DRAFT clears it. Visibility is
   // decided in the query (PUBLISHED, or SCHEDULED whose time has come), so a
   // due row is live whether or not the sweep has run.
-  scheduledFor DateTime?
-  sortOrder    Int               @default(0)
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
-  deletedAt    DateTime?
+  scheduledFor    DateTime?
+  sortOrder       Int               @default(0)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  deletedAt       DateTime?
 
   category     VideoCategory?          @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   translations VideoTopicTranslation[]
@@ -1603,6 +1663,8 @@ model Article {
   tags         ArticleTagAssignment[]
   // ADR-019, design-only — see Comment.
   comments     Comment[]
+  // ADR-123 — signed-in learners who opened this article.
+  reads        ArticleRead[]
 
   @@index([kind, status, publishedAt])
   @@index([isFeatured, status, publishedAt])
@@ -1667,6 +1729,30 @@ model ArticleTranslation {
   @@unique([locale, slug])
   @@index([slug])
   @@map("article_translations")
+}
+
+// ADR-123 — one row per (learner, article), moved forward on every re-read.
+//
+// A LAST-READ marker, not an event log: the profile page asks "what did I
+// read recently", which one row per pair answers, and a row per page view
+// would grow without bound to answer a question nobody asks. `readAt` is the
+// only thing an upsert changes, which is why it carries no `@updatedAt`.
+//
+// Keyed to the ARTICLE, not a translation: switching locale is not reading a
+// second article, and the page resolves the title in the reader's locale.
+model ArticleRead {
+  id        String   @id @default(cuid())
+  userId    String
+  articleId String
+  readAt    DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  article Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, articleId])
+  @@index([userId, readAt]) // the profile page, newest first
+  @@index([articleId])
+  @@map("article_reads")
 }
 
 // changes-07 PR 2. Keyed to the TRANSLATION, not the article: a question and
@@ -1994,6 +2080,10 @@ enum ReferenceSourceType {
   // ADR-068 §7 — a video topic holds media placements (cover, uploaded
   // videos, posters), so it is a reference SOURCE like an article or a course.
   VIDEO_TOPIC
+  // ADR-132 — a quiz's cover is a media placement like a course's.
+  QUIZ
+  // ADR-133 — a glossary topic's cover, the same placement.
+  GLOSSARY_TOPIC
 }
 
 enum ReferenceType {
@@ -2157,7 +2247,8 @@ model NewsletterSubscriber {
   email  String           @db.VarChar(255)
   locale String           @db.VarChar(10)
   status SubscriberStatus @default(PENDING)
-  /// Which placement the address came from: footer | home | news | analysis.
+  /// Where the address came from: a placement (footer | home | news | analysis),
+  /// the sign-up checkbox (signup) or an administrator (admin) — ADR-124.
   source String           @db.VarChar(32)
 
   confirmTokenHash     String?   @db.VarChar(64)
@@ -2169,6 +2260,11 @@ model NewsletterSubscriber {
 
   confirmedAt       DateTime?
   unsubscribedAt    DateTime?
+  /// Who stopped the mail: "subscriber" (their own link) or "admin" (the list
+  /// screen). Null on rows unsubscribed before ADR-124, read as "subscriber" —
+  /// only an ADMIN's unsubscribe may be undone by an admin without a fresh
+  /// confirmation, because only that one was not the reader withdrawing consent.
+  unsubscribedVia   String?   @db.VarChar(16)
   /// Throttles the "resend the confirmation" path without a second Redis key.
   lastConfirmSentAt DateTime?
   createdAt         DateTime  @default(now())
@@ -2361,14 +2457,19 @@ model ToolTranslation {
   toolId String
   locale String @db.VarChar(10)
 
-  title   String  @db.VarChar(160)
-  tagline String? @db.VarChar(220)
+  title      String  @db.VarChar(160)
+  tagline    String? @db.VarChar(220)
   /// Sanitized server-side on save (security.md #8).
-  intro   String? @db.Text
+  intro      String? @db.Text
   /// The explainer band. Sanitized on save.
-  body    String? @db.LongText
+  body       String? @db.LongText
   /// `[{ question, answer }]` — the shape articles already use.
-  faq     Json?
+  faq        Json?
+  /// `[{ icon, title, text }]` — the "why use this" band (ADR-114 #3). PLAIN
+  /// text, not rich: three lines under a glyph need no markup, and `icon` is a
+  /// `TOOL_HIGHLIGHT_ICONS` member rather than a free-text lucide name.
+  /// Null or empty means the band does not render.
+  highlights Json?
 
   seoTitle        String? @db.VarChar(70)
   seoDescription  String? @db.VarChar(180)
@@ -2400,6 +2501,16 @@ model ToolTranslation {
 enum AiProviderKind {
   ANTHROPIC
   OPENAI
+  /// ADR-120: five vendors and one custom gateway that speak the OpenAI Chat
+  /// Completions shape. The KIND names who is billed and what the usage screen
+  /// says; the protocol is `AI_PROVIDER_PRESETS` in @repo/contracts, so a new
+  /// vendor is a registry row and a migration, never a driver.
+  GOOGLE
+  XAI
+  DEEPSEEK
+  MISTRAL
+  OPENROUTER
+  OPENAI_COMPATIBLE
   /// No provider at all: a deterministic local driver that returns a labelled
   /// placeholder and records a zero-cost usage row. ADR-087 #11's MANUAL,
   /// applied here — it is what makes the platform demonstrable, seedable and
@@ -2548,7 +2659,7 @@ model AiUsage {
   /// Machine-readable taxonomy — "rate_limited", "provider_timeout",
   /// "budget_exceeded", "provider_error", … Never a raw provider message,
   /// which can quote the prompt back.
-  reason String? @db.VarChar(80)
+  reason String?      @db.VarChar(80)
 
   inputTokens       Int @default(0)
   outputTokens      Int @default(0)
@@ -2560,7 +2671,7 @@ model AiUsage {
 
   /// The admin who triggered it. SetNull: a deleted staff account must not
   /// delete the spend record it caused.
-  userId String?
+  userId     String?
   /// What it was about — "article" / "media" / "lesson" + the id. Optional
   /// because "draft me an intro" is about nothing yet.
   entityType String? @db.VarChar(40)

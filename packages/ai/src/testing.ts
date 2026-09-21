@@ -4,6 +4,7 @@
 // second way into the provider seam, and `index.test.ts` asserts it is not
 // there. It is reachable as `@repo/ai/testing`, which is a different import and
 // an obvious one in a diff.
+import type { AiDiscoveredModel } from "@repo/contracts";
 import type { AiProviderKind } from "@repo/db";
 
 import type { AiChunk, AiDriver, AiRequest, AiResult, AiUsageCounts } from "./provider.ts";
@@ -17,6 +18,8 @@ export interface MemoryDriverOptions {
   fail?: Error;
   /** Thrown by `test()` only — a key that reads but does not work. */
   testFail?: Error;
+  /** What `listModels()` returns. */
+  models?: AiDiscoveredModel[];
 }
 
 export interface MemoryDriver extends AiDriver {
@@ -67,6 +70,9 @@ export function memoryDriver(options: MemoryDriverOptions = {}): MemoryDriver {
     },
     test() {
       return options.testFail ? Promise.reject(options.testFail) : Promise.resolve();
+    },
+    listModels() {
+      return Promise.resolve(options.models ?? []);
     },
   };
 }

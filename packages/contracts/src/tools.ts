@@ -8,17 +8,20 @@
 //
 // A calculator is not composable from admin fields. Module 16 (ADR-042) is
 // what that looks like when it is tried, so the registry below is deliberately
-// the only place the eight are enumerated, and `tools.test.ts` fails in both
+// the only place the tools are enumerated, and `tools.test.ts` fails in both
 // directions when it drifts from `ROUTE_PATHS`.
 import { z } from "zod";
 
 import { ROUTE_PATHS, type RouteKey } from "./navigation.ts";
 
-// ─── The eight (ADR-086 #1) ──────────────────────────────────
+// ─── The tools (ADR-086 #1; eleven since ADR-135) ─────────────
 
 export const TOOL_KEYS = [
   "position-size",
   "pip-value",
+  "margin",
+  "profit-loss",
+  "risk-reward",
   "gain-loss",
   "pivot-points",
   "market-hours",
@@ -76,6 +79,33 @@ export const TOOLS = {
     routeKey: "tool-pip-value",
     needs: "rates",
     icon: "coins",
+    defaultRelatedCount: 6,
+    flag: "calculators",
+  },
+  // The three calculators changes-41 added (ADR-135). All three read rates
+  // only for the account-currency leg; each still answers in the pair's own
+  // currency with no provider at all.
+  margin: {
+    key: "margin",
+    routeKey: "tool-margin",
+    needs: "rates",
+    icon: "scale",
+    defaultRelatedCount: 6,
+    flag: "calculators",
+  },
+  "profit-loss": {
+    key: "profit-loss",
+    routeKey: "tool-profit-loss",
+    needs: "rates",
+    icon: "trending-up",
+    defaultRelatedCount: 6,
+    flag: "calculators",
+  },
+  "risk-reward": {
+    key: "risk-reward",
+    routeKey: "tool-risk-reward",
+    needs: "rates",
+    icon: "shield-check",
     defaultRelatedCount: 6,
     flag: "calculators",
   },
@@ -214,6 +244,54 @@ export const pipValueConfigSchema = z.object({
   accountCurrencyIds: z.array(instrumentIdSchema).max(200),
 });
 
+/** Leverage as N in 1:N. 1:1 is no leverage; nothing retail goes past 1:2000. */
+const leverageSchema = z.number().int().min(1).max(2000);
+
+export const marginConfigSchema = z
+  .object({
+    defaultAccountCurrency: z.string().min(2).max(10),
+    defaultPairId: instrumentIdSchema.nullish(),
+    defaultUnits: z.number().int().min(1),
+    defaultBalance: z.number().min(0),
+    leverageOptions: z.array(leverageSchema).min(1).max(20),
+    defaultLeverage: leverageSchema,
+    pairIds: z.array(instrumentIdSchema).max(200),
+    accountCurrencyIds: z.array(instrumentIdSchema).max(200),
+  })
+  .refine((c) => c.leverageOptions.includes(c.defaultLeverage), {
+    message: "The default leverage must be one of the options offered",
+    path: ["defaultLeverage"],
+  });
+
+export const profitLossConfigSchema = z.object({
+  defaultAccountCurrency: z.string().min(2).max(10),
+  defaultPairId: instrumentIdSchema.nullish(),
+  defaultLots: z.number().min(0.01).max(1000),
+  pairIds: z.array(instrumentIdSchema).max(200),
+  accountCurrencyIds: z.array(instrumentIdSchema).max(200),
+});
+
+export const riskRewardConfigSchema = z
+  .object({
+    defaultAccountCurrency: z.string().min(2).max(10),
+    defaultPairId: instrumentIdSchema.nullish(),
+    defaultBalance: z.number().min(0),
+    defaultRiskPercent: z.number().min(0.01).max(99),
+    minRiskPercent: z.number().min(0).max(100),
+    maxRiskPercent: z.number().min(0).max(100),
+    /** Where "conservative" ends and "moderate" ends, as percentages (ADR-135). */
+    conservativeMaxPercent: z.number().min(0).max(100),
+    moderateMaxPercent: z.number().min(0).max(100),
+    /** The ratio below which the widget says the reward is small for the risk. */
+    minRecommendedRatio: z.number().min(0).max(100),
+    pairIds: z.array(instrumentIdSchema).max(200),
+    accountCurrencyIds: z.array(instrumentIdSchema).max(200),
+  })
+  .refine((c) => c.conservativeMaxPercent < c.moderateMaxPercent, {
+    message: "The conservative limit must be below the moderate one",
+    path: ["conservativeMaxPercent"],
+  });
+
 export const gainLossConfigSchema = z.object({
   defaultStartBalance: z.number().min(0),
   decimals: z.number().int().min(0).max(8),
@@ -299,6 +377,9 @@ export const riskSentimentConfigSchema = z
 export const TOOL_CONFIG_SCHEMAS = {
   "position-size": positionSizeConfigSchema,
   "pip-value": pipValueConfigSchema,
+  margin: marginConfigSchema,
+  "profit-loss": profitLossConfigSchema,
+  "risk-reward": riskRewardConfigSchema,
   "gain-loss": gainLossConfigSchema,
   "pivot-points": pivotPointsConfigSchema,
   "market-hours": marketHoursConfigSchema,
@@ -342,6 +423,48 @@ export const toolFaqEntrySchema = z.object({
   answer: z.string().min(1).max(4000),
 });
 
+/**
+ * The glyphs a highlight may carry (ADR-114 #3).
+ *
+ * A CLOSED list, not free text, for `ToolSpec.icon`'s reason —
+ * `@repo/contracts` depends only on zod and may not import lucide-react — and
+ * for a second one that only applies here: `ToolSpec.icon` is written by us in
+ * code, while this is written by an admin in a form. An unrecognised name
+ * renders no glyph, and a four-card band with three glyphs and a gap looks
+ * broken in a way the person who typed it cannot diagnose.
+ */
+export const TOOL_HIGHLIGHT_ICONS = [
+  "calculator",
+  "target",
+  "shield",
+  "zap",
+  "globe",
+  "book-open",
+  "clock",
+  "trending-up",
+  "layers",
+  "coins",
+  "info",
+  "check",
+] as const;
+
+export type ToolHighlightIcon = (typeof TOOL_HIGHLIGHT_ICONS)[number];
+
+/**
+ * One "why use this" card (ADR-114 #3).
+ *
+ * **Plain text, deliberately.** Three lines under a glyph need no heading, no
+ * table and no link, and a rich-text field here would be a fourth surface to
+ * sanitise in exchange for formatting nobody would use well. The renderer
+ * prints it as text and `tools-highlights.test.ts` asserts the seeded copy
+ * holds no markup, which is what makes that correct rather than lucky.
+ */
+export const toolHighlightSchema = z.object({
+  icon: z.enum(TOOL_HIGHLIGHT_ICONS),
+  title: z.string().min(1).max(80),
+  text: z.string().min(1).max(300),
+});
+
 export const toolTranslationSchema = z.object({
   locale: z.string().min(2).max(10),
   title: z.string().min(1).max(160),
@@ -349,6 +472,10 @@ export const toolTranslationSchema = z.object({
   intro: z.string().max(20_000).nullish(),
   body: z.string().max(200_000).nullish(),
   faq: z.array(toolFaqEntrySchema).max(30).nullish(),
+  /** At most six: the band is a row, and a seventh card wraps to a second one
+   * that reads as an afterthought. Four is what the reference shows and what
+   * the seed writes. */
+  highlights: z.array(toolHighlightSchema).max(6).nullish(),
   seoTitle: z.string().max(70).nullish(),
   seoDescription: z.string().max(180).nullish(),
   seoFocusKeyword: z.string().max(100).nullish(),
@@ -380,6 +507,7 @@ export const saveToolSchema = z.object({
 export type SaveToolInput = z.infer<typeof saveToolSchema>;
 export type ToolTranslationInput = z.infer<typeof toolTranslationSchema>;
 export type ToolFaqEntry = z.infer<typeof toolFaqEntrySchema>;
+export type ToolHighlight = z.infer<typeof toolHighlightSchema>;
 export type ToolRelatedItem = z.infer<typeof toolRelatedItemSchema>;
 export type RiskComponent = z.infer<typeof riskComponentSchema>;
 export type MarketSessionSpec = z.infer<typeof marketSessionSchema>;

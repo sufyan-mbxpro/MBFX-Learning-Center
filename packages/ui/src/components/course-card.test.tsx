@@ -158,7 +158,9 @@ describe("CourseCard — level tone and the video chip", () => {
     renderCard({ difficultyTone: "success" });
     const ground = screen.getByText("Beginner").parentElement;
     expect(ground?.className).toContain("bg-background");
-    expect(ground?.className).toContain("rounded-full");
+    // ADR-107: the ground's radius is the Badge's, so the opaque plate cannot
+    // show a rim of itself around a squarer badge.
+    expect(ground?.className).toContain("rounded-md");
   });
 
   it("shows a video chip only when the caller counted videos", () => {

@@ -4,6 +4,8 @@
 // typo and a section that silently renders wrong.
 import { describe, expect, it } from "vitest";
 import {
+  ADMIN_SESSION_TIMEOUTS,
+  adminSessionTimeoutMs,
   dataBudgetSchema,
   HOME_SECTION_BUILT_KEYS,
   HOME_SECTION_STUB_KEYS,
@@ -12,6 +14,12 @@ import {
   isKnownHomeSectionKey,
   SETTINGS_SCHEMAS,
   SETTING_GROUPS,
+  SETTING_SELECT_OPTIONS,
+  SETTING_WIDGETS,
+  SETTING_MEGABYTE_OPTIONS,
+  bytesToMegabytes,
+  megabyteChoices,
+  megabytesToBytes,
 } from "./settings.ts";
 
 const homeSections = SETTINGS_SCHEMAS["home.sections"];
@@ -180,5 +188,80 @@ describe("cms.dataBudget (ADR-029 §5, PR 3.4)", () => {
   it("is registered in SETTINGS_SCHEMAS/SETTING_GROUPS", () => {
     expect(SETTINGS_SCHEMAS["cms.dataBudget"]).toBe(dataBudgetSchema);
     expect(SETTING_GROUPS["cms.dataBudget"]).toBe("cms");
+  });
+});
+
+describe("security.adminSessionTimeout (ADR-105)", () => {
+  const schema = SETTINGS_SCHEMAS["security.adminSessionTimeout"];
+
+  it("accepts every offered duration and nothing else", () => {
+    for (const value of ADMIN_SESSION_TIMEOUTS) expect(schema.parse(value)).toBe(value);
+    // A raw number, the shape a caller reaching for `0 means unlimited` would
+    // send, is refused rather than coerced.
+    expect(schema.safeParse(0).success).toBe(false);
+    expect(schema.safeParse("10").success).toBe(false);
+  });
+
+  it("is in the general group, so its tag and its screen agree", () => {
+    // The owner asked for it in Settings → General, and `settings:general` is
+    // what the write invalidates.
+    expect(SETTING_GROUPS["security.adminSessionTimeout"]).toBe("general");
+  });
+
+  it("renders as a dropdown of exactly its schema's values", () => {
+    // The drift this catches: adding a duration to the schema and not to the
+    // options leaves a value nothing can select; the reverse offers one the
+    // action refuses.
+    expect(SETTING_WIDGETS["security.adminSessionTimeout"]).toBe("select");
+    expect(SETTING_SELECT_OPTIONS["security.adminSessionTimeout"]).toEqual(ADMIN_SESSION_TIMEOUTS);
+    for (const option of SETTING_SELECT_OPTIONS["security.adminSessionTimeout"] ?? []) {
+      expect(schema.safeParse(option).success).toBe(true);
+    }
+  });
+
+  it("resolves to milliseconds, with `never` the only no-timeout answer", () => {
+    expect(adminSessionTimeoutMs("2")).toBe(120_000);
+    expect(adminSessionTimeoutMs("120")).toBe(7_200_000);
+    expect(adminSessionTimeoutMs("never")).toBeNull();
+    for (const value of ADMIN_SESSION_TIMEOUTS) {
+      const ms = adminSessionTimeoutMs(value);
+      if (ms !== null) expect(ms).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe("media upload caps as megabytes (changes-46)", () => {
+  const keys = [
+    "media.maxBytes.image",
+    "media.maxBytes.video",
+    "media.maxBytes.audio",
+    "media.maxBytes.document",
+  ] as const;
+
+  it.each(keys)("%s renders as a megabyte dropdown whose every size its schema accepts", (key) => {
+    expect(SETTING_WIDGETS[key]).toBe("megabytes");
+    const sizes = SETTING_MEGABYTE_OPTIONS[key] ?? [];
+    expect(sizes.length).toBeGreaterThan(3);
+    for (const mb of sizes) {
+      expect(SETTINGS_SCHEMAS[key].safeParse(megabytesToBytes(mb)).success).toBe(true);
+    }
+  });
+
+  it("converts in 1024 × 1024 steps, the unit the upload error message uses", () => {
+    expect(megabytesToBytes(5)).toBe(5 * 1024 * 1024);
+    expect(bytesToMegabytes(5 * 1024 * 1024)).toBe(5);
+    expect(bytesToMegabytes(1_500_000)).toBe(1.43);
+  });
+
+  it("keeps a stored value that is not on the list, in size order", () => {
+    const choices = megabyteChoices("media.maxBytes.image", 3 * 1024 * 1024);
+    expect(choices.map((c) => c.megabytes)).toEqual([1, 2, 3, 5, 10, 15, 20, 25, 50]);
+  });
+
+  it("does not duplicate a stored value that IS on the list, and ignores a nonsense one", () => {
+    expect(megabyteChoices("media.maxBytes.image", 5 * 1024 * 1024)).toHaveLength(8);
+    expect(megabyteChoices("media.maxBytes.image", null)).toHaveLength(8);
+    expect(megabyteChoices("media.maxBytes.image", 0)).toHaveLength(8);
+    expect(megabyteChoices("media.maxBytes.image", 1.5)).toHaveLength(8);
   });
 });

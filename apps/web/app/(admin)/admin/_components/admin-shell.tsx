@@ -6,13 +6,18 @@
 // requirePermission (a hidden button is not security).
 import { cookies } from "next/headers";
 import { getTranslations } from "next-intl/server";
+import { getAiAvailability } from "@repo/ai";
+import { routing } from "@repo/i18n/routing";
+import { adminSessionTimeoutMs } from "@repo/contracts";
 import { can, canAny, type Subject } from "@repo/rbac";
+import { getSetting } from "@repo/settings";
 import { countUnreadNotifications, getBrandAssets, listNotifications } from "@repo/core";
 import { Toaster } from "@repo/ui/components/sonner";
 import { ModeToggle } from "@repo/ui/components/mode-toggle";
 import { AdminBreadcrumbs } from "./breadcrumbs.tsx";
 import { AdminMobileNav } from "./admin-mobile-nav.tsx";
-import { AdminSearch } from "./admin-search.tsx";
+import { AdminSearch, type AdminSearchSection } from "./admin-search.tsx";
+import { AiWriter } from "./ai-writer.tsx";
 import { AdminSidebar, SIDEBAR_COOKIE } from "./admin-sidebar.tsx";
 import { type AdminNavGroup, type VisitSiteLink } from "./admin-sidebar-nav.tsx";
 import { IdleTimeout } from "./idle-timeout.tsx";
@@ -34,12 +39,10 @@ interface NavEntryDef {
     | "employees"
     | "newsletter"
     | "glossary"
-    | "glossaryTopics"
     | "learnCourses"
     | "learnLessons"
     | "learnQuizzes"
     | "learnVideos"
-    | "videoCategories"
     | "learnProgress"
     | "articles"
     | "websiteMedia"
@@ -51,7 +54,6 @@ interface NavEntryDef {
     // above it predates that rule and keeps its flat key.
     | "nav.ai"
     | "settings"
-    | "features"
     | "navigation"
     | "homepage"
     | "theme";
@@ -131,13 +133,8 @@ const ADMIN_NAV_GROUPS: {
         href: "/admin/learn/videos",
         labelKey: "learnVideos",
         icon: "learnVideos",
-        permission: "lessons.view",
-        exact: true,
-      },
-      {
-        href: "/admin/learn/videos/categories",
-        labelKey: "videoCategories",
-        icon: "videoCategories",
+        // Not `exact` since changes-48 #3: Categories is a tab of this
+        // section, not a row of its own, so this row stays lit on it.
         permission: "lessons.view",
       },
       {
@@ -158,15 +155,8 @@ const ADMIN_NAV_GROUPS: {
         href: "/admin/glossary",
         labelKey: "glossary",
         icon: "glossary",
-        permission: "glossary.view",
-        exact: true,
-      },
-      {
-        // D27: a topic IS glossary data, so it reuses the glossary keys rather
-        // than adding three nobody holds.
-        href: "/admin/glossary/topics",
-        labelKey: "glossaryTopics",
-        icon: "glossaryTopics",
+        // Topics is a tab of the glossary since changes-48 #3 (D27: a topic
+        // IS glossary data), so this row covers both and is not `exact`.
         permission: "glossary.view",
       },
       // Standalone media library (ADR-037 Decision #4's follow-up) — the
@@ -253,6 +243,35 @@ const ADMIN_NAV_GROUPS: {
   },
 ];
 
+/**
+ * Whether the AI Writer renders (ADR-129 §5): `ai.use` AND the feature's own
+ * availability, which already folds in the global switch and the budget.
+ *
+ * A failed READ hides the writer rather than failing the shell. The writer is
+ * optional chrome on every admin page; the AI area itself still reports the
+ * problem, and the run route re-checks everything on each request.
+ */
+async function aiWriterAvailable(subject: Subject): Promise<boolean> {
+  if (!can(subject, "ai.use")) return false;
+  try {
+    const availability = await getAiAvailability();
+    return availability.features.writing_studio === true;
+  } catch (error) {
+    console.error("AI Writer availability could not be read", error);
+    return false;
+  }
+}
+
+/**
+ * The languages the writer can write in, named in English (ADR-043 #2).
+ * Every locale the site can route, active or not: writing a draft in a
+ * language is not serving a page in it (ADR-091).
+ */
+function writerLanguages(): { value: string; label: string }[] {
+  const names = new Intl.DisplayNames(["en"], { type: "language" });
+  return routing.locales.map((code) => ({ value: code, label: names.of(code) ?? code }));
+}
+
 function allows(subject: Subject, entry: NavEntryDef): boolean {
   if (entry.enabled === false) return false;
   if (entry.permission === null) return true;
@@ -274,17 +293,22 @@ export async function AdminShell({
   image: string | null;
   children: React.ReactNode;
 }) {
-  const [t, unreadCount, notifications, brandAssets, cookieStore] = await Promise.all([
-    getTranslations("admin"),
-    countUnreadNotifications(subject.id),
-    listNotifications(subject.id),
-    getBrandAssets(),
-    // Sidebar collapse state is read on the SERVER so the first paint is
-    // already the right width (see admin-sidebar.tsx for why not
-    // localStorage). This layout is fully dynamic anyway (`instant =
-    // false`), so a cookie read costs nothing here.
-    cookies(),
-  ]);
+  const [t, unreadCount, notifications, brandAssets, cookieStore, sessionTimeout, writerOn] =
+    await Promise.all([
+      getTranslations("admin"),
+      countUnreadNotifications(subject.id),
+      listNotifications(subject.id),
+      getBrandAssets(),
+      // Sidebar collapse state is read on the SERVER so the first paint is
+      // already the right width (see admin-sidebar.tsx for why not
+      // localStorage). This layout is fully dynamic anyway (`instant =
+      // false`), so a cookie read costs nothing here.
+      cookies(),
+      getSetting("security.adminSessionTimeout"),
+      aiWriterAvailable(subject),
+    ]);
+  // A missing row is a database seeded before ADR-105: no timeout.
+  const idleTimeoutMs = sessionTimeout === null ? null : adminSessionTimeoutMs(sessionTimeout);
   const sidebarCollapsed = cookieStore.get(SIDEBAR_COOKIE)?.value === "collapsed";
 
   const groups: AdminNavGroup[] = ADMIN_NAV_GROUPS.map((group) => ({
@@ -308,10 +332,32 @@ export async function AdminShell({
     hint: t("visitSiteHint"),
   };
 
-  const flatEntries = groups.flatMap((group) => group.entries);
-  const searchPages = [
-    ...flatEntries.map((entry) => ({ href: entry.href, label: entry.label })),
-    { href: "/admin/profile", label: t("profile") },
+  // The ⌘K palette lists the SIDEBAR's own sections (ADR-140 §5), each row
+  // with the sidebar's glyph and a one-line hint keyed by that glyph's name —
+  // never its path. The dashboard's heading-less group is "Overview" there.
+  const searchHint = (icon: string) =>
+    t.has(`searchHints.${icon}`) ? t(`searchHints.${icon}`) : null;
+  const searchSections: AdminSearchSection[] = [
+    ...groups.map((group) => ({
+      label: group.label ?? t("searchOverview"),
+      entries: group.entries.map((entry) => ({
+        href: entry.href,
+        label: entry.label,
+        icon: entry.icon,
+        hint: searchHint(entry.icon),
+      })),
+    })),
+    {
+      label: t("searchAccount"),
+      entries: [
+        {
+          href: "/admin/profile",
+          label: t("profile"),
+          icon: "profile",
+          hint: searchHint("profile"),
+        },
+      ],
+    },
   ];
 
   // Notification text renders HERE (type → catalog string, detail
@@ -329,20 +375,26 @@ export async function AdminShell({
   return (
     <div className="flex min-h-full">
       <Toaster />
-      {/* ADR-041: ten-minute idle auto sign-out. Mounted HERE and nowhere
-          else — that is what scopes it to the admin surface. */}
-      <IdleTimeout
-        labels={{
-          title: t("idleTitle"),
-          // t.raw, not t: the {seconds} placeholder is filled on the CLIENT
-          // once a second as the countdown ticks, so the server must hand
-          // over the message with its placeholder intact rather than
-          // resolving it (t() would demand a value here and get a stale one).
-          description: String(t.raw("idleDescription")),
-          stay: t("idleStay"),
-          signOut: t("signOut"),
-        }}
-      />
+      {/* Idle auto sign-out, mounted HERE and nowhere else — that is what
+          scopes it to the admin surface (ADR-041). Its timeout is the
+          `security.adminSessionTimeout` setting, the same value `auth()`
+          enforces (ADR-128); "never" mounts nothing. */}
+      {idleTimeoutMs !== null && (
+        <IdleTimeout
+          key={idleTimeoutMs}
+          timeoutMs={idleTimeoutMs}
+          labels={{
+            title: t("idleTitle"),
+            // t.raw, not t: the {seconds} placeholder is filled on the CLIENT
+            // once a second as the countdown ticks, so the server must hand
+            // over the message with its placeholder intact rather than
+            // resolving it (t() would demand a value here and get a stale one).
+            description: String(t.raw("idleDescription")),
+            stay: t("idleStay"),
+            signOut: t("signOut"),
+          }}
+        />
+      )}
       <AdminSidebar
         groups={groups}
         visitSite={visitSite}
@@ -369,14 +421,19 @@ export async function AdminShell({
             logoDark={brandAssets.logo_dark?.url ?? null}
           />
           <AdminSearch
-            pages={searchPages}
+            sections={searchSections}
             labels={{
               placeholder: t("searchPlaceholder"),
               trigger: t("searchTrigger"),
               title: t("searchTitle"),
               description: t("searchDescription"),
               empty: t("noResults"),
-              pages: t("searchPages"),
+              close: t("searchClose"),
+              filterAll: t("searchFilterAll"),
+              filterLabel: t("searchFilterLabel"),
+              legendOpen: t("searchLegendOpen"),
+              legendNavigate: t("searchLegendNavigate"),
+              legendClose: t("searchLegendClose"),
               users: t("users"),
               roles: t("roles"),
               employees: t("employees"),
@@ -385,6 +442,9 @@ export async function AdminShell({
             }}
           />
           <div className="ms-auto flex items-center gap-1 md:gap-2">
+            {writerOn && (
+              <AiWriter languages={writerLanguages()} defaultLanguage={routing.defaultLocale} />
+            )}
             <NotificationBell
               items={items}
               unreadCount={unreadCount}

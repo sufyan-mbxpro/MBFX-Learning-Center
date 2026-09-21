@@ -15,7 +15,7 @@
 // decided by the app's own registry (ADR-048: panels are code, hrefs come
 // from the database menu), never by this file.
 import { NavigationMenu } from "@base-ui/react/navigation-menu";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ArrowRight, ChevronDown, ChevronRight, LayoutGrid } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { cn } from "@repo/ui/lib/utils";
@@ -36,7 +36,7 @@ function MegaMenuTrigger({ className, children, ...props }: NavigationMenu.Trigg
   return (
     <NavigationMenu.Trigger
       className={cn(
-        "flex h-9 items-center gap-1 rounded-full px-3 text-sm font-medium text-muted-foreground transition-colors duration-(--duration-base) select-none hover:bg-muted/70 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none data-popup-open:bg-muted data-popup-open:text-foreground",
+        "flex h-9 items-center gap-1 rounded-md px-3 text-sm font-medium text-muted-foreground transition-colors duration-(--duration-base) select-none hover:bg-muted/70 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none data-popup-open:bg-muted data-popup-open:text-foreground",
         className,
       )}
       {...props}
@@ -67,7 +67,7 @@ function MegaMenuViewport({ sideOffset = 10 }: { sideOffset?: number }) {
         // the pointer can cross it without the menu closing underneath it.
         className="z-50 h-(--positioner-height) w-(--positioner-width) max-w-(--available-width) transition-(--transition-geometry) duration-(--duration-slow) ease-(--ease-out-quint) before:absolute before:inset-x-0 before:-top-2.5 before:h-2.5 data-instant:transition-none"
       >
-        <NavigationMenu.Popup className="relative h-(--popup-height) w-(--popup-width) origin-(--transform-origin) overflow-hidden rounded-2xl bg-popover text-popover-foreground shadow-xl ring-1 ring-foreground/10 transition-(--transition-geometry) duration-(--duration-slow) ease-(--ease-out-quint) data-ending-style:scale-95 data-ending-style:opacity-0 data-starting-style:scale-95 data-starting-style:opacity-0">
+        <NavigationMenu.Popup className="relative h-(--popup-height) w-(--popup-width) origin-(--transform-origin) overflow-hidden rounded-lg bg-popover text-popover-foreground shadow-xl ring-1 ring-foreground/10 transition-(--transition-geometry) duration-(--duration-slow) ease-(--ease-out-quint) data-ending-style:scale-95 data-ending-style:opacity-0 data-starting-style:scale-95 data-starting-style:opacity-0">
           <NavigationMenu.Viewport className="relative h-full w-full" />
         </NavigationMenu.Popup>
       </NavigationMenu.Positioner>
@@ -276,31 +276,62 @@ function MegaMenuStrip({
   );
 }
 
-/** The footer row: section name at the start, a "view all" pill at the end. */
+/**
+ * The footer row: the section, named and described, at the start, and a
+ * "view all" link-button at the end.
+ *
+ * changes-46 (owner: "improve the design for that footer tile & button"). It
+ * was a hairline, a grey all-caps label and a small FILLED bronze pill, which
+ * read as an afterthought and competed with the panel's own rows for the
+ * brand colour. Now it is a tinted band (the strip's `bg-muted/50`, so the
+ * two bottom bands are one family) holding an icon tile plus the section's
+ * name and a one-line hint, and the action is an OUTLINED button on the card
+ * ground that fills with the brand only on hover — present, not shouting.
+ */
 function MegaMenuFooter({
   label,
+  description,
   actionLabel,
+  icon: Icon = LayoutGrid,
   className,
   ...props
 }: NavigationMenu.Link.Props & {
   label: React.ReactNode;
+  /** One line under the section name. */
+  description?: React.ReactNode;
   actionLabel: React.ReactNode;
+  /** The section's glyph; a generic grid when the registry has none. */
+  icon?: LucideIcon;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 border-t border-border/70 px-6 py-3">
-      <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">{label}</p>
+    <div
+      data-slot="mega-menu-footer"
+      className="flex flex-wrap items-center justify-between gap-4 border-t border-border/70 bg-muted/50 px-6 py-3.5"
+    >
+      <div className="flex min-w-0 items-center gap-3">
+        <span
+          aria-hidden
+          className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary-interactive"
+        >
+          <Icon className="size-4" />
+        </span>
+        <div className="flex min-w-0 flex-col">
+          <p className="text-sm font-semibold text-foreground">{label}</p>
+          {description && <p className="text-xs text-muted-foreground">{description}</p>}
+        </div>
+      </div>
       <NavigationMenu.Link
         className={cn(
-          "group glow-on-hover inline-flex items-center gap-1 rounded-full bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
+          "group inline-flex h-9 items-center gap-1.5 rounded-md border border-primary/40 bg-card px-4 text-sm font-semibold text-primary-interactive transition-colors duration-(--duration-base) hover:border-primary hover:bg-primary hover:text-primary-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
           className,
         )}
         {...props}
       >
         {actionLabel}
         {/* rtl:rotate-180 is the repo's existing idiom for a directional
-            chevron (see the header's ArrowRight); .hover-arrow supplies the
+            glyph (see the header's ArrowRight); .hover-arrow supplies the
             nudge and flips its own translate under [dir="rtl"]. */}
-        <ChevronRight aria-hidden className="hover-arrow size-3.5 rtl:rotate-180" />
+        <ArrowRight aria-hidden className="hover-arrow size-4 rtl:rotate-180" />
       </NavigationMenu.Link>
     </div>
   );

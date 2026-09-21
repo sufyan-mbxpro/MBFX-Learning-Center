@@ -3,6 +3,7 @@
 // level (not just via the CSS duration reset), and the preloader's cap and
 // once-per-session gate actually hold. Everything here is a behaviour a
 // future refactor could silently break with no lint or type error.
+import { StrictMode } from "react";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ArrowRight } from "lucide-react";
@@ -75,11 +76,23 @@ function stubBrowser({
     vi.stubGlobal("IntersectionObserver", undefined);
   }
 
-  /** Fire an intersection for every element the component is watching. */
-  function triggerIntersection(isIntersecting = true) {
+  /**
+   * Fire an intersection for every element the component is watching.
+   *
+   * `ratio` is the part that matters since ADR-111: the observer reveals when
+   * the ratio reaches the threshold and hides only when it is exactly 0, so a
+   * stub that reports `isIntersecting` alone cannot express the case the two
+   * thresholds exist for.
+   */
+  function triggerIntersection(ratio = 1) {
     for (const instance of instances) {
       const entries = instance.targets.map(
-        (target) => ({ target, isIntersecting }) as IntersectionObserverEntry,
+        (target) =>
+          ({
+            target,
+            isIntersecting: ratio > 0,
+            intersectionRatio: ratio,
+          }) as IntersectionObserverEntry,
       );
       if (entries.length > 0) {
         act(() => {
@@ -89,7 +102,12 @@ function stubBrowser({
     }
   }
 
-  return { triggerIntersection };
+  /** How many elements are still being watched across every observer. */
+  function watchedCount() {
+    return instances.reduce((total, instance) => total + instance.targets.length, 0);
+  }
+
+  return { triggerIntersection, watchedCount };
 }
 
 describe("Reveal — ADR-018 rule 2: content is visible without JS", () => {
@@ -122,16 +140,107 @@ describe("Reveal — ADR-018 rule 2: content is visible without JS", () => {
   });
 });
 
-describe("RevealObserver — the fallback path can never strand content hidden", () => {
-  it("does nothing at all when the browser supports scroll-driven animation natively", () => {
-    stubBrowser({ supportsViewTimeline: true });
+describe("RevealObserver — the primary path can never strand content hidden", () => {
+  // ADR-104 §2 made the observer the path that runs even on a browser with
+  // native scroll-driven animation. ADR-111 then reversed its run-once half at
+  // the owner's ask: a reveal now REPLAYS, so the assertions below are about
+  // an element that can arrive more than once.
+  it("runs even where the browser supports scroll-driven animation natively", () => {
+    const { triggerIntersection } = stubBrowser({ supportsViewTimeline: true });
     render(
       <>
         <RevealObserver />
         <Reveal>Native</Reveal>
       </>,
     );
-    expect(document.documentElement.hasAttribute("data-reveal-js")).toBe(false);
+    expect(document.documentElement.hasAttribute("data-reveal-js")).toBe(true);
+    triggerIntersection();
+    expect(screen.getByText("Native").classList.contains("is-visible")).toBe(true);
+  });
+
+  it("leaves a `timeline` opt-in to the CSS path — never hidden by the observer", () => {
+    const { triggerIntersection } = stubBrowser({ supportsViewTimeline: true });
+    render(
+      <>
+        <RevealObserver />
+        <Reveal timeline>Linked</Reveal>
+      </>,
+    );
+    const el = screen.getByText("Linked");
+    expect(el.hasAttribute("data-reveal-timeline")).toBe(true);
+    // Not observed, so an intersection cannot mark it — the CSS owns it, and
+    // the `:not([data-reveal-timeline])` guard keeps this path off it.
+    triggerIntersection();
+    expect(el.classList.contains("is-visible")).toBe(false);
+  });
+
+  // ADR-111 §1, and the inverse of the ADR-104 test it replaces. Written as
+  // one journey rather than three assertions because the bug it guards is a
+  // `unobserve` creeping back in, which only shows up on the SECOND arrival.
+  it("REPLAYS — it keeps watching, and a target can arrive again (ADR-111 §1)", () => {
+    const { triggerIntersection, watchedCount } = stubBrowser();
+    render(
+      <>
+        <RevealObserver />
+        <Reveal>Again</Reveal>
+      </>,
+    );
+    const el = screen.getByText("Again");
+    expect(watchedCount()).toBe(1);
+
+    triggerIntersection();
+    expect(el.classList.contains("is-visible")).toBe(true);
+    // Still watched: an `unobserve` here is what made the reveal one-way.
+    expect(watchedCount()).toBe(1);
+
+    triggerIntersection(0);
+    expect(el.classList.contains("is-visible")).toBe(false);
+
+    triggerIntersection();
+    expect(el.classList.contains("is-visible")).toBe(true);
+  });
+
+  // The failure a single threshold would have: an element taller than the
+  // viewport can never show 15% of itself, so hiding at the ARRIVAL threshold
+  // would tear a long band away from a reader still in the middle of it.
+  it("hides only when a target is GONE, never merely below the threshold", () => {
+    const { triggerIntersection } = stubBrowser();
+    render(
+      <>
+        <RevealObserver />
+        <Reveal>Tall</Reveal>
+      </>,
+    );
+    const el = screen.getByText("Tall");
+
+    triggerIntersection();
+    expect(el.classList.contains("is-visible")).toBe(true);
+
+    // Barely on screen, well under the 0.15 default — and it stays.
+    triggerIntersection(0.02);
+    expect(el.classList.contains("is-visible")).toBe(true);
+
+    triggerIntersection(0);
+    expect(el.classList.contains("is-visible")).toBe(false);
+  });
+
+  it("picks up a reveal added after mount — bands stream in under ADR-095", async () => {
+    const { triggerIntersection } = stubBrowser();
+    render(<RevealObserver />);
+
+    const late = document.createElement("div");
+    late.className = "reveal reveal-up";
+    late.textContent = "Streamed";
+    act(() => {
+      document.body.append(late);
+    });
+    // MutationObserver callbacks are microtask-scheduled.
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    triggerIntersection();
+    expect(late.classList.contains("is-visible")).toBe(true);
   });
 
   it("does nothing under reduced motion, so the finished state shows immediately", () => {
@@ -255,6 +364,30 @@ describe("SiteLoader — ADR-018 rule 4: bounded, skippable, once per session", 
     vi.useRealTimers();
   });
 
+  it("still dismisses when its mount effect is replayed before `load` (changes-46)", () => {
+    // The admin's Preview / View live tab: a fresh session, a document still
+    // loading at hydration, and a mount effect React runs, cleans up and runs
+    // again (StrictMode). The replay used to find the session claimed and
+    // return early, with the cleanup having removed every way to dismiss —
+    // the overlay stayed until a refresh.
+    vi.useFakeTimers();
+    stubBrowser();
+    const readyState = vi.spyOn(document, "readyState", "get").mockReturnValue("loading");
+    const { container } = render(
+      <StrictMode>
+        <SiteLoader />
+      </StrictMode>,
+    );
+    expect(container.querySelector("[data-slot=site-loader]")).not.toBeNull();
+
+    act(() => {
+      vi.advanceTimersByTime(900 + 200);
+    });
+    expect(container.querySelector("[data-slot=site-loader]")).toBeNull();
+    readyState.mockRestore();
+    vi.useRealTimers();
+  });
+
   it("never blocks interaction with the page underneath", () => {
     stubBrowser();
     const { container } = render(<SiteLoader />);
@@ -315,9 +448,24 @@ describe("ScrollToTop", () => {
     const button = screen.getByRole("button", { name: "Back to top" });
     expect(button.className).toContain("opacity-0");
 
-    // Sentinel leaves the viewport => the user has scrolled past it.
-    triggerIntersection(false);
+    // Sentinel leaves the viewport => the user has scrolled past it. A ratio
+    // of 0 is what the stub turns into `isIntersecting: false`, which is the
+    // only thing ScrollToTop reads.
+    triggerIntersection(0);
     expect(button.className).toContain("opacity-100");
+  });
+
+  it("marks itself visible for the arrival flash and draws a progress ring (changes-44 #2)", () => {
+    const { triggerIntersection } = stubBrowser();
+    render(<ScrollToTop label="Back to top" />);
+    const button = screen.getByRole("button", { name: "Back to top" });
+    expect(button.hasAttribute("data-visible")).toBe(false);
+    expect(button.querySelector("[data-slot=scroll-to-top-progress]")).not.toBeNull();
+
+    triggerIntersection(0);
+    expect(button.hasAttribute("data-visible")).toBe(true);
+    // Written straight to the element, never through React state.
+    expect(button.style.getPropertyValue("--scroll-progress")).not.toBe("");
   });
 
   it("scrolls instantly rather than smoothly under reduced motion", () => {
@@ -380,20 +528,18 @@ describe("variant additions (changes-03-plan.md §4.2)", () => {
     expect(container.innerHTML).not.toContain("bg-primary-subtle");
   });
 
-  it("Button's pill shape wins over the size's own radius", () => {
-    render(
-      <Button shape="pill" size="xs">
-        x
-      </Button>,
-    );
-    // twMerge keeps the last radius in the string; `shape` is declared after
-    // `size` in the cva config specifically so pill wins for every size.
-    const className = screen.getByRole("button").className;
-    expect(className).toContain("rounded-full");
-    // Only the BARE utility must be gone. `in-data-[slot=button-group]:
-    // rounded-lg` legitimately survives — it's variant-prefixed, so it
-    // applies in a different context and never competes with rounded-full.
-    expect(className).not.toMatch(/(?:^|\s)rounded-lg(?:\s|$)/);
+  it("every button size keeps the derived rounded-md, at every size", () => {
+    // ADR-107 deleted the `pill` shape, and with it the test that pinned
+    // pill-beats-size. What is worth guarding now is the opposite: no size
+    // may declare a radius of its own, so the whole surface moves with
+    // `--radius` when an admin changes `radiusBase`.
+    for (const size of ["xs", "default", "xl"] as const) {
+      const { unmount } = render(<Button size={size}>x</Button>);
+      const className = screen.getByRole("button").className;
+      expect(className).toMatch(/(?:^|\s)rounded-md(?:\s|$)/);
+      expect(className).not.toContain("rounded-full");
+      unmount();
+    }
   });
 });
 

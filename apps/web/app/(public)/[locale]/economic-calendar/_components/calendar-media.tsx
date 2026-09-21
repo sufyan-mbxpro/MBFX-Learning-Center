@@ -14,7 +14,32 @@ import Image from "next/image";
 import { CalendarDays, type LucideIcon } from "lucide-react";
 import { ImageReveal } from "@repo/ui/components/image-reveal";
 import { cn } from "@repo/ui/lib/utils";
-import type { CalendarImage } from "../_content/calendar-media.ts";
+import { CALENDAR_MEDIA, type CalendarImage } from "../_content/calendar-media.ts";
+
+/**
+ * The masthead's full-bleed backdrop (changes-40) — `NewsBackdrop`'s sibling.
+ *
+ * NOT `CalendarMedia` with a prop, for the reason `NewsBackdrop` gives: the
+ * aspect box, the rounded corners and the entrance wipe `ImageReveal`
+ * contributes are all wrong behind a headline. `alt=""` because it is texture
+ * under a scrim, not a fact the words leave out.
+ */
+export function CalendarBackdrop() {
+  const src = CALENDAR_MEDIA.banner;
+  if (!src) return null;
+  return (
+    <Image
+      src={src}
+      alt=""
+      fill
+      // The LCP candidate on this route.
+      priority
+      unoptimized={src.endsWith(".svg")}
+      sizes="100vw"
+      className="object-cover"
+    />
+  );
+}
 
 const PANEL_TONE_CLASS = {
   onBrand: "bg-primary-foreground/10 ring-1 ring-primary-foreground/20",
@@ -48,7 +73,7 @@ export function CalendarMedia({
         aria-hidden
         style={{ aspectRatio: ratio }}
         className={cn(
-          "flex w-full items-center justify-center rounded-2xl",
+          "flex w-full items-center justify-center rounded-lg",
           PANEL_TONE_CLASS[tone],
           className,
         )}
@@ -59,7 +84,7 @@ export function CalendarMedia({
   }
 
   return (
-    <ImageReveal ratio={ratio} className={cn("rounded-2xl", className)}>
+    <ImageReveal ratio={ratio} className={cn("rounded-lg", className)}>
       <Image src={src} alt={alt} fill sizes="(max-width: 1024px) 100vw, 50vw" />
     </ImageReveal>
   );

@@ -1,7 +1,9 @@
 "use client";
 
-// The Resources panel (changes-11 PR 3.4): hero image, video embed, external
-// resource, and downloadable attachments.
+// The Resources panel (changes-11 PR 3.4): video embed, external resource, and
+// downloadable attachments. The hero image moved to the editor's right-hand
+// Display card in ADR-139 #6; its label stays in `ResourcesLabels` because the
+// editor still reads it from here.
 //
 // These four ARE the lesson's capabilities (ADR-055 #4) alongside body
 // content, so this panel carries the live "what kind of lesson is this"
@@ -21,7 +23,6 @@ import { Button } from "@repo/ui/components/button";
 import { ConfirmDialog } from "@repo/ui/components/confirm-dialog";
 import { Input } from "@repo/ui/components/input";
 import { EditorSection, Field } from "../../../../_components/editor/editor-section.tsx";
-import { ImageUploadField } from "../../../../_components/image-upload-field.tsx";
 import { MediaPickerDialog } from "../../../../_components/media-picker-dialog.tsx";
 import type { ImageUploadLabels } from "../../../../_components/image-upload-field.tsx";
 
@@ -65,8 +66,6 @@ export interface ResourcesLabels {
 const MAX_ATTACHMENTS = 20;
 
 export function ResourcesPanel({
-  hero,
-  onHeroChange,
   videoUrl,
   onVideoUrlChange,
   videoUrlError,
@@ -79,8 +78,6 @@ export function ResourcesPanel({
   disabled,
   labels,
 }: {
-  hero: { id: string | null; url: string | null };
-  onHeroChange: (next: { id: string | null; url: string | null }) => void;
   videoUrl: string;
   onVideoUrlChange: (next: string) => void;
   /** The editor's inline message for `meta.videoUrl` (ADR-077). */
@@ -154,18 +151,6 @@ export function ResourcesPanel({
           {labels.capabilityWarning}
         </p>
       )}
-
-      <ImageUploadField
-        id="lesson-hero"
-        label={labels.heroImageLabel}
-        value={hero.url}
-        purpose="content"
-        category="learn"
-        sourceType="COURSE"
-        disabled={disabled}
-        onChange={(next) => onHeroChange({ id: next?.id ?? null, url: next?.url ?? null })}
-        labels={labels.upload}
-      />
 
       <Field label={labels.videoUrlLabel} error={videoError}>
         <Input

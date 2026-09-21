@@ -88,7 +88,11 @@ function baseCsp(nonce: string | null): string {
     // the origins a URL may be pasted from. A pasted URL is parsed into one
     // of these or rejected (security.md #9: never trust the raw URL), so the
     // allowlist and the parser cannot drift apart in the unsafe direction.
-    `frame-src 'self' https://www.tradays.com https://www.youtube-nocookie.com https://player.vimeo.com https://www.dailymotion.com`,
+    //
+    // - TradingView's widget host, for the live-rates board and the market
+    //   news band (ADR-136 §2). Framed directly, like the calendar, so no
+    //   vendor script is ever allowed.
+    `frame-src 'self' https://www.tradingview-widget.com https://www.youtube-nocookie.com https://player.vimeo.com https://www.dailymotion.com`,
     `base-uri 'self'`,
     `form-action 'self'`,
     `object-src 'none'`,

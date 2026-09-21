@@ -12,7 +12,8 @@
 // consumer that returned `null` until its fetch resolved would remove content
 // that was already on screen and shift the layout — the exact cost ADR-056
 // accepted the island in order to avoid.
-import { CircleCheckBig, LogIn } from "lucide-react";
+import { CircleCheckBig, LogIn, UserPlus } from "lucide-react";
+import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { ROUTE_PATHS } from "@repo/contracts";
 import { Link } from "@repo/i18n/navigation";
@@ -102,17 +103,44 @@ export function ProgressSignInCard({ className }: { className?: string }) {
 
   return (
     <div className={className}>
-      <div className="flex flex-col gap-2 rounded-xl border border-primary/20 bg-primary/5 p-4">
-        <p className="flex items-center gap-2 text-sm font-semibold">
-          <LogIn aria-hidden className="size-4 text-primary-interactive" />
-          {t("progress.signInTitle")}
-        </p>
-        <p className="text-sm text-muted-foreground">{t("progress.signInBody")}</p>
-        <div>
-          <Button size="sm" variant="outline" render={<Link href={ROUTE_PATHS["sign-in"]} />}>
-            {t("progress.signInAction")}
-          </Button>
-        </div>
+      <SaveProgressPrompt title={t("progress.signInTitle")} body={t("progress.signInBody")} />
+    </div>
+  );
+}
+
+/**
+ * "Sign in or join us to save your progress" (changes-42) — the card's body,
+ * shared with the quiz page's guest prompt so both offer the same two doors.
+ *
+ * Sign-in carries `?redirect=` back to THIS page (the sign-in form's own
+ * open-redirect guard accepts same-origin paths only), so a reader who signs in
+ * mid-lesson lands on the lesson rather than on the home page. `next/navigation`'s
+ * pathname, not `@repo/i18n`'s: the form `location.assign`s the value as-is, so
+ * it must keep its locale prefix.
+ */
+export function SaveProgressPrompt({ title, body }: { title: string; body: string }) {
+  const t = useTranslations("learn");
+  const pathname = usePathname();
+  const signInHref = pathname
+    ? `${ROUTE_PATHS["sign-in"]}?${new URLSearchParams({ redirect: pathname }).toString()}`
+    : ROUTE_PATHS["sign-in"];
+
+  return (
+    <div className="flex flex-col gap-2 rounded-xl border border-primary/20 bg-primary/5 p-4">
+      <p className="flex items-center gap-2 text-sm font-semibold">
+        <LogIn aria-hidden className="size-4 text-primary-interactive" />
+        {title}
+      </p>
+      <p className="text-sm text-muted-foreground">{body}</p>
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" render={<Link href={signInHref} />}>
+          <LogIn data-icon="inline-start" aria-hidden />
+          {t("progress.signInAction")}
+        </Button>
+        <Button size="sm" variant="outline" render={<Link href={ROUTE_PATHS["sign-up"]} />}>
+          <UserPlus data-icon="inline-start" aria-hidden />
+          {t("progress.joinAction")}
+        </Button>
       </div>
     </div>
   );

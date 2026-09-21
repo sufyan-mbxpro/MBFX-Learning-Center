@@ -42,34 +42,68 @@ export interface PivotOhlc {
 export interface PivotPointsConfig {
   intervals?: string[];
   defaultInterval?: string;
-  symbols?: { symbol: string; label: string }[];
 }
 
 const LEVELS = ["r4", "r3", "r2", "r1", "pp", "s1", "s2", "s3", "s4"] as const;
 
+type LevelKey = (typeof LEVELS)[number];
+
+/**
+ * A level's tone (changes-40).
+ *
+ * Colour here is MEANING, not decoration: an R level sits above the period's
+ * price and an S level below it, and the pivot is the axis both are measured
+ * from. Tinting by METHOD instead would have been five hues that say nothing —
+ * exactly what ADR-107 warns about — and it would also have fought the tonal
+ * vocabulary the rest of the site uses, where `success` and `destructive` mean
+ * something.
+ *
+ * The ink is the `-interactive` variant in both cases, which is the pair
+ * ADR-003 derives to clear 4.5:1 on `--card` in either mode; raw `--success`
+ * does not (code-style.md #24's "ink" rule, the same trap).
+ */
+const LEVEL_CLASS: Record<LevelKey, { label: string; cell: string }> = {
+  r4: { label: "bg-destructive/10 text-destructive-interactive", cell: "" },
+  r3: { label: "bg-destructive/10 text-destructive-interactive", cell: "" },
+  r2: { label: "bg-destructive/10 text-destructive-interactive", cell: "" },
+  r1: { label: "bg-destructive/10 text-destructive-interactive", cell: "" },
+  // The one row a reader looks for first, so it is the one row that is filled
+  // rather than merely tinted.
+  pp: { label: "bg-primary text-primary-foreground", cell: "bg-primary/8 font-semibold" },
+  s1: { label: "bg-success/10 text-success-interactive", cell: "" },
+  s2: { label: "bg-success/10 text-success-interactive", cell: "" },
+  s3: { label: "bg-success/10 text-success-interactive", cell: "" },
+  s4: { label: "bg-success/10 text-success-interactive", cell: "" },
+};
+
 export function PivotPointsWidget({
   config,
+  symbols,
   autofill,
   defaultSymbol,
 }: {
   config: PivotPointsConfig;
+  /** The offered instruments, resolved from the config's `symbolIds` by `pivotSymbols`. */
+  symbols: { symbol: string; label: string }[];
   /**
-   * The last COMPLETE period for each offered interval, when the platform has
-   * bars. Absent (or empty) is the normal first-run state, and the widget
-   * stays fully usable in manual mode — which is why manual is what it opens
-   * on when nothing is available.
+   * The last COMPLETE period per SYMBOL, then per offered interval, when the
+   * platform has bars. Keyed by symbol since changes-46: it used to hold the
+   * default symbol's periods only, so picking another pair from the (then
+   * restored) dropdown would have kept showing the first pair's numbers.
+   * Absent (or empty) is the normal first-run state, and the widget stays
+   * fully usable in manual mode — which is why manual is what it opens on when
+   * nothing is available.
    */
-  autofill: Record<string, PivotOhlc | null>;
+  autofill: Record<string, Record<string, PivotOhlc | null>>;
   defaultSymbol: string;
 }) {
   const t = useTranslations("tools");
   const intervals = config.intervals ?? ["1D", "1W", "1M", "1Y"];
-  const symbols = config.symbols ?? [];
 
   const [symbol, setSymbol] = useState(defaultSymbol || symbols[0]?.symbol || "EUR/USD");
   const [interval, setInterval] = useState<string>(config.defaultInterval ?? intervals[0] ?? "1D");
 
-  const fetched = autofill[interval] ?? null;
+  const fetched = autofill[symbol]?.[interval] ?? null;
   const [manual, setManual] = useState(false);
   // Switching to Manual KEEPS the fetched numbers as the starting values
   // rather than clearing the form: a reader who wants to nudge one figure
@@ -127,7 +161,14 @@ export function PivotPointsWidget({
             <FieldLabel>{t("pivot.symbol")}</FieldLabel>
             <ToolCombobox
               value={symbol}
-              onValueChange={setSymbol}
+              onValueChange={(next) => {
+                setSymbol(next);
+                // A new instrument is a new set of prices: typed figures for
+                // the old one would silently compute its levels under the new
+                // name.
+                setManual(false);
+                setOhlc({ open: "", high: "", low: "", close: "" });
+              }}
               options={symbols.map((s) => ({ value: s.symbol, label: s.label }))}
             />
           </Field>
@@ -175,34 +216,58 @@ export function PivotPointsWidget({
         rows === null ? null : (
           // Its own scroll container: five methods × nine levels is the one
           // table on this page wider than a phone.
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto rounded-lg ring-1 ring-border">
             <table className="w-full min-w-160 text-sm">
               <caption className="sr-only">{t("pivot.tableCaption")}</caption>
               <thead>
-                <tr className="border-b border-border">
-                  <th scope="col" className="py-2 text-start font-medium">
+                {/* A header BAND, not a rule. Nine rows of bare numbers under
+                    five bare words read as a spreadsheet paste; a ground under
+                    the method names is what separates the labels from the
+                    figures at a glance. */}
+                <tr className="border-b border-border bg-muted/60">
+                  <th
+                    scope="col"
+                    className="px-4 py-3 text-start text-xs font-semibold tracking-caps uppercase text-muted-foreground"
+                  >
                     {t("pivot.level")}
                   </th>
                   {PIVOT_METHODS.map((method) => (
-                    <th key={method} scope="col" className="py-2 text-end font-medium">
+                    <th
+                      key={method}
+                      scope="col"
+                      className="px-4 py-3 text-end text-xs font-semibold tracking-caps uppercase text-muted-foreground"
+                    >
                       {t(`pivot.methods.${method}`)}
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {LEVELS.map((level) => (
-                  <tr key={level} className="border-b border-border/50 last:border-0">
-                    <th scope="row" className="py-1.5 text-start font-normal text-muted-foreground">
-                      {t(`pivot.levels.${level}`)}
+                {LEVELS.map((level, index) => (
+                  <tr
+                    key={level}
+                    // The reveal classes go on the `<tr>` itself rather than
+                    // inside a `<Reveal>`: a table row may not be wrapped in a
+                    // div, and `.reveal` only ever animates opacity and
+                    // transform, both of which a row honours. The observer
+                    // island writes `is-visible` outside React, which is what
+                    // `suppressHydrationWarning` is for here — the same
+                    // exemption `Reveal` itself carries, for the same reason.
+                    suppressHydrationWarning
+                    className={`reveal reveal-up border-b border-border/50 transition-colors last:border-0 hover:bg-muted/70 ${LEVEL_CLASS[level].cell}`}
+                    // Capped, so the ninth row is not most of a second behind
+                    // the first — `RevealGroup`'s own ladder, by hand.
+                    style={{ transitionDelay: `${Math.min(index * 45, 360)}ms` }}
+                  >
+                    <th scope="row" className="px-4 py-2 text-start font-normal">
+                      <span
+                        className={`inline-flex min-w-11 items-center justify-center rounded-md px-2 py-0.5 text-xs font-semibold ${LEVEL_CLASS[level].label}`}
+                      >
+                        {t(`pivot.levels.${level}`)}
+                      </span>
                     </th>
                     {PIVOT_METHODS.map((method) => (
-                      <td
-                        key={method}
-                        className={`py-1.5 text-end tabular-nums ${
-                          level === "pp" ? "font-semibold" : ""
-                        }`}
-                      >
+                      <td key={method} className="px-4 py-2 text-end tabular-nums">
                         {price(level === "pp" ? rows[method].pp : rows[method][level])}
                       </td>
                     ))}

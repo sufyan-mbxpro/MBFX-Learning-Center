@@ -20,9 +20,9 @@ import { Badge } from "@repo/ui/components/badge";
 import { Container } from "@repo/ui/components/container";
 import { Reveal } from "@repo/ui/components/reveal";
 import { Section } from "@repo/ui/components/section";
-import { SectionHeading } from "@repo/ui/components/section-heading";
 
 import { CategoryCards } from "./category-cards.tsx";
+import { NewsBackdrop } from "./news-art.tsx";
 
 /**
  * The tag chips. Their own export because the archives put them in two
@@ -83,19 +83,51 @@ export async function ArchiveTaxonomy({
   if (!hasCategories && tags.length === 0) return null;
 
   return (
-    <Section tone="muted" spacing="lg">
+    // `id="topics"`: the listing masthead's "Browse topics" action anchors
+    // here on every page that is not the section front (changes-38).
+    //
+    // ─── The same band as `NewsTopics` (changes-40) ─────────────────────
+    //
+    // This and `NewsTopics` are the SAME band to a reader: "Topics / Keep
+    // exploring" at the foot of a listing. One of them showed a photograph and
+    // the other a flat `muted` ground, so /analysis and every archive looked
+    // unfinished beside /news for no reason anybody chose. It now takes
+    // ADR-117's treatment exactly as `NewsTopics` does — an `inverted`
+    // (`--secondary`) band, the picture at full strength, a `--secondary`
+    // scrim carrying the contrast guarantee whatever the photograph is.
+    <Section id="topics" tone="inverted" spacing="lg" className="relative isolate overflow-hidden">
+      {/* Its own layer rather than a class on Section: Section composes its
+          tone through `cn` (tailwind-merge), so a background passed in
+          className REPLACES the tone's fill instead of layering over it. */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 select-none">
+        <NewsBackdrop slot="topics" />
+      </div>
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-b from-secondary/90 via-secondary/70 to-secondary/90"
+      />
+
       <Container className="flex flex-col gap-(--section-gap)">
-        <SectionHeading
-          eyebrow={t("topicsEyebrow")}
-          title={t("exploreTitle")}
-          lead={t("exploreLead")}
-        />
+        {/* Hand-written rather than `SectionHeading`, for `NewsTopics`' own
+            reason: SectionHeading's eyebrow and lead are coloured for
+            `--background`, and this band paints `--secondary`. */}
+        <div className="flex flex-col items-start gap-3 text-start">
+          <p className="text-xs font-semibold tracking-caps text-secondary-foreground/75 uppercase">
+            {t("topicsEyebrow")}
+          </p>
+          <h2 className="font-display text-display-sm font-bold text-balance text-secondary-foreground">
+            {t("exploreTitle")}
+          </h2>
+          <p className="max-w-2xl text-lg text-pretty text-secondary-foreground/80">
+            {t("exploreLead")}
+          </p>
+        </div>
 
         <Reveal variant="up">
           <div className="flex flex-col gap-8">
             {hasCategories && (
               <div className="flex flex-col gap-4">
-                <h3 className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">
+                <h3 className="text-sm font-semibold tracking-wide text-secondary-foreground/75 uppercase">
                   {t("categories")}
                 </h3>
                 <CategoryCards categories={categories} activeSlug={activeCategorySlug} />
@@ -104,7 +136,7 @@ export async function ArchiveTaxonomy({
 
             {tags.length > 0 && (
               <div className="flex flex-col gap-4">
-                <h3 className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">
+                <h3 className="text-sm font-semibold tracking-wide text-secondary-foreground/75 uppercase">
                   {t("popularTags")}
                 </h3>
                 <TagChips tags={tags} activeSlug={activeTagSlug} />

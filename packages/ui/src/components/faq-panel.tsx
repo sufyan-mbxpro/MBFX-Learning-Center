@@ -61,7 +61,7 @@ function FaqPanel({
   return (
     <section
       className={cn(
-        "flex flex-col gap-4 rounded-2xl bg-muted/40 p-6 ring-1 ring-foreground/10",
+        "flex flex-col gap-4 rounded-lg bg-muted/40 p-6 ring-1 ring-foreground/10",
         className,
       )}
     >

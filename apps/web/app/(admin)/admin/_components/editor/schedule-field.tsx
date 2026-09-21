@@ -5,12 +5,20 @@
 // It was `publish-panel.tsx`'s alone while articles were the only entity with
 // a `scheduledFor` column. ADR-071 gave the other five entities one, so
 // `ContentStatusPanel` needs the identical field — and a second copy of a
-// `datetime-local` input plus three clock-reading preset helpers is exactly
-// the kind of duplication this repo has already paid for once (four copies of
-// one FNV-1a hash, collapsed in changes-18).
+// date-time control plus three clock-reading preset helpers is exactly the
+// kind of duplication this repo has already paid for once (four copies of one
+// FNV-1a hash, collapsed in changes-18).
+//
+// The control itself stopped being `<Input type="datetime-local">` in
+// changes-32: the box was themed and the picker it opened was Chrome's own
+// blue one, which no stylesheet reaches. `@repo/ui`'s `DateTimePicker` keeps
+// the same "YYYY-MM-DDTHH:mm" local-time string, so nothing below this
+// component moved.
+import { useTranslations } from "next-intl";
+
 import { Button } from "@repo/ui/components/button";
+import { DateTimePicker } from "@repo/ui/components/date-time-picker";
 import { Field, FieldError, FieldLabel } from "@repo/ui/components/field";
-import { Input } from "@repo/ui/components/input";
 
 export interface ScheduleFieldLabels {
   scheduleFor: string;
@@ -69,13 +77,27 @@ export function ScheduleField({
   error?: string;
 }) {
   const preset = (fn: () => Date) => () => onChange(toLocalInput(fn()));
+  // The picker's own chrome, read here rather than threaded through the six
+  // screens that build `labels` — the `AdminCombobox` arrangement, and the
+  // reason those five keys are not in `ScheduleFieldLabels`.
+  const t = useTranslations("admin");
 
   // Its own Field (ADR-077): the label, the asterisk and the error wire to
   // the input without the host threading an id pair through.
   return (
     <Field controlId={id} invalid={Boolean(error)} required={required} className="border-t pt-3">
       <FieldLabel>{labels.scheduleFor}</FieldLabel>
-      <Input type="datetime-local" value={value} onChange={(e) => onChange(e.target.value)} />
+      <DateTimePicker
+        value={value}
+        onChange={onChange}
+        labels={{
+          placeholder: t("schedulePickerPlaceholder"),
+          previousMonth: t("schedulePickerPreviousMonth"),
+          nextMonth: t("schedulePickerNextMonth"),
+          hour: t("schedulePickerHour"),
+          minute: t("schedulePickerMinute"),
+        }}
+      />
       <FieldError>{error}</FieldError>
       <div className="flex flex-wrap gap-1.5">
         <Button variant="outline" size="xs" onClick={preset(plusHour)}>

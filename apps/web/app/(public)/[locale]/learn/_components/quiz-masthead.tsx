@@ -41,9 +41,10 @@ export async function QuizMasthead({
       actions={
         // An in-page anchor, not a navigation: on a phone the grid is a
         // screen down, and a masthead that only repeats the page's name has
-        // not earned its height. `secondary` rides on --primary-foreground,
-        // the one ink ADR-003 derives to be legible on the `brand` tone.
-        <Button size="xl" shape="pill" variant="secondary" render={<a href="#quizzes" />}>
+        // not earned its height. The band is `--secondary` now that it shows
+        // its photograph (ADR-117), so the action keeps the brand FILL — a
+        // small element with its own paired ink, ADR-018 rule 5's case.
+        <Button size="xl" render={<a href="#quizzes" />}>
           {t("quizzes.heroBrowse")}
           {/* Down, not inline-end: this scrolls the page rather than
               navigating, so it needs no RTL flip either. */}

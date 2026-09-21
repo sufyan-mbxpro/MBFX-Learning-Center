@@ -38,3 +38,23 @@ describe("QuizEditor's publishing panel reads the server's copy, not a snapshot"
     });
   }
 });
+
+// A translation translates the default language's SHAPE (`saveQuiz` refuses
+// anything else). Every control that changes the shape is gated here, so an
+// editor on the Arabic tab is never offered a button that only fails.
+describe("the quiz editor on another language", () => {
+  it("offers no way to add, remove, reorder or generate questions", () => {
+    expect(source).toMatch(
+      /\{!translating && \(\s*<Button variant="outline" size="sm" onClick=\{addQuestion\}/,
+    );
+    expect(source).toContain("{ai && !translating && (");
+    expect(source).toMatch(/aiFill && !translating \? \(\s*<AiFillButton/);
+    expect(source).toMatch(/\{!translating && \(\s*<div className="flex items-center gap-1">/);
+  });
+
+  it("locks type, points, correct answer and the option list", () => {
+    const card = source.slice(source.indexOf("function QuestionCard("));
+    expect(card).toContain('const fixedOptions = question.type === "TRUE_FALSE" || translating;');
+    expect(card.match(/disabled=\{translating\}/g)).toHaveLength(3);
+  });
+});

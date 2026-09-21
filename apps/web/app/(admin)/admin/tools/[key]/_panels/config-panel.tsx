@@ -1,6 +1,6 @@
 "use client";
 
-// The eight config panels (changes-25 T5, ADR-086 #2).
+// The config panels, one per tool (changes-25 T5, ADR-086 #2; three more in ADR-135).
 //
 // **This is where "maximum control from the admin side" actually lives.** The
 // owner's B4 and B6 asked for it; ADR-086 #1 drew the line. What an admin can
@@ -23,7 +23,8 @@ import { Button } from "@repo/ui/components/button";
 import { Checkbox } from "@repo/ui/components/checkbox";
 import { Field as UiField, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
-import { Trash2, Plus } from "lucide-react";
+import { useState } from "react";
+import { CheckCheck, Plus, Search, Trash2, X } from "lucide-react";
 import { humanizeKey } from "@repo/utils";
 import { AdminCombobox } from "../../../_components/combobox.tsx";
 import { Field } from "../../../_components/editor/editor-section.tsx";
@@ -79,50 +80,146 @@ export interface ConfigPanelLabels {
   lookbackDays: string;
   riskOffBelow: string;
   riskOnAbove: string;
+  defaultBalance: string;
+  leverageOptions: string;
+  defaultLeverage: string;
+  leverageValue: string;
+  defaultLots: string;
+  conservativeMax: string;
+  moderateMax: string;
+  riskLevelsHint: string;
+  minRecommendedRatio: string;
+  minRecommendedRatioHint: string;
   none: string;
   selectedSuffix: string;
+  selectAll: string;
+  clearAll: string;
+  filterInstruments: string;
+  noInstrumentMatch: string;
 }
 
 type Config = Record<string, unknown>;
 
+/** The leverage ratios the margin panel offers as checkboxes (ADR-135). */
+const LEVERAGE_PRESETS = [1, 2, 5, 10, 20, 30, 50, 100, 200, 300, 400, 500, 1000];
+
 /** A checkbox list, not a multi-select: a clearer control for thirty rows,
- *  keyboard-reachable by construction, and it shows the count it has picked. */
+ *  keyboard-reachable by construction, and it shows the count it has picked.
+ *
+ *  changes-46 (image-113): "an option to choose all currencies". Select all /
+ *  Clear all sit in the label row, and a filter narrows the grid once the list
+ *  is long enough to scroll. Both buttons act on the FILTERED rows, so "type
+ *  EUR, Select all" ticks the euro pairs and leaves the rest as they were. */
 function InstrumentPicker({
   label,
   options,
   value,
   onChange,
-  selectedSuffix,
+  labels,
 }: {
   label: string;
   options: InstrumentOption[];
   value: string[];
   onChange: (next: string[]) => void;
-  selectedSuffix: string;
+  labels: Pick<
+    ConfigPanelLabels,
+    "selectedSuffix" | "selectAll" | "clearAll" | "filterInstruments" | "noInstrumentMatch"
+  >;
 }) {
+  const [query, setQuery] = useState("");
   const selected = new Set(value);
+  const needle = query.trim().toLowerCase();
+  const visible = needle
+    ? options.filter(
+        (option) =>
+          option.symbol.toLowerCase().includes(needle) ||
+          option.displayName.toLowerCase().includes(needle),
+      )
+    : options;
+  const visibleIds = new Set(visible.map((option) => option.id));
+  const allVisibleSelected = visible.length > 0 && visible.every((o) => selected.has(o.id));
+  const noneVisibleSelected = visible.every((o) => !selected.has(o.id));
+
+  // Rebuilt in the OPTIONS' order, like `EnumPicker`, so a select-all does
+  // not leave the stored list in whatever order the boxes were ticked.
+  const selectVisible = () =>
+    onChange(options.filter((o) => selected.has(o.id) || visibleIds.has(o.id)).map((o) => o.id));
+  const clearVisible = () => onChange(value.filter((id) => !visibleIds.has(id)));
+
   return (
-    <Field label={`${label} (${value.length} ${selectedSuffix})`}>
-      <div className="grid max-h-64 grid-cols-1 gap-1 overflow-y-auto rounded-md border border-border p-3 sm:grid-cols-2 lg:grid-cols-3">
-        {options.map((option) => (
-          // A UiField per row, never a bare HTML label element (ADR-077):
-          // the Field wires the label to its control, which is the thing a
-          // hand-written one gets wrong often enough to be worth a rule.
-          <UiField key={option.id} orientation="horizontal">
-            <Checkbox
-              checked={selected.has(option.id)}
-              onCheckedChange={(checked) =>
-                onChange(checked ? [...value, option.id] : value.filter((id) => id !== option.id))
-              }
+    <Field
+      label={`${label} (${value.length} ${labels.selectedSuffix})`}
+      adornment={
+        <div className="flex items-center gap-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={allVisibleSelected}
+            onClick={selectVisible}
+          >
+            <CheckCheck data-icon="inline-start" aria-hidden />
+            {labels.selectAll}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={noneVisibleSelected}
+            onClick={clearVisible}
+          >
+            <X data-icon="inline-start" aria-hidden />
+            {labels.clearAll}
+          </Button>
+        </div>
+      }
+    >
+      <div className="flex flex-col gap-2">
+        {options.length > 8 && (
+          <div className="relative">
+            <Search
+              aria-hidden
+              className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
             />
-            <FieldLabel className="min-w-0 font-normal">
-              <span className="min-w-0 truncate">{option.symbol}</span>
-              <span className="min-w-0 truncate text-xs text-muted-foreground">
-                {option.displayName}
-              </span>
-            </FieldLabel>
-          </UiField>
-        ))}
+            <Input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder={labels.filterInstruments}
+              aria-label={labels.filterInstruments}
+              className="ps-9"
+            />
+          </div>
+        )}
+        <div className="grid max-h-64 grid-cols-1 gap-1 overflow-y-auto rounded-md border border-border p-3 sm:grid-cols-2 lg:grid-cols-3">
+          {visible.length === 0 ? (
+            <p className="col-span-full py-4 text-center text-sm text-muted-foreground">
+              {labels.noInstrumentMatch}
+            </p>
+          ) : (
+            visible.map((option) => (
+              // A UiField per row, never a bare HTML label element (ADR-077):
+              // the Field wires the label to its control, which is the thing a
+              // hand-written one gets wrong often enough to be worth a rule.
+              <UiField key={option.id} orientation="horizontal">
+                <Checkbox
+                  checked={selected.has(option.id)}
+                  onCheckedChange={(checked) =>
+                    onChange(
+                      checked ? [...value, option.id] : value.filter((id) => id !== option.id),
+                    )
+                  }
+                />
+                <FieldLabel className="min-w-0 font-normal">
+                  <span className="min-w-0 truncate">{option.symbol}</span>
+                  <span className="min-w-0 truncate text-xs text-muted-foreground">
+                    {option.displayName}
+                  </span>
+                </FieldLabel>
+              </UiField>
+            ))
+          )}
+        </div>
       </div>
     </Field>
   );
@@ -217,12 +314,172 @@ export function ConfigPanel({
 
   const arr = (key: string): string[] =>
     Array.isArray(config[key]) ? (config[key] as string[]) : [];
+  // Pivot points: the default is picked FROM the offered symbols, so the two
+  // controls cannot disagree. With nothing ticked yet, every instrument.
+  const offeredSymbols = new Set(arr("symbolIds"));
+  const defaultSymbolOptions =
+    offeredSymbols.size === 0
+      ? instrumentOptions
+      : instrumentOptions.filter((o) => o.value === "" || offeredSymbols.has(o.value));
   const num = (key: string): number | undefined =>
     typeof config[key] === "number" ? (config[key] as number) : undefined;
   const str = (key: string): string =>
     typeof config[key] === "string" ? (config[key] as string) : "";
 
+  /** The account-currency and pair pickers three calculators share. */
+  const pairAndCurrencyPickers = (
+    <>
+      <InstrumentPicker
+        label={labels.pairs}
+        options={pairs}
+        value={arr("pairIds")}
+        onChange={(v) => set({ pairIds: v })}
+        labels={labels}
+      />
+      <InstrumentPicker
+        label={labels.accountCurrencies}
+        options={currencies}
+        value={arr("accountCurrencyIds")}
+        onChange={(v) => set({ accountCurrencyIds: v })}
+        labels={labels}
+      />
+    </>
+  );
+  const defaultCurrencyAndPair = (
+    <>
+      <Field label={labels.defaultAccountCurrency}>
+        <AdminCombobox
+          value={str("defaultAccountCurrency")}
+          onValueChange={(v) => set({ defaultAccountCurrency: v })}
+          options={currencyCodes}
+        />
+      </Field>
+      <Field label={labels.defaultPair}>
+        <AdminCombobox
+          value={str("defaultPairId")}
+          onValueChange={(v) => set({ defaultPairId: v || null })}
+          options={instrumentOptions}
+        />
+      </Field>
+    </>
+  );
+
   switch (toolKey) {
+    case "margin": {
+      // The offered leverages are a checkbox row over the common ratios PLUS
+      // whatever is already stored, so a value outside the presets that an
+      // older save wrote is shown and can be unticked, never silently kept.
+      const stored = Array.isArray(config.leverageOptions)
+        ? (config.leverageOptions as number[])
+        : [];
+      const presets = [...new Set([...LEVERAGE_PRESETS, ...stored])].sort((a, b) => a - b);
+      return (
+        <div className="flex flex-col gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">{defaultCurrencyAndPair}</div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <NumberField
+              label={labels.defaultUnits}
+              value={num("defaultUnits")}
+              onChange={(v) => set({ defaultUnits: v })}
+            />
+            <NumberField
+              label={labels.defaultBalance}
+              value={num("defaultBalance")}
+              onChange={(v) => set({ defaultBalance: v })}
+            />
+            <Field label={labels.defaultLeverage}>
+              <AdminCombobox
+                value={num("defaultLeverage") === undefined ? "" : String(num("defaultLeverage"))}
+                onValueChange={(v) => set({ defaultLeverage: Number(v) })}
+                options={stored.map((n) => ({
+                  value: String(n),
+                  label: labels.leverageValue.replace("{ratio}", String(n)),
+                }))}
+              />
+            </Field>
+          </div>
+          <EnumPicker
+            label={labels.leverageOptions}
+            options={presets.map(String)}
+            value={stored.map(String)}
+            onChange={(next) => set({ leverageOptions: next.map(Number) })}
+          />
+          {pairAndCurrencyPickers}
+        </div>
+      );
+    }
+
+    case "profit-loss":
+      return (
+        <div className="flex flex-col gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {defaultCurrencyAndPair}
+            <NumberField
+              label={labels.defaultLots}
+              value={num("defaultLots")}
+              onChange={(v) => set({ defaultLots: v })}
+              step="0.01"
+            />
+          </div>
+          {pairAndCurrencyPickers}
+        </div>
+      );
+
+    case "risk-reward":
+      return (
+        <div className="flex flex-col gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">{defaultCurrencyAndPair}</div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <NumberField
+              label={labels.defaultBalance}
+              value={num("defaultBalance")}
+              onChange={(v) => set({ defaultBalance: v })}
+            />
+            <NumberField
+              label={labels.defaultRisk}
+              value={num("defaultRiskPercent")}
+              onChange={(v) => set({ defaultRiskPercent: v })}
+              step="0.1"
+            />
+            <NumberField
+              label={labels.minRisk}
+              value={num("minRiskPercent")}
+              onChange={(v) => set({ minRiskPercent: v })}
+              step="0.1"
+            />
+            <NumberField
+              label={labels.maxRisk}
+              value={num("maxRiskPercent")}
+              onChange={(v) => set({ maxRiskPercent: v })}
+              step="0.1"
+            />
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <NumberField
+              label={labels.conservativeMax}
+              hint={labels.riskLevelsHint}
+              value={num("conservativeMaxPercent")}
+              onChange={(v) => set({ conservativeMaxPercent: v })}
+              step="0.1"
+            />
+            <NumberField
+              label={labels.moderateMax}
+              value={num("moderateMaxPercent")}
+              onChange={(v) => set({ moderateMaxPercent: v })}
+              step="0.1"
+            />
+            <NumberField
+              label={labels.minRecommendedRatio}
+              hint={labels.minRecommendedRatioHint}
+              value={num("minRecommendedRatio")}
+              onChange={(v) => set({ minRecommendedRatio: v })}
+              step="0.1"
+            />
+          </div>
+          {pairAndCurrencyPickers}
+        </div>
+      );
+
     case "position-size":
       return (
         <div className="flex flex-col gap-4">
@@ -267,14 +524,14 @@ export function ConfigPanel({
             options={pairs}
             value={arr("pairIds")}
             onChange={(v) => set({ pairIds: v })}
-            selectedSuffix={labels.selectedSuffix}
+            labels={labels}
           />
           <InstrumentPicker
             label={labels.accountCurrencies}
             options={currencies}
             value={arr("accountCurrencyIds")}
             onChange={(v) => set({ accountCurrencyIds: v })}
-            selectedSuffix={labels.selectedSuffix}
+            labels={labels}
           />
         </div>
       );
@@ -308,14 +565,14 @@ export function ConfigPanel({
             options={pairs}
             value={arr("pairIds")}
             onChange={(v) => set({ pairIds: v })}
-            selectedSuffix={labels.selectedSuffix}
+            labels={labels}
           />
           <InstrumentPicker
             label={labels.accountCurrencies}
             options={currencies}
             value={arr("accountCurrencyIds")}
             onChange={(v) => set({ accountCurrencyIds: v })}
-            selectedSuffix={labels.selectedSuffix}
+            labels={labels}
           />
         </div>
       );
@@ -357,7 +614,7 @@ export function ConfigPanel({
               <AdminCombobox
                 value={str("defaultSymbolId")}
                 onValueChange={(v) => set({ defaultSymbolId: v || null })}
-                options={instrumentOptions}
+                options={defaultSymbolOptions}
               />
             </Field>
           </div>
@@ -365,8 +622,18 @@ export function ConfigPanel({
             label={labels.symbols}
             options={instruments}
             value={arr("symbolIds")}
-            onChange={(v) => set({ symbolIds: v })}
-            selectedSuffix={labels.selectedSuffix}
+            // The default must be one of the offered symbols. Unticking it
+            // (or clearing the list) drops the default rather than leaving a
+            // saved default the public picker does not list.
+            onChange={(v) =>
+              set({
+                symbolIds: v,
+                ...(str("defaultSymbolId") && !v.includes(str("defaultSymbolId"))
+                  ? { defaultSymbolId: null }
+                  : {}),
+              })
+            }
+            labels={labels}
           />
         </div>
       );
@@ -526,7 +793,7 @@ export function ConfigPanel({
             options={currencies}
             value={arr("currencyIds")}
             onChange={(v) => set({ currencyIds: v })}
-            selectedSuffix={labels.selectedSuffix}
+            labels={labels}
           />
         </div>
       );
@@ -553,7 +820,7 @@ export function ConfigPanel({
             options={instruments}
             value={arr("instrumentIds")}
             onChange={(v) => set({ instrumentIds: v })}
-            selectedSuffix={labels.selectedSuffix}
+            labels={labels}
           />
         </div>
       );

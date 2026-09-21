@@ -4,6 +4,7 @@ import { can, requirePermission } from "@repo/rbac";
 import { AdminPage } from "../../_components/admin-page.tsx";
 import { learnLabelMaps } from "../_lib/learn-labels.ts";
 import { LessonsTable, type LessonsTableLabels } from "./lessons-table.tsx";
+import { formatDateTime } from "@repo/utils";
 
 // The flat lesson list + OUTDATED translation queue (plan §8.1).
 //
@@ -20,7 +21,6 @@ export default async function LessonsAdminPage() {
   ]);
 
   const maps = learnLabelMaps(t);
-  const dateFormat = new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" });
 
   const labels: LessonsTableLabels = {
     search: t("searchLessons"),
@@ -86,7 +86,7 @@ export default async function LessonsAdminPage() {
             translationStatusLabel:
               maps.translationStatuses[l.translationStatus] ?? l.translationStatus,
           })),
-          updatedAtLabel: dateFormat.format(row.updatedAt),
+          updatedAtLabel: formatDateTime(row.updatedAt),
           updatedAtSort: row.updatedAt.getTime(),
         }))}
         courses={courses.map((course) => ({ id: course.id, title: course.title }))}

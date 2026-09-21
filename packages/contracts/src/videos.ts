@@ -14,7 +14,7 @@
 // All three are enforced here so the admin form, the server action and the
 // service fail identically rather than in three slightly different ways.
 import { z } from "zod";
-import { externalUrlSchema, learnTrackSchema } from "./learn.ts";
+import { contentFlagsSchema, externalUrlSchema, learnTrackSchema } from "./learn.ts";
 
 // Local rather than shared with learn.ts, which keeps its own copies private
 // for the same reason: these are shapes, not a contract between the files, and
@@ -99,18 +99,25 @@ export type VideoTopicVideoInput = z.infer<typeof videoTopicVideoSchema>;
 
 // ─── Topics ──────────────────────────────────────────────────
 
-export const videoTopicMetaSchema = z.object({
-  /**
-   * Required (ADR-068 §1): the track is the URL's second segment, not a filter
-   * over one, so it cannot be null for the same reason `Quiz.track` cannot.
-   */
-  track: learnTrackSchema,
-  /** Nullable: a topic outlives the category it was filed under. */
-  categoryId: idSchema.nullable().optional(),
-  coverAssetId: idSchema.nullable().optional(),
-  visibility: z.enum(["PUBLIC", "AUTHENTICATED", "PREMIUM"]).optional(),
-  sortOrder: z.int().min(0).max(9999).optional(),
-});
+export const videoTopicMetaSchema = z
+  .object({
+    /**
+     * Required (ADR-068 §1): the track is the URL's second segment, not a filter
+     * over one, so it cannot be null for the same reason `Quiz.track` cannot.
+     */
+    track: learnTrackSchema,
+    /** Nullable: a topic outlives the category it was filed under. */
+    categoryId: idSchema.nullable().optional(),
+    coverAssetId: idSchema.nullable().optional(),
+    visibility: z.enum(["PUBLIC", "AUTHENTICATED", "PREMIUM"]).optional(),
+    sortOrder: z.int().min(0).max(9999).optional(),
+    /**
+     * ADR-144 §2 — also list this topic on every other school's video pages.
+     * `track` stays the canonical address: those listings link to it.
+     */
+    showOnAllTracks: z.boolean().optional(),
+  })
+  .extend(contentFlagsSchema.shape);
 export type VideoTopicMetaInput = z.infer<typeof videoTopicMetaSchema>;
 
 export const videoTopicTranslationSchema = z.object({
@@ -124,6 +131,13 @@ export const videoTopicTranslationSchema = z.object({
   seoTitle: z.string().trim().max(70).nullable().optional(),
   seoDescription: z.string().trim().max(180).nullable().optional(),
   seoFocusKeyword: z.string().trim().max(100).nullable().optional(),
+  /**
+   * This locale's text came from AI and has not been edited since (changes-29
+   * B3, as `saveArticleTranslationSchema` has it). The save writes
+   * `MACHINE_TRANSLATED` instead of `TRANSLATED`, which keeps it off the public
+   * reading-language menu (ADR-127 #2) until a human's Save promotes it.
+   */
+  machineTranslated: z.boolean().optional(),
 });
 export type VideoTopicTranslationInput = z.infer<typeof videoTopicTranslationSchema>;
 
@@ -242,6 +256,12 @@ export interface VideoTopicCardView {
   category: { slug: string; name: string } | null;
   coverUrl: string | null;
   videoCount: number;
+  /** ADR-139 #3 — placement: first on the shelf, and the Featured view. */
+  isFeatured: boolean;
+  /** ADR-139 #4 — a marker on the card; nothing is gated. */
+  isPremium: boolean;
+  /** ISO. The shelf's Newest view. */
+  publishedAt: string | null;
 }
 
 export interface VideoTopicView {

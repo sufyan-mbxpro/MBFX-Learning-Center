@@ -19,6 +19,8 @@ export * from "./public-content.ts";
 export * from "./articles.ts";
 export * from "./content-relations.ts";
 export * from "./public-articles.ts";
+export * from "./article-search.ts";
+export * from "./reading-languages.ts";
 export * from "./courses.ts";
 export * from "./course-sections.ts";
 export * from "./lessons.ts";
@@ -29,7 +31,9 @@ export * from "./quiz-links.ts";
 export * from "./quizzes.ts";
 export * from "./videos.ts";
 export * from "./learn-analytics.ts";
+export * from "./learn-analytics-filter.ts";
 export * from "./glossary-topics.ts";
+export * from "./public-search.ts";
 export * from "./market.ts";
 export * from "./market-admin.ts";
 export * from "./market-analytics.ts";
@@ -41,6 +45,7 @@ export * from "./media.ts";
 export * from "./brand-assets.ts";
 export * from "./email-admin.ts";
 export * from "./newsletter.ts";
+export * from "./support.ts";
 export * from "./ai-admin.ts";
 export * from "./ai-media.ts";
 export * from "./cms/index.ts";
@@ -68,3 +73,4 @@ export async function recordAudit(input: RecordAuditInput): Promise<void> {
     },
   });
 }
+export * from "./account.ts";

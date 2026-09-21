@@ -201,7 +201,7 @@ describe("B2 — auto-SEO reviews before it applies", () => {
   it("ticks a field by default only when it is EMPTY", () => {
     // An admin who wrote a meta description should not lose it to an
     // unattended tick.
-    expect(dialog).toContain("current[key].trim().length === 0");
+    expect(dialog).toContain('(current[key] ?? "").trim().length === 0');
   });
 
   it("offers no image field of any kind", () => {
@@ -230,6 +230,31 @@ describe("B2 — auto-SEO reviews before it applies", () => {
     );
     expect(page).toContain("availability.features.seo_generation");
     expect(page).toContain("availability.features.writing_assistant");
+  });
+
+  it("reaches the SEO section of every editor that has one, in the article's format", () => {
+    const admin = join(APP_ROOT, "(admin)", "admin");
+    const editors: [string, string][] = [
+      [join(admin, "learn", "courses", "[id]", "course-editor.tsx"), "courses.update"],
+      [join(admin, "learn", "lessons", "[id]", "lesson-editor.tsx"), "lessons.update"],
+      [join(admin, "learn", "videos", "[id]", "video-editor.tsx"), "lessons.update"],
+      [join(admin, "glossary", "[id]", "glossary-editor.tsx"), "glossary.update"],
+      [join(admin, "glossary", "topics", "[id]", "topic-editor.tsx"), "glossary.update"],
+      [join(admin, "tools", "[key]", "tool-editor.tsx"), "tools.update"],
+    ];
+    const route = stripped(join(admin, "api", "ai", "run", "route.ts"));
+    const seoRow = route.slice(route.indexOf("seo_generation: ["), route.indexOf("translation: ["));
+    for (const [editor, key] of editors) {
+      const source = stripped(editor);
+      // In the SEO section's header, exactly where the article editor puts it.
+      expect(source, relative(APP_ROOT, editor)).toContain("<AiSeoButton");
+      expect(source, relative(APP_ROOT, editor)).toContain("actions={");
+      // …and the run route accepts the key that saves that editor, or every
+      // press would be refused.
+      expect(seoRow, `seo_generation does not accept ${key}`).toContain(`"${key}"`);
+    }
+    const shared = stripped(join(admin, "_lib", "editor-ai.ts"));
+    expect(shared).toContain("availability.features.seo_generation");
   });
 });
 
@@ -447,5 +472,105 @@ describe("the sealed key reaches no screen", () => {
     const form = stripped(join(AI_ROOT, "providers", "provider-form.tsx"));
     expect(form).toContain("apiKeySaved");
     expect(form).toContain("apiKeyEmpty");
+  });
+});
+
+describe("ADR-126 — a brief fills the form, and nothing is saved until Save", () => {
+  const admin = join(APP_ROOT, "(admin)", "admin");
+  const fill = stripped(join(admin, "_components", "ai-fill.tsx"));
+  const editorAi = stripped(join(admin, "_lib", "editor-ai.ts"));
+  const route = stripped(join(admin, "api", "ai", "run", "route.ts"));
+
+  it("writes nothing: the fill component imports no server action", () => {
+    // ADR-097 #4. The review dialog hands the editor a patch; the editor's own
+    // Save, schema and permission check persist it.
+    expect(fill).not.toContain("_actions/");
+    expect(fill).toContain("onApply(patch)");
+  });
+
+  it("ticks a suggested field by default only when it is empty", () => {
+    expect(fill).toContain('(current[key] ?? "").trim().length === 0');
+  });
+
+  it("parses with schemas derived from the field registry", () => {
+    expect(fill).toContain("aiFormSuggestionSchema(module)");
+    expect(fill).toContain("aiFieldSuggestionSchema(definition)");
+  });
+
+  it("never takes HTML from the model — our code writes the markup", () => {
+    expect(fill).toContain("aiBlocksToHtml(");
+    expect(fill).not.toContain("innerHTML");
+  });
+
+  it("omits an action with nothing to work on, rather than greying it", () => {
+    expect(fill).toContain('action === "regenerate" || hasValue');
+  });
+
+  it("resolves availability on the server, gated on ai.use and the content key", () => {
+    expect(editorAi).toContain("getAiAvailability()");
+    expect(editorAi).toContain('can(subject, "ai.use")');
+    expect(editorAi).toContain("canAny(subject, contentKeys)");
+    expect(editorAi).toContain("availability.features.form_fill");
+    expect(editorAi).not.toContain('"use client"');
+  });
+
+  it("gates form fill on the MODULE's own key, for every module", async () => {
+    const { AI_FILL_MODULES } = await import("@repo/contracts");
+    expect(route).toContain("requireFillModule(subject, fill.module)");
+    for (const fillModule of AI_FILL_MODULES) {
+      expect(route, `no permission row for "${fillModule}"`).toContain(`  ${fillModule}: [`);
+    }
+  });
+
+  it("reaches every editor page", () => {
+    const pages = [
+      join(admin, "learn", "courses", "[id]", "page.tsx"),
+      join(admin, "learn", "lessons", "[id]", "page.tsx"),
+      join(admin, "learn", "videos", "[id]", "page.tsx"),
+      join(admin, "learn", "quizzes", "[id]", "page.tsx"),
+      join(admin, "glossary", "[id]", "page.tsx"),
+      join(admin, "glossary", "topics", "[id]", "page.tsx"),
+      join(admin, "tools", "[key]", "page.tsx"),
+    ];
+    for (const page of pages) {
+      expect(stripped(page), relative(APP_ROOT, page)).toContain("loadEditorAi(subject");
+    }
+    const article = stripped(join(admin, "articles", "[id]", "page.tsx"));
+    expect(article).toContain("availability.features.form_fill");
+  });
+});
+
+describe("the AI Writer (ADR-129)", () => {
+  const admin = join(APP_ROOT, "(admin)", "admin");
+  const shell = stripped(join(admin, "_components", "admin-shell.tsx"));
+  const writer = stripped(join(admin, "_components", "ai-writer.tsx"));
+  const route = stripped(join(admin, "api", "ai", "run", "route.ts"));
+
+  it("is mounted by the shell only when ai.use AND the feature are available", () => {
+    expect(shell).toContain('can(subject, "ai.use")');
+    expect(shell).toContain("availability.features.writing_studio === true");
+    expect(shell).toMatch(/\{writerOn && \(\s*<AiWriter/);
+  });
+
+  it("disables nothing on availability — its absence is the answer", () => {
+    for (const forbidden of [/disabled=\{[^}]*\bwriterOn\b/, /disabled=\{[^}]*\bavailab/]) {
+      expect(writer).not.toMatch(forbidden);
+    }
+  });
+
+  it("is gated on ai.use alone, stated as an explicit null rather than an empty list", () => {
+    // `canAny(subject, [])` refuses, so an empty list would lock everyone out;
+    // a missing check would be silent. `null` plus the early return is neither.
+    expect(route).toContain("writing_studio: null");
+    expect(route).toContain("if (permissions === null) return;");
+  });
+
+  it("runs each studio action on its own tier", () => {
+    expect(route).toContain("AI_STUDIO_ACTIONS.find");
+  });
+
+  it("writes nothing: no server action, no save, only the one run endpoint", () => {
+    expect(writer).not.toContain("_actions/");
+    expect(writer).toContain('feature: "writing_studio"');
   });
 });

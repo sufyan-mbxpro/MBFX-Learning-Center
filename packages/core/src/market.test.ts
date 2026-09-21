@@ -3,13 +3,14 @@
 // plus the cache/degrade behavior with an injected in-memory cache.
 import { setupServer } from "msw/node";
 import { http, HttpResponse } from "msw";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   alphaVantageHistoryProvider,
   alphaVantageProvider,
   createMarketService,
   parseAlphaVantageDaily,
   MarketDataError,
+  ProviderQuotaExhaustedError,
   resolveProvider,
   type RateCache,
 } from "./market.ts";
@@ -248,6 +249,55 @@ describe("alphaVantageHistoryProvider", () => {
     expect(params!.get("to_symbol")).toBe("USD");
   });
 
+  it("asks DIGITAL_CURRENCY_DAILY for crypto, and parses its payload", async () => {
+    // FX_DAILY rejects BTC. The payload below is the shape the live endpoint
+    // returned on 2026-09-16, trimmed to two days.
+    let params: URLSearchParams | null = null;
+    server.use(
+      http.get(`${BASE}/query`, ({ request }) => {
+        params = new URL(request.url).searchParams;
+        return HttpResponse.json({
+          "Meta Data": { "2. Digital Currency Code": "BTC", "4. Market Code": "USD" },
+          "Time Series (Digital Currency Daily)": {
+            "2026-09-16": {
+              "1. open": "65524.55",
+              "2. high": "65780.69",
+              "3. low": "65477.98",
+              "4. close": "65668.21",
+              "5. volume": "2.38",
+            },
+            "2026-09-15": {
+              "1. open": "67670.43",
+              "2. high": "67900.00",
+              "3. low": "65400.00",
+              "4. close": "65524.55",
+              "5. volume": "9.10",
+            },
+          },
+        });
+      }),
+    );
+    const bars = await alphaVantageHistoryProvider({ apiKey: "k" }).fetchDailySeries(
+      "BTC/USD",
+      "full",
+      "CRYPTO",
+    );
+    expect(params!.get("function")).toBe("DIGITAL_CURRENCY_DAILY");
+    expect(params!.get("symbol")).toBe("BTC");
+    expect(params!.get("market")).toBe("USD");
+    expect(bars.map((b) => b.close)).toEqual([65524.55, 65668.21]);
+  });
+
+  it("declares which kinds it can serve as bars, so the sweep spends nothing on the rest", () => {
+    const provider = alphaVantageHistoryProvider({ apiKey: "k" });
+    for (const kind of ["CURRENCY", "PAIR", "CRYPTO"] as const) {
+      expect(provider.supportsKind!(kind)).toBe(true);
+    }
+    for (const kind of ["METAL", "INDEX", "COMMODITY"] as const) {
+      expect(provider.supportsKind!(kind)).toBe(false);
+    }
+  });
+
   it("treats 200 + Note as rate-limited, not as success", async () => {
     // AlphaVantage does not use a status code for this. The live rate path
     // already handles it; the history path has to handle it too, or a sweep
@@ -257,6 +307,67 @@ describe("alphaVantageHistoryProvider", () => {
     await expect(
       alphaVantageHistoryProvider({ apiKey: "k" }).fetchDailySeries("EUR/USD", "compact"),
     ).rejects.toThrow(MarketDataError);
+  });
+
+  describe("AlphaVantage's two limits", () => {
+    // Wording as the provider sends it; the classifier reads the sentence
+    // because both limits arrive as HTTP 200 + Information.
+    const BURST = {
+      Information:
+        "Thank you for using Alpha Vantage! Please consider spreading out your free API requests more sparingly (1 request per second).",
+    };
+    const DAILY = {
+      Information:
+        "We have detected your API key as XXXX and our standard API rate limit is 25 requests per day.",
+    };
+    const history = (fetchImpl: typeof fetch) =>
+      alphaVantageHistoryProvider({ apiKey: "k", fetchImpl, minIntervalMs: 0 });
+    const replies = (...bodies: unknown[]) => {
+      let call = 0;
+      const impl = (async () =>
+        Response.json(bodies[Math.min(call++, bodies.length - 1)])) as typeof fetch;
+      return { impl, calls: () => call };
+    };
+
+    it("waits out a per-second throttle and retries once", async () => {
+      const { impl, calls } = replies(BURST, series);
+      const bars = await history(impl).fetchDailySeries("EUR/USD", "compact");
+      expect(bars).toHaveLength(2);
+      expect(calls()).toBe(2);
+    });
+
+    it("reports a throttle that survives the retry as per-second, not as a spent day", async () => {
+      const { impl, calls } = replies(BURST, BURST);
+      const pending = history(impl).fetchDailySeries("EUR/USD", "compact");
+      await expect(pending).rejects.toThrow(/per second/);
+      await expect(pending).rejects.not.toBeInstanceOf(ProviderQuotaExhaustedError);
+      expect(calls()).toBe(2);
+    });
+
+    it("does not retry a spent daily quota, and says which limit it was", async () => {
+      const { impl, calls } = replies(DAILY);
+      const pending = history(impl).fetchDailySeries("EUR/USD", "compact");
+      await expect(pending).rejects.toBeInstanceOf(ProviderQuotaExhaustedError);
+      await expect(pending).rejects.toThrow(/daily request limit/);
+      expect(calls()).toBe(1);
+    });
+
+    it("spaces consecutive requests by the minimum interval", async () => {
+      const at: number[] = [];
+      const impl = (async () => {
+        at.push(Date.now());
+        return Response.json(series);
+      }) as typeof fetch;
+      const provider = alphaVantageHistoryProvider({
+        apiKey: "k",
+        fetchImpl: impl,
+        minIntervalMs: 60,
+      });
+      await provider.fetchDailySeries("EUR/USD", "compact");
+      await provider.fetchDailySeries("GBP/USD", "compact");
+      // A few ms of timer slack either way; back to back would be ~0.
+      expect(at[1]! - at[0]!).toBeGreaterThanOrEqual(50);
+    });
   });
 
   it("treats 200 + Information as rate-limited too", async () => {
@@ -307,6 +418,26 @@ describe("alphaVantageHistoryProvider", () => {
     await expect(
       alphaVantageHistoryProvider({ apiKey: "k" }).fetchDailySeries("EUR/USD", "compact"),
     ).rejects.toThrow(/HTTP 503/);
+  });
+
+  it("gives up on a provider that never answers instead of hanging the sweep", async () => {
+    // Regression: `fetch` has no timeout, so "Sync now" could spin forever.
+    const hangs: typeof fetch = (_url, init) =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(init.signal!.reason));
+      });
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    try {
+      const pending = alphaVantageHistoryProvider({
+        apiKey: "k",
+        fetchImpl: hangs,
+      }).fetchDailySeries("EUR/USD", "compact");
+      const assertion = expect(pending).rejects.toThrow(/did not respond/);
+      await vi.advanceTimersByTimeAsync(30_000);
+      await assertion;
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

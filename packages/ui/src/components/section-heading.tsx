@@ -31,8 +31,14 @@ function SectionHeading({
       {...props}
     >
       {eyebrow && <Badge variant="eyebrow">{eyebrow}</Badge>}
-      <h2 className="text-display-sm font-semibold text-balance">{title}</h2>
-      {lead && <p className="max-w-2xl text-lg text-pretty text-muted-foreground">{lead}</p>}
+      {/* ADR-140 §1 — the owner's reference sets a section heading at
+          30px → 48px bold with a 20px lead (`text-3xl md:text-5xl font-bold`
+          / `text-xl`). `display-sm` spans exactly that range. Bold, because
+          the display slot is now the system UI face and a sans at this size
+          set regular reads as unfinished; ADR-102's `font-normal` was right
+          only for its serif. */}
+      <h2 className="font-display text-display-sm font-bold text-balance">{title}</h2>
+      {lead && <p className="max-w-3xl text-xl text-pretty text-muted-foreground">{lead}</p>}
     </div>
   );
 }

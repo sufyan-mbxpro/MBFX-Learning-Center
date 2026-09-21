@@ -60,6 +60,10 @@ export function toShelfTracks(groups: TrackGroup[], t: Translate): ShelfTrack[] 
         coverUrl: cover,
         coverIsGenerated: cover !== null && isGeneratedCover(cover),
         isExternal: course.externalUrl !== null,
+        isFeatured: course.isFeatured,
+        isPremium: course.isPremium,
+        publishedAt: course.publishedAt,
+        popularity: course.enrollmentCount,
         sections: course.sections.map((section) => ({
           id: section.id,
           title: section.title,
@@ -97,5 +101,7 @@ export function shelfLabels(t: Translate): ShelfLabels {
     noneTitle: t("filters.noneTitle"),
     noneBody: t("filters.noneBody"),
     clearFilter: t("filters.clear"),
+    featuredMarker: t("markers.featured"),
+    premiumMarker: t("markers.premium"),
   };
 }

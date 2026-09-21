@@ -1,20 +1,17 @@
+import { getTranslations } from "next-intl/server";
 import { getBrandAssets } from "@repo/core";
 import { getSetting } from "@repo/settings";
-import { AmbientMotif } from "@repo/ui/components/ambient-motif";
-import { BrandLogo } from "@repo/ui/components/brand-logo";
+import { AuthSplit } from "@repo/ui/components/auth-split";
 import { Reveal } from "@repo/ui/components/reveal";
+import { authBrand } from "../../../_lib/auth-brand.tsx";
 
-// The shell the public credential screens share (changes-21 F6).
+// The shell every public credential screen shares — sign-in, sign-up and the
+// two recovery screens (changes-21 F6 extracted it; sign-in and sign-up now
+// render through it too, rather than carrying their own copies).
 //
-// Sign-in and sign-up each carry their own copy of this markup, written before
-// there was a second screen to share it with. The two recovery screens make it
-// four, so this extracts it rather than adding two more copies. Converting the
-// existing pair is a separate, mechanical change and deliberately not folded
-// into a PR about password recovery.
-//
-// The logo is the admin-uploaded brand mark, as on the header, footer and admin
-// shell: a credential screen showing the site's NAME while every other surface
-// shows its mark is the one place a brand is most noticeably absent.
+// A split frame: the brand panel (the uploaded logo and the site's name,
+// large) beside the form. The panel is
+// hidden below `lg`, so on a phone the form is the whole screen.
 export async function AuthScreen({
   title,
   description,
@@ -24,35 +21,38 @@ export async function AuthScreen({
   title: string;
   description: string;
   children: React.ReactNode;
-  /** The "back to sign in" line under the card. */
+  /** The links under the form ("Back to sign in", "Create an account"). */
   footer?: React.ReactNode;
 }) {
-  const [siteName, brandAssets] = await Promise.all([getSetting("site.name"), getBrandAssets()]);
+  const [t, common, siteName, brandAssets] = await Promise.all([
+    getTranslations("auth"),
+    getTranslations("common"),
+    getSetting("site.name"),
+    getBrandAssets(),
+  ]);
+  // The wordmark is the site's full name from the catalog ("MBX Learning
+  // Center"), not the short `site.name` setting the logo's alt text uses.
+  const { panel, mark } = authBrand({
+    logoAlt: siteName ?? common("siteName"),
+    brandAssets,
+    wordmark: common("siteName"),
+    tagline: t("panelTagline"),
+  });
 
   return (
-    // `isolate` alongside `relative`: without a stacking context the motif's
-    // -z-10 puts it BEHIND this element's own bg-glow-primary rather than
-    // between the glow and the card.
-    <main className="bg-glow-primary container-page section-lg relative isolate flex flex-1 items-center justify-center overflow-hidden">
-      <AmbientMotif variant="currency" intensity={0.8} />
-      <Reveal variant="scale" className="flex w-full max-w-sm flex-col gap-6">
-        <div className="flex justify-center">
-          <BrandLogo
-            light={brandAssets.logo_light?.url ?? null}
-            dark={brandAssets.logo_dark?.url ?? null}
-            alt={siteName ?? ""}
-            className="h-14"
-            fallback={<span className="text-lg font-semibold tracking-tight">{siteName}</span>}
-          />
-        </div>
-        <div className="flex flex-col gap-6 rounded-xl border bg-card p-8 shadow-card">
-          <div className="flex flex-col gap-1.5">
-            <h1 className="text-xl font-semibold">{title}</h1>
-            <p className="text-sm text-muted-foreground">{description}</p>
-          </div>
+    // `isolate` alongside `relative` keeps the glow in this element's own
+    // stacking context.
+    <main className="bg-glow-primary container-page relative isolate flex flex-1 items-center justify-center overflow-hidden py-8 lg:py-12">
+      <Reveal variant="scale" className="flex w-full justify-center">
+        <AuthSplit
+          panel={panel}
+          mark={mark}
+          title={title}
+          description={description}
+          footer={footer}
+        >
           {children}
-          {footer}
-        </div>
+        </AuthSplit>
       </Reveal>
     </main>
   );

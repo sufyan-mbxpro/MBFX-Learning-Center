@@ -116,6 +116,7 @@ interface TopicSpec {
   categoryId?: string | null;
   publish?: boolean;
   coverAssetId?: string | null;
+  showOnAllTracks?: boolean;
 }
 
 async function makeCategory(name?: string): Promise<string> {
@@ -160,6 +161,7 @@ async function makeTopic(
       track: spec.track ?? "forex",
       ...(spec.categoryId === undefined ? {} : { categoryId: spec.categoryId }),
       ...(spec.coverAssetId === undefined ? {} : { coverAssetId: spec.coverAssetId }),
+      ...(spec.showOnAllTracks === undefined ? {} : { showOnAllTracks: spec.showOnAllTracks }),
     },
     translation: { locale: "en", title: `Topic ${seq}`, content: "<p>Body</p>" },
     videos: spec.videoRows ?? [{ externalUrl: EXTERNAL, sortOrder: 0 }],
@@ -378,6 +380,47 @@ describe("public reads", () => {
     const crypto = await videos.loadVideoCategories("en", "crypto");
     expect(forex.find((c) => c.id === categoryId)?.topicCount).toBe(2);
     expect(crypto.find((c) => c.id === categoryId)?.topicCount).toBe(1);
+  });
+
+  it("lists a shared topic under both schools, linked by its own track, and 404s it under the other", async () => {
+    const categoryId = await makeCategory("Shared across schools");
+    const sharedId = await makeTopic({ track: "forex", categoryId, showOnAllTracks: true });
+    const ownId = await makeTopic({ track: "forex", categoryId });
+    const shared = (await videos.getVideoTopicAdmin(sharedId))!;
+    expect(shared.showOnAllTracks).toBe(true);
+    const slug = shared.translations[0]!.slug;
+    const categorySlug = (await videos.loadVideoCategories("en", "forex")).find(
+      (c) => c.id === categoryId,
+    )!.slug;
+
+    // Listed on the other school's index and category page, carrying its
+    // canonical track so the card links to the one address (ADR-144 §2).
+    for (const listing of [
+      await videos.loadVideoTopics("en", "crypto"),
+      await videos.loadVideoTopics("en", "crypto", categorySlug),
+    ]) {
+      expect(listing.find((c) => c.id === sharedId)?.track).toBe("forex");
+      expect(listing.map((c) => c.id)).not.toContain(ownId);
+    }
+    // The chip counts what its page lists.
+    const cryptoChip = (await videos.loadVideoCategories("en", "crypto")).find(
+      (c) => c.id === categoryId,
+    );
+    expect(cryptoChip?.topicCount).toBe(1);
+
+    // One address: the page itself still answers under its own track only.
+    expect(await videos.loadVideoTopicBySlug("en", "forex", slug)).not.toBeNull();
+    expect(await videos.loadVideoTopicBySlug("en", "crypto", slug)).toBeNull();
+
+    // Switching it off takes it out of the other school again.
+    await videos.saveVideoTopic(editor, {
+      topicId: sharedId,
+      meta: { showOnAllTracks: false },
+      translation: { locale: "en", title: shared.translations[0]!.title, content: "<p>Body</p>" },
+      videos: [{ externalUrl: EXTERNAL, sortOrder: 0 }],
+      links: [],
+    });
+    expect((await videos.loadVideoTopics("en", "crypto")).map((c) => c.id)).not.toContain(sharedId);
   });
 
   it("drops rows in an unregistered track from the sitemap", async () => {

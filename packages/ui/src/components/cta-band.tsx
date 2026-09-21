@@ -6,7 +6,7 @@
 import { cn } from "@repo/ui/lib/utils";
 
 const CTA_VARIANT_CLASS = {
-  default: "container-page rounded-2xl",
+  default: "container-page rounded-lg",
   "full-width": "w-full",
 } as const;
 

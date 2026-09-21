@@ -19,6 +19,7 @@ import { EmptyState } from "@repo/ui/components/empty";
 import { cn } from "@repo/ui/lib/utils";
 
 import { ArticleMedia } from "./article-media.tsx";
+import { formatDate } from "@repo/utils";
 
 type ArticleCardsVariant = "standard" | "featured" | "compact";
 
@@ -35,12 +36,22 @@ type ArticleCardsVariant = "standard" | "featured" | "compact";
 // as its UNWRAPPED width — so on a phone one long excerpt made the column
 // ~1300px and the homepage scrolled sideways (found in the changes-20
 // Phase 6 browser pass, measured 1307px track in a 460px list).
+//
+// `standard` is sized to the home page's platform cards (changes-36, the
+// owner's "same size like The platform cards"): a card is ~300px wide
+// wherever it is drawn — four across a full-width band, three beside the
+// listing sidebar, two on a tablet — with the same 16:10 cover and the same
+// 16px title. The breakpoints are CONTAINER widths, so the column count
+// follows the space a caller gives the grid rather than the viewport.
 const GRID_CLASS: Record<ArticleCardsVariant, string> = {
-  standard: "grid grid-cols-1 gap-6 @2xl:grid-cols-2 @6xl:grid-cols-3",
+  standard: "grid grid-cols-1 gap-4 @xl:grid-cols-2 @4xl:grid-cols-3 @6xl:grid-cols-4",
   // `featured` gives the first entry the full width and a taller image.
   featured: "grid grid-cols-1 gap-6 @2xl:grid-cols-2",
   compact: "flex flex-col gap-4",
 };
+
+/** The standard grid, for the placeholders that must land over its cards. */
+export const ARTICLE_CARDS_STANDARD_GRID = GRID_CLASS.standard;
 
 export async function ArticleCards({
   entries,
@@ -49,6 +60,7 @@ export async function ArticleCards({
   showAuthor = false,
   variant = "standard",
   highlightFeatured = true,
+  leadSizes,
 }: {
   entries: ArticleListEntry[];
   locale: string;
@@ -65,9 +77,25 @@ export async function ArticleCards({
    * against something unemphasised.
    */
   highlightFeatured?: boolean;
+  /**
+   * The lead card's `sizes`, for a `featured` grid that is not full-bleed
+   * (changes-35, ADR-116).
+   *
+   * Defaults to what `/news` has always rendered, `100vw`, which is right for
+   * a full-width lead and wrong everywhere else: the home page's desk band
+   * puts this card in ~55% of the width, so the optimizer would serve roughly
+   * twice the pixels the slot paints — on the largest image on that page. A
+   * prop rather than a second component, because the card is identical and
+   * only its slot is not.
+   *
+   * There is deliberately no `leadRatio` beside it. 21/9 reads as a letterbox
+   * only at full width; in a 770px column it is a 330px cover, which is an
+   * ordinary feature proportion. A prop no call site passes is one code-style
+   * #28 would have us leave out.
+   */
+  leadSizes?: string;
 }) {
   const t = await getTranslations("news");
-  const dateFormat = new Intl.DateTimeFormat(locale, { dateStyle: "medium" });
   const kindLabels: Record<string, string> = {
     NEWS: t("kindNews"),
     ANALYSIS: t("kindAnalysis"),
@@ -155,8 +183,13 @@ export async function ArticleCards({
                   >
                     <ArticleMedia
                       entry={entry}
-                      ratio={featuredFirst ? 21 / 9 : 16 / 9}
-                      sizes={featuredFirst ? "100vw" : "(max-width: 640px) 100vw, 33vw"}
+                      // 16:10 is `HOME_MEDIA_SIZE`, the platform cards' own cover.
+                      ratio={featuredFirst ? 21 / 9 : 16 / 10}
+                      sizes={
+                        featuredFirst
+                          ? (leadSizes ?? "100vw")
+                          : "(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+                      }
                     />
                     {highlightFeatured && entry.isFeatured && (
                       // The editor's Featured flag, finally visible to the
@@ -203,7 +236,7 @@ export async function ArticleCards({
                   <h3
                     className={cn(
                       "leading-snug font-semibold transition-colors",
-                      featuredFirst ? "text-2xl" : resolved === "compact" ? "text-sm" : "text-lg",
+                      featuredFirst ? "text-2xl" : resolved === "compact" ? "text-sm" : "text-base",
                       // The heading's ink follows the CARD's hover, not only
                       // the link's own: on a card this size the pointer is
                       // rarely on the words themselves.
@@ -212,7 +245,13 @@ export async function ArticleCards({
                   >
                     <Link
                       href={`/news/${entry.slug}`}
-                      className={cn("link-underline", resolved === "compact" && "line-clamp-3")}
+                      className={cn(
+                        "link-underline",
+                        // Two lines on a standard card (changes-36): at ~300px a
+                        // long headline ran to four, and the tallest card set
+                        // the height of its whole row.
+                        resolved === "compact" ? "line-clamp-3" : "line-clamp-2",
+                      )}
                     >
                       {entry.title}
                     </Link>
@@ -235,14 +274,16 @@ export async function ArticleCards({
                     read affordance shares this row rather than adding a third
                     band of chrome to a card that is mostly chrome already. */}
                   {resolved !== "compact" && (
-                    <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-2 border-t pt-3 text-xs text-muted-foreground">
+                    <div className="mt-auto flex items-center gap-x-3 border-t pt-3 text-xs text-muted-foreground">
                       {showAuthor && entry.authorName && (
-                        <span className="flex items-center gap-1.5">
-                          <UserRound aria-hidden className="size-3.5" />
-                          {entry.authorName}
+                        <span className="flex min-w-0 items-center gap-1.5">
+                          <UserRound aria-hidden className="size-3.5 shrink-0" />
+                          <span className="truncate">{entry.authorName}</span>
                         </span>
                       )}
-                      {entry.publishedAt && <time>{dateFormat.format(entry.publishedAt)}</time>}
+                      {entry.publishedAt && (
+                        <time className="shrink-0">{formatDate(entry.publishedAt, locale)}</time>
+                      )}
                       {/* aria-hidden and not focusable: the heading above is
                           already a link to the same place, and a second one
                           would make every card two identical stops in a
@@ -250,9 +291,13 @@ export async function ArticleCards({
                           the pointer, so it is announced to neither reader. */}
                       <span
                         aria-hidden
-                        className="ms-auto inline-flex items-center gap-1.5 font-medium text-primary-interactive"
+                        className="ms-auto inline-flex shrink-0 items-center gap-1.5 font-medium text-primary-interactive"
                       >
-                        {t("readArticle")}
+                        {/* The arrow alone, not "Read article" + arrow: at the
+                            platform cards' ~300px width, author + date + the
+                            words wrapped to a second row or truncated the
+                            author (changes-36). The heading is the real link,
+                            so the words were never announced anyway. */}
                         <ArrowRight aria-hidden className="hover-arrow size-3.5 rtl:rotate-180" />
                       </span>
                     </div>
@@ -261,27 +306,10 @@ export async function ArticleCards({
                   {/* The compact variant keeps the date inline — no byline row. */}
                   {resolved === "compact" && entry.publishedAt && (
                     <time className="text-xs text-muted-foreground">
-                      {dateFormat.format(entry.publishedAt)}
+                      {formatDate(entry.publishedAt, locale)}
                     </time>
                   )}
                 </Body>
-
-                {/* Rule sweeping from the inline START — `start-0` + `w-0` →
-                    `w-full`, so it runs the correct way in RTL with no [dir]
-                    rule. Last, not first, so the cover stays the card's first
-                    child (Card drops its top padding for a `card-media`
-                    first child); it is absolutely placed, so order is not
-                    position. On a child, never on the Card: `.card-hover`
-                    declares its own `transition-property` and, sitting later
-                    in `@layer utilities` than Tailwind's generated classes,
-                    it beats a transition utility written in the class
-                    attribute — the card would jump rather than glide. */}
-                {resolved !== "compact" && (
-                  <span
-                    aria-hidden
-                    className="pointer-events-none absolute top-0 start-0 z-20 h-1 w-0 bg-primary transition-(--transition-size) duration-(--duration-slow) ease-(--ease-out-quint) group-hover:w-full"
-                  />
-                )}
               </Card>
             </li>
           );

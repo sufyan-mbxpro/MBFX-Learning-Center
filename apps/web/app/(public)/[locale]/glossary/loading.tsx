@@ -21,7 +21,7 @@ export default function GlossaryLoading() {
           <Skeleton className="h-4 w-24" />
           <Skeleton className="h-12 w-full max-w-xl" />
           <Skeleton className="h-6 w-full max-w-2xl" />
-          <SkeletonButton size="xl" shape="pill" />
+          <SkeletonButton size="xl" />
         </Container>
       </Section>
 

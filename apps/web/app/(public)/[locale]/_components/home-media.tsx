@@ -109,22 +109,32 @@ export function HomeMedia({
     <ImageReveal ratio={ratio} wipe={false} className={cn("rounded-none", className)}>
       <Image
         src={src}
-        // `alt=""`, for the reason `AboutArt` states: these are generated
-        // abstract panels, texture beside the copy, never information that
-        // exists only in the picture. Inventing a description for abstract
-        // artwork adds noise to a screen reader without adding a fact — and
-        // the card's own heading already names the destination. If a slot
-        // ever holds a photograph that CARRIES meaning it needs a real alt
-        // string from the catalog, and this component needs an `alt` prop.
+        // `alt=""`, for the reason `AboutArt` states, and it survives the
+        // switch to photography: these are texture beside the copy, never
+        // information that exists only in the picture. The card's own heading
+        // names the destination and its body says what is there, so a
+        // description of the photograph would repeat the copy to a screen
+        // reader rather than add to it. A slot holding a picture that CARRIES
+        // a fact needs a real alt string from the catalog, and this component
+        // needs an `alt` prop.
         alt=""
         width={HOME_MEDIA_SIZE.width}
         height={HOME_MEDIA_SIZE.height}
-        // `unoptimized`, not `dangerouslyAllowSVG` in next.config: a few KB of
-        // hand-generated vector has nothing for the optimizer to win, and the
-        // config flag would relax SVG handling for EVERY image the app serves,
-        // admin-entered URLs included, to buy that nothing. Same call AboutArt
-        // and the article cover images make.
-        unoptimized
+        // Vector skips the optimizer; photography goes through it.
+        //
+        // Every slot holds a photograph today, so only the second branch runs.
+        // The first is kept because dropping an SVG back in here is a one-line
+        // change in `home-media.ts` and the failure it would cause is not
+        // obvious: Next REFUSES to optimize an SVG unless `dangerouslyAllowSVG`
+        // is set in next.config — a flag that would relax SVG handling for
+        // EVERY image the app serves, admin-entered URLs included, to buy
+        // nothing on a few KB of vector. Same call AboutArt and the article
+        // covers make.
+        //
+        // A photograph is the opposite case: the card is ~430px wide on a
+        // desktop and 82vw on a phone, so the optimizer's job here is to not
+        // send the 1440px master to either.
+        unoptimized={src.endsWith(".svg")}
         sizes={sizes}
       />
     </ImageReveal>

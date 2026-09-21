@@ -3,7 +3,6 @@
 // without importing each other, and `page.tsx` has one place to look when it
 // builds props.
 import type { ContentStatusLabels } from "../../../_components/editor/content-status-panel.tsx";
-import type { SeoAnalysisLabels } from "../../../_components/editor/seo-analysis.tsx";
 import type { ImageUploadLabels } from "../../../_components/image-upload-field.tsx";
 import type { RichTextLabels } from "../../../_components/rich-text-editor.tsx";
 import type { CurriculumLabels } from "./_panels/curriculum-panel.tsx";
@@ -15,6 +14,8 @@ import type { RecommendationsLabels } from "./_panels/recommendations-panel.tsx"
  * the boundary — the article editor's convention, kept so the two screens read
  * the same way.
  */
+import type { ContentFlags } from "../../../_components/editor/content-flags-fields.tsx";
+
 export interface CourseTranslationDraft {
   locale: string;
   title: string;
@@ -25,6 +26,11 @@ export interface CourseTranslationDraft {
   seoDescription: string;
   seoFocusKeyword: string;
   translationStatus: string;
+  /**
+   * Untouched AI output (changes-29 B3). Set by "Translate", cleared by any
+   * edit to a translatable field; the save turns it into `MACHINE_TRANSLATED`.
+   */
+  machineTranslated?: boolean;
 }
 
 export interface CourseData {
@@ -37,6 +43,8 @@ export interface CourseData {
   finalQuizId: string | null;
   coverAssetId: string | null;
   coverUrl: string | null;
+  /** ADR-139 â€” Featured / Active / Premium, edited in the Display card. */
+  flags: ContentFlags;
   externalUrl: string;
   visibility: string;
   sortOrder: number;
@@ -82,6 +90,8 @@ export interface CourseEditorLabels {
   // Settings
   settingsSection: string;
   settingsSectionDescription: string;
+  displaySection: string;
+  displaySectionDescription: string;
   trackLabel: string;
   difficultyLabel: string;
   visibilityLabel: string;
@@ -120,7 +130,6 @@ export interface CourseEditorLabels {
 
   // Nested panels
   status: ContentStatusLabels;
-  analysis: SeoAnalysisLabels;
   curriculum: CurriculumLabels;
   recommendations: RecommendationsLabels;
   editor: RichTextLabels;

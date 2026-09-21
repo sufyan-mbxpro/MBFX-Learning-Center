@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { alternatesFor, descriptionFrom, shareMetadata } from "../../../../../_lib/seo.ts";
 import { notFound, permanentRedirect } from "next/navigation";
 import Image from "next/image";
 import { getTranslations, setRequestLocale } from "next-intl/server";
@@ -11,6 +12,7 @@ import {
   resolveRecommendations,
 } from "@repo/core";
 import { isLearnTrack, learnTrackPath, LEARN_TRACKS, type LearnTrackKey } from "@repo/contracts";
+import { getServableLocales } from "@repo/i18n";
 import { Link } from "@repo/i18n/navigation";
 import { routing } from "@repo/i18n/routing";
 import { getSetting, isFeatureVisible } from "@repo/settings";
@@ -20,7 +22,7 @@ import { Button } from "@repo/ui/components/button";
 import { Container } from "@repo/ui/components/container";
 import { Empty, EmptyDescription, EmptyTitle } from "@repo/ui/components/empty";
 import { ExternalBadge } from "@repo/ui/components/external-badge";
-import { Reveal } from "@repo/ui/components/reveal";
+import { Reveal, RevealGroup } from "@repo/ui/components/reveal";
 import { RichText } from "@repo/ui/components/rich-text";
 import { Section } from "@repo/ui/components/section";
 import { courseCoverUrl, isGeneratedCover } from "../../_content/learn-media.ts";
@@ -30,13 +32,18 @@ import { LearnBackdrop } from "../../_components/learn-art.tsx";
 import { LearnBreadcrumb } from "../../_components/learn-breadcrumb.tsx";
 import { CurriculumWithProgress } from "../../_components/curriculum-with-progress.tsx";
 import { CourseCompletionBanner } from "../../_components/course-completion.tsx";
+import { CourseAssessment } from "../../_components/course-assessment.tsx";
 import {
   CourseProgressBar,
   CourseStartCta,
   ProgressSignInCard,
 } from "../../_components/course-progress.tsx";
 import { ProgressProvider } from "../../_components/progress-provider.tsx";
+import { TrackProgressBand } from "../../_components/track-progress-band.tsx";
 import { CourseJsonLd } from "../../_components/course-json-ld.tsx";
+import { ReadingLanguageMenu } from "../../../_components/reading-language-menu.tsx";
+import { readingLanguageOptions, readingLocaleFrom } from "../../../_lib/reading-language.ts";
+import { INTERACTIVE_CARD } from "@repo/ui/lib/surfaces";
 
 // Course detail (changes-11 PR 4.2 + its share of 4.4).
 //
@@ -52,40 +59,46 @@ import { CourseJsonLd } from "../../_components/course-json-ld.tsx";
 // call `useProgress()` are client components.
 export async function generateMetadata({
   params,
+  searchParams,
 }: PageProps<"/[locale]/learn/[track]/[course]">): Promise<Metadata> {
   const { locale, course: courseSlug } = await params;
   setRequestLocale(locale);
-  const [view, template] = await Promise.all([
-    getCourseBySlug(locale, courseSlug),
+  const readingLocale = readingLocaleFrom(await searchParams);
+  const [view, template, tCommon] = await Promise.all([
+    getCourseBySlug(locale, courseSlug, readingLocale),
     getSetting("seo.titleTemplate"),
+    getTranslations({ locale, namespace: "common" }),
   ]);
   if (!view) return {};
 
-  const languages = Object.fromEntries(
-    view.alternates.map((alt) => [
-      alt.locale,
-      coursePath(alt.locale, routing.defaultLocale, view.track, alt.slug),
-    ]),
-  );
-
+  const ownPath = coursePath(locale, routing.defaultLocale, view.track, view.slug);
   return {
     title: (template ?? "%s").replace("%s", view.seoTitle ?? view.title),
-    description: view.seoDescription ?? view.summary ?? undefined,
-    alternates: {
-      canonical: coursePath(locale, routing.defaultLocale, view.track, view.slug),
-      languages,
-    },
-    openGraph: {
-      type: "website",
+    ...descriptionFrom(view.seoDescription, view.summary),
+    alternates: await alternatesFor({
+      canonical: ownPath,
+      languages: view.alternates.map((alt) => ({
+        locale: alt.locale,
+        href: coursePath(alt.locale, routing.defaultLocale, view.track, alt.slug),
+      })),
+    }),
+    // ADR-127 #4: a `?lang=` reading view is never indexed. A conditional
+    // SPREAD, never `robots: undefined` (ADR-090).
+    ...(view.readingLocale ? { robots: { index: false, follow: true } } : {}),
+    ...(await shareMetadata({
+      locale,
+      siteName: tCommon("siteName"),
+      url: ownPath,
       title: view.seoTitle ?? view.title,
-      description: view.seoDescription ?? view.summary ?? undefined,
-      images: view.coverUrl ? [{ url: view.coverUrl }] : undefined,
-    },
+      description: view.seoDescription ?? view.summary,
+      image: view.coverUrl,
+    })),
   };
 }
 
 export default async function CoursePage({
   params,
+  searchParams,
 }: PageProps<"/[locale]/learn/[track]/[course]">) {
   const { locale, track, course: courseSlug } = await params;
   setRequestLocale(locale);
@@ -93,7 +106,8 @@ export default async function CoursePage({
 
   if (!(await isFeatureVisible("courses", null))) notFound();
 
-  const view = await getCourseBySlug(locale, courseSlug);
+  const readingLocale = readingLocaleFrom(await searchParams);
+  const view = await getCourseBySlug(locale, courseSlug, readingLocale);
   if (!view) {
     // Old address? `saveCourse` wrote a 301 row when the slug OR the track
     // changed (ADR-065 §1), keyed on the full path — so the lookup uses the
@@ -114,11 +128,24 @@ export default async function CoursePage({
   // uses, so the right rail costs this page nothing beyond a cache hit that
   // `/learn` has usually already warmed — and the rail can never disagree with
   // the shelf about what is published, because it IS the shelf's data.
-  const [t, recommendations, groups] = await Promise.all([
+  const [t, tPublic, recommendations, groups, servableLocales] = await Promise.all([
     getTranslations({ locale, namespace: "learn" }),
+    getTranslations({ locale, namespace: "public" }),
     resolveRecommendations(locale, view.id, view.track, 3),
     getLearnIndex(locale),
+    getServableLocales(),
   ]);
+
+  // ADR-127: the course's own words can be read in another language. The
+  // curriculum below stays in the page's locale: it is navigation.
+  const readingOptions = readingLanguageOptions({
+    languages: view.readingLanguages,
+    contentLocale: view.contentLocale,
+    interfaceLocale: locale,
+    servable: servableLocales,
+    currentPath: `${learnTrackPath(track)}/${view.slug}`,
+    pathFor: (language) => `${learnTrackPath(track)}/${language.slug}`,
+  });
 
   const difficulties = difficultyLabels(t);
 
@@ -231,7 +258,7 @@ export default async function CoursePage({
                   {/* 16:6 — a header band, not a card cover. Wide enough to
                       carry the track's artwork, short enough that the title
                       below it is still above the fold on a phone. */}
-                  <div className="relative aspect-16/6 w-full overflow-hidden rounded-2xl bg-muted ring-1 ring-foreground/10">
+                  <div className="relative aspect-16/6 w-full overflow-hidden rounded-lg bg-muted ring-1 ring-foreground/10">
                     <Image
                       src={coverUrl}
                       alt=""
@@ -265,12 +292,28 @@ export default async function CoursePage({
                     newTabLabel={t("external.opensInNewTab")}
                   />
                 )}
+                {/* ADR-127: closes the badge row at its inline end. */}
+                <div className="ms-auto">
+                  <ReadingLanguageMenu
+                    options={readingOptions}
+                    label={tPublic("readingLanguage")}
+                  />
+                </div>
               </div>
-              <h1 className="text-display-sm font-semibold tracking-tight text-balance">
+              {/* `lang`/`dir` follow the TRANSLATION on screen (ADR-127 #1). */}
+              <h1
+                lang={view.contentLocale}
+                dir={view.contentDirection}
+                className="text-display-sm font-semibold tracking-tight text-balance"
+              >
                 {view.title}
               </h1>
               {view.summary && (
-                <p className="max-w-2xl text-lg text-pretty text-muted-foreground">
+                <p
+                  lang={view.contentLocale}
+                  dir={view.contentDirection}
+                  className="max-w-2xl text-lg text-pretty text-muted-foreground"
+                >
                   {view.summary}
                 </p>
               )}
@@ -278,7 +321,7 @@ export default async function CoursePage({
 
             {/* Sticky from lg: the reader scrolling a long curriculum keeps the
                 progress bar and the resume button in reach. */}
-            <div className="flex flex-col gap-4 rounded-2xl border bg-card p-5 shadow-sm lg:sticky lg:top-24">
+            <div className="flex flex-col gap-4 rounded-lg border bg-card p-5 shadow-sm lg:sticky lg:top-24">
               <CourseProgressBar lessonsTotal={view.lessonCount} />
 
               {isExternal && view.externalUrl ? (
@@ -350,6 +393,11 @@ export default async function CoursePage({
               }))}
             />
 
+            {/* changes-46 (image-106): the signed-out "Track your progress"
+                band, above the curriculum it would track. Client-decided —
+                renders nothing for a learner or where progress is off. */}
+            {!isExternal && <TrackProgressBand lessonsTotal={view.lessonCount} className="mb-4" />}
+
             <div className="flex flex-col gap-1">
               <h2 className="text-xl font-semibold">{t("course.curriculum")}</h2>
               <p className="text-sm text-muted-foreground">{t("course.curriculumIntro")}</p>
@@ -366,76 +414,105 @@ export default async function CoursePage({
                 defaultOpenSectionIds={defaultOpenSectionIds}
               />
             )}
+
+            {/* ADR-084 #1–#2: the course's final assessment closes the
+                curriculum, where a learner who has worked through it arrives.
+                Absent when the course has none or its quiz is not publicly
+                reachable — the same null that stops it blocking completion. */}
+            {view.finalQuiz && <CourseAssessment quiz={view.finalQuiz} />}
           </div>
 
-          <aside className="flex flex-col gap-6 lg:sticky lg:top-24 lg:self-start">
-            {view.description && (
-              <div className="card-hover flex flex-col gap-2 rounded-2xl border bg-card p-5">
-                <h2 className="flex items-center gap-2 text-base font-semibold">
-                  <BookOpen aria-hidden className="size-4 text-primary-interactive" />
-                  {t("course.whatYouLearn")}
-                </h2>
-                <RichText html={view.description} className="text-sm" />
-              </div>
-            )}
+          {/* ─── Both columns open on a BARE heading (changes-40) ───────────
+              The main column starts with "Curriculum" as plain text above its
+              cards; the rail started with a heading INSIDE a card, so the two
+              first lines sat at different heights and the reader read it as an
+              alignment bug. Every block here now takes the main column's shape
+              — an `h2` and a lead, then the cards — so whichever block happens
+              to be first (a course with no description starts at "More
+              courses") lines up with "Curriculum".
 
-            {recommendations.length > 0 && (
-              <div className="flex flex-col gap-3">
-                <div className="flex flex-col gap-0.5">
-                  <h2 className="text-base font-semibold">{t("course.recommendations")}</h2>
-                  <p className="text-sm text-muted-foreground">
-                    {t("course.recommendationsIntro")}
-                  </p>
+              The heading sizes match it too: `text-xl` on the block title,
+              `text-sm text-muted-foreground` on its lead. */}
+          {/* The rail's blocks stagger in from the inline end (changes-45).
+              The aside stays the sticky box and carries no transform. */}
+          <aside className="lg:sticky lg:top-24 lg:self-start">
+            <RevealGroup variant="end" step={80} className="flex flex-col gap-8">
+              {view.description && (
+                <div className="flex flex-col gap-4">
+                  <div className="flex flex-col gap-1">
+                    <h2 className="flex items-center gap-2 text-xl font-semibold">
+                      <BookOpen aria-hidden className="size-4.5 text-primary-interactive" />
+                      {t("course.whatYouLearn")}
+                    </h2>
+                  </div>
+                  <div
+                    className="card-hover rounded-lg border bg-card p-5"
+                    lang={view.contentLocale}
+                    dir={view.contentDirection}
+                  >
+                    <RichText html={view.description} className="text-sm" />
+                  </div>
                 </div>
-                <ul className="flex flex-col gap-2">
-                  {recommendations.map((rec) => (
-                    <li key={rec.id}>
-                      <Link
-                        href={`${learnTrackPath(rec.track as LearnTrackKey)}/${rec.slug}`}
-                        className="group card-hover flex items-center gap-3 rounded-xl border bg-card p-3 transition-colors duration-(--duration-base) hover:border-primary/25 hover:bg-muted/40"
-                      >
-                        <span className="relative size-12 shrink-0 overflow-hidden rounded-lg bg-muted">
-                          {(() => {
-                            // Same cover rule as everywhere else: the course's
-                            // own artwork, else its track's panel.
-                            const cover = courseCoverUrl(rec.coverUrl, rec.track);
-                            return (
-                              cover && (
-                                <Image
-                                  src={cover}
-                                  alt=""
-                                  fill
-                                  unoptimized={isGeneratedCover(cover)}
-                                  sizes="48px"
-                                  className="media-zoom object-cover"
-                                />
-                              )
-                            );
-                          })()}
-                        </span>
-                        <span className="flex min-w-0 flex-col">
-                          <span className="truncate text-sm font-medium">{rec.title}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {difficulties[rec.difficulty] ?? rec.difficulty} ·{" "}
-                            {t("card.lessons", { count: rec.lessonCount })}
-                          </span>
-                        </span>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+              )}
 
-            {/* Everything else published, filterable by track (design pass
+              {recommendations.length > 0 && (
+                <div className="flex flex-col gap-4">
+                  <div className="flex flex-col gap-1">
+                    <h2 className="text-xl font-semibold">{t("course.recommendations")}</h2>
+                    <p className="text-sm text-muted-foreground">
+                      {t("course.recommendationsIntro")}
+                    </p>
+                  </div>
+                  <ul className="flex flex-col gap-2">
+                    {recommendations.map((rec) => (
+                      <li key={rec.id}>
+                        <Link
+                          href={`${learnTrackPath(rec.track as LearnTrackKey)}/${rec.slug}`}
+                          className={`${INTERACTIVE_CARD} flex items-center gap-3 p-3`}
+                        >
+                          <span className="relative size-12 shrink-0 overflow-hidden rounded-lg bg-muted">
+                            {(() => {
+                              // Same cover rule as everywhere else: the course's
+                              // own artwork, else its track's panel.
+                              const cover = courseCoverUrl(rec.coverUrl, rec.track);
+                              return (
+                                cover && (
+                                  <Image
+                                    src={cover}
+                                    alt=""
+                                    fill
+                                    unoptimized={isGeneratedCover(cover)}
+                                    sizes="48px"
+                                    className="media-zoom object-cover"
+                                  />
+                                )
+                              );
+                            })()}
+                          </span>
+                          <span className="flex min-w-0 flex-col">
+                            <span className="truncate text-sm font-medium">{rec.title}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {difficulties[rec.difficulty] ?? rec.difficulty} ·{" "}
+                              {t("card.lessons", { count: rec.lessonCount })}
+                            </span>
+                          </span>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Everything else published, filterable by track (design pass
                 2026-09-09). Distinct from the block above it: those three are
                 the editor's answer to "what next", these are the catalogue.
                 Renders nothing when this is the only published course. */}
-            <CourseSidebar
-              tracks={sidebarTracks}
-              courses={sidebarCourses}
-              currentTrack={view.track}
-            />
+              <CourseSidebar
+                tracks={sidebarTracks}
+                courses={sidebarCourses}
+                currentTrack={view.track}
+              />
+            </RevealGroup>
           </aside>
         </Container>
       </Section>

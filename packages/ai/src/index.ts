@@ -62,7 +62,12 @@ export {
 // The "test connection" path, and the one key reader's public face. Note what
 // is NOT exported: `loadProviderDriver` itself, the three drivers, and anything
 // that would let a caller build a request without going through the door.
-export { testProviderConnection, type ProviderTestResult } from "./run.ts";
+export {
+  discoverProviderModels,
+  testProviderConnection,
+  type ModelDiscoveryResult,
+  type ProviderTestResult,
+} from "./run.ts";
 
 export { buildPrompt, PROMPT_BUILDERS, type BuiltPrompt } from "./prompts/index.ts";
 

@@ -110,7 +110,12 @@ describe("the ad-hoc patterns are gone (changes-21 Phase A)", () => {
   it.each([
     ["a lucide spinner", /Loader2|LoaderCircle|animate-spin/],
     ["a hand-placed button spinner", /\{\s*(pending|isPending|busy|saving)\s*&&\s*<Spinner/],
-    ["a hand-rolled pulse", /className="[^"]*animate-pulse/],
+    // `motion-safe:animate-pulse` is deliberately NOT matched. The pattern this
+    // rule is about is a grey block pretending to be Skeleton; the one live
+    // exception is `LiveRatesBoard`'s 8px status dot, which is a placeholder for
+    // nothing and stops entirely for a reader who asked for reduced motion. An
+    // unprefixed `animate-pulse` still fails.
+    ["a hand-rolled pulse", /className="[^"]*(?<!motion-safe:)animate-pulse/],
   ])("no %s — Button `loading` and Skeleton own those", (_, pattern) => {
     expect(live.filter((file) => pattern.test(source(file))).map(rel)).toEqual([]);
   });

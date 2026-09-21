@@ -24,10 +24,15 @@
 //      meaning for a column that already has one.
 import {
   AI_FEATURES,
+  AI_PROVIDER_PRESETS,
   isAiFeatureKey,
+  type AiConnectionTestInput,
+  type AiDiscoveredModel,
   type AiFeatureKey,
   type AiFeatureSaveInput,
   type AiLimitsSaveInput,
+  type AiSetupSaveInput,
+  type AiUsageLimitsSaveInput,
   type AiModelSaveInput,
   type AiProviderSaveInput,
   type AiUsageFilter,
@@ -36,6 +41,7 @@ import {
   AI_USAGE_RETENTION_DAYS,
   applyBudgetSettings,
   currentPeriod,
+  discoverProviderModels,
   estimateCostUsd,
   getBudgetState,
   hasAiSecretKey,
@@ -372,6 +378,300 @@ export async function deleteAiModel(subject: Subject, id: string): Promise<void>
   });
 }
 
+// ─── Guided setup (ADR-120) ──────────────────────────────────
+//
+// `/admin/settings/ai` in one flow: choose a provider, type its key, test it,
+// pick models from the list the provider itself returns, save. Everything here
+// is composed from the same rules the providers screen follows — the key is
+// write-only and sealed on save, blank means unchanged, exactly one default —
+// so the two screens cannot disagree about what a provider row means.
+
+/** A discovered model, with what this database already knows about it. */
+export interface AiSetupModelOption extends AiDiscoveredModel {
+  /**
+   * A price already on record for this model ID — this provider's row first,
+   * then any provider's. Null means nobody has priced it and the admin must.
+   */
+  knownInputPricePerMTok: number | null;
+  knownOutputPricePerMTok: number | null;
+  knownCachedInputPricePerMTok: number | null;
+  /** This provider already offers it, enabled. Pre-ticks the checkbox. */
+  isSelected: boolean;
+}
+
+export interface AiSetupDiscoveryResult {
+  ok: boolean;
+  reason: AiReason | null;
+  models: AiSetupModelOption[];
+}
+
+/** The stored models of one provider, in the shape the setup form edits. */
+export interface AiSetupStoredModel {
+  modelId: string;
+  label: string;
+  inputPricePerMTok: number;
+  outputPricePerMTok: number;
+  cachedInputPricePerMTok: number | null;
+  maxOutputTokens: number;
+  supportsVision: boolean;
+}
+
+export interface AiSetupView {
+  providers: AiProviderView[];
+  /** Enabled models per provider id — what the form shows before any test. */
+  models: Record<string, AiSetupStoredModel[]>;
+  limits: AiLimitsView;
+  hasSecretKey: boolean;
+}
+
+export async function loadAiSetupView(): Promise<AiSetupView> {
+  const [providers, rows, limits] = await Promise.all([
+    listAiProviders(),
+    db.aiModel.findMany({
+      where: { isEnabled: true },
+      orderBy: [{ sortOrder: "asc" }, { modelId: "asc" }],
+    }),
+    loadAiLimitsView(),
+  ]);
+
+  const models: Record<string, AiSetupStoredModel[]> = {};
+  for (const row of rows) {
+    (models[row.providerId] ??= []).push({
+      modelId: row.modelId,
+      label: row.label,
+      inputPricePerMTok: Number(row.inputPricePerMTok),
+      outputPricePerMTok: Number(row.outputPricePerMTok),
+      cachedInputPricePerMTok:
+        row.cachedInputPricePerMTok === null ? null : Number(row.cachedInputPricePerMTok),
+      maxOutputTokens: row.maxOutputTokens,
+      supportsVision: row.supportsVision,
+    });
+  }
+
+  return { providers, models, limits, hasSecretKey: hasAiSecretKey() };
+}
+
+/** Upper bound a discovered ceiling is clamped to — the form schema's own max. */
+const MAX_OUTPUT_TOKENS_CEILING = 200_000;
+
+/**
+ * "Test connection" on the setup screen: prove the key, then return the models.
+ *
+ * A stored key is used only when the provider id names a row of the SAME kind —
+ * switching the dropdown from Anthropic to Gemini must never send the stored
+ * Anthropic key to Google.
+ */
+export async function discoverAiModels(
+  subject: Subject,
+  input: AiConnectionTestInput,
+): Promise<AiSetupDiscoveryResult> {
+  const row = input.providerId
+    ? await db.aiProvider.findUnique({
+        where: { id: input.providerId },
+        select: { id: true, kind: true },
+      })
+    : null;
+  const providerId = row && row.kind === input.kind ? row.id : null;
+
+  const result = await discoverProviderModels({
+    kind: input.kind,
+    providerId,
+    ...(input.apiKey ? { apiKey: input.apiKey } : {}),
+    baseUrl: input.baseUrl || null,
+  });
+
+  if (providerId) {
+    await db.aiProvider.update({
+      where: { id: providerId },
+      data: { lastTestAt: new Date(), lastTestError: result.ok ? null : result.reason },
+    });
+  }
+
+  await recordAudit({
+    userId: subject.id,
+    action: "ai.provider.test",
+    entityType: "AiProvider",
+    entityId: providerId ?? `new:${input.kind}`,
+    changes: {
+      after: { ok: result.ok, reason: result.reason, modelCount: result.models.length },
+    },
+  });
+
+  if (!result.ok) return { ok: false, reason: result.reason, models: [] };
+
+  const known = await db.aiModel.findMany({
+    where: { modelId: { in: result.models.map((model) => model.modelId) } },
+    select: {
+      providerId: true,
+      modelId: true,
+      isEnabled: true,
+      inputPricePerMTok: true,
+      outputPricePerMTok: true,
+      cachedInputPricePerMTok: true,
+    },
+  });
+
+  const models = result.models.map((model): AiSetupModelOption => {
+    const own = providerId
+      ? known.find((k) => k.providerId === providerId && k.modelId === model.modelId)
+      : undefined;
+    const priced = own ?? known.find((k) => k.modelId === model.modelId);
+    return {
+      ...model,
+      maxOutputTokens:
+        model.maxOutputTokens === null
+          ? null
+          : Math.min(model.maxOutputTokens, MAX_OUTPUT_TOKENS_CEILING),
+      knownInputPricePerMTok: priced ? Number(priced.inputPricePerMTok) : null,
+      knownOutputPricePerMTok: priced ? Number(priced.outputPricePerMTok) : null,
+      knownCachedInputPricePerMTok:
+        priced?.cachedInputPricePerMTok == null ? null : Number(priced.cachedInputPricePerMTok),
+      isSelected: Boolean(own?.isEnabled),
+    };
+  });
+
+  return { ok: true, reason: null, models };
+}
+
+export class AiSetupKeyRequiredError extends Error {
+  constructor() {
+    super("An API key is required to connect this provider");
+    this.name = "AiSetupKeyRequiredError";
+  }
+}
+
+/**
+ * Connect a provider: one save for the row, its key, its models and the tiers.
+ *
+ * The provider becomes enabled AND the default in the same transaction that
+ * demotes the incumbent (#3 above). A stored model the admin un-ticked is
+ * DISABLED, never deleted — usage rows and feature overrides still point at it,
+ * and ticking it again restores its price history rather than starting over.
+ */
+export async function saveAiSetup(
+  subject: Subject,
+  input: AiSetupSaveInput,
+): Promise<AiProviderView> {
+  const preset = AI_PROVIDER_PRESETS[input.kind];
+
+  const existing = input.providerId
+    ? await db.aiProvider.findUnique({
+        where: { id: input.providerId },
+        select: { id: true, kind: true, apiKeyCipher: true },
+      })
+    : null;
+  // A row of another kind is not this provider. Reusing it would carry its
+  // sealed key across vendors.
+  const target = existing && existing.kind === input.kind ? existing : null;
+
+  if (preset.protocol !== "echo" && !input.apiKey && !target?.apiKeyCipher) {
+    throw new AiSetupKeyRequiredError();
+  }
+
+  const saved = await db.$transaction(async (tx: Prisma.TransactionClient) => {
+    const data = {
+      kind: input.kind,
+      baseUrl: input.baseUrl || null,
+      isEnabled: true,
+      isDefault: true,
+      ...(input.apiKey ? { apiKeyCipher: sealAiSecret(input.apiKey) } : {}),
+    };
+    const provider = target
+      ? await tx.aiProvider.update({ where: { id: target.id }, data })
+      : await tx.aiProvider.create({ data: { ...data, label: preset.defaultLabel } });
+
+    await tx.aiProvider.updateMany({
+      where: { id: { not: provider.id }, isDefault: true },
+      data: { isDefault: false },
+    });
+
+    // Echo's one placeholder model is seeded and never edited from here.
+    if (preset.protocol === "echo") return provider;
+
+    const stored = await tx.aiModel.findMany({
+      where: { providerId: provider.id },
+      select: {
+        id: true,
+        modelId: true,
+        inputPricePerMTok: true,
+        outputPricePerMTok: true,
+        cachedInputPricePerMTok: true,
+      },
+    });
+    const selected = new Set(input.models.map((model) => model.modelId));
+
+    for (const [index, model] of input.models.entries()) {
+      const previous = stored.find((row) => row.modelId === model.modelId);
+      // The setup screen does not ask for prices: an absent one keeps what is
+      // stored, and a model nobody has priced starts at 0 until someone prices
+      // it on the providers screen.
+      const inputPrice =
+        model.inputPricePerMTok ?? (previous ? Number(previous.inputPricePerMTok) : 0);
+      const outputPrice =
+        model.outputPricePerMTok ?? (previous ? Number(previous.outputPricePerMTok) : 0);
+      const cachedPrice =
+        model.cachedInputPricePerMTok !== undefined
+          ? model.cachedInputPricePerMTok
+          : previous?.cachedInputPricePerMTok != null
+            ? Number(previous.cachedInputPricePerMTok)
+            : null;
+      // `pricedAt` moves only when a price moves — `saveAiModel`'s rule.
+      const priceChanged =
+        !previous ||
+        Number(previous.inputPricePerMTok) !== inputPrice ||
+        Number(previous.outputPricePerMTok) !== outputPrice;
+      const fields = {
+        label: model.label,
+        inputPricePerMTok: inputPrice,
+        outputPricePerMTok: outputPrice,
+        cachedInputPricePerMTok: cachedPrice,
+        maxOutputTokens: model.maxOutputTokens,
+        supportsVision: model.supportsVision,
+        isEnabled: true,
+        sortOrder: (index + 1) * 10,
+        ...(priceChanged ? { pricedAt: new Date() } : {}),
+      };
+      if (previous) {
+        await tx.aiModel.update({ where: { id: previous.id }, data: fields });
+      } else {
+        await tx.aiModel.create({
+          data: { ...fields, providerId: provider.id, modelId: model.modelId },
+        });
+      }
+    }
+
+    const dropped = stored.filter((row) => !selected.has(row.modelId)).map((row) => row.id);
+    if (dropped.length > 0) {
+      await tx.aiModel.updateMany({ where: { id: { in: dropped } }, data: { isEnabled: false } });
+    }
+    return provider;
+  });
+
+  if (preset.protocol !== "echo") {
+    await updateSetting("ai.model.light", input.tiers.light, subject.id);
+    await updateSetting("ai.model.standard", input.tiers.standard, subject.id);
+    await updateSetting("ai.model.heavy", input.tiers.heavy, subject.id);
+  }
+
+  await recordAudit({
+    userId: subject.id,
+    action: target ? "ai.setup.update" : "ai.setup.create",
+    entityType: "AiProvider",
+    entityId: saved.id,
+    // No key, as everywhere: `keyChanged` is the only thing the log is told.
+    changes: {
+      after: {
+        kind: input.kind,
+        keyChanged: Boolean(input.apiKey),
+        models: input.models.map((model) => model.modelId),
+        tiers: preset.protocol === "echo" ? null : input.tiers,
+      },
+    },
+  });
+
+  return (await loadAiProvider(saved.id))!;
+}
+
 // ─── Features ────────────────────────────────────────────────
 
 export interface AiFeatureCard {
@@ -506,13 +806,44 @@ export async function loadAiLimitsView(): Promise<AiLimitsView> {
   return { ...limits, budget, tierFeatures };
 }
 
-export async function saveAiLimits(subject: Subject, input: AiLimitsSaveInput): Promise<void> {
+async function writeUsageLimits(subject: Subject, input: AiUsageLimitsSaveInput): Promise<void> {
   await updateSetting("ai.enabled", input.enabled, subject.id);
   await updateSetting("ai.maxTokensPerRequest", input.maxTokensPerRequest, subject.id);
   await updateSetting("ai.monthlyBudgetUsd", input.monthlyBudgetUsd, subject.id);
   await updateSetting("ai.budgetWarnPercent", input.budgetWarnPercent, subject.id);
   await updateSetting("ai.capBehavior", input.capBehavior, subject.id);
   await updateSetting("ai.rateLimitPerUserHour", input.rateLimitPerUserHour, subject.id);
+}
+
+/**
+ * The setup screen's usage section — the limits without the tiers, which that
+ * screen sets together with the models they must name (ADR-120).
+ */
+export async function saveAiUsageLimits(
+  subject: Subject,
+  input: AiUsageLimitsSaveInput,
+): Promise<void> {
+  await writeUsageLimits(subject, input);
+  await applyBudgetSettings({ budgetUsd: input.monthlyBudgetUsd });
+  await recordAudit({
+    userId: subject.id,
+    action: "ai.limits.update",
+    entityType: "Setting",
+    entityId: "ai",
+    changes: {
+      after: {
+        enabled: input.enabled,
+        monthlyBudgetUsd: input.monthlyBudgetUsd,
+        capBehavior: input.capBehavior,
+        maxTokensPerRequest: input.maxTokensPerRequest,
+        rateLimitPerUserHour: input.rateLimitPerUserHour,
+      },
+    },
+  });
+}
+
+export async function saveAiLimits(subject: Subject, input: AiLimitsSaveInput): Promise<void> {
+  await writeUsageLimits(subject, input);
   await updateSetting("ai.model.light", input.modelLight, subject.id);
   await updateSetting("ai.model.standard", input.modelStandard, subject.id);
   await updateSetting("ai.model.heavy", input.modelHeavy, subject.id);

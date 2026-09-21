@@ -5,7 +5,6 @@ import type { SeoCheckId } from "@repo/utils";
 import type { ImageUploadLabels } from "../../_components/image-upload-field.tsx";
 import type { RichTextLabels } from "../../_components/rich-text-editor.tsx";
 import type { ContentStatsLabels } from "../../_components/editor/content-stats.tsx";
-import type { SeoAnalysisLabels } from "../../_components/editor/seo-analysis.tsx";
 import type { FaqLabels } from "../../_components/editor/faq-panel.tsx";
 import type { RelatedLabels } from "./_panels/related-panel.tsx";
 import type { PublishLabels } from "./_panels/publish-panel.tsx";
@@ -201,7 +200,6 @@ export interface EditorLabels {
 
   // Nested panels
   stats: ContentStatsLabels;
-  analysis: SeoAnalysisLabels;
   faq: FaqLabels;
   related: RelatedLabels;
   publish: PublishLabels;

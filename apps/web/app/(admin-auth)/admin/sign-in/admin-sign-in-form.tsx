@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { Lock, Mail } from "lucide-react";
 import { Button } from "@repo/ui/components/button";
 import { Input } from "@repo/ui/components/input";
 import { Label } from "@repo/ui/components/label";
 import { PasswordInput } from "@repo/ui/components/password-input";
+import { AuthInputIcon } from "../../../_lib/auth-input-icon.tsx";
 import { useSearchParam } from "../../../_lib/use-search-param.ts";
 import {
   isAdminPath,
@@ -43,7 +45,11 @@ export function AdminSignInForm({
     setFailure(null);
     startTransition(async () => {
       const result = await signInWithPassword(email, password);
-      if (result.status === "failed") {
+      // `twoFactor` is refused with the generic message: a staff account has
+      // no way to turn two-factor on (the learner profile page is the only
+      // enrolment screen, ADR-123), so a challenge here is not a flow this
+      // form supports.
+      if (result.status !== "ok") {
         setFailure("credentials");
         return;
       }
@@ -81,37 +87,43 @@ export function AdminSignInForm({
       )}
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="admin-signin-email">{labels.email}</Label>
-        <Input
-          id="admin-signin-email"
-          type="email"
-          autoComplete="email"
-          required
-          value={email}
-          aria-invalid={failure !== null || undefined}
-          aria-describedby={errorId}
-          onChange={(e) => setEmail(e.target.value)}
-        />
+        <AuthInputIcon icon={Mail}>
+          <Input
+            className="ps-10"
+            id="admin-signin-email"
+            type="email"
+            autoComplete="email"
+            required
+            value={email}
+            aria-invalid={failure !== null || undefined}
+            aria-describedby={errorId}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+        </AuthInputIcon>
       </div>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="admin-signin-password">{labels.password}</Label>
-        <PasswordInput
-          id="admin-signin-password"
-          showLabel={labels.showPassword}
-          hideLabel={labels.hidePassword}
-          autoComplete="current-password"
-          required
-          value={password}
-          aria-invalid={failure !== null || undefined}
-          aria-describedby={errorId}
-          onChange={(e) => setPassword(e.target.value)}
-        />
+        <AuthInputIcon icon={Lock}>
+          <PasswordInput
+            className="ps-10"
+            id="admin-signin-password"
+            showLabel={labels.showPassword}
+            hideLabel={labels.hidePassword}
+            autoComplete="current-password"
+            required
+            value={password}
+            aria-invalid={failure !== null || undefined}
+            aria-describedby={errorId}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        </AuthInputIcon>
       </div>
       {failure && (
         <p id="admin-signin-error" role="alert" className="text-sm text-destructive-interactive">
           {failure === "notStaff" ? labels.notStaff : labels.failed}
         </p>
       )}
-      <Button type="submit" loading={pending} className="w-full">
+      <Button type="submit" size="lg" loading={pending} className="w-full">
         {labels.submit}
       </Button>
     </form>

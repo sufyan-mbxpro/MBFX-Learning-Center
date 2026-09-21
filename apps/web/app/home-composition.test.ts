@@ -99,9 +99,35 @@ describe("ADR-093 — the two new bands are registered in every place a band liv
     expect(HOME_SECTION_VARIANTS.quotes).toEqual(["single", "carousel"]);
   });
 
-  it("the connect band renders nothing without an active social link", () => {
-    // A "follow us" band over an empty row invites a visitor to follow nobody.
-    expect(read("_sections/connect.tsx")).toContain("if (socialLinks.length === 0) return null;");
+  it("the connect band draws no follow row without an active social link", () => {
+    // A "follow us" heading over an empty row invites a visitor to follow
+    // nobody. ADR-093's rule is unchanged; changes-35 moved it one level down,
+    // from the BAND to the COLUMN, because the band gained a second half (the
+    // subscribe panel, merged in from the standalone newsletter band). So the
+    // follow half is gated on the links and the band survives without it.
+    const src = read("_sections/connect.tsx");
+    expect(src).toContain("const showFollow = socialLinks.length > 0;");
+    expect(src).toContain("{showFollow && (");
+  });
+
+  it("the connect band renders nothing when BOTH of its halves are empty", () => {
+    // ADR-116 §3's per-dataset rule, which this band needs now that it has two
+    // datasets: no social link AND no newsletter placement is a band with
+    // nothing in it, not a band with two empty columns.
+    expect(read("_sections/connect.tsx")).toContain(
+      "if (!showFollow && !showSubscribe) return null;",
+    );
+  });
+
+  it("the merged subscribe half still reads BOTH newsletter switches", () => {
+    // ADR-080 #5 is untouched by the merge: the FLAG says signup exists, the
+    // PLACEMENT says it is drawn here, and the form still submits `home` as its
+    // source so admin filtering sees what it always saw. Merging two bands must
+    // not quietly become "signup is always on the home page".
+    const src = read("_sections/connect.tsx");
+    expect(src).toContain('isFeatureVisible("newsletter", null)');
+    expect(src).toContain('isNewsletterPlacementEnabled("home")');
+    expect(src).toContain('source="home"');
   });
 
   it("the connect band claims no livestream", () => {

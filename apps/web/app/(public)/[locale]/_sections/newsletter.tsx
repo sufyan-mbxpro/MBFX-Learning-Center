@@ -9,6 +9,7 @@ import { Reveal } from "@repo/ui/components/reveal";
 import { Section } from "@repo/ui/components/section";
 import { NewsletterForm } from "../_components/newsletter-form.tsx";
 import { newsletterFormLabels } from "../_components/newsletter-labels.ts";
+import { SIGNED_OUT_ONLY_CLASS } from "../../../_lib/session-hint.ts";
 import type { SectionProps } from "./registry.ts";
 
 export async function Newsletter({ locale, variant = "full-width" }: SectionProps) {
@@ -29,7 +30,8 @@ export async function Newsletter({ locale, variant = "full-width" }: SectionProp
   ]);
 
   return (
-    <Section spacing="md">
+    // ADR-124: absent for a signed-in reader, decided before first paint.
+    <Section spacing="md" className={SIGNED_OUT_ONLY_CLASS}>
       <Reveal variant="up">
         {/* CtaBand's `default` variant already carries .container-page —
             wrapping it in <Container> too would nest the gutter twice. */}

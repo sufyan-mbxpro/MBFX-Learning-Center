@@ -4,7 +4,8 @@
 //
 // A `null` entry is not a defect: the surface renders complete without it.
 // `GlossaryBackdrop` returns null, the slot goes undefined, and `PageHero`
-// falls back to its own tone. No page has to remember to check.
+// stands as a plain `--secondary` band (ADR-117). No page has to remember
+// to check.
 //
 // The pieces are generated vector art (ADR-051 §5's system), emitted by
 // `apps/web/scripts/generate-glossary-art.mjs` and committed under
@@ -19,11 +20,16 @@ export type GlossaryImage = string | null;
 /** Backdrops: full-bleed texture behind copy, never a framed image. */
 export const GLOSSARY_MEDIA = {
   /** `/glossary` — the A–Z index. */
-  banner: "/glossary/banner.svg",
+  banner: "/banners/glossary.webp",
   /** `/glossary/[term]` — one entry opened out into its levels. */
   termBanner: "/glossary/term-banner.svg",
-  /** `/glossary/topics` and a topic's own page. */
-  topicsBanner: "/glossary/topics-banner.svg",
+  /**
+   * `/glossary/topics`, and the fallback behind a topic that has no cover of
+   * its own (ADR-133). The owner's photography since changes-40, replacing the
+   * generated vector wash — one file, so the index and every coverless topic
+   * change together.
+   */
+  topicsBanner: "/banners/glossary-topics.webp",
 } satisfies Record<string, GlossaryImage>;
 
 export type GlossaryMediaKey = keyof typeof GLOSSARY_MEDIA;

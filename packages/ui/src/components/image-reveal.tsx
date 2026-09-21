@@ -27,6 +27,10 @@ function ImageReveal({
   return (
     <AspectRatio
       ratio={ratio}
+      // `.image-wipe` is a reveal target: the observer adds `.is-visible` to
+      // this className outside React, possibly before hydration. Same
+      // exemption and reason as `Reveal`.
+      suppressHydrationWarning
       className={cn("group overflow-hidden rounded-lg bg-muted", wipe && "image-wipe", className)}
     >
       {cloneElement(children, {

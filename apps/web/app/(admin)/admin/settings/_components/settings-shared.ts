@@ -37,7 +37,12 @@ export interface SettingsIndex {
 // untouched — anything that still reads them at render time keeps working;
 // only the admin editing screen is unreachable while paused. Drop a key
 // from this set to restore its screen.
-const PAUSED_SETTINGS_GROUPS = new Set(["cms", "layout"]);
+//
+// `articles` is not paused but DELETED (ADR-144 §5): its four values keep
+// their seeded rows and are still read, and changing them is a seed or code
+// change. It sits in the same set because the effect is the same — no hub
+// card, no sub-nav entry, and `/admin/settings/articles` answers 404.
+const PAUSED_SETTINGS_GROUPS = new Set(["cms", "layout", "articles"]);
 
 // Navigation reordering and homepage section composition are paused too
 // (ADR-038, same reasoning as PAUSED_SETTINGS_GROUPS above) — these aren't
@@ -48,13 +53,26 @@ const STRUCTURAL_DESIGN_ADMIN_UI_ENABLED = false;
 export async function loadSettingsIndex(subject: Subject, t: TranslateHas): Promise<SettingsIndex> {
   const canViewSettings = can(subject, "settings.view");
   const settings = canViewSettings ? await loadAllSettings() : [];
-  const groups = [...new Set(settings.map((s) => s.groupName))].filter(
-    (group) => !PAUSED_SETTINGS_GROUPS.has(group),
-  );
+  // changes-38: General leads (and Theme follows it, below) — the two an
+  // admin opens first. The rest keep the alphabetical order the reader
+  // returns; `toSorted` is stable, so only `general` moves.
+  const groups = [...new Set(settings.map((s) => s.groupName))]
+    .filter((group) => !PAUSED_SETTINGS_GROUPS.has(group))
+    .toSorted((a, b) => Number(b === "general") - Number(a === "general"));
+
+  const themeEntry: SettingsNavEntry[] = can(subject, "theme.update")
+    ? [{ href: "/admin/theme", label: t("theme") }]
+    : [];
+  const leadsWithGeneral = groups[0] === "general";
 
   const navEntries: SettingsNavEntry[] = [
+    // changes-38: "the general & theme should be placed at the start".
+    // Theme is not a registry group, so it is spliced in after General — or
+    // first, for a subject who cannot see the groups at all.
+    ...(leadsWithGeneral ? [] : themeEntry),
     ...groups.flatMap((group) => [
       { href: `/admin/settings/${group}`, label: groupLabel(t, group) },
+      ...(group === "general" ? themeEntry : []),
       // Email (Module 17) is one registry group with three screens, because a
       // template body and a delivery log are not settings fields. They are
       // listed beside their group rather than nested: `SettingsNav` is flat,
@@ -77,17 +95,22 @@ export async function loadSettingsIndex(subject: Subject, t: TranslateHas): Prom
     ...(!canViewSettings && can(subject, "email.log.view")
       ? [{ href: "/admin/settings/email/log", label: t("email.logNav") }]
       : []),
+    // changes-37 (ADR-121 §6): the market data provider — its API key and
+    // refresh — beside the AI provider, which already has a settings screen.
+    // Gated on the provider's own key rather than `settings.view`, so the
+    // entry appears exactly for whoever the destination admits.
+    ...(can(subject, "market.providers.manage")
+      ? [{ href: "/admin/settings/market", label: t("marketData.providerTitle") }]
+      : []),
     ...(can(subject, "social.manage")
       ? [{ href: "/admin/settings/social", label: t("social") }]
       : []),
-    ...(can(subject, "features.manage") ? [{ href: "/admin/features", label: t("features") }] : []),
     ...(STRUCTURAL_DESIGN_ADMIN_UI_ENABLED && can(subject, "navigation.manage")
       ? [{ href: "/admin/navigation", label: t("navigation") }]
       : []),
     ...(STRUCTURAL_DESIGN_ADMIN_UI_ENABLED && can(subject, "settings.update")
       ? [{ href: "/admin/homepage", label: t("homepage") }]
       : []),
-    ...(can(subject, "theme.update") ? [{ href: "/admin/theme", label: t("theme") }] : []),
   ];
 
   return { settings, groups, navEntries };

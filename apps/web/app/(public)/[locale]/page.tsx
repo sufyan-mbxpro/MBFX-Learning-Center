@@ -1,9 +1,11 @@
 import { Fragment, Suspense } from "react";
 import type { Metadata } from "next";
+import { siteUrl } from "../../_lib/site-url.ts";
+import { alternatesFor, jsonLd, localizedPath, shareMetadata } from "../../_lib/seo.ts";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { getSetting } from "@repo/settings";
-import { getActiveLocales } from "@repo/i18n";
-import { routing } from "@repo/i18n/routing";
+import { getBrandAssets } from "@repo/core";
+import { getServableLocales } from "@repo/i18n";
 import { Container } from "@repo/ui/components/container";
 import { Section } from "@repo/ui/components/section";
 import { SECTION_COMPONENTS, SECTION_PENDING } from "./_sections/registry.ts";
@@ -44,22 +46,31 @@ export async function generateMetadata({ params }: PageProps<"/[locale]">): Prom
   const { locale } = await params;
   setRequestLocale(locale);
 
-  const [t, tCommon, template, activeLocales] = await Promise.all([
+  const [t, tCommon, servable] = await Promise.all([
     getTranslations("home"),
     getTranslations("common"),
-    getSetting("seo.titleTemplate"),
-    getActiveLocales(),
+    getServableLocales(),
   ]);
-
-  const languages = Object.fromEntries(
-    activeLocales.map((l) => [l.code, l.code === routing.defaultLocale ? "/" : `/${l.code}`]),
-  );
+  const siteName = tCommon("siteName");
 
   return {
-    title: (template ?? "%s").replace("%s", tCommon("siteName")),
+    // The site name ALONE, never through `seo.titleTemplate`: the template's
+    // job is to append the brand to a page's own title, and the home page's
+    // title IS the brand — "MBX Learning Center | MBX Pro" said it twice, in
+    // two different names.
+    title: siteName,
     description: t("heroBody"),
-    alternates: { languages },
-    openGraph: { title: tCommon("siteName"), description: t("heroBody") },
+    alternates: await alternatesFor({
+      canonical: localizedPath(locale, "/"),
+      languages: servable.map((code) => ({ locale: code, href: localizedPath(code, "/") })),
+    }),
+    ...(await shareMetadata({
+      locale,
+      siteName,
+      url: localizedPath(locale, "/"),
+      title: siteName,
+      description: t("heroBody"),
+    })),
   };
 }
 
@@ -90,11 +101,45 @@ export default async function Home({ params }: PageProps<"/[locale]">) {
   const { locale } = await params;
   setRequestLocale(locale);
 
-  const sections = (await getSetting("home.sections")) ?? [];
+  const [sectionSetting, tCommon, brandAssets] = await Promise.all([
+    getSetting("home.sections"),
+    getTranslations("common"),
+    getBrandAssets(),
+  ]);
+  const sections = sectionSetting ?? [];
   const enabled = sections.filter((s) => s.enabled).toSorted((a, b) => a.order - b.order);
+
+  // `Organization` + `WebSite`, once, on the home page — the page that IS the
+  // site. Only what we can state from data we hold (the discipline
+  // `course-json-ld.tsx` follows): a name, the address and the uploaded logo.
+  // No `SearchAction`: search is a palette over an API, and there is no
+  // results URL to template.
+  const origin = siteUrl();
+  const logo = brandAssets.logo_light?.url ?? brandAssets.logo_dark?.url ?? null;
+  const siteGraph = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Organization",
+        "@id": `${origin}/#organization`,
+        name: tCommon("siteName"),
+        url: `${origin}/`,
+        ...(logo ? { logo: logo.startsWith("http") ? logo : `${origin}${logo}` } : {}),
+      },
+      {
+        "@type": "WebSite",
+        "@id": `${origin}/#website`,
+        name: tCommon("siteName"),
+        url: `${origin}${localizedPath(locale, "/")}`,
+        inLanguage: locale,
+        publisher: { "@id": `${origin}/#organization` },
+      },
+    ],
+  };
 
   return (
     <main className="flex flex-col">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(siteGraph) }} />
       {enabled.map((section, index) => {
         const Component = SECTION_COMPONENTS[section.key];
         if (!Component) return <SectionStub key={section.key} sectionKey={section.key} />;

@@ -18,6 +18,7 @@
 // between a meter and an optimist.
 import {
   AI_PAYLOAD_SCHEMAS,
+  type AiDiscoveredModel,
   type AiEffort,
   type AiFeatureKey,
   type AiModelRole,
@@ -157,7 +158,7 @@ async function prepare(input: AiTaskInput): Promise<Prepared> {
 
   const images = input.images ?? [];
   if (images.length > 0 && !resolved.model.supportsVision) {
-    throw await refusal(input, "content_too_large", {
+    throw await refusal(input, "model_no_vision", {
       modelId: resolved.model.modelId,
       provider: resolved.model.providerKind,
     });
@@ -336,6 +337,49 @@ export interface ProviderTestResult {
  * an unsaved key has nowhere else to be proved) or omitted, in which case the
  * stored one is used. Either way it is used once and never returned.
  */
+export interface ModelDiscoveryResult {
+  ok: boolean;
+  reason: AiReason | null;
+  models: AiDiscoveredModel[];
+}
+
+/**
+ * Test a connection AND read the provider's model list (ADR-120).
+ *
+ * Same key rule as `testProviderConnection`: a typed key is used once and never
+ * returned; without one the STORED key is opened by `loadProviderDriver()`,
+ * which stays its only reader. `test()` runs first because on one gateway the
+ * list is public and would pass on any key at all.
+ */
+export async function discoverProviderModels(input: {
+  providerId?: string | null;
+  kind: AiProviderKind;
+  apiKey?: string;
+  baseUrl?: string | null;
+}): Promise<ModelDiscoveryResult> {
+  try {
+    if (input.kind !== "ECHO" && !input.apiKey && !input.providerId) {
+      throw new AiError("missing_key", "No key typed and no stored provider");
+    }
+    const driver =
+      input.apiKey || input.kind === "ECHO" || !input.providerId
+        ? driverForKey({
+            kind: input.kind,
+            apiKey: input.apiKey ?? "",
+            baseUrl: input.baseUrl ?? null,
+          })
+        : await loadProviderDriver(input.providerId, {
+            includeDisabled: true,
+            baseUrl: input.baseUrl ?? null,
+          });
+    await driver.test();
+    const models = await driver.listModels();
+    return { ok: true, reason: null, models };
+  } catch (error) {
+    return { ok: false, reason: classifyProviderError(error), models: [] };
+  }
+}
+
 export async function testProviderConnection(input: {
   providerId?: string;
   kind?: AiProviderKind;

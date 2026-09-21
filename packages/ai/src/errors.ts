@@ -19,6 +19,10 @@ export const AI_REASONS = [
   "missing_key",
   "secret_unreadable",
   "content_too_large",
+  // The request carries an image and the resolved model is not marked
+  // "Reads images". Its own reason: reported as `content_too_large` it sent
+  // admins resizing a 200 KB photo that was never the problem.
+  "model_no_vision",
   // The provider answered, or failed to.
   "provider_auth",
   "provider_rate_limit",
@@ -41,6 +45,10 @@ export const AI_REFUSAL_REASONS = [
   "missing_key",
   "secret_unreadable",
   "content_too_large",
+  // The request carries an image and the resolved model is not marked
+  // "Reads images". Its own reason: reported as `content_too_large` it sent
+  // admins resizing a 200 KB photo that was never the problem.
+  "model_no_vision",
 ] as const satisfies readonly AiReason[];
 
 export function isRefusalReason(reason: AiReason): boolean {

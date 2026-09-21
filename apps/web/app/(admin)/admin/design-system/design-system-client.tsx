@@ -682,10 +682,8 @@ export function DesignSystem() {
             </Row>
             <Row label={humanizeKey("shapeAndEmphasis")}>
               <Button emphasis>{s("action")}</Button>
-              <Button shape="pill">{s("newItem")}</Button>
-              <Button variant="outline" shape="pill">
-                {s("newItem")}
-              </Button>
+              <Button>{s("newItem")}</Button>
+              <Button variant="outline">{s("newItem")}</Button>
             </Row>
           </Section>
 
@@ -1249,7 +1247,7 @@ export function DesignSystem() {
                 detail={s("metricDetail")}
                 footer={
                   <>
-                    <Progress size="xs" value={98} />
+                    <Progress size="xs" value={98} aria-label={s("metricLabel")} />
                     <MetaText className="mt-1">{s("metricCaption")}</MetaText>
                   </>
                 }
@@ -1266,7 +1264,7 @@ export function DesignSystem() {
                     <span>{s("metricMeta")}</span>
                   </>
                 }
-                footer={<Progress size="xs" value={60} />}
+                footer={<Progress size="xs" value={60} aria-label={s("volumeLabel")} />}
               />
             </div>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -1390,7 +1388,7 @@ export function DesignSystem() {
                   <SkeletonField />
                   <div className="flex gap-2">
                     <SkeletonButton />
-                    <SkeletonButton size="sm" shape="pill" />
+                    <SkeletonButton size="sm" />
                   </div>
                 </div>
                 <SkeletonCard media="video" />
@@ -1400,9 +1398,12 @@ export function DesignSystem() {
             </Row>
             <Row label={humanizeKey("progress")}>
               <div className="flex w-full max-w-md flex-col gap-3">
-                <Progress size="xs" value={25} />
-                <Progress size="sm" value={50} />
-                <Progress value={75} />
+                {/* The showcase's bars are examples, but a progressbar with
+                    no name is an axe failure wherever it renders — and
+                    /admin/design-system is a real route the gate covers. */}
+                <Progress size="xs" value={25} aria-label={humanizeKey("progress_xs")} />
+                <Progress size="sm" value={50} aria-label={humanizeKey("progress_sm")} />
+                <Progress value={75} aria-label={humanizeKey("progress_default")} />
               </div>
             </Row>
             <Row label={s("commandHint")}>

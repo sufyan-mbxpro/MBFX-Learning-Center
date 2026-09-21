@@ -3,8 +3,14 @@
 // still renders, just unstyled and off-brand.
 import { describe, expect, it } from "vitest";
 import { EDITORIAL_CLASSES } from "@repo/contracts";
-import { DEFAULT_BRAND, DEFAULT_LIGHT_SURFACE } from "@repo/theme";
-import { editorialStyle, inlineEditorialStyles, renderEmailShell } from "./layout.ts";
+import { DEFAULT_BRAND, DEFAULT_LIGHT_SURFACE, deriveTonalInk } from "@repo/theme";
+import {
+  absoluteUrl,
+  editorialStyle,
+  emailLinkColor,
+  inlineEditorialStyles,
+  renderEmailShell,
+} from "./layout.ts";
 import type { EmailPalette } from "./layout.ts";
 
 const palette: EmailPalette = {
@@ -60,6 +66,24 @@ describe("inlineEditorialStyles", () => {
     expect(inlineEditorialStyles(`<p>hi</p>`, palette)).toBe("<p>hi</p>");
   });
 
+  it("draws a link in the brand's link ink, never the client's default blue", () => {
+    const output = inlineEditorialStyles(`<p><a href="https://x.test">go</a></p>`, palette);
+    expect(output).toContain(`color:${emailLinkColor(palette)}`);
+    expect(emailLinkColor(palette)).toBe(
+      deriveTonalInk(DEFAULT_BRAND.primary, DEFAULT_LIGHT_SURFACE.background),
+    );
+  });
+
+  it("lets a tone class on a link override the link ink", () => {
+    const output = inlineEditorialStyles(
+      `<a class="ed-tx-danger" href="https://x.test">go</a>`,
+      palette,
+    );
+    expect(output.indexOf(emailLinkColor(palette))).toBeLessThan(
+      output.indexOf(DEFAULT_BRAND.error),
+    );
+  });
+
   it("still sanitises on the way through", () => {
     const output = inlineEditorialStyles(
       `<p class="ed-tx-info">hi</p><script>x()</script>`,
@@ -107,5 +131,26 @@ describe("renderEmailShell", () => {
     const html = renderEmailShell(base);
     expect(html).toContain(DEFAULT_LIGHT_SURFACE.background);
     expect(html).toContain(DEFAULT_LIGHT_SURFACE.textPrimary);
+  });
+});
+
+describe("absoluteUrl", () => {
+  it("makes an upload path absolute against the site origin", () => {
+    expect(absoluteUrl("/uploads/logo.png", "http://localhost:3000/")).toBe(
+      "http://localhost:3000/uploads/logo.png",
+    );
+  });
+
+  it("passes an absolute http(s) URL through", () => {
+    expect(absoluteUrl("https://cdn.example.com/l.png", "https://site.test")).toBe(
+      "https://cdn.example.com/l.png",
+    );
+  });
+
+  it("refuses what it cannot resolve safely", () => {
+    expect(absoluteUrl("", "https://site.test")).toBeUndefined();
+    expect(absoluteUrl("//evil.example/l.png", "https://site.test")).toBeUndefined();
+    expect(absoluteUrl("javascript:alert(1)", "https://site.test")).toBeUndefined();
+    expect(absoluteUrl("/uploads/l.png", "")).toBeUndefined();
   });
 });

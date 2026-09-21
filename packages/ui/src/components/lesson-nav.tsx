@@ -69,7 +69,7 @@ export function LessonNav({
       {previous ? (
         <a
           href={previous.href}
-          className="group card-hover hover-lift flex min-w-0 flex-1 items-center gap-3 rounded-xl border bg-card p-3 no-underline transition-colors duration-(--duration-base) hover:border-primary/30 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none md:p-4"
+          className="group card-hover hover-lift sheen flex min-w-0 flex-1 items-center gap-3 rounded-lg bg-card p-3 no-underline ring-1 ring-foreground/10 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none md:p-4"
         >
           <span
             className={cn(
@@ -93,7 +93,7 @@ export function LessonNav({
       {next ? (
         <a
           href={next.href}
-          className="group sheen hover-lift flex min-w-0 flex-1 items-center gap-3 rounded-xl bg-primary p-3 text-primary-foreground no-underline shadow-sm transition-colors duration-(--duration-base) hover:bg-primary-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none md:p-4"
+          className="group sheen hover-lift flex min-w-0 flex-1 items-center gap-3 rounded-lg bg-primary p-3 text-primary-foreground no-underline shadow-sm transition-colors duration-(--duration-base) hover:bg-primary-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none md:p-4"
         >
           <span className="flex min-w-0 flex-1 flex-col items-end gap-0.5 text-end">
             <span className={EYEBROW}>{labels.next}</span>

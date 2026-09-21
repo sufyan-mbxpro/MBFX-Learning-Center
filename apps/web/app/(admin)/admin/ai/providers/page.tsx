@@ -8,8 +8,8 @@ import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardContent } from "@repo/ui/components/card";
 import { Empty, EmptyDescription, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
-import { humanizeKey } from "@repo/utils";
 import { AdminPage } from "../../_components/admin-page.tsx";
+import { formatDateTime } from "@repo/utils";
 
 // Providers (ADR-098).
 //
@@ -28,7 +28,6 @@ export default async function AiProvidersPage() {
   const tAi = await getTranslations("admin.ai");
 
   const providers = await listAiProviders();
-  const dateFormat = new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" });
   const secretKeyMissing = providers.some((provider) => !provider.hasSecretKey);
 
   return (
@@ -71,7 +70,7 @@ export default async function AiProvidersPage() {
                     <span className="font-medium">{provider.label}</span>
                     {/* ADR-044 #5 — a raw enum member never renders. */}
                     <span className="text-xs text-muted-foreground">
-                      {humanizeKey(provider.kind)}
+                      {tAi(`providerKinds.${provider.kind}`)}
                     </span>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -83,9 +82,7 @@ export default async function AiProvidersPage() {
                         rather than as the point of it. */}
                     {provider.kind !== "ECHO" && (
                       <Badge variant={provider.hasApiKey ? "secondary" : "outline"}>
-                        {provider.hasApiKey
-                          ? tAi("providerKeyPresent")
-                          : tAi("providerKeyMissing")}
+                        {provider.hasApiKey ? tAi("providerKeyPresent") : tAi("providerKeyMissing")}
                       </Badge>
                     )}
                   </div>
@@ -100,7 +97,7 @@ export default async function AiProvidersPage() {
                       }
                     >
                       {provider.lastTestAt
-                        ? `${dateFormat.format(provider.lastTestAt)}${
+                        ? `${formatDateTime(provider.lastTestAt)}${
                             provider.lastTestError
                               ? ` · ${
                                   tAi.has(`reasons.${provider.lastTestError}`)

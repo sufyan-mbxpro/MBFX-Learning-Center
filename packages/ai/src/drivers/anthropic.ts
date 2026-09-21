@@ -12,6 +12,7 @@
 // `{ promptTokens, completionTokens }` would make our cost figure wrong by
 // design. That is the fourth reason this is not the Vercel AI SDK.
 import Anthropic from "@anthropic-ai/sdk";
+import type { AiDiscoveredModel } from "@repo/contracts";
 import type { AiProviderKind } from "@repo/db";
 
 import type { AiChunk, AiDriver, AiRequest, AiResult, AiUsageCounts } from "../provider.ts";
@@ -188,14 +189,27 @@ export function anthropicDriver(options: AnthropicOptions): AiDriver {
     },
 
     async test() {
-      // One token against the cheapest possible request. It proves the key, the
-      // host and the network — and nothing about whether a given model is
-      // enabled on the account, which the error message will say if it is not.
-      await client.messages.create({
-        model: "claude-haiku-4-5",
-        max_tokens: 1,
-        messages: [{ role: "user", content: "ping" }],
-      });
+      // The Models API, not a one-token message (ADR-120): it proves the key,
+      // the host and the network, costs nothing, and does not fail on an
+      // account that happens not to have the model a ping would have named.
+      await client.models.list({ limit: 1 });
+    },
+
+    async listModels() {
+      const models: AiDiscoveredModel[] = [];
+      // The SDK pages for us; newest first is the provider's own order.
+      for await (const model of client.models.list({ limit: 100 })) {
+        models.push({
+          modelId: model.id,
+          label: (model.display_name || model.id).slice(0, 80),
+          maxOutputTokens: model.max_tokens ?? null,
+          supportsVision: model.capabilities?.image_input?.supported ?? null,
+          // The Models API publishes no prices. The admin types them.
+          inputPricePerMTok: null,
+          outputPricePerMTok: null,
+        });
+      }
+      return models;
     },
   };
 }

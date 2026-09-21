@@ -59,7 +59,7 @@ export async function PopularTools({ locale, limit }: SectionProps) {
                 <li key={tool.key}>
                   {/* A whole-card stretched link: everything in it leads to the
                     same one place, so there is no second target to protect. */}
-                  <Card className="group/tool card-hover hover-lift sheen relative h-full ring-1 ring-foreground/10 hover:ring-primary/30">
+                  <Card className="group/tool card-hover hover-lift sheen relative h-full ring-1 ring-foreground/10">
                     <CardContent className="flex h-full flex-col gap-3">
                       <span className="flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary-interactive ring-1 ring-primary/15 transition-all duration-(--duration-base) ease-(--ease-out-quint) group-hover/tool:scale-105 group-hover/tool:bg-primary/15 group-hover/tool:ring-primary/30">
                         <Icon aria-hidden className="size-5.5" />

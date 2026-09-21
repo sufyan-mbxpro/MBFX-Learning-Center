@@ -203,3 +203,68 @@ describe("saveTheme — validateTheme reports, it does not block (changes-05)", 
     expect(presets.find((p) => p.key === key)?.isActive).toBe(true);
   });
 });
+
+// changes-46 — "Save as preset", "use that preset", and removing one.
+describe("theme presets", () => {
+  const tokens = () => ({
+    brandColors: goodBrand,
+    lightSurface: palette,
+    darkSurface: darkPalette,
+    layoutTokens,
+  });
+
+  it("saves the editor's tokens as a new INACTIVE row with a derived, unique key, and audits it", async () => {
+    const name = `Summer ${Date.now()}`;
+    const first = await admin.saveThemePreset(ACTOR, { name, description: "Warm", ...tokens() });
+    const second = await admin.saveThemePreset(ACTOR, { name, description: "", ...tokens() });
+    expect(second.key).not.toBe(first.key);
+    expect(second.key.startsWith(first.key)).toBe(true);
+
+    const row = await db.theme.findUniqueOrThrow({ where: { key: first.key } });
+    expect(row).toMatchObject({ name, description: "Warm", isActive: false, isSystem: false });
+    expect(row.brandColors).toEqual(goodBrand);
+    expect(
+      await db.auditLog.count({ where: { action: "theme.presetCreate", entityId: first.key } }),
+    ).toBe(1);
+
+    const listed = (await admin.loadThemePresets()).find((p) => p.key === first.key);
+    expect(listed?.swatches).toEqual(Object.values(goodBrand));
+  });
+
+  it("activates a saved preset, then refuses to delete it while active or built-in", async () => {
+    const { key } = await admin.saveThemePreset(ACTOR, {
+      name: `Use me ${Date.now()}`,
+      description: "",
+      ...tokens(),
+    });
+    await admin.activateTheme(ACTOR, key);
+    await expect(admin.deleteThemePreset(ACTOR, key)).rejects.toBeInstanceOf(
+      admin.ThemePresetInUseError,
+    );
+
+    const system = await db.theme.create({
+      data: {
+        key: `system-${Date.now()}`,
+        name: "Built in",
+        ...tokens(),
+        isSystem: true,
+      } as never,
+    });
+    await expect(admin.deleteThemePreset(ACTOR, system.key)).rejects.toBeInstanceOf(
+      admin.SystemThemePresetError,
+    );
+  });
+
+  it("deletes an inactive saved preset and audits it", async () => {
+    const { key } = await admin.saveThemePreset(ACTOR, {
+      name: `Scrap ${Date.now()}`,
+      description: "",
+      ...tokens(),
+    });
+    await admin.deleteThemePreset(ACTOR, key);
+    expect(await db.theme.findUnique({ where: { key } })).toBeNull();
+    expect(
+      await db.auditLog.count({ where: { action: "theme.presetDelete", entityId: key } }),
+    ).toBe(1);
+  });
+});

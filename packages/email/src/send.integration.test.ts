@@ -224,13 +224,31 @@ describe("sendTemplatedEmail", () => {
     expect(await inbox()).toHaveLength(1);
   });
 
-  it("fails, without throwing, when the template row is missing", async () => {
+  // ADR-131: a key the registry added after this database was seeded is
+  // restored from its code default rather than failing with "run the seed".
+  it("restores a missing template from its default, and sends", async () => {
     await setSetting("email.enabled", true);
     await useSmtp();
 
     const result = await sendReset();
-    expect(result.status).toBe("FAILED");
-    expect(result.reason).toContain("seed");
+    expect(result.status).toBe("SENT");
+    const row = await db.emailTemplate.findUniqueOrThrow({
+      where: { key: "auth.password_reset" },
+      include: { translations: true },
+    });
+    expect(row.translations.map((translation) => translation.locale)).toEqual(["en"]);
+  });
+
+  // Create-only, like the seed: restoring must never undo an admin's choice.
+  it("does not switch a template back on when it restores its content", async () => {
+    await setSetting("email.enabled", true);
+    await useSmtp();
+    await db.emailTemplate.create({ data: { key: "auth.password_reset", isActive: false } });
+
+    const result = await sendReset();
+    expect(result.status).toBe("SUPPRESSED");
+    const row = await db.emailTemplate.findUniqueOrThrow({ where: { key: "auth.password_reset" } });
+    expect(row.isActive).toBe(false);
   });
 
   it("fails, without throwing, when the mail server is unreachable", async () => {

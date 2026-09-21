@@ -12,7 +12,7 @@
 // transpilation anyway.
 import { execFileSync } from "node:child_process";
 import path from "node:path";
-import { e2eDatabaseUrl } from "../playwright.config.ts";
+import { e2eDatabaseUrl } from "./database.ts";
 
 const dbPackageRoot = path.resolve(__dirname, "../../../packages/db");
 
@@ -53,6 +53,44 @@ export function seededArticle(): SeededArticle {
 
 export function auditCount(entityId: string, action: string): number {
   return query<number>("auditCount", { entityId, action });
+}
+
+/** An active locale, as ADR-091's `getServableLocales()` would report it. */
+export interface ActiveLocaleRow {
+  code: string;
+  isRtl: boolean;
+}
+
+/** The locales this install actually serves (ADR-091). */
+export function activeLocales(): ActiveLocaleRow[] {
+  return query<ActiveLocaleRow[]>("activeLocales");
+}
+
+/** One settings row as the database holds it. */
+export interface SettingRow {
+  key: string;
+  value: unknown;
+  groupName: string;
+  isPublic: boolean;
+}
+
+/** A settings screen's save, read back from the row rather than the form. */
+export function setting(key: string): SettingRow | null {
+  return query<SettingRow | null>("setting", { key });
+}
+
+export interface AiFeatureRow {
+  key: string;
+  isEnabled: boolean;
+  providerId: string | null;
+  modelId: string | null;
+  maxOutputTokens: number | null;
+  extraInstructions: string | null;
+}
+
+/** One `AiFeature` row (Module 18), for the AI screens' DB-level assertions. */
+export function aiFeature(key: string): AiFeatureRow | null {
+  return query<AiFeatureRow | null>("aiFeature", { key });
 }
 
 export interface SeededTool {

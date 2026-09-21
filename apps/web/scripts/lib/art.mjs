@@ -1,6 +1,6 @@
 // The shared engine behind the site's generated vector art (ADR-051 §5).
 //
-// Extracted from `generate-about-art.mjs` when the homepage needed the same
+// Extracted from the About generator when the homepage needed the same
 // artwork system (`generate-home-art.mjs`). Nothing about the output changed:
 // the palette, the PRNG, the scaffolding and every motif are the same code
 // they were, and because each piece is seeded from its own file name, the

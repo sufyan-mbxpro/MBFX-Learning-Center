@@ -279,3 +279,51 @@ describe("getRiskSentiment", () => {
     expect(view.bands).toEqual({ riskOffBelow: 20, riskOnAbove: 80 });
   });
 });
+
+describe("getVolatilityBoard (ADR-136 §3)", () => {
+  it("profiles a registry instrument from its bars' ranges", async () => {
+    // makeSeries writes high = close × 1.01 and low = close × 0.99, so every
+    // session's range is exactly 2% of its close.
+    await makeSeries("EUR/USD", 70, () => 1.1);
+    const board = await analytics.getVolatilityBoard();
+    const major = board.groups.find((group) => group.key === "major")!;
+    const row = major.rows.find((r) => r.symbol === "EUR/USD")!;
+
+    expect(row.profile.timeframes.daily.current).toBeCloseTo(2, 8);
+    expect(row.profile.timeframes.monthly.average).toBeCloseTo(2, 8);
+    expect(row.profile.timeframes.weekly.trend).toBeCloseTo(0, 8);
+    expect(row.profile.timeframes.daily.level).toBe("extreme");
+    expect(board.asOf).toBe(new Date(Date.UTC(2026, 0, 70)).toISOString());
+  });
+
+  it("names a symbol with no bars or no row as missing, never as a zero", async () => {
+    await makeSeries("GBP/USD", 0, () => 1.3);
+    const board = await analytics.getVolatilityBoard();
+    const major = board.groups.find((group) => group.key === "major")!;
+
+    expect(major.rows).toEqual([]);
+    expect(major.missing).toContain("GBP/USD");
+    expect(major.missing).toContain("EUR/USD");
+    expect(board.asOf).toBeNull();
+  });
+
+  it("reports a short history as dashes", async () => {
+    await makeSeries("USD/TRY", 3, () => 32);
+    const board = await analytics.getVolatilityBoard();
+    const row = board.groups.find((group) => group.key === "exotic")!.rows[0]!;
+
+    expect(row.profile.timeframes.daily.current).toBeCloseTo(2, 8);
+    expect(row.profile.timeframes.daily.average).toBeNull();
+    expect(row.profile.timeframes.monthly.current).toBeNull();
+  });
+
+  it("ignores an instrument the registry does not name, and an inactive one", async () => {
+    await makeSeries("AAA/USD", 30, () => 5);
+    const inactive = await makeSeries("USD/CHF", 30, () => 0.9);
+    await db.marketInstrument.update({ where: { id: inactive.id }, data: { isActive: false } });
+
+    const board = await analytics.getVolatilityBoard();
+    const symbols = board.groups.flatMap((group) => group.rows.map((row) => row.symbol));
+    expect(symbols).toEqual([]);
+  });
+});

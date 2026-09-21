@@ -9,148 +9,94 @@
 // could only look at. Removing it also removed the only facet query that had
 // to scan every published row, which is why the facet itself went with it
 // rather than being left computed and unread.
-import Image from "next/image";
 import { getTranslations } from "next-intl/server";
 import { Search } from "lucide-react";
 import type { ArticleFacets } from "@repo/core";
 import { Link } from "@repo/i18n/navigation";
-import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
-import { Card, CardContent, CardHeader } from "@repo/ui/components/card";
-import { Input } from "@repo/ui/components/input";
+import { RevealGroup } from "@repo/ui/components/reveal";
 
-// Built on the design system's Card (ADR-050), not on a copy of its class
-// string. The copy this replaced had already drifted — it omitted
-// `text-card-foreground` — and it was the reason these four stacked panels
-// had no header band while every other card was about to get one.
-function Panel({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <Card>
-      <CardHeader>
-        {/* The heading element stays real — Card/CardTitle are plain divs
-            here, so the <h2> goes in directly rather than through a render
-            prop this component does not have. */}
-        <h2 className="text-sm leading-snug font-semibold">{title}</h2>
-      </CardHeader>
-      <CardContent>{children}</CardContent>
-    </Card>
-  );
-}
+import { LatestPostsPanel, Panel, PopularTagsPanel } from "./facet-panels.tsx";
+import { ListingSearchForm, ListingSearchInput } from "./listing-navigation.tsx";
 
 export async function ArticleSidebar({
   facets,
   locale,
   basePath,
   query,
+  activeCategorySlug,
+  activeTagSlug,
 }: {
   facets: ArticleFacets;
   locale: string;
   /** Where the search form submits — /news or /analysis. */
   basePath: string;
   query?: string;
+  /** On a category archive, that category's row is marked current, not linked. */
+  activeCategorySlug?: string;
+  /** On a tag archive, that tag's chip is marked current, not linked. */
+  activeTagSlug?: string;
 }) {
   const t = await getTranslations("news");
 
   return (
-    <aside className="flex flex-col gap-5 lg:sticky lg:top-24 lg:self-start">
-      {/* A plain GET form: no JS needed, and the resulting URL is
-          shareable and cacheable. `q` is parsed server-side through
+    // The panels arrive one after another from the inline end (changes-45),
+    // the same stagger the listing's cards use. The ASIDE stays the sticky
+    // element and carries no transform: a transform on a sticky box's own
+    // element is how it stops sticking, so the motion is on its children.
+    <aside className="lg:sticky lg:top-24 lg:self-start">
+      <RevealGroup variant="end" step={80} className="flex flex-col gap-5">
+        {/* Still a GET form underneath: no JS needed, and the resulting URL is
+          shareable and cacheable. With JS it navigates without reloading the
+          document (changes-39). `q` is parsed server-side through
           publicArticleSearchSchema before it reaches @repo/core. */}
-      <form action={basePath} className="flex gap-2">
-        <Input
-          type="search"
-          name="q"
-          defaultValue={query}
-          aria-label={t("searchLabel")}
-          placeholder={t("searchPlaceholder")}
-          className="flex-1"
-        />
-        <Button type="submit" size="icon" aria-label={t("searchLabel")}>
-          <Search aria-hidden className="size-4" />
-        </Button>
-      </form>
+        <ListingSearchForm action={basePath} className="flex gap-2">
+          {/* Controlled (changes-40). A soft navigation keeps this node
+            mounted, so a changing `defaultValue` both warned and did nothing —
+            see `ListingSearchInput`. */}
+          <ListingSearchInput
+            query={query}
+            aria-label={t("searchLabel")}
+            placeholder={t("searchPlaceholder")}
+            className="flex-1"
+          />
+          <Button type="submit" size="icon" aria-label={t("searchLabel")}>
+            <Search aria-hidden className="size-4" />
+          </Button>
+        </ListingSearchForm>
 
-      {facets.categories.length > 0 && (
-        <Panel title={t("categories")}>
-          <ul className="flex flex-col gap-2">
-            {facets.categories.map((category) => (
-              <li key={category.id} className="flex items-center justify-between gap-2">
-                <Link
-                  href={`/news/category/${category.slug}`}
-                  className="link-underline text-sm text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  {category.name}
-                </Link>
-                <span className="text-xs text-muted-foreground">{category.count}</span>
-              </li>
-            ))}
-          </ul>
-        </Panel>
-      )}
-
-      {facets.latest.length > 0 && (
-        <Panel title={t("latestPosts")}>
-          <ul className="flex flex-col gap-4">
-            {facets.latest.map((entry) => (
-              <li key={entry.articleId} className="group flex items-start gap-3">
-                {entry.coverImageUrl && (
-                  <Link
-                    href={`/news/${entry.slug}`}
-                    tabIndex={-1}
-                    aria-hidden
-                    className="relative size-14 shrink-0 overflow-hidden rounded-md bg-muted"
-                  >
-                    <Image
-                      src={entry.coverImageUrl}
-                      alt=""
-                      fill
-                      unoptimized
-                      sizes="56px"
-                      className="media-zoom object-cover"
-                    />
-                  </Link>
-                )}
-                {/* `min-w-0 flex-1`: a flex child's minimum width is its
-                    content, so without it one unbreakable run in a headline
-                    pushed the column past the card edge, where the card's
-                    `overflow-hidden` clipped it mid-word (found in the
-                    changes-20 Phase 6 browser pass, once ADR-075's 24px card
-                    rhythm narrowed the sidebar). `wrap-break-word` lets that
-                    run break instead. */}
-                <div className="flex min-w-0 flex-1 flex-col gap-1">
-                  <Link
-                    href={`/news/${entry.slug}`}
-                    className="link-underline line-clamp-2 text-sm leading-snug font-medium wrap-break-word"
-                  >
-                    {entry.title}
-                  </Link>
-                  {entry.publishedAt && (
-                    <time className="text-xs text-muted-foreground">
-                      {new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(
-                        entry.publishedAt,
-                      )}
-                    </time>
+        {facets.categories.length > 0 && (
+          <Panel title={t("categories")}>
+            <ul className="flex flex-col gap-2">
+              {facets.categories.map((category) => (
+                <li key={category.id} className="flex items-center justify-between gap-2">
+                  {category.slug === activeCategorySlug ? (
+                    // The archive being viewed is not a link to itself — the
+                    // same rule `TagChips` follows, stated with aria-current so
+                    // it is not purely visual.
+                    <span aria-current="page" className="text-sm font-semibold text-foreground">
+                      {category.name}
+                    </span>
+                  ) : (
+                    <Link
+                      href={`/news/category/${category.slug}`}
+                      className="link-underline text-sm text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                      {category.name}
+                    </Link>
                   )}
-                </div>
-              </li>
-            ))}
-          </ul>
-        </Panel>
-      )}
+                  <span className="text-xs text-muted-foreground">{category.count}</span>
+                </li>
+              ))}
+            </ul>
+          </Panel>
+        )}
 
-      {facets.tags.length > 0 && (
-        <Panel title={t("popularTags")}>
-          <ul className="flex flex-wrap gap-2">
-            {facets.tags.map((tag) => (
-              <li key={tag.id}>
-                <Badge variant="pill" render={<Link href={`/news/tag/${tag.slug}`} />}>
-                  {tag.name}
-                </Badge>
-              </li>
-            ))}
-          </ul>
-        </Panel>
-      )}
+        {/* Shared with the glossary's rail since changes-40 — one "Latest
+          posts", one "Popular tags". */}
+        <LatestPostsPanel title={t("latestPosts")} entries={facets.latest} locale={locale} />
+        <PopularTagsPanel title={t("popularTags")} tags={facets.tags} activeSlug={activeTagSlug} />
+      </RevealGroup>
     </aside>
   );
 }

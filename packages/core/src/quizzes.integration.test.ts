@@ -773,6 +773,52 @@ describe("authoring", () => {
     expect(allIds).toEqual(expect.arrayContaining([forex.quizId, crypto.quizId]));
   });
 
+  // ADR-132 — a quiz cover is a media placement like a course cover: the card
+  // resolves it, the reference guards the asset, and clearing it releases both.
+  it("saves, shows and clears an uploaded cover", async () => {
+    const { quizId } = await makeQuiz({ isStandalone: true, publish: true });
+    const title = (await db.quizTranslation.findFirstOrThrow({ where: { quizId } })).title;
+    const asset = await db.mediaAsset.create({
+      data: {
+        key: `${Math.random().toString(16).slice(2).padEnd(24, "0").slice(0, 24)}.webp`,
+        url: "/uploads/quiz-cover.webp",
+        fileName: "quiz-cover.webp",
+        mimeType: "image/webp",
+        size: 128,
+        purpose: "content",
+      },
+    });
+
+    await quizzes.saveQuiz(editor, {
+      quizId,
+      meta: { coverAssetId: asset.id },
+      translation: { locale: "en", title },
+      questions: (await quizzes.getQuizAdmin(quizId, "en"))!.questions,
+    });
+
+    expect((await quizzes.getQuizAdmin(quizId, "en"))!.coverUrl).toBe("/uploads/quiz-cover.webp");
+    const card = (await quizzes.loadStandaloneQuizzes("en")).find((q) => q.id === quizId);
+    expect(card?.coverUrl).toBe("/uploads/quiz-cover.webp");
+    expect(
+      await db.contentReference.count({
+        where: { sourceType: "QUIZ", sourceId: quizId, refType: "MEDIA", refId: asset.id },
+      }),
+    ).toBe(1);
+
+    await quizzes.saveQuiz(editor, {
+      quizId,
+      meta: { coverAssetId: null },
+      translation: { locale: "en", title },
+      questions: (await quizzes.getQuizAdmin(quizId, "en"))!.questions,
+    });
+
+    const cleared = (await quizzes.loadStandaloneQuizzes("en")).find((q) => q.id === quizId);
+    expect(cleared?.coverUrl).toBeNull();
+    expect(
+      await db.contentReference.count({ where: { sourceType: "QUIZ", sourceId: quizId } }),
+    ).toBe(0);
+  });
+
   it("keeps an attempt readable after its quiz is edited", async () => {
     // ADR-058's consequence: an attempt records the answers given, not the
     // questions asked. Rewriting a question does not invalidate past attempts.
@@ -800,5 +846,137 @@ describe("authoring", () => {
     const attempt = await db.quizAttempt.findUniqueOrThrow({ where: { id: result.attemptId } });
     expect(attempt.passed).toBe(true);
     expect(attempt.score).toBe(2);
+  });
+});
+
+// ─── Translation (ADR-127 applied to quizzes) ────────────────
+
+describe("a quiz in another language", () => {
+  async function arabicLocale() {
+    await db.locale.upsert({
+      where: { code: "ar" },
+      update: {},
+      create: {
+        code: "ar",
+        name: "Arabic",
+        nativeName: "العربية",
+        direction: "RTL",
+        isDefault: false,
+        isActive: false,
+        sortOrder: 3,
+      },
+    });
+  }
+
+  /** An Arabic save of the given quiz's own structure, words replaced. */
+  async function arabicInput(quizId: string) {
+    const detail = await quizzes.getQuizAdmin(quizId, "en");
+    return {
+      quizId,
+      meta: {},
+      translation: { locale: "ar", title: "اختبار" },
+      questions: detail!.questions.map((question, index) => ({
+        id: question.id,
+        type: question.type,
+        sortOrder: index,
+        points: question.points,
+        prompt: `سؤال ${index}`,
+        options: question.options.map((_, o) => `خيار ${o}`),
+        explanations: [],
+        correctAnswer: question.correctAnswer,
+      })),
+    };
+  }
+
+  it("saves the words and leaves the questions, correct answers and English untouched", async () => {
+    await arabicLocale();
+    const { quizId, questionIds } = await makeQuiz();
+    const input = await arabicInput(quizId);
+    // A translation cannot move the answer, even if the payload says so.
+    input.questions[0]!.correctAnswer = 2;
+
+    await quizzes.saveQuiz(editor, input);
+
+    const english = await quizzes.getQuizAdmin(quizId, "en");
+    expect(english!.questions.map((q) => q.id)).toEqual(questionIds);
+    expect(english!.questions[0]!.correctAnswer).toBe(1);
+    expect(english!.questions[0]!.prompt).toBe("Question 0");
+    const arabic = await quizzes.getQuizAdmin(quizId, "ar");
+    expect(arabic!.questions[0]!.prompt).toBe("سؤال 0");
+  });
+
+  it("refuses a translation that drops a question or changes an option count", async () => {
+    await arabicLocale();
+    const { quizId } = await makeQuiz();
+
+    const dropped = await arabicInput(quizId);
+    dropped.questions.pop();
+    await expect(quizzes.saveQuiz(editor, dropped)).rejects.toThrow(
+      quizzes.QuizTranslationStructureError,
+    );
+
+    const extraOption = await arabicInput(quizId);
+    extraOption.questions[0]!.options.push("إضافي");
+    await expect(quizzes.saveQuiz(editor, extraOption)).rejects.toThrow(
+      quizzes.QuizTranslationStructureError,
+    );
+
+    // Neither refused save deleted anything.
+    const english = await quizzes.getQuizAdmin(quizId, "en");
+    expect(english!.questions).toHaveLength(2);
+  });
+
+  it("reads in Arabic through ?lang=, RTL, and never shows a half-translated quiz", async () => {
+    await arabicLocale();
+    const { quizId } = await makeQuiz();
+    await quizzes.saveQuiz(editor, await arabicInput(quizId));
+    const slug = (await db.quizTranslation.findFirstOrThrow({ where: { quizId, locale: "en" } }))
+      .slug;
+
+    const view = await quizzes.loadQuizBySlug("en", slug, "ar");
+    expect(view!.readingLocale).toBe("ar");
+    expect(view!.contentDirection).toBe("rtl");
+    expect(view!.title).toBe("اختبار");
+    expect(view!.questions[0]!.prompt).toBe("سؤال 0");
+    expect(view!.slug).toBe(slug);
+    expect(view!.readingLanguages.map((l) => l.locale)).toEqual(["en", "ar"]);
+    expect(JSON.stringify(view)).not.toContain("correctAnswer");
+
+    // A question added in English afterwards has no Arabic words: Arabic stops
+    // being offered rather than mixing languages mid-quiz.
+    const english = await quizzes.getQuizAdmin(quizId, "en");
+    await quizzes.saveQuiz(editor, {
+      quizId,
+      meta: {},
+      translation: {
+        locale: "en",
+        title: english!.translations.find((tr) => tr.locale === "en")!.title,
+      },
+      questions: [
+        ...english!.questions.map((question, index) => ({
+          id: question.id,
+          type: question.type,
+          sortOrder: index,
+          points: question.points,
+          prompt: question.prompt,
+          options: question.options,
+          explanations: question.explanations,
+          correctAnswer: question.correctAnswer,
+        })),
+        {
+          type: "SINGLE_CHOICE" as const,
+          sortOrder: 2,
+          points: 1,
+          prompt: "New",
+          options: ["x", "y"],
+          explanations: [],
+          correctAnswer: 0,
+        },
+      ],
+    });
+    const after = await quizzes.loadQuizBySlug("en", slug, "ar");
+    expect(after!.readingLocale).toBeNull();
+    expect(after!.title).not.toBe("اختبار");
+    expect(after!.readingLanguages.map((l) => l.locale)).toEqual(["en"]);
   });
 });

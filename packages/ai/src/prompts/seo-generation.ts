@@ -1,4 +1,5 @@
-// `seo_generation` — the article editor's SEO section (B2).
+// `seo_generation` — the SEO section of every editor that has one (B2): articles,
+// courses, lessons, video topics, glossary terms and topics, tools.
 //
 // The limits named in the prompt are the COLUMN's limits, and the response is
 // parsed by `seoSuggestionSchema` with those same numbers. Over-length is a
@@ -17,7 +18,7 @@ export function buildSeoGenerationPrompt(
   const system = buildSystem(
     [
       "You write search metadata for a forex and trading education website.",
-      "You describe what the page actually contains. You never promise returns, never use clickbait, and never invent a claim the article does not make.",
+      "You describe what the page actually contains. You never promise returns, never use clickbait, and never invent a claim the page does not make.",
       `Write in ${language}.`,
       "",
       "Return this JSON shape:",
@@ -39,9 +40,9 @@ export function buildSeoGenerationPrompt(
     extraInstructions,
   );
 
-  const parts = [asData("article title", payload.title)];
-  if (payload.excerpt) parts.push(asData("article excerpt", payload.excerpt));
-  parts.push(asData("article body", payload.content));
+  const parts = [asData("page title", payload.title)];
+  if (payload.excerpt) parts.push(asData("page excerpt", payload.excerpt));
+  parts.push(asData("page body", payload.content));
 
   return { system, messages: [{ role: "user", content: parts.join("\n\n") }] };
 }

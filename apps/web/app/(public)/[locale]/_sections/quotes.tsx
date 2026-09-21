@@ -66,10 +66,9 @@ export async function Quotes({ locale, variant = "single", limit }: SectionProps
       : [await loadQuoteOfTheDay()];
 
   return (
-    <Section tone="muted" spacing="md" className="relative isolate overflow-hidden">
-      {/* The one piece of depth this band gets. A quote is the quietest thing
-          on the page and a card would make it the loudest. */}
-      <span aria-hidden className="bg-glow-primary pointer-events-none absolute inset-0 -z-10" />
+    <Section tone="muted" spacing="md">
+      {/* ADR-101 §6: no wash. A quote is the quietest thing on the page —
+          the muted tone is the whole of the depth it needs. */}
       <Container>
         <Reveal variant="up">
           {variant === "carousel" && shown.length > 1 ? (

@@ -11,11 +11,9 @@ import {
   Calculator,
   CandlestickChart,
   Sparkles,
-  Tags,
   ChartLine,
   CircleHelp,
   BookOpen,
-  Flag,
   GraduationCap,
   IdCard,
   Image,
@@ -31,7 +29,6 @@ import {
   Users,
   Globe,
   ExternalLink,
-  FolderOpen,
   Video,
   type LucideIcon,
 } from "lucide-react";
@@ -39,7 +36,8 @@ import { cn } from "@repo/ui/lib/utils";
 import { NavItem } from "@repo/ui/components/nav-item";
 import { MicroHeading } from "@repo/ui/components/typography";
 
-const ICONS: Record<string, LucideIcon> = {
+/** Shared with the ⌘K palette, so a destination has one glyph in both places. */
+export const ICONS: Record<string, LucideIcon> = {
   dashboard: LayoutDashboard,
   users: Users,
   roles: Shield,
@@ -51,8 +49,6 @@ const ICONS: Record<string, LucideIcon> = {
   learnQuizzes: CircleHelp,
   learnProgress: ChartLine,
   learnVideos: Video,
-  videoCategories: FolderOpen,
-  glossaryTopics: Tags,
   articles: Newspaper,
   websiteMedia: Image,
   website: Globe,
@@ -60,7 +56,6 @@ const ICONS: Record<string, LucideIcon> = {
   tools: Calculator,
   ai: Sparkles,
   settings: Settings,
-  features: Flag,
   navigation: ListTree,
   homepage: Home,
   theme: Palette,
@@ -104,50 +99,63 @@ export function AdminSidebarNav({
   const railClass = collapsed ? "justify-center gap-0 px-0" : undefined;
 
   return (
-    <nav className={cn("flex flex-1 flex-col overflow-y-auto", collapsed ? "gap-2" : "gap-4")}>
-      {groups.map((group, index) => (
-        <div key={group.label ?? index} className="flex flex-col gap-1">
-          {group.label &&
-            (collapsed ? (
-              // A visible heading has nowhere to go on a 64px rail, but the
-              // grouping is still real to a screen reader — keep it as the
-              // separator's label rather than dropping the structure.
-              <hr aria-label={group.label} className="mx-2 my-1 border-t" />
-            ) : (
-              <MicroHeading render={<p />} className="px-4 pb-1">
-                {group.label}
-              </MicroHeading>
-            ))}
-          {group.entries.map((entry) => {
-            const Icon = ICONS[entry.icon];
-            const isActive = entry.exact
-              ? pathname === entry.href
-              : pathname === entry.href || pathname.startsWith(`${entry.href}/`);
-            return (
-              <NavItem
-                key={entry.href}
-                render={<Link href={entry.href} />}
-                active={isActive}
-                icon={Icon && <Icon aria-hidden />}
-                // Collapsed, the icon is the only visible content — the
-                // label has to reach both the accessibility tree
-                // (aria-label) and the pointer user (native tooltip).
-                aria-label={collapsed ? entry.label : undefined}
-                title={collapsed ? entry.label : undefined}
-                className={railClass}
-              >
-                {!collapsed && entry.label}
-              </NavItem>
-            );
-          })}
-        </div>
-      ))}
+    // Two parts since changes-37: the groups SCROLL, and "Visit site" does
+    // not. It used to be the last child of the scrolling nav with `mt-auto`,
+    // which pins it to the bottom only while the groups are shorter than the
+    // sidebar — on a laptop screen with every group granted it scrolled away
+    // below the fold with the rest ("fixed visit site in admin side").
+    <div className="flex min-h-0 flex-1 flex-col gap-2">
+      <nav
+        className={cn(
+          "flex min-h-0 flex-1 flex-col overflow-y-auto",
+          collapsed ? "gap-2" : "gap-4",
+        )}
+      >
+        {groups.map((group, index) => (
+          <div key={group.label ?? index} className="flex flex-col gap-1">
+            {group.label &&
+              (collapsed ? (
+                // A visible heading has nowhere to go on a 64px rail, but the
+                // grouping is still real to a screen reader — keep it as the
+                // separator's label rather than dropping the structure.
+                <hr aria-label={group.label} className="mx-2 my-1 border-t" />
+              ) : (
+                <MicroHeading render={<p />} className="px-4 pb-1">
+                  {group.label}
+                </MicroHeading>
+              ))}
+            {group.entries.map((entry) => {
+              const Icon = ICONS[entry.icon];
+              const isActive = entry.exact
+                ? pathname === entry.href
+                : pathname === entry.href || pathname.startsWith(`${entry.href}/`);
+              return (
+                <NavItem
+                  key={entry.href}
+                  render={<Link href={entry.href} />}
+                  active={isActive}
+                  icon={Icon && <Icon aria-hidden />}
+                  // Collapsed, the icon is the only visible content — the
+                  // label has to reach both the accessibility tree
+                  // (aria-label) and the pointer user (native tooltip).
+                  aria-label={collapsed ? entry.label : undefined}
+                  title={collapsed ? entry.label : undefined}
+                  className={railClass}
+                >
+                  {!collapsed && entry.label}
+                </NavItem>
+              );
+            })}
+          </div>
+        ))}
+      </nav>
 
       {visitSite && (
-        // Pinned below every group (mt-auto): this leaves the admin rather
-        // than navigating within it, so it must not read as one more
-        // section. A new tab — the admin was mid-task — which is exactly
-        // what target=_blank + rel=noopener is for.
+        // Pinned below every group, OUTSIDE the scroll: this leaves the admin
+        // rather than navigating within it, so it must not read as one more
+        // section, and it must not scroll out of reach. A rule above it says
+        // the same thing. A new tab — the admin was mid-task — which is
+        // exactly what target=_blank + rel=noopener is for.
         <NavItem
           href={visitSite.href}
           target="_blank"
@@ -156,11 +164,11 @@ export function AdminSidebarNav({
           title={collapsed ? visitSite.label : visitSite.hint}
           icon={<Globe aria-hidden />}
           trailing={collapsed ? undefined : <ExternalLink aria-hidden className="opacity-70" />}
-          className={cn("mt-auto text-muted-foreground", railClass)}
+          className={cn("shrink-0 text-muted-foreground", railClass)}
         >
           {!collapsed && visitSite.label}
         </NavItem>
       )}
-    </nav>
+    </div>
   );
 }

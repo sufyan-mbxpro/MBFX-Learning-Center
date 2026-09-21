@@ -1,5 +1,17 @@
-// ADR-047 §2 and ADR-018 compliance for the About-section primitives
-// (changes-09-plan.md PR 2). These pin GUARANTEES, not styling:
+// ADR-047 §2 and ADR-018 compliance for the primitives the About section
+// introduced (changes-09-plan.md PR 2).
+//
+// **The section is gone (changes-33, ADR-109) and this file is not.** The
+// components stayed in `@repo/ui`, and so did the rule they exist to keep:
+// `/support` is data-gated by ADR-047 §2 exactly as its predecessor was, and
+// `PageHero` is on every public masthead. The NAME is stale; renaming it
+// would be churn against a file whose subject has not changed.
+//
+// `AwardGrid`, `HotspotMap` and `Timeline` have no call site today. Kept
+// deliberately — they are tested, and the next company-facts page will want
+// them (ADR-109 Consequences).
+//
+// These pin GUARANTEES, not styling:
 //
 //   - an empty collection renders nothing at all (no heading, no empty
 //     grid, no stray <ul>), because a page must never advertise a fact it
@@ -187,6 +199,84 @@ describe("PageHero", () => {
     expect(screen.getByText("About")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Start learning" })).toBeTruthy();
     expect(screen.getByText("Figures are illustrative.")).toBeTruthy();
+  });
+});
+
+// ADR-117 — a masthead that was given a photograph shows the photograph.
+//
+// The owner's report was "remove the yellow cover/shade on all banners, also
+// the text should be visible after remove the yellow shade", and both halves
+// of that sentence are load-bearing. The brand gradient came off; something
+// has to take over the contrast guarantee it was carrying, and a text-shadow
+// over an arbitrary photograph is not a guarantee.
+//
+// Every assertion here is about the band's CLASS LIST rather than about how
+// it looks, which is the only thing jsdom can settle — but the class list is
+// where the decision lives: `--secondary-foreground` on `--secondary` is a
+// pairing the theme engine derives readable (ADR-003), and the scrim is what
+// makes `--secondary` the thing actually behind the words.
+describe("PageHero — the photo tone", () => {
+  const band = (c: HTMLElement) => c.querySelector("[data-slot=page-hero]")!;
+  const backdrop = <img data-testid="art" alt="" src="/banners/news.webp" />;
+
+  it("a backdrop selects `photo`, and `photo` is not the brand fill", () => {
+    const { container } = render(<PageHero title="News" backdrop={backdrop} />);
+    const el = band(container);
+    expect(el.getAttribute("data-tone")).toBe("photo");
+    expect(el.className).toContain("bg-secondary");
+    expect(el.className).toContain("text-secondary-foreground");
+    // The yellow. `--primary` is #C8986B by default (ADR-143), and a
+    // full-band gradient of it is what every masthead was wearing.
+    expect(el.className).not.toContain("from-primary");
+  });
+
+  it("renders the artwork at full strength, not clamped to 25%", () => {
+    const { container } = render(<PageHero title="News" backdrop={backdrop} />);
+    const wrapper = container.querySelector("[data-testid=art]")!.parentElement!;
+    // 25% was the right ceiling while the art sat UNDER a fill; it is also
+    // what made the owner's photography read as a texture nobody could see.
+    expect(wrapper.className).not.toContain("opacity-25");
+  });
+
+  it("puts a --secondary scrim between the artwork and the copy", () => {
+    const { container } = render(<PageHero title="News" backdrop={backdrop} />);
+    const el = band(container);
+    // Anything matching `from-secondary` is the veil: the copy reads against
+    // a known fill in a known direction rather than against whatever the
+    // photograph happens to contain at that point.
+    expect(el.innerHTML).toContain("from-secondary");
+  });
+
+  it("clears the far side for a start-aligned band, and does not for a centred one", () => {
+    // The asymmetry IS the design, and it is the homepage hero's idiom: a
+    // start-aligned masthead keeps its words in the inline-start half, so the
+    // scrim can go fully transparent on the other side and the reader sees
+    // the picture rather than a tint of it. A centred masthead has copy
+    // across the full width and cannot afford that anywhere.
+    const start = render(<PageHero title="News" backdrop={backdrop} />).container;
+    const centre = render(<PageHero title="News" align="center" backdrop={backdrop} />).container;
+    expect(band(start).innerHTML).toContain("md:to-transparent");
+    expect(band(centre).innerHTML).not.toContain("to-transparent");
+  });
+
+  it("keeps `brand` when there is no artwork to show", () => {
+    // ADR-117 is not "the brand fill was wrong". A band with nothing behind
+    // it still needs a surface, and the one the theme engine guarantees an
+    // ink for is the one it should have.
+    const { container } = render(<PageHero title="Sitemap" />);
+    const el = band(container);
+    expect(el.getAttribute("data-tone")).toBe("brand");
+    expect(el.className).toContain("from-primary");
+    expect(el.innerHTML).not.toContain("from-secondary");
+  });
+
+  it("lets an explicit tone win over the backdrop default", () => {
+    const { container } = render(<PageHero title="News" tone="muted" backdrop={backdrop} />);
+    const el = band(container);
+    expect(el.getAttribute("data-tone")).toBe("muted");
+    // No scrim either — the veil belongs to `photo` alone, and painting one
+    // over a `muted` band would darken a light surface for no reason.
+    expect(el.innerHTML).not.toContain("from-secondary");
   });
 });
 

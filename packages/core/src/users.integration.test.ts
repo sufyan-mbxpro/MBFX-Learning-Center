@@ -303,3 +303,154 @@ describe("offboardEmployee — atomicity with fault injection", () => {
     ).toBe(0);
   });
 });
+
+// changes-45 / ADR-142 — the user record page's writes.
+describe("the user record's writes", () => {
+  it("adminUpdateUser writes the names, derives `name`, and audits before/after", async () => {
+    const actor = await actorSubject(100, ["users.update"]);
+    const target = await createUser(`rec-edit-${Date.now()}@x.com`, "LEARNER");
+    await users.adminUpdateUser(actor, {
+      userId: target.id,
+      email: target.email,
+      firstName: "Ada",
+      lastName: "Lovelace",
+      phone: "",
+      status: "ACTIVE",
+      emailVerified: true,
+    });
+    const row = await db.user.findUniqueOrThrow({ where: { id: target.id } });
+    expect(row).toMatchObject({
+      name: "Ada Lovelace",
+      firstName: "Ada",
+      lastName: "Lovelace",
+      phone: null,
+      emailVerified: true,
+    });
+    const audit = await db.auditLog.findFirst({
+      where: { action: "users.update", entityId: target.id },
+    });
+    expect(audit?.userId).toBe(actor.id);
+  });
+
+  it("adminUpdateUser changes the address, unverifies it, audits both, and keeps sessions", async () => {
+    const actor = await actorSubject(100, ["users.update"]);
+    const stamp = Date.now();
+    const target = await createUser(`rec-mail-${stamp}@x.com`, "LEARNER");
+    await db.user.update({ where: { id: target.id }, data: { emailVerified: true } });
+    await db.session.create({
+      data: {
+        id: crypto.randomUUID(),
+        token: crypto.randomUUID(),
+        userId: target.id,
+        expiresAt: new Date(Date.now() + 60_000),
+      },
+    });
+
+    await users.adminUpdateUser(actor, {
+      userId: target.id,
+      email: `  New-${stamp}@X.com `,
+      firstName: "Ada",
+      lastName: "",
+      phone: "",
+      status: "ACTIVE",
+      emailVerified: false,
+    });
+
+    const row = await db.user.findUniqueOrThrow({ where: { id: target.id } });
+    expect(row.email).toBe(`new-${stamp}@x.com`);
+    expect(row.emailVerified).toBe(false);
+    expect(await db.session.count({ where: { userId: target.id } })).toBe(1);
+    const audit = await db.auditLog.findFirst({
+      where: { action: "users.update", entityId: target.id },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(audit?.changes).toMatchObject({
+      before: { email: `rec-mail-${stamp}@x.com`, emailVerified: true },
+      after: { email: `new-${stamp}@x.com`, emailVerified: false },
+    });
+  });
+
+  it("adminUpdateUser refuses an address another account holds, and writes nothing", async () => {
+    const actor = await actorSubject(100, ["users.update"]);
+    const stamp = Date.now();
+    const holder = await createUser(`rec-held-${stamp}@x.com`, "LEARNER");
+    const target = await createUser(`rec-free-${stamp}@x.com`, "LEARNER");
+    await expect(
+      users.adminUpdateUser(actor, {
+        userId: target.id,
+        email: holder.email.toUpperCase(),
+        firstName: "Changed",
+        lastName: "",
+        phone: "",
+        status: "ACTIVE",
+        emailVerified: false,
+      }),
+    ).rejects.toBeInstanceOf(users.EmailInUseError);
+    const row = await db.user.findUniqueOrThrow({ where: { id: target.id } });
+    expect(row).toMatchObject({ email: target.email, firstName: null });
+  });
+
+  it("adminUpdateUser refuses to re-address an account at or above the actor's level", async () => {
+    // Re-addressing an account is where its next reset link goes: the
+    // canAssignRole strict `<`, applied to the target's own highest role.
+    const actor = await actorSubject(50, ["users.update"]);
+    const stamp = Date.now();
+    const target = await createUser(`rec-peer-${stamp}@x.com`, "STAFF");
+    const role = await db.role.create({
+      data: { key: `peer-${stamp}`, name: "Peer", level: 50 },
+    });
+    await db.userRole.create({ data: { userId: target.id, roleId: role.id } });
+    const edit = {
+      userId: target.id,
+      firstName: "Peer",
+      lastName: "",
+      phone: "",
+      status: "ACTIVE" as const,
+      emailVerified: false,
+    };
+    await expect(
+      users.adminUpdateUser(actor, { ...edit, email: `taken-over-${stamp}@x.com` }),
+    ).rejects.toBeInstanceOf(users.EmailChangeForbiddenError);
+    // The same actor may still edit everything else about them.
+    await users.adminUpdateUser(actor, { ...edit, email: target.email });
+    expect((await db.user.findUniqueOrThrow({ where: { id: target.id } })).firstName).toBe("Peer");
+  });
+
+  it("revokeUserSessions ends every session, and refuses the actor's own account", async () => {
+    const actor = await actorSubject(100, ["users.update"]);
+    const target = await createUser(`rec-rev-${Date.now()}@x.com`, "LEARNER");
+    await db.session.createMany({
+      data: [1, 2].map((n) => ({
+        id: crypto.randomUUID(),
+        token: crypto.randomUUID(),
+        userId: target.id,
+        expiresAt: new Date(Date.now() + 60_000 * n),
+      })),
+    });
+    expect(await users.revokeUserSessions(actor, target.id)).toBe(2);
+    expect(await db.session.count({ where: { userId: target.id } })).toBe(0);
+    await expect(users.revokeUserSessions(actor, actor.id)).rejects.toThrow(
+      users.SelfSessionRevokeError,
+    );
+  });
+
+  it("recordImpersonationStart audits a learner and refuses staff with NO audit row", async () => {
+    const actor = await actorSubject(100, ["users.impersonate"]);
+    const learner = await createUser(`rec-imp-l-${Date.now()}@x.com`, "LEARNER");
+    const staff = await createUser(`rec-imp-s-${Date.now()}@x.com`, "STAFF");
+
+    await users.recordImpersonationStart(actor, learner.id);
+    expect(
+      await db.auditLog.count({
+        where: { action: "users.impersonateStart", entityId: learner.id, userId: actor.id },
+      }),
+    ).toBe(1);
+
+    await expect(users.recordImpersonationStart(actor, staff.id)).rejects.toThrow(
+      users.NotImpersonatableError,
+    );
+    expect(
+      await db.auditLog.count({ where: { action: "users.impersonateStart", entityId: staff.id } }),
+    ).toBe(0);
+  });
+});

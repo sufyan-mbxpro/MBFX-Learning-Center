@@ -31,6 +31,7 @@ import { useTranslations } from "next-intl";
 import { CourseCard, type CourseCardLabels } from "@repo/ui/components/course-card";
 import type { CourseLevelTone } from "@repo/ui/components/course-card";
 import { Button } from "@repo/ui/components/button";
+import { ClientPagination, usePagedList } from "@repo/ui/components/client-pagination";
 import { Container } from "@repo/ui/components/container";
 import { Empty, EmptyDescription, EmptyTitle } from "@repo/ui/components/empty";
 import { SearchInput } from "@repo/ui/components/search-input";
@@ -40,6 +41,9 @@ import { Section } from "@repo/ui/components/section";
 import { SectionHeading } from "@repo/ui/components/section-heading";
 import { cn } from "@repo/ui/lib/utils";
 import type { CurriculumSection } from "@repo/ui/components/curriculum-list";
+import { usePaginationLabels } from "../_lib/use-pagination-labels.ts";
+import { applyShelfView, availableShelfViews, type ShelfView } from "../_lib/shelf-view.ts";
+import { ShelfViewChips } from "./shelf-view-chips.tsx";
 import { useLearnerDashboard } from "./progress-provider.tsx";
 
 export interface ShelfCourse {
@@ -58,6 +62,12 @@ export interface ShelfCourse {
   coverIsGenerated: boolean;
   isExternal: boolean;
   sections: CurriculumSection[];
+  /** ADR-139 — the view row's inputs and the card's markers. */
+  isFeatured: boolean;
+  isPremium: boolean;
+  publishedAt: string | null;
+  /** Learners who have started it: the Popular view. */
+  popularity: number;
 }
 
 export interface ShelfTrack {
@@ -75,6 +85,9 @@ export interface ShelfLabels extends CourseCardLabels {
   noneTitle: string;
   noneBody: string;
   clearFilter: string;
+  /** ADR-139 — the cover markers. */
+  featuredMarker: string;
+  premiumMarker: string;
 }
 
 /** The chip order is the progression a learner moves through, not alphabetical. */
@@ -92,6 +105,11 @@ export function CourseShelf({ tracks, labels }: { tracks: ShelfTrack[]; labels: 
   const [difficulty, setDifficulty] = useState<string | null>(null);
   const [track, setTrack] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [view, setView] = useState<ShelfView>("all");
+  const views = useMemo(
+    () => availableShelfViews(tracks.flatMap((group) => group.courses)),
+    [tracks],
+  );
 
   // The list re-filters at typing speed on a payload this size, but
   // `useDeferredValue` keeps the input itself responsive if a shelf ever grows
@@ -105,7 +123,7 @@ export function CourseShelf({ tracks, labels }: { tracks: ShelfTrack[]; labels: 
         .filter((group) => track === null || group.track === track)
         .map((group) => ({
           ...group,
-          courses: group.courses.filter((course) => {
+          courses: applyShelfView(group.courses, view).filter((course) => {
             if (difficulty !== null && course.difficulty !== difficulty) return false;
             if (needle === "") return true;
             // Title and summary only. Searching the lesson titles too would
@@ -122,7 +140,7 @@ export function CourseShelf({ tracks, labels }: { tracks: ShelfTrack[]; labels: 
         // shape, so the filtered page and the unfiltered one behave alike.
         .filter((group) => group.courses.length > 0)
     );
-  }, [tracks, track, difficulty, deferredQuery]);
+  }, [tracks, track, difficulty, deferredQuery, view]);
 
   // Only offer a chip for a level that actually has courses: a filter that can
   // only ever produce an empty result is a dead control.
@@ -130,13 +148,15 @@ export function CourseShelf({ tracks, labels }: { tracks: ShelfTrack[]; labels: 
     tracks.some((group) => group.courses.some((course) => course.difficulty === key)),
   );
 
-  const filtering = difficulty !== null || track !== null || query.trim() !== "";
+  const filtering =
+    difficulty !== null || track !== null || query.trim() !== "" || view === "featured";
   const shownCount = visible.reduce((sum, group) => sum + group.courses.length, 0);
 
   function clearAll() {
     setDifficulty(null);
     setTrack(null);
     setQuery("");
+    setView("all");
   }
 
   return (
@@ -155,8 +175,16 @@ export function CourseShelf({ tracks, labels }: { tracks: ShelfTrack[]; labels: 
           gap. */}
       <Section id="courses" spacing="sm" className="section-flush-end scroll-mt-24">
         <Container className="flex flex-col gap-4">
-          <div className="flex flex-col gap-3 rounded-2xl border bg-card/60 p-4 shadow-sm backdrop-blur-sm sm:flex-row sm:items-center sm:gap-4">
-            <div className="relative flex-1">
+          {/* ADR-139 #5: the top-level view — what to show before how to
+              narrow it. */}
+          <ShelfViewChips views={views} value={view} onChange={setView} />
+          {/* Search, topic and difficulty share ONE row (changes-47) — they
+              are three narrowings of the same list, and a second row of chips
+              under the box read as a separate control. Below lg it stacks, and
+              past the search's floor the chip groups wrap onto the next line
+              rather than squeezing the input. */}
+          <div className="flex flex-col gap-3 rounded-lg border bg-card/60 p-4 shadow-sm backdrop-blur-sm lg:flex-row lg:flex-wrap lg:items-center lg:gap-4">
+            <div className="relative min-w-64 flex-1">
               {/* SearchInput owns the glyph; pe-9 leaves room for the clear
                   button beside it in this positioned box. */}
               <SearchInput
@@ -171,7 +199,7 @@ export function CourseShelf({ tracks, labels }: { tracks: ShelfTrack[]; labels: 
                   type="button"
                   onClick={() => setQuery("")}
                   aria-label={t("filters.clearSearch")}
-                  className="absolute end-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground transition-colors duration-(--duration-base) hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+                  className="absolute end-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground transition-colors duration-(--duration-base) hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
                 >
                   <X aria-hidden className="size-4" />
                 </button>
@@ -195,15 +223,12 @@ export function CourseShelf({ tracks, labels }: { tracks: ShelfTrack[]; labels: 
                 ))}
               </ChipGroup>
             )}
-          </div>
 
-          {offered.length > 1 && (
-            <div className="flex flex-wrap items-center justify-between gap-3">
+            {offered.length > 1 && (
               <ChipGroup label={labels.filterLabel}>
-                <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                  <SlidersHorizontal aria-hidden className="size-4" />
-                  {labels.filterLabel}
-                </span>
+                {/* The glyph alone marks the group in the row; the group's
+                    aria-label is what names it to assistive tech. */}
+                <SlidersHorizontal aria-hidden className="size-4 text-muted-foreground" />
                 <FilterChip
                   active={difficulty === null}
                   onClick={() => setDifficulty(null)}
@@ -218,16 +243,16 @@ export function CourseShelf({ tracks, labels }: { tracks: ShelfTrack[]; labels: 
                   />
                 ))}
               </ChipGroup>
+            )}
+          </div>
 
-              {/* The count is announced, not just shown: filtering with the
-                  keyboard moves nothing into view, so a sighted change alone
-                  would be silent for a screen-reader user. */}
-              {filtering && (
-                <p aria-live="polite" className="text-sm text-muted-foreground">
-                  {t("filters.resultCount", { count: shownCount })}
-                </p>
-              )}
-            </div>
+          {/* The count is announced, not just shown: filtering with the
+              keyboard moves nothing into view, so a sighted change alone would
+              be silent for a screen-reader user. */}
+          {filtering && (
+            <p aria-live="polite" className="text-end text-sm text-muted-foreground">
+              {t("filters.resultCount", { count: shownCount })}
+            </p>
           )}
         </Container>
       </Section>
@@ -246,35 +271,77 @@ export function CourseShelf({ tracks, labels }: { tracks: ShelfTrack[]; labels: 
         </Section>
       ) : (
         visible.map((group, index) => (
-          <Section
+          <TrackBand
             key={group.track}
-            spacing="md"
+            group={group}
+            labels={labels}
             tone={index % 2 === 1 ? "muted" : "default"}
-            className="relative isolate overflow-hidden"
-          >
-            <Container className="flex flex-col gap-6">
-              <Reveal variant="up">
-                <SectionHeading title={group.title} lead={group.description} />
-              </Reveal>
-              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                {group.courses.map((course, cardIndex) => (
-                  // Staggered by position in the band, capped so the last card
-                  // of a long shelf is not still waiting when it scrolls in.
-                  <Reveal
-                    key={course.id}
-                    variant="up"
-                    delay={Math.min(cardIndex, 5) * 60}
-                    className="flex"
-                  >
-                    <ShelfCard course={course} labels={labels} />
-                  </Reveal>
-                ))}
-              </div>
-            </Container>
-          </Section>
+            // Whatever narrows the band sends it back to page one.
+            resetKey={`${view}|${difficulty ?? ""}|${deferredQuery.trim()}`}
+          />
         ))
       )}
     </>
+  );
+}
+
+/**
+ * One track's band, paged six courses at a time (changes-37, ADR-121 §2).
+ *
+ * Its own component because the page is per BAND — Forex on page two and
+ * Crypto on page one is a real state — and a hook cannot be called inside the
+ * `map` above. The pager sits under the grid, not over it: a reader decides to
+ * see more after reading what is there.
+ */
+function TrackBand({
+  group,
+  labels,
+  tone,
+  resetKey,
+}: {
+  group: ShelfTrack;
+  labels: ShelfLabels;
+  tone: "muted" | "default";
+  resetKey: string;
+}) {
+  const paginationLabels = usePaginationLabels();
+  const { page, pageCount, pageItems, setPage } = usePagedList(group.courses, { resetKey });
+  const anchorId = `track-${group.track}`;
+
+  return (
+    <Section
+      id={anchorId}
+      spacing="md"
+      tone={tone}
+      className="relative isolate scroll-mt-24 overflow-hidden"
+    >
+      <Container className="flex flex-col gap-6">
+        <Reveal variant="up">
+          <SectionHeading title={group.title} lead={group.description} />
+        </Reveal>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {pageItems.map((course, cardIndex) => (
+            // Staggered by position on the page, capped so the last card of a
+            // long page is not still waiting when it scrolls in.
+            <Reveal
+              key={course.id}
+              variant="up"
+              delay={Math.min(cardIndex, 5) * 60}
+              className="flex"
+            >
+              <ShelfCard course={course} labels={labels} />
+            </Reveal>
+          ))}
+        </div>
+        <ClientPagination
+          page={page}
+          pageCount={pageCount}
+          onPageChange={setPage}
+          labels={paginationLabels}
+          scrollTargetId={anchorId}
+        />
+      </Container>
+    </Section>
   );
 }
 
@@ -308,6 +375,12 @@ function ShelfCard({
       coverUrl={course.coverUrl}
       isExternal={course.isExternal}
       sections={course.sections}
+      markers={[
+        ...(course.isFeatured ? [{ label: labels.featuredMarker }] : []),
+        ...(course.isPremium
+          ? [{ label: labels.premiumMarker, tone: "marker-dark" as const }]
+          : []),
+      ]}
       labels={labels}
       cta={cta}
       footer={footer}
@@ -358,9 +431,9 @@ function FilterChip({
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "rounded-full px-3.5 py-1.5 text-sm font-medium ring-1 transition duration-(--duration-base) ease-(--ease-out-quint) focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
+        "rounded-md px-3.5 py-1.5 text-sm font-medium ring-1 transition duration-(--duration-base) ease-(--ease-out-quint) focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
         active
-          ? "bg-primary text-primary-foreground shadow-sm ring-primary"
+          ? "bg-primary-solid text-primary-solid-foreground shadow-sm ring-primary"
           : "bg-background text-muted-foreground ring-border hover:-translate-y-px hover:text-foreground hover:shadow-sm hover:ring-primary/25",
       )}
     >

@@ -69,7 +69,7 @@ export function VideoRelated({
           {/* A button, not the bare link this had: on a tinted band a text
               link at `text-sm` was the quietest thing in the block while
               being the only thing in it that goes anywhere. */}
-          <Button variant="outline" size="sm" shape="pill" render={<Link href={allHref} />}>
+          <Button variant="outline" size="sm" render={<Link href={allHref} />}>
             {allLabel}
             <ArrowRight data-icon="inline-end" aria-hidden className="rtl:rotate-180" />
           </Button>

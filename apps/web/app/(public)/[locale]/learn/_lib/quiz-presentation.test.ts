@@ -38,8 +38,13 @@ describe("quizCoverUrl — deterministic artwork", () => {
     // collapses onto a single panel is the failure this whole approach exists
     // to avoid, and it is the shape a broken hash produces.
     const slugs = Array.from({ length: 40 }, (_, index) => `quiz-${index}`);
-    const used = new Set(slugs.map(quizCoverUrl));
+    const used = new Set(slugs.map((slug) => quizCoverUrl(slug)));
     expect(used.size).toBe(QUIZ_PANELS.length);
+  });
+
+  it("prefers the editor's uploaded cover over a panel (ADR-132)", () => {
+    expect(quizCoverUrl("pips-and-lots", "/uploads/cover.webp")).toBe("/uploads/cover.webp");
+    expect(QUIZ_PANELS).toContain(quizCoverUrl("pips-and-lots", null));
   });
 });
 

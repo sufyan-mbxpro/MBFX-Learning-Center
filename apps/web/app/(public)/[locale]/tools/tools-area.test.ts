@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-import { TOOLS, TOOL_KEYS, toolFlag, toolPath } from "@repo/contracts";
+import { ROUTE_PATHS, TOOLS, TOOL_KEYS, toolFlag, toolPath } from "@repo/contracts";
 import en from "@repo/i18n/messages/en.json";
 import { TOOL_ICONS, hasIconForEveryTool } from "./_components/tool-icons.ts";
 
@@ -36,6 +36,8 @@ const layout = read("./layout.tsx");
 const shell = read("./_components/tool-shell.tsx");
 const widgetSwitch = read("./_components/tool-widget.tsx");
 const rateFootnote = read("./_components/rate-footnote.tsx");
+const widgetLayout = read("./_components/widget-layout.tsx");
+const marketHours = read("./_widgets/market-hours.tsx");
 
 describe("the index is a real page now", () => {
   it("no longer renders ComingSoon", () => {
@@ -62,7 +64,7 @@ describe("icons", () => {
   });
 });
 
-describe("the six-band flow lives in ONE place (ADR-086 #9)", () => {
+describe("the band flow lives in ONE place (ADR-086 #9, ADR-114 #1)", () => {
   it("orders the bands in tool-shell, not in the page", () => {
     // Read from the RETURN block only: the props destructured above it list
     // the same names in a different order, and matching those would pin the
@@ -72,7 +74,7 @@ describe("the six-band flow lives in ONE place (ADR-086 #9)", () => {
     // band comment explaining WHY the masthead is compact says the word
     // "widget", and read as source that put the widget band above PageHero.
     const jsx = code(shell).slice(code(shell).indexOf("  return ("));
-    const order = ["PageHero", "widget", "body", "faq", "related", "disclaimer"];
+    const order = ["PageHero", "widget", "faq", "body", "highlights", "related"];
     let previous = -1;
     for (const band of order) {
       const at = jsx.indexOf(band);
@@ -82,15 +84,53 @@ describe("the six-band flow lives in ONE place (ADR-086 #9)", () => {
     }
   });
 
-  it("pays the section rhythm once between the widget and its explainer", () => {
-    // changes-26 #2. Four stacked `Section`s each paid `section-md`
-    // (`clamp(3rem, 6vw, 5rem)`), so the calculator and the paragraph about it
-    // were 160px apart on a laptop. Asserted by COUNT rather than by class:
-    // "there is one Section between the masthead and the related strip" is
-    // the property, and it survives the gap being retuned.
+  it("puts the widget and its explainer in ONE Section", () => {
+    // changes-26 #2, and still the reason after ADR-114 moved the explainer
+    // beside the widget rather than under it: two stacked `Section`s each pay
+    // `section-md` (`clamp(3rem, 6vw, 5rem)`), so the calculator and the
+    // paragraph about it were 160px apart on a laptop.
+    //
+    // Asserted over the SLICE between the masthead and the highlights band
+    // rather than over the whole return, because the highlights band pays its
+    // own rhythm deliberately — it is the page's argument for itself, which is
+    // a different thing from the page.
     const jsx = code(shell).slice(code(shell).indexOf("  return ("));
-    expect(jsx.split("<Section").length - 1).toBe(1);
-    expect(jsx).toContain("flex flex-col gap-");
+    const band = jsx.slice(jsx.indexOf("<PageHero"), jsx.indexOf("highlights.length"));
+    expect(band.split("<Section").length - 1).toBe(1);
+    // …and separates its two columns with a GAP rather than with a second
+    // section's padding, which is the same statement from the other side.
+    expect(band).toMatch(/gap-\d/);
+  });
+
+  it("puts the calculator first and its explanation beside it (ADR-114 #1)", () => {
+    // The owner's ask, as a property: two columns at `lg`, and the widget is
+    // the one a reader meets first — in the DOM as well as on screen, which is
+    // what a screen-reader and a phone both get.
+    const jsx = code(shell).slice(code(shell).indexOf("  return ("));
+    expect(jsx).toContain("lg:grid-cols-(--grid-3-2)");
+    expect(jsx.indexOf("{widget}")).toBeLessThan(jsx.indexOf("<aside"));
+    // code-style.md #23: the one-column base is stated, never implied.
+    expect(jsx).toContain("grid grid-cols-1");
+  });
+
+  it("puts common questions UNDER the calculator, in the calculator's column", () => {
+    // Owner, 2026-09-18: in the aside the FAQ read as more explainer and began
+    // far below the widget's foot; full width broke the two-column page. It is
+    // the widget column's second child, at the widget's width.
+    const jsx = code(shell).slice(code(shell).indexOf("  return ("));
+    const widgetColumn = jsx.slice(jsx.indexOf("{widget}"), jsx.indexOf("<aside"));
+    expect(widgetColumn).toContain("<FaqPanel");
+    const aside = jsx.slice(jsx.indexOf("<aside"), jsx.indexOf("</aside>"));
+    expect(aside).not.toContain("<FaqPanel");
+  });
+
+  it("splits the widget's own columns on its WIDTH, not the viewport's", () => {
+    // ADR-114 #2. `lg:grid-cols-2` inside a three-fifths column gives an
+    // inputs track of about 290px at 1024px, which does not hold a currency
+    // combobox beside a result panel.
+    expect(widgetLayout).toContain("@container/widget");
+    expect(widgetLayout).toContain("@2xl/widget:grid-cols-2");
+    expect(code(widgetLayout)).not.toContain("lg:grid-cols-2");
   });
 
   it("keeps the page from laying itself out", () => {
@@ -99,6 +139,18 @@ describe("the six-band flow lives in ONE place (ADR-086 #9)", () => {
     expect(toolPage).toContain("<ToolShell");
     expect(code(toolPage)).not.toContain("<PageHero");
     expect(code(toolPage)).not.toContain("<FaqPanel");
+  });
+});
+
+describe("the editor's Cover image reaches the masthead", () => {
+  // It was saved, audited and reference-tracked, and read by nothing: an
+  // admin uploaded a cover and no public page changed (code-style.md #28).
+  it("passes the resolved cover URL to the shell as the backdrop", () => {
+    expect(code(toolPage)).toMatch(/backdrop=\{\s*page\.coverUrl \?/);
+  });
+
+  it("lets the shell hand that backdrop to PageHero", () => {
+    expect(code(shell)).toMatch(/<PageHero[\s\S]*?backdrop=\{backdrop\}/);
   });
 });
 
@@ -129,20 +181,25 @@ describe("a disabled or unknown tool 404s (ADR-086 #5)", () => {
   });
 });
 
-describe("the section bar", () => {
-  it("uses the ONE SectionNav, not a second strip (ADR-076 §1)", () => {
-    expect(layout).toContain("SectionNav");
-    expect(layout).toContain("_components/section-nav.tsx");
+describe("the tools shell", () => {
+  // ADR-112 dropped the section bar. This is the inverse of the test it
+  // replaces, and it is here for the revert rather than for a deliberate
+  // re-add: a strip of eight tabs that scrolls sideways under the header is
+  // exactly what a future "the tools need navigation" instinct reaches for.
+  it("renders NO section bar (ADR-112)", () => {
+    expect(layout).not.toContain("SectionNav");
+    expect(layout).not.toContain("section-nav.tsx");
   });
 
-  it("hides itself when it would have a single tab", () => {
-    // A row of one tab is chrome that tells the reader nothing — the rule the
-    // learn bar and GlossaryTabs already follow.
-    expect(layout).toContain("items.length > 1");
+  it("does not load the tool list at all, having nothing to list", () => {
+    expect(layout).not.toContain("getEnabledTools");
   });
 
-  it("lists only ENABLED tools — a disabled one is absent, not disabled", () => {
-    expect(layout).toContain("getEnabledTools");
+  // The landmark is why the layout still exists: without it the index and the
+  // eight tool pages open none, which axe reports as a MODERATE `region`
+  // violation — under the serious/critical gate, so it fails silently.
+  it("still opens the area's one <main> landmark", () => {
+    expect(layout).toContain("<main");
   });
 });
 
@@ -159,17 +216,24 @@ describe("prerendering", () => {
   });
 });
 
+/**
+ * Every string in a catalog subtree, with its dotted path.
+ *
+ * Module-level because two describes below check COPY rules — ADR-088's
+ * "never real-time" and ADR-114 #4's "never volatility" — and a rule about
+ * words has to be checked where the words are.
+ */
+const walkStrings = (node: unknown, path: string[] = []): [string, string][] =>
+  typeof node === "string"
+    ? [[path.join("."), node]]
+    : node && typeof node === "object"
+      ? Object.entries(node).flatMap(([k, v]) => walkStrings(v, [...path, k]))
+      : [];
+
 describe('never "real-time", never "live" (ADR-088 #7)', () => {
   // The rule nothing static enforced before this test. It is a COPY rule, so
   // the catalog is where it has to be checked.
-  const walk = (node: unknown, path: string[] = []): [string, string][] =>
-    typeof node === "string"
-      ? [[path.join("."), node]]
-      : node && typeof node === "object"
-        ? Object.entries(node).flatMap(([k, v]) => walk(v, [...path, k]))
-        : [];
-
-  const toolsStrings = walk((en as { tools: unknown }).tools);
+  const toolsStrings = walkStrings((en as { tools: unknown }).tools);
 
   it("finds the namespace at all — a silent zero would pass every assertion", () => {
     expect(toolsStrings.length).toBeGreaterThan(30);
@@ -183,10 +247,18 @@ describe('never "real-time", never "live" (ADR-088 #7)', () => {
     },
   );
 
-  it("labels a stale rate in words rather than hiding it", () => {
-    expect(rateFootnote).toContain("staleAsOf");
+  // changes-40 REPLACED the stale WARNING, not the "as of" line. ADR-088 #7's
+  // requirement is that a figure says when it is from; "out of date, and shown
+  // for reference only" was editorial judgement on top of that, printed under a
+  // warning triangle on every tool of a freshly seeded install.
+  it("prints the date a rate is from, on every rate-backed surface", () => {
+    expect(rateFootnote).toContain('t("common.asOf"');
     const strings = Object.fromEntries(toolsStrings);
-    expect(strings["common.staleAsOf"]).toMatch(/out of date/i);
+    expect(strings["common.asOf"]).toMatch(/\{date\}/);
+  });
+
+  it("no longer prints the stale warning", () => {
+    expect(rateFootnote).not.toContain("staleAsOf");
   });
 });
 
@@ -226,22 +298,33 @@ const seed = readFileSync(
   "utf8",
 );
 
+/**
+ * The tools panel's own source, sliced out of the registry.
+ *
+ * It used to end at `viewAll: "tools"`, which ADR-112 DELETED — so `indexOf`
+ * returned -1, `slice(start, -1)` ran to the end of the file, and both
+ * assertions below passed by reading every panel in it. The end marker is now
+ * the object's own closing line, which cannot be removed without the panel
+ * going with it.
+ */
+const toolsPanel = (): string => {
+  const start = megaMenu.indexOf("  tools: {");
+  const end = megaMenu.indexOf("} as const satisfies", start);
+  expect(start, "mega-menu.ts declares no tools panel").toBeGreaterThan(-1);
+  expect(end, "the tools panel is not the last entry any more").toBeGreaterThan(start);
+  return megaMenu.slice(start, end);
+};
+
 describe("the tools mega panel", () => {
   it("names EVERY registered tool across its three columns", () => {
-    const panel = megaMenu.slice(
-      megaMenu.indexOf("  tools: {"),
-      megaMenu.indexOf('viewAll: "tools"'),
-    );
+    const panel = toolsPanel();
     for (const key of TOOL_KEYS) {
       expect(panel, `the tools panel never lists "${key}"`).toContain(`"tool-${key}"`);
     }
   });
 
   it("names no tool twice", () => {
-    const panel = megaMenu.slice(
-      megaMenu.indexOf("  tools: {"),
-      megaMenu.indexOf('viewAll: "tools"'),
-    );
+    const panel = toolsPanel();
     for (const key of TOOL_KEYS) {
       const count = panel.split(`"tool-${key}"`).length - 1;
       expect(count, `"${key}" appears ${count} times in the tools panel`).toBe(1);
@@ -329,6 +412,109 @@ describe("the area opens one landmark", () => {
       ["the tool shell", shell],
     ] as const) {
       expect(code(source), `${name} opens a second <main>`).not.toContain("<main");
+    }
+  });
+});
+
+// ─── The economic calendar (ADR-115) ─────────────────────────
+//
+// It is in the Tools panel and is NOT a `TOOLS` member, which is a pair of
+// facts that only stay true together if both are asserted. The guard above —
+// "the panel names every registered tool" — is unchanged and still correct,
+// because the calendar is not one.
+
+describe("the economic calendar is in the menu but not in the registry", () => {
+  it("is not a tool", () => {
+    expect(TOOL_KEYS).not.toContain("economic-calendar");
+    // It keeps its own URL (ADR-050), which is the half a later "just make it
+    // the ninth tool" would break.
+    expect(ROUTE_PATHS["economic-calendar"]).toBe("/economic-calendar");
+  });
+
+  it("sits in the panel's Timing column, beside the two tools that answer 'when'", () => {
+    const panel = toolsPanel();
+    const timing = panel.slice(panel.indexOf('key: "timing"'), panel.indexOf('key: "rates"'));
+    expect(timing, "the Timing column does not list the calendar").toContain('"economic-calendar"');
+  });
+
+  it("carries a header glyph, which is silent to omit", () => {
+    // `MEGA_MENU_ICONS` is `Partial<Record<RouteKey, LucideIcon>>`, so a
+    // missing entry renders a row with no glyph next to eight that have one.
+    expect(megaMenu).toContain('"economic-calendar": ');
+  });
+
+  it("is seeded as a child of the Tools tree", () => {
+    const tree = seed.slice(
+      seed.indexOf("const TOOLS_NAV = {"),
+      seed.indexOf("  /**\n   * A root row"),
+    );
+    expect(tree).toContain('routeKey: "economic-calendar"');
+  });
+
+  it("is no longer a flat header row, and the seed removes the one that exists", () => {
+    const flat = seed.slice(
+      seed.indexOf("const NAV = ["),
+      seed.indexOf("];", seed.indexOf("const NAV = [")),
+    );
+    expect(flat).not.toContain('routeKey: "economic-calendar"');
+    // An upsert seed never deletes, so an existing database keeps the row
+    // unless something says otherwise — and the delete must be SCOPED, since
+    // the footer row and the new Tools child share this routeKey.
+    expect(seed).toContain('routeKey: "economic-calendar", parentId: null');
+  });
+
+  it("keeps its footer row, because a footer is a sitemap", () => {
+    const footer = seed.slice(
+      seed.indexOf("const FOOTER_MENUS = ["),
+      seed.indexOf("] satisfies", seed.indexOf("const FOOTER_MENUS = [")),
+    );
+    expect(footer).toContain('routeKey: "economic-calendar"');
+  });
+
+  it("is a card on the index, appended by the page rather than by the service", () => {
+    // ADR-115 #3: `getEnabledTools` reads the `Tool` table and there is no row
+    // for the calendar. Teaching the service about one would make the admin
+    // list and the drift guard learn the same exception.
+    expect(code(indexPage)).toContain('isFeatureVisible("economic_calendar"');
+    expect(code(indexPage)).toContain('ROUTE_PATHS["economic-calendar"]');
+  });
+});
+
+// ─── Market hours (ADR-114 #4) ───────────────────────────────
+
+describe("/tools/market-hours leads with the clock and the overlaps", () => {
+  it("dropped the 24-hour timeline", () => {
+    // The inverse of the test it replaces, and here for the revert rather than
+    // for a deliberate re-add: the timeline is one component away from coming
+    // back, and `sessionDaySegments` is still in @repo/utils, still tested.
+    expect(code(marketHours)).not.toContain("sessionDaySegments");
+    expect(code(marketHours)).not.toContain("nowFraction");
+  });
+
+  it("derives the overlaps rather than listing them", () => {
+    expect(code(marketHours)).toContain("sessionOverlaps(");
+  });
+
+  it("ticks the clock in its own component, not in the widget", () => {
+    // `useClientSecond` in the widget would re-run the session arithmetic and
+    // every pairwise intersection sixty times a minute to move two digits.
+    const widgetBody = marketHours.slice(marketHours.indexOf("export function MarketHoursWidget"));
+    expect(widgetBody).not.toContain("useClientSecond");
+    expect(marketHours).toContain("function LiveClock");
+  });
+
+  it("says how many sessions overlap, never how volatile that is (ADR-088)", () => {
+    // The reference's "highest volatility, all major pairs active" is a claim
+    // about the market. What we can say is arithmetic on the clock.
+    // Through `code()`, for the reason that helper documents: the comment
+    // in the widget explaining why it says "how long, not how volatile" uses
+    // the word, and read as source it fails the rule it is describing.
+    expect(code(marketHours).toLowerCase()).not.toContain("volatil");
+    const strings = Object.fromEntries(
+      walkStrings((en as { tools: { marketHours: unknown } }).tools.marketHours),
+    );
+    for (const value of Object.values(strings)) {
+      expect(String(value).toLowerCase()).not.toContain("volatil");
     }
   });
 });

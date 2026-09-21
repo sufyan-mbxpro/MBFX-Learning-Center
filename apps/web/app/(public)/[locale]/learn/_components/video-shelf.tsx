@@ -8,8 +8,9 @@
 // no page behind it and `?category=charting` is not a URL anyone bookmarks.
 // A video category IS a page — `/learn/<track>/videos/categories/<slug>` — with
 // its own title, its own metadata and its own canonical URL. So these chips
-// navigate (D26). No `useState`, no live region announcing a count that a
-// navigation already announces by changing the page.
+// navigate (D26). No live region announcing a count that a navigation already
+// announces by changing the page. The one piece of state is the ADR-139 view
+// row, which orders the rows already on this page rather than choosing a page.
 //
 // That also means the shelf never has to hold every topic in one payload to
 // narrow it later: each category view loads its own rows.
@@ -22,8 +23,14 @@ import { useState } from "react";
 import Image from "next/image";
 import { useTranslations } from "next-intl";
 
-import type { VideoCategoryView, VideoTopicCardView } from "@repo/contracts";
+import {
+  isLearnTrack,
+  learnTrackVideosPath,
+  type VideoCategoryView,
+  type VideoTopicCardView,
+} from "@repo/contracts";
 import { Link } from "@repo/i18n/navigation";
+import { ClientPagination, usePagedList } from "@repo/ui/components/client-pagination";
 import { Container } from "@repo/ui/components/container";
 import { Empty, EmptyDescription, EmptyTitle } from "@repo/ui/components/empty";
 import { Reveal } from "@repo/ui/components/reveal";
@@ -32,6 +39,9 @@ import { VideoCard } from "@repo/ui/components/video-card";
 import { cn } from "@repo/ui/lib/utils";
 
 import { videoCoverUrl } from "../_content/learn-media.ts";
+import { usePaginationLabels } from "../_lib/use-pagination-labels.ts";
+import { applyShelfView, availableShelfViews, type ShelfView } from "../_lib/shelf-view.ts";
+import { ShelfViewChips } from "./shelf-view-chips.tsx";
 import { categoryTone, videoCardLabels } from "../_lib/video-labels.ts";
 
 export function VideoShelf({
@@ -61,6 +71,16 @@ export function VideoShelf({
 }) {
   const t = useTranslations("learn");
   const labels = videoCardLabels(t);
+  // ADR-139 #5 — the view row. Client state, unlike the category chips below:
+  // a view is an ordering of THIS page's rows, not a page of its own. No
+  // Popular view here: nothing counts a video topic's readers.
+  const [view, setView] = useState<ShelfView>("all");
+  const views = availableShelfViews(topics);
+  const viewed = applyShelfView(topics, view);
+  // Six a page (changes-37, ADR-121 §2). A category here is a NAVIGATION, so a
+  // new category is a new page and a fresh component; only the view resets.
+  const paginationLabels = usePaginationLabels();
+  const { page, pageCount, pageItems, setPage } = usePagedList(viewed, { resetKey: view });
 
   return (
     <Section
@@ -71,6 +91,7 @@ export function VideoShelf({
     >
       <Container className="flex flex-col gap-6">
         {header}
+        <ShelfViewChips views={views} value={view} onChange={setView} />
         {/* One category is not a filter, it is a label — a chip row that can
             only ever produce the set already on screen is a dead control.
             Same rule `QuizShelf` applies to its own chips. */}
@@ -105,8 +126,11 @@ export function VideoShelf({
           </Empty>
         ) : (
           <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {topics.map((topic, index) => {
-              const href = `${basePath}/${topic.slug}`;
+            {pageItems.map((topic, index) => {
+              // The topic's OWN track, not this page's: a topic shared with
+              // every school (ADR-144 §2) has one address, and the copy of
+              // that URL under the other school 404s.
+              const href = `${isLearnTrack(topic.track) ? learnTrackVideosPath(topic.track) : basePath}/${topic.slug}`;
               return (
                 // A <ul> takes <li> children and nothing else, so the reveal
                 // wrapper goes INSIDE the item rather than around it.
@@ -133,6 +157,12 @@ export function VideoShelf({
                           : null
                       }
                       coverUrl={videoCoverUrl(topic.coverUrl, topic.slug)}
+                      markers={[
+                        ...(topic.isFeatured ? [{ label: t("markers.featured") }] : []),
+                        ...(topic.isPremium
+                          ? [{ label: t("markers.premium"), tone: "marker-dark" as const }]
+                          : []),
+                      ]}
                       highlighted={
                         activeCategory !== null && topic.category?.slug === activeCategory
                       }
@@ -145,6 +175,14 @@ export function VideoShelf({
             })}
           </ul>
         )}
+
+        <ClientPagination
+          page={page}
+          pageCount={pageCount}
+          onPageChange={setPage}
+          labels={paginationLabels}
+          {...(anchorId ? { scrollTargetId: anchorId } : {})}
+        />
       </Container>
     </Section>
   );
@@ -206,11 +244,13 @@ function Chip({
       // markup follows the difference in what they do.
       aria-current={active ? "page" : undefined}
       className={cn(
-        "inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-sm font-medium ring-1 transition duration-(--duration-base) ease-(--ease-out-quint) focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
+        "inline-flex items-center gap-2 rounded-md px-3.5 py-1.5 text-sm font-medium ring-1 transition duration-(--duration-base) ease-(--ease-out-quint) focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
         active
           ? cn(
               "shadow-sm",
-              tone ? CHIP_ACTIVE_TONE[tone] : "bg-primary text-primary-foreground ring-primary",
+              tone
+                ? CHIP_ACTIVE_TONE[tone]
+                : "bg-primary-solid text-primary-solid-foreground ring-primary",
             )
           : "bg-background text-muted-foreground ring-border hover:-translate-y-px hover:text-foreground hover:shadow-sm hover:ring-primary/25",
       )}
@@ -222,7 +262,7 @@ function Chip({
         // "Getting started".
         aria-hidden
         className={cn(
-          "rounded-full px-1.5 text-xs tabular-nums",
+          "rounded-sm px-1.5 text-xs tabular-nums",
           active ? "bg-foreground/10" : "bg-muted",
         )}
       >

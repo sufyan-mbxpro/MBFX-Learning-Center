@@ -12,8 +12,9 @@
 import { cacheLife, cacheTag, revalidateTag } from "next/cache";
 import { db, type Prisma } from "@repo/db";
 import { pickTranslation, type LocaleFallbackInfo } from "@repo/i18n";
-import { htmlToText } from "@repo/utils";
+import { htmlLead, htmlToText } from "@repo/utils";
 import type { Subject } from "@repo/rbac";
+import { syncReferences } from "./cms/references.ts";
 import { sanitizeRichText, slugify } from "./content.ts";
 // One-way edge: public-content.ts does not import this module, so the daily
 // rotation primitive is shared rather than duplicated (import-x/no-cycle).
@@ -40,6 +41,24 @@ export class TopicInUseError extends Error {
     super(`This topic still has ${termCount} term(s)`);
     this.name = "TopicInUseError";
   }
+}
+
+/**
+ * MediaAsset ids → public URLs, skipping a soft-deleted asset (ADR-133).
+ *
+ * A second read rather than a join: `coverAssetId` is a plain String column
+ * (MediaAsset carries no back-relations — ADR-035), as on Course and Quiz. A
+ * deleted asset resolves to nothing, so the page falls back to the glossary's
+ * own artwork instead of rendering a broken image.
+ */
+async function coverUrlsFor(ids: (string | null)[]): Promise<Map<string, string>> {
+  const unique = [...new Set(ids.filter((id): id is string => Boolean(id)))];
+  if (unique.length === 0) return new Map();
+  const assets = await db.mediaAsset.findMany({
+    where: { id: { in: unique }, deletedAt: null },
+    select: { id: true, url: true },
+  });
+  return new Map(assets.map((asset) => [asset.id, asset.url]));
 }
 
 async function uniqueTopicSlug(locale: string, base: string, topicId: string): Promise<string> {
@@ -143,6 +162,12 @@ export interface GlossaryTopicTranslationRow {
 export interface GlossaryTopicAdminDetail {
   id: string;
   isActive: boolean;
+  /** ADR-139. */
+  isFeatured: boolean;
+  isPremium: boolean;
+  /** ADR-133 — the stored MediaAsset id, and its URL while the asset is live. */
+  coverAssetId: string | null;
+  coverUrl: string | null;
   sortOrder: number;
   termCount: number;
   updatedAt: Date;
@@ -166,6 +191,9 @@ export async function loadGlossaryTopicAdminDetail(
     select: {
       id: true,
       isActive: true,
+      isFeatured: true,
+      isPremium: true,
+      coverAssetId: true,
       sortOrder: true,
       updatedAt: true,
       _count: { select: { terms: true } },
@@ -184,9 +212,15 @@ export async function loadGlossaryTopicAdminDetail(
   });
   if (!row) return null;
 
+  const covers = await coverUrlsFor([row.coverAssetId]);
+
   return {
     id: row.id,
     isActive: row.isActive,
+    isFeatured: row.isFeatured,
+    isPremium: row.isPremium,
+    coverAssetId: row.coverAssetId,
+    coverUrl: row.coverAssetId ? (covers.get(row.coverAssetId) ?? null) : null,
     sortOrder: row.sortOrder,
     termCount: row._count.terms,
     updatedAt: row.updatedAt,
@@ -215,9 +249,23 @@ export async function duplicateGlossaryTopic(actor: Subject, topicId: string): P
   });
 
   const copy = await db.glossaryTopic.create({
-    data: { isActive: false, sortOrder: source.sortOrder },
+    data: {
+      isActive: false,
+      sortOrder: source.sortOrder,
+      coverAssetId: source.coverAssetId,
+    },
     select: { id: true },
   });
+  // The copy holds its own reference, so deleting the original's reference
+  // never leaves the copy's cover unguarded (ADR-133, `duplicateQuiz`'s rule).
+  const coverAssetId = source.coverAssetId;
+  if (coverAssetId) {
+    await db.$transaction((tx) =>
+      syncReferences(tx, { sourceType: "GLOSSARY_TOPIC", sourceId: copy.id }, [
+        { refType: "MEDIA", refId: coverAssetId, field: "coverAssetId" },
+      ]),
+    );
+  }
 
   // After the row exists, because `uniqueTopicSlug` excludes a topic id and
   // there is no id to exclude until then. Sequential rather than parallel: two
@@ -280,6 +328,11 @@ export interface GlossaryTopicInput {
   seoKeywords?: string | null;
   isActive?: boolean;
   sortOrder?: number;
+  /** ADR-133 — null clears the cover; undefined leaves it alone. */
+  coverAssetId?: string | null;
+  /** ADR-139 — placement, and a stored-not-enforced premium label. */
+  isFeatured?: boolean;
+  isPremium?: boolean;
 }
 
 export async function saveGlossaryTopic(actor: Subject, input: GlossaryTopicInput): Promise<void> {
@@ -292,6 +345,9 @@ export async function saveGlossaryTopic(actor: Subject, input: GlossaryTopicInpu
   const meta: Prisma.GlossaryTopicUpdateInput = {};
   if (input.isActive !== undefined) meta.isActive = input.isActive;
   if (input.sortOrder !== undefined) meta.sortOrder = input.sortOrder;
+  if (input.coverAssetId !== undefined) meta.coverAssetId = input.coverAssetId;
+  if (input.isFeatured !== undefined) meta.isFeatured = input.isFeatured;
+  if (input.isPremium !== undefined) meta.isPremium = input.isPremium;
 
   const fields = {
     name: input.name,
@@ -307,6 +363,17 @@ export async function saveGlossaryTopic(actor: Subject, input: GlossaryTopicInpu
 
   await db.$transaction(async (tx) => {
     await tx.glossaryTopic.update({ where: { id: input.topicId }, data: meta });
+    // ADR-133 — the cover is a ContentReference so deleteMedia()'s in-use
+    // guard protects it. An empty list when cleared removes the reference.
+    if (input.coverAssetId !== undefined) {
+      await syncReferences(
+        tx,
+        { sourceType: "GLOSSARY_TOPIC", sourceId: input.topicId },
+        input.coverAssetId
+          ? [{ refType: "MEDIA", refId: input.coverAssetId, field: "coverAssetId" }]
+          : [],
+      );
+    }
     await tx.glossaryTopicTranslation.upsert({
       where: { topicId_locale: { topicId: input.topicId, locale: input.locale } },
       update: fields,
@@ -336,7 +403,13 @@ export async function deleteGlossaryTopic(actor: Subject, topicId: string): Prom
   const count = await db.glossaryTerm.count({ where: { topicId, deletedAt: null } });
   if (count > 0) throw new TopicInUseError(count);
 
-  await db.glossaryTopic.delete({ where: { id: topicId } });
+  // A topic is HARD-deleted, unlike a quiz, so its cover reference goes with
+  // it — left behind, it would hold the asset "in use" by a row that no longer
+  // exists, and deleteMedia() would refuse it forever (ADR-133).
+  await db.$transaction(async (tx) => {
+    await syncReferences(tx, { sourceType: "GLOSSARY_TOPIC", sourceId: topicId }, []);
+    await tx.glossaryTopic.delete({ where: { id: topicId } });
+  });
   await recordAudit({
     userId: actor.id,
     action: "glossary.delete",
@@ -422,6 +495,11 @@ export interface GlossaryTopicView {
   seoTitle: string | null;
   seoDescription: string | null;
   termCount: number;
+  /**
+   * ADR-133 — the uploaded cover's URL, or null when there is none (or its
+   * asset was deleted). The page supplies the fallback artwork, not this.
+   */
+  coverUrl: string | null;
 }
 
 export interface GlossaryTopicTermView {
@@ -442,9 +520,11 @@ export async function loadGlossaryTopics(locale: string): Promise<GlossaryTopicV
   const { locales, defaultLocale } = await localeContext();
   const rows = await db.glossaryTopic.findMany({
     where: { isActive: true },
-    orderBy: [{ sortOrder: "asc" }],
+    // ADR-139 #3 — featured topics lead, then the editors' order.
+    orderBy: [{ isFeatured: "desc" }, { sortOrder: "asc" }],
     select: {
       id: true,
+      coverAssetId: true,
       translations: {
         select: {
           locale: true,
@@ -461,6 +541,8 @@ export async function loadGlossaryTopics(locale: string): Promise<GlossaryTopicV
     },
   });
 
+  const covers = await coverUrlsFor(rows.map((row) => row.coverAssetId));
+
   return rows.flatMap((row) => {
     if (row._count.terms === 0) return [];
     const t = pickTranslation(row.translations, locale, defaultLocale, locales);
@@ -474,6 +556,7 @@ export async function loadGlossaryTopics(locale: string): Promise<GlossaryTopicV
         seoTitle: t.seoTitle,
         seoDescription: t.seoDescription,
         termCount: row._count.terms,
+        coverUrl: row.coverAssetId ? (covers.get(row.coverAssetId) ?? null) : null,
       },
     ];
   });
@@ -514,6 +597,7 @@ export async function loadGlossaryTopicBySlug(
     where: { id: match.topicId, isActive: true },
     select: {
       id: true,
+      coverAssetId: true,
       translations: {
         select: {
           locale: true,
@@ -554,13 +638,15 @@ export async function loadGlossaryTopicBySlug(
           termId: term.id,
           slug: tt.slug,
           term: tt.term,
-          definition: htmlToText(tt.simpleExplanation),
+          definition: htmlLead(tt.simpleExplanation),
         },
       ];
     })
     // Alphabetical, because a topic page is a reference list and a reader
     // scanning it is looking for a word, not for an editor's ordering.
     .sort((a, b) => a.term.localeCompare(b.term));
+
+  const covers = await coverUrlsFor([topic.coverAssetId]);
 
   return {
     id: topic.id,
@@ -571,6 +657,7 @@ export async function loadGlossaryTopicBySlug(
     seoTitle: t.seoTitle,
     seoDescription: t.seoDescription,
     termCount: terms.length,
+    coverUrl: topic.coverAssetId ? (covers.get(topic.coverAssetId) ?? null) : null,
     terms,
     alternates: topic.translations.map((tr) => ({ locale: tr.locale, slug: tr.slug })),
   };

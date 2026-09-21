@@ -66,10 +66,13 @@ function PaginationLink({
   outlined = false,
   size = "icon-sm",
   render,
+  children,
   ...props
 }: PaginationLinkProps) {
-  // Children live on PaginationLink (the page number), not on the router
-  // element, so they are part of what gets cloned onto it.
+  // Children (the page number, a chevron and label) go to the BUTTON, never
+  // onto the cloned router element: Button always passes its own `children`
+  // to the primitive, and an undefined one there replaced whatever the render
+  // element carried — every page link rendered as an empty box (changes-38).
   const anchorProps = {
     "aria-current": isActive ? ("page" as const) : undefined,
     "data-slot": "pagination-link",
@@ -83,7 +86,9 @@ function PaginationLink({
       className={cn("tabular-nums", className)}
       nativeButton={false}
       render={render ? cloneElement(render, anchorProps) : <a {...anchorProps} />}
-    />
+    >
+      {children}
+    </Button>
   );
 }
 

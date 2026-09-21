@@ -38,6 +38,7 @@ import { useId, useState } from "react";
 import { ChevronDown, ChevronUp, Clock, GraduationCap, Layers, PlayCircle } from "lucide-react";
 
 import { Badge } from "@repo/ui/components/badge";
+import { CardMarkers, type CardMarker } from "@repo/ui/components/card-markers";
 import { Button } from "@repo/ui/components/button";
 import {
   CurriculumList,
@@ -79,20 +80,20 @@ export function CourseCardSkeleton({ className }: { className?: string }) {
     <div
       aria-hidden
       className={cn(
-        "flex min-w-0 flex-col rounded-2xl bg-card ring-1 ring-foreground/10",
+        "flex min-w-0 flex-col rounded-lg bg-card ring-1 ring-foreground/10",
         className,
       )}
     >
       <div className="flex flex-col gap-4 sm:flex-row">
-        <Skeleton className="aspect-video w-full shrink-0 rounded-none rounded-t-2xl sm:aspect-square sm:w-44 sm:rounded-s-2xl sm:rounded-e-none" />
+        <Skeleton className="aspect-video w-full shrink-0 rounded-none rounded-t-lg sm:aspect-square sm:w-44 sm:rounded-s-lg sm:rounded-e-none" />
         <div className="flex min-w-0 flex-1 flex-col gap-2 p-4 ps-0 max-sm:ps-4 max-sm:pt-0">
           <div className="flex items-start justify-between gap-3">
             <Skeleton className="h-5 w-40 max-w-full" />
             <SkeletonButton size="sm" />
           </div>
           <div className="flex gap-1.5">
-            <Skeleton className="h-5 w-20 rounded-full" />
-            <Skeleton className="h-5 w-24 rounded-full" />
+            <Skeleton className="h-5 w-20 rounded-md" />
+            <Skeleton className="h-5 w-24 rounded-md" />
           </div>
           <SkeletonText lines={2} />
         </div>
@@ -130,6 +131,7 @@ export function CourseCard({
   /** Optional image renderer, so the app can pass `next/image` without
    * @repo/ui taking a dependency on Next (architecture.md #10). */
   renderCover,
+  markers,
   className,
 }: {
   href: string;
@@ -155,6 +157,8 @@ export function CourseCard({
    * renderer the only path means a caller that forgets it sees the placeholder
    * and notices, rather than shipping unoptimised images nobody spots.
    */
+  /** ADR-139 — "Featured" / "Premium" over the cover's bottom-end corner. */
+  markers?: readonly CardMarker[];
   renderCover?: (args: { src: string; alt: string }) => React.ReactNode;
   className?: string;
 }) {
@@ -176,7 +180,7 @@ export function CourseCard({
         // (it selects `.group:hover`, which a named-only group never matches).
         // A caller that puts `media-zoom` on its cover image gets the zoom
         // from a hover anywhere on the card because of this pair.
-        "group group/card card-hover hover-lift sheen flex min-w-0 flex-col rounded-2xl bg-card ring-1 ring-foreground/10 hover:ring-primary/30",
+        "group group/card card-hover hover-lift sheen flex min-w-0 flex-col rounded-lg bg-card ring-1 ring-foreground/10",
         className,
       )}
     >
@@ -186,7 +190,7 @@ export function CourseCard({
         {/* 16:9, fixed — a shelf whose cards are different heights because one
             course has no cover reads as broken rather than as varied. The
             placeholder occupies the same box. */}
-        <div className="relative aspect-video w-full shrink-0 overflow-hidden rounded-t-2xl bg-muted sm:aspect-square sm:w-44 sm:rounded-s-2xl sm:rounded-e-none">
+        <div className="relative aspect-video w-full shrink-0 overflow-hidden rounded-t-lg bg-muted sm:aspect-square sm:w-44 sm:rounded-s-lg sm:rounded-e-none">
           {coverUrl && renderCover ? (
             renderCover({ src: coverUrl, alt: "" })
           ) : (
@@ -214,11 +218,12 @@ export function CourseCard({
               the contrast depended on the picture. On the page background the
               tint composites onto exactly the surface ADR-073 derives the ink
               against, so every tone clears 4.5:1 whatever the cover is. */}
-          <span className="absolute top-2.5 start-2.5 rounded-full bg-background shadow-sm transition-transform duration-(--duration-base) ease-(--ease-out-quint) group-hover/card:scale-105">
+          <span className="absolute top-2.5 start-2.5 rounded-md bg-background shadow-sm transition-transform duration-(--duration-base) ease-(--ease-out-quint) group-hover/card:scale-105">
             <Badge variant={difficultyTone} className="uppercase">
               {difficultyLabel}
             </Badge>
           </span>
+          <CardMarkers markers={markers} />
         </div>
 
         <div className="flex min-w-0 flex-1 flex-col gap-2 p-4 ps-0 max-sm:ps-4 max-sm:pt-0">
@@ -303,7 +308,7 @@ export function CourseCard({
           collapsed lists in the DOM on a shelf of courses costs more than it
           saves. */}
       {hasLessons && expanded && (
-        <div id={panelId} className="rounded-b-2xl border-t bg-muted/30 px-2 py-2">
+        <div id={panelId} className="rounded-b-lg border-t bg-muted/30 px-2 py-2">
           <CurriculumList sections={sections} labels={labels} variant="compact" />
         </div>
       )}

@@ -1,12 +1,9 @@
 import type { Metadata } from "next";
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { getBrandAssets } from "@repo/core";
-import { getSetting } from "@repo/settings";
+import { getSetting, isFeatureVisible } from "@repo/settings";
 import { MIN_PASSWORD_LENGTH } from "@repo/contracts";
 import { getPathname, Link } from "@repo/i18n/navigation";
-import { AmbientMotif } from "@repo/ui/components/ambient-motif";
-import { BrandLogo } from "@repo/ui/components/brand-logo";
-import { Reveal } from "@repo/ui/components/reveal";
+import { AuthScreen } from "../_components/auth-screen.tsx";
 import { SignUpForm } from "./sign-up-form.tsx";
 
 // Public self-registration (ADR-052) — the learner account the whole
@@ -28,60 +25,50 @@ export async function generateMetadata({
 export default async function SignUpPage({ params }: PageProps<"/[locale]/sign-up">) {
   const { locale } = await params;
   setRequestLocale(locale);
-  const [t, siteName, brandAssets] = await Promise.all([
+  const [t, newsletterEnabled] = await Promise.all([
     getTranslations("auth"),
-    getSetting("site.name"),
-    getBrandAssets(),
+    // ADR-124: the opt-in checkbox exists only while the newsletter does.
+    // Evaluated for an anonymous subject, like every public placement, so the
+    // page stays cacheable.
+    isFeatureVisible("newsletter", null),
   ]);
 
   return (
-    // `isolate` is added alongside the existing `relative`: without a
-    // stacking context the motif's -z-10 puts it BEHIND this element's
-    // own bg-glow-primary rather than between the glow and the card.
-    <main className="bg-glow-primary container-page section-lg relative isolate flex flex-1 items-center justify-center overflow-hidden">
-      <AmbientMotif variant="currency" intensity={0.8} />
-      <Reveal variant="scale" className="flex w-full max-w-sm flex-col gap-6">
-        <div className="flex justify-center">
-          <BrandLogo
-            light={brandAssets.logo_light?.url ?? null}
-            dark={brandAssets.logo_dark?.url ?? null}
-            alt={siteName ?? ""}
-            className="h-14"
-            fallback={<span className="text-lg font-semibold tracking-tight">{siteName}</span>}
-          />
-        </div>
-        <div className="flex flex-col gap-6 rounded-xl border bg-card p-8 shadow-card">
-          <div className="flex flex-col gap-1.5">
-            <h1 className="text-xl font-semibold">{t("signUpTitle")}</h1>
-            <p className="text-sm text-muted-foreground">{t("signUpDescription")}</p>
-          </div>
-          <SignUpForm
-            homeHref={getPathname({ href: "/", locale })}
-            verifiedHref={`${getPathname({ href: "/sign-in", locale })}?verified=1`}
-            minPasswordLength={MIN_PASSWORD_LENGTH}
-            labels={{
-              name: t("name"),
-              email: t("email"),
-              password: t("password"),
-              showPassword: t("showPassword"),
-              hidePassword: t("hidePassword"),
-              passwordHint: t("passwordHint", { count: MIN_PASSWORD_LENGTH }),
-              submit: t("signUpSubmit"),
-              failed: t("signUpFailed"),
-              taken: t("emailTaken"),
-            }}
-          />
-          <p className="text-center text-sm text-muted-foreground">
-            {t("haveAccount")}{" "}
-            <Link
-              href="/sign-in"
-              className="font-medium text-primary-interactive underline-offset-4 hover:underline"
-            >
-              {t("signInLink")}
-            </Link>
-          </p>
-        </div>
-      </Reveal>
-    </main>
+    <AuthScreen
+      title={t("signUpTitle")}
+      description={t("signUpDescription")}
+      footer={
+        <p className="text-center text-sm text-muted-foreground">
+          {t("haveAccount")}{" "}
+          <Link
+            href="/sign-in"
+            className="font-medium text-primary-interactive underline-offset-4 hover:underline"
+          >
+            {t("signInLink")}
+          </Link>
+        </p>
+      }
+    >
+      <SignUpForm
+        homeHref={getPathname({ href: "/", locale })}
+        verifiedHref={`${getPathname({ href: "/sign-in", locale })}?verified=1`}
+        minPasswordLength={MIN_PASSWORD_LENGTH}
+        locale={locale}
+        newsletterEnabled={newsletterEnabled}
+        labels={{
+          name: t("name"),
+          email: t("email"),
+          password: t("password"),
+          showPassword: t("showPassword"),
+          hidePassword: t("hidePassword"),
+          passwordHint: t("passwordHint", { count: MIN_PASSWORD_LENGTH }),
+          submit: t("signUpSubmit"),
+          failed: t("signUpFailed"),
+          taken: t("emailTaken"),
+          newsletterOptIn: t("newsletterOptIn"),
+          newsletterOptInHint: t("newsletterOptInHint"),
+        }}
+      />
+    </AuthScreen>
   );
 }

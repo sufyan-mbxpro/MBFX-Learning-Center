@@ -39,7 +39,12 @@ import {
   MegaMenuViewport,
 } from "@repo/ui/components/mega-menu";
 import { NavLink } from "../_components/nav-link.tsx";
-import { panelForHref, resolveMegaMenuPanel, type MegaResolvableItem } from "./mega-menu.ts";
+import {
+  MEGA_MENU_ICONS,
+  panelForHref,
+  resolveMegaMenuPanel,
+  type MegaResolvableItem,
+} from "./mega-menu.ts";
 
 export interface SiteNavItem extends MegaResolvableItem {
   children: MegaResolvableItem[];
@@ -70,7 +75,7 @@ export function SiteNav({ items, ariaLabel }: { items: SiteNavItem[]; ariaLabel:
 
           // 1. A registered panel — the mega treatment.
           if (panel) {
-            const resolved = resolveMegaMenuPanel(panel, item.children);
+            const resolved = resolveMegaMenuPanel(panel, item.children, item);
             return (
               <MegaMenuItem key={item.id}>
                 <MegaMenuTrigger>{item.label}</MegaMenuTrigger>
@@ -123,6 +128,8 @@ export function SiteNav({ items, ariaLabel }: { items: SiteNavItem[]; ariaLabel:
                   {resolved.viewAll && (
                     <MegaMenuFooter
                       label={item.label}
+                      description={t("mega.footerHint", { section: item.label })}
+                      icon={panel.viewAll ? MEGA_MENU_ICONS[panel.viewAll] : undefined}
                       actionLabel={t("mega.viewAll")}
                       render={linkRender(resolved.viewAll)}
                     />

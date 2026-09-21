@@ -245,8 +245,14 @@ export function RichTextEditor({
   labels,
   className,
   mediaCategory = "general",
-  /** Opt-in source view. Body-length prose wants it; a one-line hint doesn't. */
-  allowHtmlMode = false,
+  /**
+   * The Visual / HTML source tabs. ON by default since changes-46 #2 — the
+   * owner asked for the article editor's two tabs on every text editor, and
+   * an opt-in had left the glossary topic, tool and email bodies without it.
+   */
+  allowHtmlMode = true,
+  mode: controlledMode,
+  onModeChange,
   ai,
 }: {
   id?: string;
@@ -265,6 +271,13 @@ export function RichTextEditor({
   mediaCategory?: MediaCategory;
   allowHtmlMode?: boolean;
   /**
+   * Controlled tab, for a host whose STORED data depends on it — the email
+   * template's body mode decides whether the shell wraps it. Omitted, the
+   * editor keeps its own state and always opens on Visual.
+   */
+  mode?: "visual" | "html";
+  onModeChange?: (mode: "visual" | "html") => void;
+  /**
    * The writing assistant (changes-29 B1), or nothing.
    *
    * **Its PRESENCE is the availability answer** (ADR-097 #6): resolved on the
@@ -280,7 +293,12 @@ export function RichTextEditor({
   const field = useFieldContext();
   const fileRef = React.useRef<HTMLInputElement>(null);
   const [, force] = React.useReducer((n: number) => n + 1, 0);
-  const [mode, setMode] = React.useState<"visual" | "html">("visual");
+  const [ownMode, setOwnMode] = React.useState<"visual" | "html">("visual");
+  const mode = controlledMode ?? ownMode;
+  const setMode = (next: "visual" | "html") => {
+    setOwnMode(next);
+    onModeChange?.(next);
+  };
   // ADR-049: an image already in the library goes into a second article
   // without a second upload. Same dialog the image FIELDS use.
   const [pickerOpen, setPickerOpen] = React.useState(false);
@@ -338,7 +356,7 @@ export function RichTextEditor({
         // editor is inside a grid track, and without these the track grows
         // to fit the content and pushes the sidebar off screen.
         class:
-          "min-h-72 max-w-none px-3 py-2 text-sm leading-relaxed break-words outline-none [&_a]:text-primary-interactive [&_a]:underline-offset-4 [&_a:hover]:underline [&_blockquote]:border-s-2 [&_blockquote]:ps-4 [&_blockquote]:text-muted-foreground [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:font-mono [&_code]:text-sm [&_h2]:mt-4 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:mt-3 [&_h3]:text-lg [&_h3]:font-semibold [&_h4]:font-semibold [&_hr]:my-4 [&_img]:my-2 [&_img]:max-h-96 [&_img]:rounded-lg [&_ol]:list-decimal [&_ol]:ps-5 [&_p]:my-1.5 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:bg-muted [&_pre]:p-4 [&_ul]:list-disc [&_ul]:ps-5 [&_table]:my-3 [&_table]:w-full [&_table]:table-fixed [&_table]:border-collapse [&_td]:border [&_td]:p-2 [&_td]:align-top [&_th]:border [&_th]:bg-muted/50 [&_th]:p-2 [&_th]:text-start [&_.selectedCell]:bg-primary/10 [&_.is-editor-empty:first-child]:before:pointer-events-none [&_.is-editor-empty:first-child]:before:float-start [&_.is-editor-empty:first-child]:before:h-0 [&_.is-editor-empty:first-child]:before:text-muted-foreground [&_.is-editor-empty:first-child]:before:content-placeholder",
+          "min-h-96 max-w-none px-3 py-2 text-sm leading-relaxed break-words outline-none [&_a]:text-primary-interactive [&_a]:underline-offset-4 [&_a:hover]:underline [&_blockquote]:border-s-2 [&_blockquote]:ps-4 [&_blockquote]:text-muted-foreground [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:font-mono [&_code]:text-sm [&_h2]:mt-4 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:mt-3 [&_h3]:text-lg [&_h3]:font-semibold [&_h4]:font-semibold [&_hr]:my-4 [&_img]:my-2 [&_img]:max-h-96 [&_img]:rounded-lg [&_ol]:list-decimal [&_ol]:ps-5 [&_p]:my-1.5 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:bg-muted [&_pre]:p-4 [&_ul]:list-disc [&_ul]:ps-5 [&_table]:my-3 [&_table]:w-full [&_table]:table-fixed [&_table]:border-collapse [&_td]:border [&_td]:p-2 [&_td]:align-top [&_th]:border [&_th]:bg-muted/50 [&_th]:p-2 [&_th]:text-start [&_.selectedCell]:bg-primary/10 [&_.is-editor-empty:first-child]:before:pointer-events-none [&_.is-editor-empty:first-child]:before:float-start [&_.is-editor-empty:first-child]:before:h-0 [&_.is-editor-empty:first-child]:before:text-muted-foreground [&_.is-editor-empty:first-child]:before:content-placeholder",
       },
     },
     onUpdate: ({ editor: e }) => emit(e.getHTML()),
@@ -432,7 +450,7 @@ export function RichTextEditor({
   if (!editor) {
     return (
       <div
-        className={cn("min-h-72 rounded-md border border-input bg-background", className)}
+        className={cn("min-h-96 rounded-md border border-input bg-background", className)}
         aria-busy
       />
     );
@@ -524,7 +542,7 @@ export function RichTextEditor({
           // ADR-044 #6's stated exception: a control whose VALUE is code the
           // admin reads character by character keeps a fixed-width face.
           // The frame draws the focus and invalid rings for both modes.
-          className="min-h-72 resize-y rounded-none border-0 font-mono text-xs whitespace-pre focus-visible:ring-0 focus-visible:ring-offset-0 aria-invalid:ring-0"
+          className="min-h-96 resize-y rounded-none border-0 font-mono text-xs whitespace-pre focus-visible:ring-0 focus-visible:ring-offset-0 aria-invalid:ring-0"
           onChange={(e) => emit(e.target.value)}
         />
       ) : (

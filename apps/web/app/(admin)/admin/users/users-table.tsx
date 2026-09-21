@@ -27,7 +27,7 @@ import { AdminCombobox } from "../_components/combobox.tsx";
 import { FilterBarRow } from "@repo/ui/components/filter-bar";
 import { StatusBadge, USER_STATUS_TONE, statusTone } from "../_components/status-badge.tsx";
 import { useServerAction } from "../_hooks/use-server-action.ts";
-import { useUrlFilters } from "../_hooks/use-url-filters.ts";
+import { useUrlFilters, useUrlFiltersPending } from "../_hooks/use-url-filters.ts";
 
 export interface UserTableRow {
   id: string;
@@ -112,6 +112,7 @@ export function UsersTable({
 }) {
   const { run } = useServerAction();
   const setParams = useUrlFilters();
+  const pending = useUrlFiltersPending();
   const [confirmTarget, setConfirmTarget] = React.useState<{
     rows: UserTableRow[];
     status: "ACTIVE" | "SUSPENDED";
@@ -260,6 +261,7 @@ export function UsersTable({
       {/* changes-08 #7: type and status sit in the DataTable's own
           toolbar, sharing a row with the search box. */}
       <DataTable
+        pending={pending}
         columns={columns}
         data={rows}
         labels={tableLabels}

@@ -18648,3 +18648,5066 @@ for the five admin screens and every Phase 2 affordance (`fixme`, same
 auth-setup reason as every admin spec); axe on the AI screens and on B4's
 public takeaways block; and a Lighthouse check that no AI client code reaches a
 public route.
+
+## 2026-09-15 — changes-31: the warm editorial home page
+
+**Modules 02 / 07 / 12** — a second design reference
+(`docs/design-reference/extracted-design.md`) adopted for the public home page,
+landing in theme defaults and shared components rather than in page markup.
+**ADR-101** (the warm ramp), **ADR-102** (a display typeface), **ADR-103**
+(three owner-supplied bands), **ADR-104** (a reveal plays once). Plan:
+`docs/changes/changes-31-home-redesign.md`.
+
+### What the extraction actually found
+
+The useful finding was a negative one: **the reference's brand colours are the
+ones we already ship.** `DEFAULT_BRAND.primary` is `#C28D5A` — ADR-072 took it
+from a reference in the same lineage — and `accent #EAE5DE` is already its
+cream. Nothing in `DEFAULT_BRAND` changed.
+
+The whole colour delta was **temperature**. Our ramp was shadcn slate, blue at
+every step; a bronze primary on it reads as a brown button on a grey site. The
+warm ramp makes the same bronze read as one material, and that is the single
+biggest visual change in this work.
+
+### Two things the ground had to earn
+
+`background` went to `#F7F3ED`, not the `#FBF9F6` the extraction first
+proposed. At the lighter value a white card sat **1.04:1** against its ground —
+too small a step to separate anything, which would have put the card's border
+back to do the job the ground is supposed to do. At `#F7F3ED` it is 1.11:1 and
+a card reads as an object on a surface, which is what lets the public card drop
+its resting shadow (ADR-101 §4).
+
+`textSecondary` was the value the warm rotation constrained. The first
+candidate (`#77706A`) cleared the background at 4.64:1 and **failed the muted
+surface at 4.32:1** — the exact pair ADR-072 §4's own note says had been missing
+from `validateMode` and quietly permitted everywhere. Darkened to `#6F6862`
+rather than lightening the muted surface, because the panel tint is what the
+reference is made of.
+
+### The engine bug the property test caught
+
+`deriveTonalInk` delegated to `deriveInteractive(color, tint)` on the reasoning
+that the tint is always the harder surface, so an ink clearing it clears the
+page too. **That held only while the page was pure white.** On an ivory ground a
+near-white fill tints to something LIGHTER than the page, and the implication
+runs the other way. The fast-check contract found it immediately: 4.4894:1
+against a 4.5 floor.
+
+Fixed in the engine, not the test — the search now requires the candidate to
+clear the target on **both** the tint and the page. That is correct for any
+background an admin can set, which is the property the contract was asserting
+all along.
+
+### A third font slot
+
+`LayoutTokens.fontDisplay` (ADR-102), because the reference's serif/sans
+duality is its typographic system and ours could not express it: two slots, no
+serif in the registry, one emitted family. Optional, falling back to `fontSans`,
+so every Theme row that predates the field renders exactly as it did. Default
+Fraunces, weight-axis subset — the all-axes file buys automatic optical sizing
+for 84 KB, more than Inter's whole face, on a public route.
+
+Honest scope note: its **picker ships into a paused tab** (ADR-038/042's
+`THEME_LAYOUT_TAB_ENABLED = false`), exactly as `fontSans` has for two modules.
+Colour stays fully admin-editable; typography is a theme-row token whose UI is
+paused, and un-pausing it is ADR-042's call, not this change's.
+
+### Three bands that render nothing
+
+The reference's trust strip, facts band and testimonials have no data behind
+them here. ADR-103 names the distinction ADR-076 was actually drawing — **a
+count is forbidden, a fact is permitted** — and builds all three as
+owner-supplied content modules on ADR-051 §1's two-state switch. `REAL_HOME_FACTS`
+ships empty, so a production build renders thirteen bands, not sixteen, until
+the owner fills it in. That is the design working.
+
+`public-chrome.test.ts`'s allow-list grew from one file to two, plus a new
+assertion that a facts band reads **no counting service** — which is the
+property that actually separates a fact from a count, and what keeps the
+allow-list from being just a list of names.
+
+### A reveal plays once
+
+ADR-104 reverses which of ADR-018 rule 2's two paths is primary. The native
+`animation-timeline: view()` path is progress-driven, so a band fades back out
+when a reader scrolls up to re-read it; the observer unobserves after firing.
+The observer is now the path, the timeline is an opt-in (`timeline`), and the
+guarantee is untouched: content is visible in the server HTML and hidden only
+under `[data-reveal-js]`, which nothing sets without an observer behind it.
+
+One thing the promotion exposed: the island queried the DOM **once on mount**,
+and ADR-095 streams bands in after that. Every section below the first Suspense
+boundary would have been hidden and never observed — a blank page, not a missing
+animation. A MutationObserver now picks up late arrivals.
+
+`RevealGroup` is the stagger, and it IS the grid: it wraps each child, so those
+wrappers have to be the grid items. Wrapping from outside collapses every card
+to one column, and `display: contents` is not the escape hatch it looks like —
+an element with no box has nothing to fade.
+
+### Not done, and why
+
+- **No framed sheet** (owner's call): it fights the pinned header offset, the
+  sticky section bar and the escaping mega menu.
+- **`next/dynamic` on exactly one leaf**, not five. `Carousel` serves the FIRST
+  band, so deferring it makes the page slower to become interactive; `Counter`
+  and `NewsletterForm` are smaller than the round trip a lazy boundary costs;
+  every band is already split by ADR-095's per-section `<Suspense>`, and
+  `next/dynamic` on a server component buys nothing. The reasoning is recorded
+  beside the one call.
+- **No blur placeholder on the hero.** It is the LCP image; a placeholder delays
+  the real paint and adds its base64 to the HTML.
+
+### Tests
+
+theme **72** · ui **435** · contracts **366** · db **34** · apps/web **2081
+across 48 files**. All seven `check:*` scripts and `governance:check` green.
+Four theme pins moved with the ramp (the CSS snapshot, the derived link ink
+`#936B44` → `#8C6641`, the raw-primary ratio 2.76 → 2.62, and the
+input-border remedy's tripping background); two were rewritten to read the
+constant instead of a literal, since what they assert is the FORM of the emitted
+value, not that the background is white.
+
+**Owed to Module 14:** axe on the home page in both modes, a real Lighthouse run
+(CLS from the reveals, LCP with the display face on the critical path), and the
+RTL smoke pass over the new hero scrim and trust strip.
+
+## 2026-09-15 — changes-31: the homepage opens on a full-height slider
+
+**Module 12**, with one extension to **Module 07**. Owner, same day: the
+"Watch a lesson, then read the rest" band becomes a full-page slider composed
+like the reference's hero. No new ADR — composition is code (ADR-042), and the
+two decisions this touched (ADR-104 §6's LCP rule, ADR-101 §6's ambient
+devices) were amended in place rather than superseded, since neither had
+shipped.
+
+### One band moves, so another has to
+
+`learning_videos` was a shelf of six tiles on an inverted band. Its `carousel`
+variant now means ONE SLIDE PER VIEW at `max(34rem, 100svh - header)`: a
+full-bleed cover, a scrim, and the copy at the inline start — eyebrow chip,
+display-serif title, lead, two actions — with the carousel's controls overlaid
+at the bottom of the slide on the page's own content column.
+
+**`grid` is untouched**, and that is not incidental: `/learn` renders this same
+component with `variant="grid"` and is not part of this redesign. The switch is
+written as "anything but grid is the slider", so a future variant lands on the
+slider rather than on an unhandled branch.
+
+The hero directly below it had to change with it. It was the reference's
+image-led opening from earlier today — copy over a scrimmed full-bleed cover —
+and **two stacked full-bleed image bands is one hero too many.** It goes back
+to what `split` has always named: copy beside a media panel, on the page's own
+ground, where its ink needs no scrim to be legible. It keeps the `<h1>`; a
+slide is an `<h2>`, because a slide says what one LESSON is and the hero says
+what the SITE is.
+
+### The LCP moved, and now something holds it there
+
+`priority` moved to the slider's FIRST slide and came off the hero entirely.
+Two images marked `priority` do not make two things fast — they split one
+budget and both arrive late — and the slider's other three covers are
+`loading="lazy"`, since eager-loading four full-bleed images to show one spends
+exactly the budget the priority buys.
+
+`home-opening.test.ts` is the new guard, and it checks the property across
+**every band in the registry**, not just these two: one `priority` on the page,
+no `Reveal` on the opening band, the hero carrying no second scrim, and
+`/learn`'s grid path still producing tiles.
+
+It also needed a `code()` helper that strips comments before grepping. The
+first draft reported the hero as claiming `priority` — on the strength of the
+comment saying it does not.
+
+### Carousel grew one prop, not three
+
+`layout="full"` switches slide width, track gutters and control placement
+together. They only make sense in one combination: a full-bleed slide must have
+no gap (a seam would flash between slides), no track padding (it would show as
+a gutter down both sides of the image), and its controls cannot sit under the
+track because there is nothing under the track. Three props would have offered
+seven combinations, six of them broken.
+
+The overlaid control row is `container-page` + `pointer-events-none` with
+`*:pointer-events-auto` on its children — the strip spans the full width and
+would otherwise swallow every click on the slide behind it.
+
+`--height-hero-slide` is `svh`, not `vh`: on mobile Safari `vh` is the LARGEST
+viewport, so a 100vh slide is taller than the screen until the address bar
+collapses, and the controls sit below the fold on first paint.
+
+### What it still refuses to copy
+
+Text straight onto the photograph. `coverUrl` is editor-supplied and
+`videoTopicCoverUrl` is generated art, so nothing can assume what is behind the
+words — the scrim runs from fully opaque `--secondary` and the copy sits inside
+that zone, the same token pair `Section tone="inverted"` uses (ADR-072 §1).
+
+And an inline player. The tile's facade exists because a rail of tiles can
+afford one; a slide inside a scroll-snap track that starts playing under the
+reader's pointer is the autoplay problem Carousel's own header already refuses.
+The primary action goes to the topic page, where the real player lives.
+
+### Tests
+
+ui **435** · apps/web **2091 across 49 files** (ten new). Lint and typecheck
+clean on both. Still owed to Module 14, and now larger: axe over the slider in
+both modes, the RTL pass over its scrim and overlaid controls, and a real
+Lighthouse run — a full-height image band at the top of the page is exactly
+where an LCP regression would show.
+
+## 2026-09-15 — changes-31: the slider opens on the owner's footage
+
+**Module 12**, one token in **Module 07**. Owner, same day: use
+`Home-1.mp4` as the carousel's opening, compose it like the reference, and
+float a small panel across it. No new ADR — composition is code (ADR-042), and
+ADR-104 §6's LCP rule is amended in place for the third time rather than
+superseded, since it has not shipped.
+
+### The file could not stay where it was
+
+`apps/web/storage/` is git-ignored — it is the local-disk storage driver's
+root (ADR-017), where UPLOADED media lands under a hashed name. A hero
+backdrop is a brand asset referenced by a literal path, not an upload, so it
+moved to `apps/web/public/home/home-1.mp4` beside the generated panels, and is
+addressed through `HOME_MEDIA` like every other image on the page.
+
+**It is 8.8 MB, and that is now committed.** More than every other asset on
+this page put together. Flagged rather than quietly absorbed, with the recipe
+for a re-encode in `home-media.ts`; the three mitigations below are what keep
+it off the critical path in the meantime, not a substitute for shrinking it.
+
+### No autoPlay attribute, deliberately
+
+`HeroVideo` is a client island for exactly one reason: whether the footage
+plays is the visitor's decision, and `prefers-reduced-motion` cannot be read on
+the server. Looping footage under a headline is precisely the large-scale
+motion that preference is about, and the global `animation-duration: 0.01ms`
+reset does **nothing** to a `<video>` — it is not an animation.
+
+With an `autoPlay` attribute the browser starts playing from the server HTML,
+before hydration and before anyone has been asked. A reduced-motion visitor
+would watch it play and then stop. So the element renders paused with its
+poster, and `play()` is called after mount, only when motion is allowed, with
+the rejection swallowed — a browser refusing autoplay under data-saver is a
+legitimate outcome, not an error.
+
+Three things fall out of that, all good: with JS off the slide is a still
+image (complete, not broken); the POSTER is what paints, so the LCP candidate
+is an ordinary `<img>` the browser already prioritises; and the 8.8 MB is
+never on the critical path. Nothing on the page claims next/image `priority`
+any more — `home-opening.test.ts` checks that across every band in the
+registry, not just this one.
+
+### The panel, and the collision it caused
+
+The reference's floating search bar becomes `QuickStartBanner`: four labelled
+cells divided by vertical hairlines, then one filled action. Same shape, the
+job a learning site actually has — begin, practise, look a word up, run the
+numbers.
+
+Every cell is a LINK, not a select. The reference's are form controls because
+its four fields compose into one query; ours are four different pages, and a
+dropdown that navigates on change cannot be opened with a keyboard without
+going somewhere.
+
+It overlaps the band's bottom edge with `-mt-14`, not `absolute`: the panel
+still occupies its own space, so the section below starts underneath it rather
+than sliding behind it. But Carousel's overlaid arrows sit at `bottom-8`, which
+put them **under the panel**. Fixed with `--carousel-controls-inset` — the
+token belongs to Carousel, the value belongs to the call site, because the call
+site is the only thing that knows something floats at that edge.
+
+### One shell, two kinds of slide
+
+The intro slide and the topic slides share a `slide()` shell — backdrop, scrim,
+chip, display-serif title, lead, two actions. Only the backdrop and the words
+differ. Writing the composition twice is how two slides in one band drift
+apart, and the scrim in particular has to be identical: it is what makes text
+over arbitrary imagery legible at all (ADR-072 §1).
+
+The copy is the one real difference in KIND. The intro slide talks about the
+curriculum — what you are about to learn and in what order — because it opens
+the page; every other slide says what one recording is.
+
+### Still not a player
+
+The footage is muted, looping, `aria-hidden`, and has no controls. A slide
+inside a scroll-snap track that starts a real recording under the reader's
+pointer is the autoplay problem Carousel's own header already refuses, and a
+control a screen reader cannot reach is worse than no control. A topic's actual
+player still lives on its own page (ADR-068).
+
+### Tests
+
+ui **435** · apps/web **2101 across 49 files** — `home-opening.test.ts` grew
+from 10 cases to 18, covering the poster, the missing `autoPlay`, the two
+attributes iOS silently requires, and the panel clearing the controls it
+overlaps. Lint, typecheck, all `check:*` and `governance:check` green.
+
+**Owed to Module 14**, and larger again: axe over the slider in both modes, the
+RTL pass over its scrim, overlaid controls and the panel's divided cells, and a
+Lighthouse run that is now genuinely load-bearing — 8.8 MB of footage on the
+homepage is exactly the kind of thing a budget exists to catch.
+
+## 2026-09-15 — changes-31: the homepage opening is static, and the slider is gone
+
+**Module 12.** Owner, same day: take the dynamic video content off the home
+page, place the footage generically, drop the slider. What opens the page is
+now one static band.
+
+### The slider is removed, not hidden
+
+`Carousel`'s `layout="full"` and `--carousel-controls-inset` are **reverted**.
+They had exactly one call site and it is gone, and an unused prop on a
+design-system component is worse than no prop: it is a contract someone will
+trust without a worked example. `carousel.tsx` is byte-identical to what it was
+before this change opened.
+
+`--height-hero-slide` stays, renamed `--height-hero` — the static band still
+wants the viewport under the header, and the `svh` reasoning is unchanged.
+
+### The footage moved into the hero, where composition belongs
+
+`Hero`'s `split` variant is the band: the video full-bleed behind a scrim, the
+h1 and lead on the page's own column, the quick-start panel floated across the
+bottom edge. It reads **no service, no flag and no published rows** — only
+`site.description`, which is content the owner types rather than content an
+editor publishes. That is composition in the ADR-042 sense, and it is what you
+want of the first thing every visitor sees.
+
+The copy the slide briefly carried moved onto the hero's own keys and the five
+`slider*` keys were deleted. One band, one set of keys; a key nothing reads is
+how a catalog starts lying.
+
+### Two switches, because one was not reachable
+
+`learning_videos` is seeded `enabled: false` and its variant vocabulary is now
+`["grid"]` — `carousel` went with the placement it existed for.
+
+That alone would not have been enough. **A database seeded before today still
+holds an ENABLED row, and the homepage section composer is paused (ADR-038), so
+there is no screen on which to turn it off.** `VideoShowcase` therefore returns
+null for any variant but `grid`, and that check runs FIRST — ahead of the
+feature flag and the query, because a band that is not going to render should
+not cost a round trip to find that out.
+
+ADR-092 is untouched and deliberately so: what moved is WHERE the rail appears,
+not where its content comes from. `/learn` still renders it from published
+`VideoTopic` rows, which is the surface those rows were always really for. The
+key stays in `HOME_SECTION_BUILT_KEYS` rather than moving to the stub list,
+because the component is still built — `check:home-sections` keeps matching it.
+
+### Tests
+
+`home-opening.test.ts` was rewritten around the new shape (18 cases): the band
+reads no service or flag, the rail's guard precedes its I/O, the footage keeps
+its poster and its missing `autoPlay`, the copy sits inside an opaque scrim,
+and the panel's cells are links rather than selects. ui **435** · contracts
+**366** · apps/web **2101 across 49 files**. Lint, typecheck, all `check:*` and
+`governance:check` green.
+
+**Owed to Module 14**, unchanged in kind: axe over the hero in both modes, the
+RTL pass over its scrim and the panel's divided cells, and a Lighthouse run —
+8.8 MB of footage on the homepage is exactly what a budget exists to catch.
+
+## 2026-09-15 — changes-31 fix: the guard that could not run
+
+**Module 12 / Module 01.** The entry above records two switches for the video
+rail: `enabled: false` in the seed, and `VideoShowcase` returning null for any
+variant but `grid`, the second one written specifically because _"a database
+seeded before today still holds an ENABLED row"_. Running the app against such
+a database 500s on every public page:
+
+```
+ZodError: Unknown variant "carousel" for section "learning_videos". Allowed: grid.
+  at loadSetting (packages/settings/src/index.ts:45:17)
+```
+
+### The second switch was upstream of itself
+
+Narrowing `HOME_SECTION_VARIANTS.learning_videos` to `["grid"]` did not leave
+the stale row merely unrendered — it made it **unparseable**. `loadSetting`
+parses strictly and throws on a row that fails its own schema, deliberately (a
+wrong-shaped value is a data-integrity bug, not a missing optional). So the
+read never returns, and the guard written for exactly this row can never run:
+it lives one layer _below_ the thing that throws.
+
+Worth stating plainly, because it generalises past this band: **narrowing a
+value's vocabulary is a breaking data change, not a code-only one.** Every
+existing database becomes invalid the moment the narrower schema ships, and the
+seed cannot repair it — `home.sections` is upserted with an `update` that never
+touches `value` ("never overwrite a value an admin has already changed"), so
+`db:seed` is a no-op and only `db:reset` clears it, at the cost of all content.
+
+### The repair is a data migration
+
+`20260915120000_repair_learning_videos_variant_changes31` rewrites the
+`learning_videos` entry in place: `variant` to `grid`, `enabled` to `false`.
+The second field is the load-bearing one — setting `variant` alone makes the
+row parse and the guard pass, which would put the rail back on the homepage,
+the band the owner asked to remove. Migrating is what reaches an existing
+database at all; it is also the only mechanism here that does, given the seed's
+own rule about admin values.
+
+Surgical on purpose. Every other stored section is untouched, and this does
+**not** add changes-31's three new bands (`trust_strip`, `facts`,
+`testimonials`) — homepage rows are create-only and an existing database still
+needs `pnpm db:reset` to see them, which is the decision the seed records. A
+migration that repairs what crashes is not licence to re-compose someone's
+homepage. The `WHERE` matches only a `learning_videos` entry that is not
+already `grid`, so a freshly seeded database is a no-op.
+
+### Tests
+
+No new guard: the failing state is a row in a database, which no source-level
+test can see. `home-opening.test.ts`'s existing assertion that the vocabulary
+is `["grid"]` is unchanged and still correct. The E2E database needed nothing —
+`provision.mts` drops and recreates it per run, so it picks the repaired value
+up from the seed.
+
+**Owed to Module 14**, unchanged from the entry above.
+
+## 2026-09-15 — the explore carousel gets real photography
+
+**Module 12.** Seven of the eight "Everything a trader needs, in one place"
+cards now carry owner-supplied photographs instead of the generated vector
+panels they shipped with. No ADR: this is the swap `_content/home-media.ts` was
+built to make, and ADR-047 §3's pattern predicted it in writing — _"a photograph
+that CARRIES meaning would also need a real alt string"_ was the only clause
+that needed a decision, and it did not apply.
+
+### What the pattern actually bought
+
+The change is two files and a folder of assets. `HOME_MEDIA` points at
+`/home/<key>.webp`; nothing else in the section, the card, the registry or the
+catalog knows the difference, because one string has addressed the art, the
+media entry, the four catalog keys and the card since the set was generated.
+2101 tests passed unchanged, which is the honest measure of it.
+
+The files were fitted to `HOME_MEDIA_SIZE` — 1440×900, exactly `HomeMedia`'s
+box — so no card reflowed. `Analysis.png` was cropped from the **left** rather
+than the centre: it carries a baked-in "Analysis" wordmark hard against that
+edge, and a centred crop clipped the A.
+
+### One conditional, and why it is not a preference
+
+`HomeMedia` rendered `unoptimized` because the set was SVG, and Next refuses to
+optimize an SVG without `dangerouslyAllowSVG` — a flag that would relax SVG
+handling for **every** image the app serves, admin-entered URLs included, to buy
+nothing on a few KB of vector. A photograph is the opposite case: the card is
+~430px wide on a desktop, so the optimizer's job is to not send the 1440px
+master. It is now `unoptimized={src.endsWith(".svg")}` — both rules, stated
+once, at the only place that can tell which file it has.
+
+`alt=""` survives the switch and that is deliberate. These are texture beside
+the copy: the card's heading names the destination and its body says what is
+there, so describing the photograph would repeat the copy to a screen reader
+rather than add to it.
+
+### `markets` keeps its panel, and the generator keeps one line
+
+No photograph was supplied for `markets`, whose section is still `soon` — which
+is precisely the case the generated set exists for. It keeps `markets.svg`, and
+`generate-home-art.mjs` now emits **that piece only**. The other seven entries
+were deleted from `PIECES` and their files from `public/home/`: a generator that
+keeps writing files nothing reads is how `public/` fills with orphans that look
+maintained. The motifs all stay in `lib/art.mjs` (the video posters and the
+About set still use several), so restoring one is a line here and a `.svg` in
+the media entry.
+
+Visible consequence, stated rather than discovered later: the markets card is
+now the one vector panel in a row of photographs, so it reads as a different
+family. That is honest for the card that says "Coming soon", and it resolves
+the day a markets photograph arrives.
+
+### Tests
+
+None added. Nothing here is a new rule — the assets are data behind an existing
+seam, and the one code change is a conditional whose two branches are both
+exercised by the page (seven raster, one SVG). `pnpm --filter web test` is green
+at 2101, typecheck and lint clean, and re-running the generator leaves
+`markets.svg` and the six video posters byte-identical.
+
+**Owed to Module 14**, extended by one item: a Lighthouse pass over the
+homepage now measures seven photographs through the optimizer rather than eight
+inline-cheap SVGs. The masters total ~390 KB of WebP and the optimizer serves
+each card at its rendered width, but the budget is where that gets proven.
+
+## 2026-09-15 — changes-32: a shorter homepage, and the rhythm behind it
+
+**Module 12 / Module 07 / Module 01.** Three owner asks from one screenshot:
+drop the "How we teach" band, drop the "Live markets" card, and close the
+white space between bands. The third is the only one with reach beyond the
+homepage, and it is the one worth reading about.
+
+### The gap was the scale, not the page
+
+The screenshot showed ~230px of empty page between the explore carousel and the
+band under it. Measured rather than guessed: `--section-space-lg` is
+`clamp(4rem, 8vw, 7rem)` and it is `padding-block`, so at 1440px every `lg`
+band paid **112px top and 112px bottom**. Two stacked `lg` bands therefore put
+224px between their contents, and an `lg` above an `md` put 192px. Nothing was
+wrong with any section; the scale was.
+
+So the fix is in the scale, and there is exactly one:
+
+```
+--section-space-sm: clamp(2rem,  4vw, 3rem)  →  clamp(1.75rem, 3vw,   2.5rem)
+--section-space-md: clamp(3rem,  6vw, 5rem)  →  clamp(2.5rem,  4.5vw, 3.5rem)
+--section-space-lg: clamp(4rem,  8vw, 7rem)  →  clamp(3rem,    5.5vw, 4.5rem)
+```
+
+Measured after: 72 / 56 / 40px against 112 / 80 / 48. The **ratios are
+unchanged** — sm : md : lg is still roughly 1 : 1.4 : 1.8 — so the rhythm says
+the same thing about which band is a major break and which is a minor one;
+only the amplitude came down, by about a third at the desktop end.
+
+The mobile end moves least, and deliberately: a phone never had this problem.
+The clamp _floor_ was close to right; it is the viewport-relative middle term
+that ran away on a wide screen, which is why `8vw` was the number doing the
+damage.
+
+`--section-gap` (heading → content, **inside** a band) is untouched. The
+reported gap is between bands, and that token is what keeps a heading attached
+to the thing it introduces.
+
+This reaches every public page — `/learn`, `/news`, `/tools`, `/about`, the
+article pages — which is the point of there being one scale, and is also the
+one thing to look at if a band somewhere now reads tight.
+
+### "How we teach" is off, not deleted
+
+`feature_highlights` is seeded `enabled: false`. The component, its six catalog
+entries and its registry line all stay, so re-enabling it is one word — and
+`/about` is where those six commitments belong if it stays off.
+
+`20260915160000_disable_feature_highlights_changes32` does the same for a
+database that already exists, for the reason the changes-31 repair one
+migration earlier spells out: `home.sections` is upserted with an `update` that
+never touches `value`, so a seed edit reaches a FRESH install only and
+`pnpm db:seed` is a no-op against an existing one. Unlike that migration this
+is not repairing a crash — the row parses and renders perfectly well, the owner
+simply asked for it off — which is why it changes that one field and nothing
+else: no reorder, no other key, no bands added. Idempotent, and a no-op on a
+freshly seeded database.
+
+### "Live markets" leaves the carousel, and takes the generated set with it
+
+`markets` is out of `EXPLORE_DESTINATIONS`. The **route is untouched** —
+`/markets` still renders `ComingSoon`, and the header, footer and
+`RESERVED_PATHS` still name it. What changed is that the homepage no longer
+spends a card of its most valuable band on the one destination that cannot
+answer yet.
+
+Two consequences worth stating, because each removed something:
+
+**The `soon` branch is now unreached.** `markets` was the only `soon` card, and
+`explore-destinations.test.ts` had an assertion that the registry held one of
+each status, _"so neither branch can rot unnoticed"_. That assertion is deleted
+rather than repaired: it pinned a fact about the **content** of the list —
+which destinations happen to be built today — dressed as an invariant. The
+per-destination check above it is the real guard, it reads `status` against the
+route file on every run, and it works fine over whatever statuses exist. The
+branch itself stays: it costs a badge, and without it the next section built
+ahead of its route links to a page that apologises in prose with no warning on
+the card.
+
+**The generated card set is gone.** `markets.svg` was the last of the eight
+vector panels still in use after this morning's photography swap, so it is
+deleted and `generate-home-art.mjs` no longer has a `PIECES` array at all — it
+emits the six video posters and nothing else. The file keeps its name and all
+the motifs stay in `lib/art.mjs` (the About set and the posters use several),
+so restoring a card is a small array and a `.svg` in `home-media.ts`.
+
+`HomeMedia`'s `unoptimized={src.endsWith(".svg")}` therefore has no SVG caller
+left. Kept, with the comment rewritten to say so: dropping an SVG back into
+`home-media.ts` is a one-line change whose failure mode is not obvious, since
+Next refuses to optimize an SVG at all without `dangerouslyAllowSVG`.
+
+### Tests
+
+2098 in apps/web (three fewer — the deleted status-coverage assertion and the
+two per-destination cases that went with the `markets` entry), 435 in
+`@repo/ui`, 366 in contracts, 34 in db, all green; typecheck and lint clean;
+`check:home-sections`, `check:reserved-paths`, `check:phantom-deps` and
+`check:catalog-completeness` all OK.
+
+No new guard for the rhythm change, and that is a judgement rather than an
+omission: the values are one CSS custom property each and a test asserting
+`clamp(3rem, 5.5vw, 4.5rem)` would only restate the line it is reading. What
+would be worth catching — a band that now reads cramped — is a visual
+regression, which is Module 14's axe/Lighthouse/visual work.
+
+**Owed to Module 14**, extended: the rhythm change is site-wide, so whatever
+visual baseline that work establishes should be taken after it, not before.
+
+## 2026-09-15 — changes-32: the blue calendar, the idle timeout, and the rule that swept
+
+**Module 04 / 05 / 07 / 09 / 12.** Three more of the owner's list. The middle
+one needed an ADR; the other two are the kind of fix that is only interesting
+because of what it turned out to touch.
+
+### A themed field that opened somebody else's picker
+
+`ScheduleField` was `<Input type="datetime-local">`. The box was ours and the
+panel it opened was Chrome's: a blue month grid, blue selection chips, a blue
+AM/PM column. That is not a styling omission — a native control's popup is
+browser UI. `::-webkit-calendar-picker-indicator` can be recoloured and
+**nothing inside the panel can**, so matching the site meant owning the panel.
+
+`@repo/ui/components/date-time-picker` is that panel: a trigger in the shared
+control box (`selectTriggerVariants`, so it is the same 40px object as every
+Input and every dropdown), a month grid of real buttons, and hour/minute
+`Select`s. The wire format is **unchanged** — the same `"YYYY-MM-DDTHH:mm"`
+local-time string — so `publish-panel`, `ContentStatusPanel` and the six
+screens that build their labels did not move.
+
+Two details worth keeping:
+
+**The clock is never read during render.** The browsed month and today's marker
+both arrive from a `useEffect`, which is the purity rule `schedule-field.tsx`
+already documents for its three preset helpers. A `useState` initializer would
+have been shorter and is the same violation.
+
+**Every date the grid formats is built at UTC midnight and formatted with
+`timeZone: "UTC"`.** Not a timezone decision — the value is local wall-clock
+from end to end — but without it "the 15th" renders as the 14th west of
+Greenwich, and the server's render and the browser's disagree.
+
+The second half of the owner's report, "extra space on the right side of the
+input", was the same native box: `datetime-local` lays out `mm/dd/yyyy --:-- --`
+and parks its indicator after it, so a full-width field showed a wide dead gap.
+The trigger is value-plus-one-glyph, so the width is all used.
+
+### The idle timeout (ADR-105)
+
+"Admin session logout timing… also implement that functionality as well."
+`security.adminSessionTimeout` is a SELECT in **Settings → General** —
+2 / 5 / 15 / 30 / 60 / 120 minutes, or never — seeded **never**, so installing
+this changes nobody's behaviour until somebody chooses.
+
+The decision worth reading is where the enforcement lives, and the answer is
+**nowhere**: there is no check. `auth()` shortens the session row's own
+`expiresAt`, and an idle session is therefore not flagged as idle — it is
+_expired_, so Better Auth's ordinary validation refuses it and the admin
+layout, `requirePermission`, every route handler and every server action all
+inherit the behaviour without one of them having to remember a new rule.
+
+`auth()` is the placement because it is the only point all four already share.
+The admin layout looked like complete coverage and is not: the article editor
+autosaves through route handlers and every mutation is a server action, neither
+of which re-renders a layout, so a person editing one long post would have been
+signed out mid-sentence having been continuously active.
+
+The cost is a new package edge, `auth → settings`, which architecture.md #8
+asks to be argued rather than assumed — the argument is above, and the read is
+`getSetting`, cached and tagged `settings:general`, so it is not a query per
+request. The write is throttled to at most one indexed single-row UPDATE a
+minute; `nextStaffExpiry` is the whole decision, pure and exported, and it has
+the six cases the tests name — including the one that matters, that turning the
+timeout OFF stops shortening sessions and never extends one.
+
+STAFF only, on `userType` rather than a role or a permission, so it cannot be
+switched off by a grant (security.md #3's two locks).
+
+**A side effect worth its own line:** the settings form was printing SELECT
+option values verbatim — survivable for `light`/`dark`/`system`, meaningless
+for `2`. Options now take ADR-044 #5's two-step (`admin.settingOptions.<key>.
+<value>` through `t.has`, `humanizeKey()` behind it), so the theme-mode
+dropdown reads in words too.
+
+### The rule that swept across the top of everything
+
+"Remove the extra hover effects like showing the top colourful line on the
+top… maintain the other hover effects." There were five of them: the explore
+carousel's cards, the calendar's `AccentCard`, `ArticleCards`, the news
+spotlight's lead, and the category tiles. Four were pure hover — `w-0` at rest,
+`group-hover:w-full` — and are deleted, along with `DESTINATION_BAR_CLASS` and
+`AccentTone.bar`, which had no other caller.
+
+The fifth is not, and is the reason this is not a five-line diff.
+`CategoryCards` rests at `w-10` and draws the bar `w-full` on the **current**
+category: the rule is identity and state there, not an effect. So that one
+keeps its bar and loses only the sweep. Deleting it would have taken the
+current tile's marker and every tile's colour with it.
+
+Everything else on those cards — the ring, the shadow, the lift, the sheen,
+the icon flip, the arrow — is untouched, which is what "maintain the other
+hover effects" asked for.
+
+### Tests
+
+9 in `@repo/auth` (six new, covering `nextStaffExpiry`), 370 in contracts
+(four new on the timeout registry: schema, group, widget/options agreement,
+and the string→ms resolver), 435 in `@repo/ui`, 2098 in apps/web, 34 in db —
+all green. Typecheck and lint clean across the four packages touched;
+`check:phantom-deps` OK and `check:catalog-completeness` OK (inactive-locale
+warnings only, per ADR-091).
+
+**Owed to Module 14**, extended by two: axe over the new picker popup (a grid
+of buttons with `aria-pressed` and formatted `aria-label`s — written to pass,
+not yet measured), and an E2E for the timeout, which wants a clock it can move
+rather than a two-minute wait.
+
+## 2026-09-15 — changes-32: one toolbar, a strip that stays, and a news section with news in it
+
+**Module 09 / 15 / 11 / 07 / 01.** Three more owner asks, and the first is the
+one with reach: it became a standard (ADR-106) and moved thirteen screens.
+
+### Four rows above a table, three of them carrying one thing each
+
+The screenshot of `/admin/articles/tags` had the heading, then the tab strip,
+then a row holding nothing but "New tag", then the table's own toolbar holding
+the search and the column picker. changes-08 built that toolbar to hold exactly
+the kind of control sitting alone in the row above it, and ADR-044 #9 had
+already said filters belong there. **ADR-106 extends that to the primary
+action**: `DataTable` takes an `actions` slot, rendered FIRST in the toolbar's
+end cluster so the one action a screen exists to offer does not slide sideways
+when a row selection appears and bulk actions push in.
+
+Applied everywhere it applies: articles, categories, tags, glossary, glossary
+topics, courses, quizzes, videos, video categories, roles, market instruments,
+social links.
+
+`admin-toolbar-conventions.test.ts` fails on the shape that was there. It
+anchors on the `</div>` immediately before `<DataTable`, deliberately — a
+row-action CELL is also `flex justify-end`, and the first version of the guard
+flagged three of them.
+
+### "The tabs reload the page" — they did not, and the complaint was right anyway
+
+`SubNav` is `next/link`, so a tab click has always been a soft navigation. What
+was being watched was the **chrome being rebuilt**: all three browse screens
+rendered their own `AdminPage` heading AND their own copy of the strip, so a
+soft navigation unmounted both and constructed them again under a `loading.tsx`
+scoped to the whole screen. Everything above the table blinked.
+
+A LAYOUT survives a soft navigation. `articles/(browse)/` is a route group — no
+URL moves — holding `layout.tsx` plus the three screens; the layout renders the
+heading, the strip and the Settings button, and each page renders its table and
+nothing else. Nothing got faster; the chrome stopped being re-created.
+
+Two details that are the reason for the group, and for the heading's wording:
+
+**The editor sits outside it.** `/admin/articles/[id]` used to render the strip
+with "Articles" highlighted while showing something that is not the article
+list. It takes a back link now.
+
+**The heading is the SECTION's, not the tab's.** Three screens each repeating a
+title the active tab already states is three chances to disagree about what the
+section is called.
+
+### A tab that leaves the section is not a tab
+
+Five tabs, two of which navigated away: **Media** to the standalone Content →
+Media library and **Settings** to `/admin/settings/articles`, which draws its
+own settings frame. Both produced a strip with nothing active in it.
+
+Media is gone — it is in the sidebar, where a shared library belongs. Settings
+came back as an outline button in the section heading, top-right, above the
+strip, which is where the owner asked for it. The same rule split the two mixed
+screens: `/admin/learn/videos` keeps "Manage categories" in the header and moves
+"New topic" down; `/admin/market` keeps the provider link and moves "New
+instrument".
+
+**`admin-page-conventions.test.ts` caught the one real regression**, which is
+worth recording because it was right and its rule needed widening rather than an
+exception: `/admin/articles` now has no `page.tsx` of its own, so the breadcrumb
+guard read it as a crumb linking to a dead route. A `(group)` adds no URL
+segment, so a page inside one answers the parent's URL — the guard now looks
+inside route groups.
+
+### The media library: a 200px file in a 480px box
+
+Three asks, one cause between two of them. `AssetThumbnail` hard-coded
+`sizes="200px"`, which is right for a grid tile and was also what the detail
+dialog's ~480px preview got: Next served the 200px variant and the browser
+upscaled it. That is the "compressed the resolution too much" — **the bytes on
+disk were never touched**, nothing in the upload pipeline resizes, and the
+original is exactly what was uploaded. `sizes` is a required prop now, so the
+next caller has to answer for its own box.
+
+The preview is also a ROW rather than a banner: an `aspect-video` block at the
+top of the dialog was ~270px of picture that pushed every field below the fold
+and made the form look like it had none. Beside the metadata it says the same
+thing in a third of the height, `object-contain` on a muted ground so the whole
+image shows rather than a crop of it.
+
+**Download** is `?download=1` on `/uploads/[file]`, and `contentDispositionFor`
+takes a `force` argument rather than a widened kind test. The two questions are
+different — "is this a thing we embed" is about the FILE, "did someone press
+Download" is about the REQUEST — and collapsing them would make every image on
+the public site serve as an attachment. Same function, so the RFC 6266 filename
+scrubbing a DOCUMENT gets is not bypassed by the new path; two tests say so.
+
+### A news section with news in it
+
+Module 15 shipped one sample article, which loaded the editor and left `/news`
+looking broken: the spotlight only renders above `SPOTLIGHT_COUNT` visible
+stories, the per-category bands come from `getCategoryDigests`, and
+`loadArticleFacets` drops a zero-count category (ADR-081 #3) — one row exercised
+none of it.
+
+`prisma/seed-articles.ts` is a twelve-piece corpus across all four categories
+and both surfaces (`/news` is `NEWS`; `/analysis` is `ANALYSIS` + `TRADE_IDEA`,
+so a corpus of one kind would have left the other page as empty as before).
+`create`-only on the translation slug, like the sample above it, so a re-seed
+adds what is missing and never touches an edited row.
+
+**It is illustrative, not reportage**, and that is a rule the file states rather
+than a tone it happens to have: no article quotes a real person, attributes a
+statement to a real institution, or prints a price as though it were today's.
+These rows ship in a database. Every number in them is framed as an example.
+
+No covers, deliberately: the cards already have a kind-toned fallback built for
+exactly this, and twelve pieces of invented stock art would be twelve decisions
+the design did not ask for.
+
+### The logos
+
+`apps/web/public/brand/logo-light.png` and `logo-dark.png` — the owner's marks,
+seeded as `BrandAsset` rows so every `BrandLogo` on both surfaces stops falling
+through to its text fallback.
+
+Static files, **not** `MediaAsset` rows, and the distinction matters: a
+MediaAsset row asserts bytes exist in the storage driver's root, which is
+git-ignored, so a row pointing at a file nobody checked out 404s in every picker
+that lists it — the trap changes-28 recorded for the video-topic covers. A
+static path is the shape `site.faviconUrl` and `seo.defaultOgImage` already
+seed. `create`-only per slot, so an admin's own upload survives a re-seed.
+
+The two `.jpeg` marks in that folder are not seeded: `BrandAssetKey` is a closed
+set of three (`logo_light` / `logo_dark` / `favicon`) and a JPEG with a white
+ground is not a favicon. Inventing a key for them is a schema change, not a
+seed.
+
+### Tests
+
+2126 in apps/web (25 new — `admin-toolbar-conventions.test.ts`), 49 in
+`@repo/core`'s media suite (two new on the forced disposition), 435 in
+`@repo/ui`, 34 in db, all green. Typecheck and lint clean; `pnpm db:seed` run
+against a live database — 12 articles and 2 logos created, and a second run is a
+no-op.
+
+**Owed to Module 14**: an E2E for the tab strip that asserts what this change is
+actually about — that the heading and the strip are the SAME DOM nodes after a
+tab click. A unit test can see where a strip is declared; only a browser can see
+that it survived.
+
+## 2026-09-15 — changes-32: a squarer public site, and a search that finds things
+
+**Module 07 / 12 / 11 / 05 / 01.** The last two owner asks, and both turned
+into a rule rather than a patch — ADR-107 for the radius, ADR-108 for the
+search.
+
+### The pill was half-removed, and `rounded-2xl` was never on the scale
+
+> use the square radius on the public site..do not use round button,menu or any
+> other places,,also check the sizing & radius etc..should be consistant
+> everywhere
+
+Three problems named in one sentence, and only the first is about taste.
+
+**The pill.** ADR-101 §5 established the tailored 6px rectangle in changes-31
+and took `shape="pill"` off the home hero, the video rail and the connect
+band — leaving it on **thirty-four** other public call sites. So the same
+button was a pill on `/about` and a rectangle on `/`. "It stays available and
+stays a deliberate choice" is exactly how that happened, so the variant is
+DELETED rather than unused, and `SkeletonButton`'s `shape` with it. The `shape`
+axis stays with one member: a future shape should be an entry, not a rebuilt
+axis.
+
+**`rounded-2xl` is not a radius, it is a number.** `globals.css` derives four
+steps from the admin-set `--radius`, and `rounded-2xl` is Tailwind's own 16px
+literal that moves with nothing. It was on 27 files, almost all public cards,
+so an admin who set a 2px `radiusBase` still got 16px corners on every public
+page and 8px in the admin. That is not a styling preference — it is
+code-style.md #28's rule about settings nothing reads, one layer down: the
+control was a decoration.
+
+**`rounded-full` was doing two unrelated jobs.** A badge, a view chip, a
+mega-menu item, a filter chip, a section-nav item, a quiz answer — rows of text
+with horizontal padding, none of them circles. The rule now is **geometry, not
+content**: `rounded-full` is for a square box, a capped track, a switch or
+radio knob, a status dot, a decorative rule. `CountBadge` is the stated
+exception and keeps it, which is why the test is geometry rather than "does it
+contain text" — a count bubble is a dot with a number in it.
+
+Skeletons moved with their components (#4): half the `rounded-full` in the
+public tree was a `loading.tsx` standing in for a badge or a CTA that is no
+longer a pill, and a placeholder in the wrong shape is a layout shift, which is
+the one thing a skeleton exists to prevent.
+
+`apps/web/app/radius-scale.test.ts` fails on any radius above `xl` and on a
+`shape="pill"` coming back. `public-design-system.test.tsx`'s
+"pill beats the size's radius" test is **deleted rather than repaired** — it
+pinned the behaviour of a variant that no longer exists — and replaced by its
+inverse: no size may declare a radius of its own, so the whole surface moves
+when `radiusBase` does. `docs/design-system/tokens.md` §4.1 is updated, since
+it is binding.
+
+### A search that searches
+
+> add the searchbar for the public site as well that can we access on any
+> page,content,can be use by ctrl+k
+
+The public header had a magnifying glass linking to `/news`, behind
+`header.showSearch`, seeded **false** — correctly, because a global-looking
+search that only finds articles is worse than none. ADR-108 is the backend, and
+three decisions in it are worth reading.
+
+**Visibility composes the page's own rule, never a fresh one.** Every query
+uses `publicArticleWhere`, `publicGlossaryTermWhere`, `publicCourseWhere`,
+`publicLessonWhere`, `publicQuizWhere` or `scheduledVisibilityOr` rather than a
+`status: PUBLISHED` typed into the new file. That is the whole security
+argument and it is structural rather than careful: a search with its own idea
+of "public" is a way to discover drafts by typing, and it would have drifted
+the next time a schedule rule moved — ADR-071 moved five of them in one PR.
+A lesson additionally needs a published section and a visible course, the same
+rule `Course.lessonCount` counts by (ADR-081 #2), so search cannot offer a link
+the curriculum does not.
+
+**The test suite found the design bug, which is the point of writing it
+first-ish.** Matching `simpleExplanation` — rich text since ADR-069 — with a
+`LIKE` is wrong in BOTH directions: it misses "bid and ask" when the source is
+`<em>bid</em> and ask`, and it matches a reader searching for "strong" against
+every term that emboldens a word. So rich text is **shown, never matched**: the
+query hits plain columns and the rich ones only supply an excerpt, stripped.
+Both halves are now guarded.
+
+**`%` is a wildcard.** `sanitizeQuery` strips `%`, `_` and `\` before the
+`contains`, because one typed character should not turn the palette into a
+table dump. Prisma parameterises the value — this is not an injection defence,
+it is a "one keystroke must not scan every table" defence. Two bounds either
+side: a 2-character floor and a 100-character ceiling, in `@repo/contracts` and
+enforced again in the service, because the client must not be the only thing
+that knows.
+
+Flags gate at the ROUTE, not in the service, against an ANONYMOUS subject — the
+right argument and not a shortcut, since the endpoint reads no session, so an
+AUTHENTICATED-scoped flag correctly hides its section and a signed-in reader
+sees the same public corpus. A disabled section is ABSENT, not unreachable.
+
+40 requests per IP per minute, and `private, no-store`: the corpus is public,
+but a shared cache keyed on strings readers typed is a log of what readers
+type, held somewhere nobody is looking after it.
+
+**The shortcut is on `window`, not on the button.** The trigger has two forms —
+an icon below `md`, a labelled box with the key cap above it, because printing
+the shortcut is the only way a reader learns it exists — and neither gates the
+listener.
+
+`header.showSearch` now seeds **true**, and
+`20260915180000_enable_header_search_changes32` flips it for a database that
+already exists — bounded to rows still holding the seeded `false`, for the
+reason the two data migrations before it record: the settings upsert never
+touches `value`, so a seed change reaches a fresh install only.
+
+### Tests
+
+376 in contracts (six new on the query bounds), 435 in `@repo/ui`, 2131 in
+apps/web (four new — `radius-scale.test.ts`), 12 new integration tests in
+`@repo/core` against a real MariaDB, 34 in db. All green. Typecheck and lint
+clean across contracts, core, db, auth, ui and web; `check:phantom-deps`,
+`check:catalog-completeness` and `governance:check` OK. `pnpm db:deploy` run
+against a live database and `header.showSearch` verified `true`.
+
+**Owed to Module 14**, extended by two: axe over the open palette, and an E2E
+that types into it. The visibility rules are covered by integration tests; the
+keyboard path is not, and it is the half the owner actually asked for.
+
+### One unrelated repair, because it blocked the report
+
+`pnpm lint` was returning 10,518 errors on any machine that had run the E2E
+suite. `tooling/eslint-config/base.js` ignored `**/.next/**` and not
+`**/.next-e2e/**` — the harness's own build output, which `playwright.config.ts`
+points `NEXT_DIST_DIR` at so `pnpm e2e` and `pnpm dev` can run at the same time.
+It is git-ignored, so it never showed up in a diff; it was simply linted.
+
+One line, and pre-existing since changes-20 Phase 5. Fixed here rather than
+noted, because "lint is clean" is a claim this entry makes and CI's
+lint → typecheck → test → build order would hit it the first time a build
+landed before a lint.
+
+## 2026-09-15 — changes-33: a section withdrawn, a footer that says who we are, and a reveal that goes both ways
+
+**Module 12 / 08 / 07 / 05 / 01 / 13.** Twelve owner asks. Four became ADRs
+(109–112) because four of them reverse a decision this repository had already
+written down; the rest are the swaps and fixes the registries were built for.
+
+Four readings were confirmed with the owner before any code, because each one
+changed what the work WAS rather than how it was done: About goes and Support
+stays; the banners fill section mastheads; "Sitemap" is a page, not
+`sitemap.xml`; and "two-way" means the reveal plays out and in again.
+
+### The About section had one page worth keeping
+
+> remove the about section on the public site & all pages that has been used
+> in that … and follow this support page
+
+ADR-047 built five About pages in changes-09, and its §2 laid down the rule
+that made shipping them defensible: **an empty collection renders NOTHING**.
+Then `ABOUT_FACTS` was never filled in. Every one of its seven collections is
+still `[]` and `foundedYear` is still `null` — the rule working exactly as
+designed, and also a verdict. What rendered was catalog prose about ourselves
+with the factual half missing, and ADR-051's invented dataset behind a switch
+was a second answer to the same question that nobody turned on.
+
+So ADR-109 deletes the section and keeps the one page a reader actually
+arrives at with a question, at `/support`, with no section bar above it — a
+strip of one tab is chrome that tells the reader nothing, which is ADR-076
+§1's own rule applied to a section that is now a single page. The shape is
+the owner's reference: a lead panel beside a dense grid rather than five
+full-width bands, and a FAQ answering the five questions support receives.
+`SUPPORT_CHANNELS` carries ADR-047 §2's rule forward unchanged, still empty,
+so the "here is how to reach us" band is absent rather than placeholdered.
+
+`/markets` went in the same ADR and for a plainer reason: changes-25 built
+`/tools`, changes-32 took Markets off the homepage carousel, and what was
+left was a header entry leading to a page that says a section is being built.
+
+**Un-reserving the two segments is load-bearing, not tidying.**
+`check-reserved-paths.mjs` fails a reservation with nothing behind it, but the
+real reason is `resolvePublicPage`: it returns not-found for a reserved first
+segment **before** it consults the redirect table. `/about/support` →
+`/support` could not have worked while `about` was still reserved. Six
+redirects are seeded and only one of them is a move; the other five go to the
+nearest true page rather than to a 404, which is what changes-22 built
+`ComingSoon` for.
+
+The seed DELETES the superseded menu rows by `routeKey`, which is safe in
+exactly the way overwriting a settings value is not: a row whose key is not in
+`ROUTE_PATHS` cannot resolve to a URL at all, so leaving it preserves nothing.
+
+### A footer that can be read by a regulator
+
+> add this info in the seeder: Trading risk Disclaimer … Company registration
+> number … Registered address … © 2026 MBFX Global Limited
+>
+> Terms / Privacy / Agreement … should be dynamically add from the admin site,
+> when click on that pages then the pdf file should be visible on new tab
+
+The disclaimer and the copyright line existed with placeholder text; the
+registration number, the address and the documents did not exist at all.
+
+**The registration number and the address are their OWN settings**, not two
+more sentences inside the disclaimer: the footer prints them as separate
+lines, a translator handles an address differently from a paragraph of risk
+prose, and either can be read alone by a page the disclaimer does not appear
+on. Both may be empty, and then neither line renders — a label over nothing is
+a worse claim than saying nothing.
+
+ADR-110 is the documents, and three decisions in it are worth reading.
+
+**The public address is ours.** `/legal/terms`, not a link to the stored file.
+An admin swaps the PDF and every link ever printed still resolves; the URL is
+shareable and indexable; and no storage key is published in the page source of
+every page on the site.
+
+**The setting holds a PATH and the route branches on `/uploads/`.** A seeded
+install points at a committed file under `public/legal/` and the route
+redirects to it; an admin's upload points at the storage driver and the route
+streams the bytes. The committed-file half follows the precedent changes-32
+recorded beside the brand logos: a MediaAsset row asserts bytes exist in a
+git-ignored directory, so a seeded row 404s in every picker on a fresh clone.
+External URLs are refused, with the same negative lookahead
+`internalPathSchema` carries — `//evil.example` passes every naive
+`startsWith("/")`.
+
+**`/legal/[doc]` is the ONE route that serves an uploaded file inline.**
+ADR-034 §1's attachment default is unchanged everywhere else, and
+`legal-documents.test.ts` asserts that too: `/uploads/[file]` still sends every
+DOCUMENT as an attachment, because nothing there knows the file was asked for
+on purpose. Here it was — the reader clicked a link labelled "Privacy" — and
+the exception is defensible only for a format browsers render in a sandboxed
+viewer of their own, so the MIME **recorded at upload** decides. A setting
+pointed at a `.docx` 404s rather than getting a PDF header over bytes that are
+not one.
+
+`DOCUMENT` is a new `SettingType` rather than a widened `IMAGE`: an image
+field's whole affordance is the preview, and a thumbnail of page one of a
+forty-page agreement tells an admin nothing. `DocumentPickerField` has no
+upload of its own — the picker it opens already uploads, and a second path
+would be a second set of size limits and a second place for the category to be
+wrong.
+
+**`/sitemap` is a page for a person.** Built from the footer's own
+`footer.menuColumns` and `buildMenu`, so it inherits every rule that comes with
+them — a flag-off section prunes, an empty column disappears, an admin's
+reordering shows up here too. A second hand-maintained list is how a sitemap
+ends up advertising a page deleted two releases ago.
+
+### The reveal goes both ways now, and the header arrives with the page
+
+> the late loading effects should be 2 way … the menu should also show the late
+> loading for the whole site
+
+ADR-104 is three weeks old and chose the opposite. ADR-111 records this as a
+trade made the other way rather than as a discovery that ADR-104 was wrong —
+its argument about a paragraph dimming while a reader re-reads it is still the
+argument, and it is why the progress-driven `timeline` path is still a
+separate, opt-in effect.
+
+**Two thresholds, and the asymmetry is the design.** Arriving needs the
+element's threshold; leaving needs `intersectionRatio === 0`, gone completely.
+A single threshold has a failure run-once could never reach: an element taller
+than the viewport can never show 15% of itself, so it would fade out from
+under a reader still in the middle of it. Both ratios have to be in the
+`threshold` array, because that array is the set of ratios that fire a
+callback, not a filter applied to one. `rootMargin` becomes symmetric for the
+matching reason — the one-way `0 0 -10% 0` did nothing on the way up, so an
+element re-entering through the top snapped in at the viewport edge.
+
+**The header's entrance is an ANIMATION, not a `.reveal`**, and not for
+convenience: the header is sticky and never leaves the viewport, so the
+observer would add `.is-visible` on the first frame and never remove it. It
+sits on the `<header>` inside `StickyHeaderShell`, never on the shell — a
+transform on the sticky element's own wrapper is how a sticky bar stops
+sticking.
+
+One consequence worth knowing: a `delay` is a `transition-delay`, which CSS
+applies in both directions, so a staggered row un-staggers on the way out too.
+That reads correctly, and it is the reason `RevealGroup`'s `maxDelay` cap
+matters more than it did.
+
+### The tools strip, and the view-all that never was
+
+> when we click on any tools then its appearing the submenu for the tools —
+> remove that
+
+At 1440px, eight tool names do not fit. The bar scrolled sideways with a
+scrollbar under it, so opening one calculator put a second navigation bar
+across the page whose only information was which tool you had just chosen.
+
+ADR-112 drops it and narrows ADR-076 §1 rather than repealing it: a section
+bar is for surfaces that are DIFFERENT KINDS of thing, which a reader moves
+between while doing one task. Four learning surfaces qualify; eight
+calculators, used one at a time, do not. The layout survives because the
+`<main>` landmark is why it exists — without it axe reports a MODERATE
+`region` violation, which slips under the serious/critical gate.
+
+**Writing the test for that surfaced a latent bug.** The Tools mega panel has
+declared `viewAll: "tools"` since ADR-086 §9 and the footer has never once
+rendered: `resolveMegaMenuPanel` resolves that key against the panel's own
+CHILD ROWS, and the seeded tools tree has eight children, none of them
+`tools`. The About panel worked because its seed listed `about` as its own
+first child. Nothing failed, because `viewAll` is optional and an unresolvable
+one is indistinguishable from an absent one. Deleted rather than fixed with a
+ninth seeded row: the three columns already list every tool, so "View all"
+would lead to an index of the same eight.
+
+### A curriculum that says which section is which
+
+> improve the styling for this curriculum lessons — should be more colourful,
+> visible, add badges etc
+
+Three sections rendered as three identically-weighted white cards, and the only
+thing telling them apart was reading the titles — while the timeline INSIDE
+each card already said "in this sequence". So the header now carries the
+ordinal, the title at `text-base font-semibold`, and the count as a chip; the
+lesson rows get a hover ground and a hairline between them so a reader can see
+where one ends.
+
+**One accent, not a palette.** Cycling a hue per section would be decoration
+that looks like meaning: this design system spends `success`/`warning`/`info`
+on difficulty and on lesson state, and a third unrelated use on the same pages
+is how a reader stops trusting any of them. The count chip is `pill`, the
+neutral card-metadata variant, for the same reason — a lesson count is not a
+status. `curriculum-list.test.tsx` pins both, and ADR-082's two structural
+rules (the marker outside the anchor, nothing positioned between the title and
+the `<li>`) are untouched and still guarded.
+
+### The hero painted one picture and then swapped it for another
+
+> when home page is loading first load something else image then showing the
+> video — remove that image
+
+The `<video>` carried `poster="/hero-app-mockup.jpg"` — a picture of the app,
+not a still from the footage. So the band painted a photograph, held it, and
+replaced it with something unrelated. A swap between two unrelated images
+reads as a bug, and it is the one the owner reported. `home-media.ts`'s own
+`TODO(owner)` had already named it.
+
+Extracting a real still would be the other fix and is still the better one;
+nothing in this toolchain can decode the H.264 (the only ffmpeg on hand is
+Playwright's, built webm-only). So the poster is gone and the band carries a
+solid `--secondary` fill — the same token the scrim above it fades FROM, so
+the hero is one coherent dark panel from first paint and the footage arrives
+INTO it rather than replacing something. The guarantee the suite exists for is
+unchanged: the 8.8 MB is still off the critical path, and that was always
+`preload="metadata"` plus a post-hydration `play()`, never the poster.
+
+### The owner's photography, in eleven slots
+
+> add the banners to all places … replace the news & analysis image from The
+> platform
+
+`scripts/import-owner-art.mjs` turns the supplied files into committed WebP —
+the same job the four `generate-*-art.mjs` scripts do for vector panels, for
+photography instead. The sources live under `storage/uploads/**`, which is
+git-ignored, which is exactly why the OUTPUT is committed and why this is not
+part of any build.
+
+Every placement was then a one-line edit in an area's own `_content/*-media.ts`,
+because ADR-047 §3's pattern is what it was built for. Two things did need a
+decision:
+
+**A masthead and a card cover cannot be the same file.** `LEARN_TRACK_MEDIA`
+was one entry doing both jobs, which worked while both were generated panels
+with nothing in them to crop badly. The owner's photography is 3:1 and has a
+subject, so `object-cover` into a card box crops the subject out and a 4:3
+cover across a 1920px masthead is upscaled. `LEARN_TRACK_BANNER` is the second
+registry, typed as the same total map so a third track is a type error until
+its banner exists.
+
+**`unoptimized` now follows the FILE.** It was unconditional on the three
+backdrop components, as the alternative to `dangerouslyAllowSVG` in
+next.config — which would relax SVG handling for every image the app serves,
+admin-entered cover URLs included, to buy nothing on a few KB of vector. With
+photography in most slots an unconditional flag also means shipping a 1920px
+WebP to a phone, so it is `src.endsWith(".svg")`.
+
+The calendar's hero is the one slot that is a media COLUMN rather than a
+backdrop: it renders at 4:3 with no `object-cover`, so a 3:1 banner there is
+not cropped, it is STRETCHED. It gets its own 4:3 output from the same source.
+
+### Tests
+
+381 in `@repo/contracts` (the About guards replaced by their withdrawal
+inverse), 436 in `@repo/ui` (the run-once reveal test replaced by its inverse
+plus the tall-element case; six new on the curriculum header), 2089 in
+`apps/web` (14 new in `legal-documents.test.ts`). All green.
+`check:phantom-deps`, `check:permission-keys`, `check:catalog-completeness`,
+`check:home-sections`, `check:email-templates`, `check:reserved-paths` and
+`governance:check` all OK.
+
+**Owed to Module 14**, extended by three: an E2E that follows each footer legal
+link and asserts an inline PDF; axe over `/support` and `/sitemap`; and a
+reduced-motion pass over the two-way reveal (the escape is unit-tested, the
+rendered behaviour is not).
+
+### Verified against a running build, not only against the suite
+
+`next build` clean, then `next start` and a Playwright pass over the
+production server:
+
+- all four withdrawn paths land where ADR-109 says (`/about`, `/about/why-us`
+  and `/about/support` → `/support`; `/markets` → `/tools`). **They arrive as
+  CLIENT redirects, not 3xx**, because Cache Components flushes the static
+  shell before the dynamic segment resolves and the status is already sent —
+  a `curl` sees 200 with `NEXT_REDIRECT;replace;/tools;308;` in the payload.
+  Worth knowing before anyone writes a redirect assertion against a status
+  code.
+- `/legal/terms` returns 200, `application/pdf`, no `Content-Disposition`, and
+  4.5 MB of real `%PDF` bytes, from a footer link carrying
+  `target="_blank" rel="noopener noreferrer"`.
+- `/tools/position-size` has ONE `<main>` and no section bar.
+- The reveal replays: 9 of 18 `.is-visible` at the top of `/support`, 4 at the
+  bottom, 9 again on the way back.
+- **Twelve public routes at 390px, every one with `scrollWidth === clientWidth`.**
+  That is the owner's "check the responsiveness of the whole site" answered
+  with a measurement rather than an opinion. The two elements that measure
+  past the viewport are `reveal-end` bands resting 1.5rem toward the inline
+  end, which `overflow-x-clip` on the content wrapper contains — the case
+  `layout.tsx` already documents.
+
+### One unrelated repair, found while verifying
+
+Every page render was throwing next-intl `INVALID_KEY`:
+`admin.settingOptions` held `"site.defaultThemeMode"` and
+`"security.adminSessionTimeout"` as FLAT keys, and a dot is how next-intl
+expresses nesting. It came in with ADR-105 #7 (changes-32, uncommitted) and
+cost nothing visible — `t.has()` returned false, `optionLabel` fell through to
+`humanizeKey()`, and the SELECT still showed words — so the only symptom was
+an error in the dev overlay and in the server log on every request.
+
+Nesting the two objects fixes it with no change to the lookup:
+`settingOptions.${key}.${option}` resolves `settingOptions.site.defaultThemeMode.light`
+either way. `apps/web/app/catalog-shape.test.ts` is the regression test, and
+it runs over all four catalogs — nothing else catches this shape, because
+TypeScript sees a `Record<string, ...>` in both cases and
+`check:catalog-completeness` compares key SETS, which are identical.
+
+## 2026-09-16 — changes-35: the support page the reader needed, and a second door with no subject
+
+**Module 12 / 17.** One owner ask, one ADR (113), because it reverses a page
+composition this repository wrote down eight days ago and amends a sentence in
+another ADR that was load-bearing.
+
+> https://mbfx.co/support — make support page like that. add support form.
+> when click on live chat it should redirect to whatsapp page, email popup the
+> email app option & click on phone support ask the option. should be same
+> text, same format, same question & answer.
+
+### The gate worked, which is why the page was broken
+
+ADR-109 built `/support` from the reference's SHAPE with its own words, and
+carried `SUPPORT_CHANNELS` forward empty with a `TODO(owner)`. ADR-047 §2 rule
+1 then did exactly what it says: an empty collection renders nothing, so the
+"Ways to reach us" list never drew.
+
+The result is worth stating plainly, because it is the second instance of the
+same shape in two change-sets. `/support` exists so a reader with a question
+can ask it. It shipped with no channel, no form and no address — and it looked
+finished. That is precisely what the previous DEVLOG entry called a verdict on
+`ABOUT_FACTS`, reproduced one page later. **A data gate on a collection nobody
+is going to fill is not a gate; it is an outage with good manners.** The rule
+is right and stays. What was missing is the data, and a test that fails when
+the data goes away again.
+
+### Five bands, in the reference's order, and the order is an argument
+
+Hero → How Can We Help? → Frequently Asked Questions → Still Need Help? →
+Coming Soon. The `help`, `selfServe` and `cta` bands are gone with their
+catalog keys, and `hero-actions.tsx` with them — the reference's hero has no
+buttons and nothing else imported it.
+
+Channels first because a reader who already wants to phone should not scroll
+past seven FAQ items to find the number; the FAQ next because it is cheaper
+for both sides than a message; the form is the fallback its own heading calls
+it. The three cards do what the owner asked: `https://wa.me/+447822035609`,
+`mailto:support@mbfx.co`, `tel:+18445880522`. The hrefs are built in the facts
+file so that the one thing a reviewer has to check about an anonymous outbound
+link — its scheme — is in one place, and only the off-site one carries
+`rel="noopener noreferrer"`, because `mailto:` and `tel:` open no document.
+
+"Coming Soon" links what exists rather than copying four dead buttons: Help
+Center → `/glossary`, Video Tutorials → `/learn/forex/videos`, Phone Support →
+`tel:`, Community Forum static. Each linked card is flag-checked against an
+anonymous subject, and a flagged-off section goes static rather than absent —
+the heading already says the word.
+
+### The FAQ left the catalog, and that is code-style #2 being kept, not bent
+
+The seven answers carry a $10 minimum, 1:100 leverage, MetaTrader 5, a
+15-minute-to-24-hour processing window and GMT+2. Every one is a claim about a
+brokerage. ADR-047 §2 rule 2 says facts do not live in message catalogs, and
+`SupportChannel.availability` has carried that reasoning for opening hours
+since the file was written: a wrong translation of a fact is worse than an
+untranslated one.
+
+So `SUPPORT_FAQ` is in `support-facts.ts` and everything the band SAYS ABOUT
+ITSELF — heading, lead, card titles, button labels, every form label and
+placeholder, all four result messages — is in `en.json`. The split is: how
+support works is interface text and is translated; what we charge, pay out and
+run on is the owner's. A guard asserts the answers hold no markup, which is
+what makes `FaqPanel format="text"` correct for them.
+
+### A second mutation with no subject
+
+ADR-080 #3's "signup is the ONE anonymous public mutation" was not decoration
+— it meant every defence against an unknown caller fitted in one file. There
+are two now, and the second is built to be read the same way.
+`_actions/support.ts` opens by naming the five parts that replace the
+`requirePermission()` it cannot have: a recorded inbox (checked first, so an
+unconfigured install spends nobody's rate-limit budget), a honeypot, the
+schema, a per-IP limit and a per-address limit.
+
+Two things make it narrower than signup rather than wider. **It stores
+nothing** — no model, so no table an attacker can grow; the `EmailDelivery`
+row is what survives, and it holds no body and no variables (ADR-078 #5). And
+**`to` comes from the facts file**, never from the request, which is the one
+property to preserve if that file is ever edited — `support-page.test.ts`
+asserts it directly, and also that a `to` posted with the form is ignored.
+
+The honeypot is `company`, deliberately not signup's `website`: a bot that
+learns to skip one should not thereby pass the other. **A third endpoint of
+this shape needs its own ADR**, and the guard is real rather than a sentence —
+the test enumerates `_actions/*.ts` holding a honeypot constant, the one thing
+only a subject-less mutation needs, and fails on a third.
+
+### One thing found while building it
+
+`check:email-templates` compared the two KEY lists and nothing else.
+`emailTemplateSaveSchema` refuses an undeclared variable when an ADMIN saves a
+body — but the seeded defaults never pass through that schema, so a typo in
+`email-template-defaults.ts` reaches a real inbox as literal `{{braces}}`, and
+"Reset to default" puts it back afterwards. Five variables in one template is
+what surfaced it.
+
+The script now runs the same comparison one level down: every `{{name}}` a
+default body uses must be declared by its registry entry, and every variable
+the entry marks `required` must appear. It strips comments before chunking —
+without that, the prose explaining `{{contact.message}}` above the support
+entry was attributed to `newsletter.welcome` above it, which is a good
+reminder that a parser reading source has to be told what source is. Verified
+in both directions by renaming `contact.message` to `contact.mesage` and
+watching it fail twice, once for each rule.
+
+`support.request` is the one template whose recipient is us, so it is
+`audience: "staff"` and renders in English (ADR-043 #2) rather than in the
+visitor's locale — translating a Spanish reader's report into Spanish would
+translate it away from whoever has to act on it. The locale is printed as
+`{{contact.locale}}` instead, so nothing the form submits is dropped.
+
+### Tests
+
+394 in `@repo/contracts` (13 new in `support.test.ts`), 34 in `@repo/db`, 74
+in `@repo/email`, 2137 in `apps/web` (16 new in `_actions/support.test.ts`, 27
+new in `support-page.test.ts`). All green. `check:email-templates` — now with
+its variable comparison — `check:phantom-deps`, `check:permission-keys`,
+`check:catalog-completeness` and `governance:check` all OK; lint and typecheck
+clean across `web`, `contracts`, `core`, `db` and `email`.
+
+### Verified against a running app, not only against the suite
+
+Seeded, then driven with Playwright against the dev server:
+
+- **The five bands render in the reference's order** with the seven questions,
+  and the three deleted bands leave nothing behind.
+- **The three channels resolve**: `https://wa.me/+447822035609` (new tab,
+  `rel="noopener noreferrer"`), `mailto:support@mbfx.co`, `tel:+18445880522`.
+- **A real submit produced exactly one delivery row** — `support.request`, to
+  `support@mbfx.co` (the facts-file inbox, not anything posted with the form),
+  `locale: en`, subject `Support request: Verification run`, `SENT`. Worth
+  noting for anyone writing the owed E2E: **`email_deliveries` has no body or
+  variables COLUMN at all**, so ADR-078 #5 is structural rather than a
+  convention to assert. Mailpit stayed empty because the seeded transport is
+  `LOG`; the row is the assertion, not the mailbox.
+- **390px: `scrollWidth === clientWidth`** on `/support`, the changes-33
+  standard.
+- The submit control is enabled before anything is typed (code-style #24).
+
+**One repair the browser found and the suite could not.** `Button` passes
+`nativeButton={false}` whenever `render` is given — correct, since every call
+site renders a `<Link>` — and Base UI then stamps `role="button"` on the
+anchor. Across the site that is a cosmetic inaccuracy. On these three it is a
+false statement: all of them LEAVE, to WhatsApp, to a mail client, to the
+dialler, and a screen-reader user was told "button". The three carry an
+explicit `role="link"` with the reasoning inline. **Fixing it inside `Button`
+would change every `render={<Link/>}` on the public surface and is its own
+change** — noted here rather than done quietly.
+
+**One pre-existing problem found, not fixed, because it is not this change's.**
+Every public route logs a React hydration attribute mismatch — `/support`,
+and equally `/glossary`, `/news` and `/tools`, which this work never touched.
+The component stack points inside `Reveal` under `PageHero`, i.e. every public
+masthead. It predates this change-set and wants its own investigation; it is
+recorded here so the next person does not rediscover it from scratch.
+
+**Owed to Module 14**, extended by three: axe over the rebuilt `/support`; an
+E2E that submits the form against Mailpit and asserts one `support.request`
+delivery row with no body recorded; and a 390px overflow measurement for the
+new bands, the standard the changes-33 entry set for public routes.
+
+## 2026-09-16 — changes-34: a calculator with its explanation beside it, and a calendar that found its menu
+
+**Module 13 / 12 / 09 / 11 / 08 / 01.** The three asks left at the foot of
+`changes-33-fixes-improvements-2.md` — the ones changes-33 did not reach. Two
+ADRs (114, 115), because both reverse something this repository had already
+written down.
+
+Three readings were confirmed with the owner before any code, since each
+changed what the work WAS rather than how it was done: the tools pass is the
+reference's full page rather than only its layout; the calendar MOVES into
+Tools rather than appearing in two places; and the market-hours timeline goes.
+
+### A tool page that can be read while it is being used
+
+> https://mbfx.co/tools/pip-calculator — overall the presentation should be
+> like this, the all calculators
+
+The reference's calculator sits beside its explanation. Ours sat above it,
+which put "what is a pip?" below the fold at exactly the moment it was wanted:
+while a reader looks at a field labelled "Trade size (units)" and decides what
+to type. `--grid-3-2` at `lg`, widget first in the DOM as well as on screen, and
+intro, body and FAQ in an `<aside>` beside it. No new data, no words moved —
+ADR-086 §9 put the band order in one file so that this would be one edit for
+eight pages, and this is that mechanism being used rather than worked around.
+
+**One thing had to change underneath it.** `WidgetLayout` split its inputs from
+its results at `lg:grid-cols-2`, which was right while the widget was the page's
+full measure and wrong the moment something moved beside it: at 1024px the
+inputs column comes out about 290px, which does not hold a currency combobox
+next to a result panel. It is a `@container` query now. "Do two columns fit
+here" is a question about the element, and the viewport only ever answered it
+by coincidence — `article-list.tsx` found the same thing in changes-19 and is
+the precedent the comment points at.
+
+### The benefits band is DATA, and the seed fills it
+
+The reference's second half is four icon-and-title cards: "Accurate
+calculations", "Multi-currency support". That is new content, so ADR-114 #3
+adds `ToolTranslation.highlights` — a JSON array of `{ icon, title, text }`, at
+most six, validated by `toolHighlightSchema`, edited in the tool editor beside
+the FAQ. ADR-086 #1 a second time within its own module: the band exists in
+code, every word in it is admin-editable.
+
+**The glyph is the one thing an admin does not get to type.**
+`TOOL_HIGHLIGHT_ICONS` is a closed list of twelve and the field is a combobox.
+`ToolSpec.icon`'s reason applies — `@repo/contracts` may not import
+lucide-react — plus one that only applies here: `ToolSpec.icon` is written by
+us in code and this is written by someone in a form, and an unrecognised name
+renders nothing, so the band comes back from a save with three cards and a gap.
+`parseHighlights` drops exactly the bad entry and keeps the rest, which is the
+behaviour a row of four wants; three cards beat an empty band.
+
+**The text is plain, and a test is what makes that correct rather than lucky.**
+Three lines under a glyph need no headings, tables or links, and a rich-text
+field would be a fourth surface to sanitise for formatting nobody would use
+well. `tools-highlights.test.ts` fails on a tag or an entity in either field —
+`support-page.test.ts`'s guard for `SUPPORT_FAQ`, same reasoning: a field the
+renderer prints verbatim must never hold something its author expected to be
+parsed.
+
+**And the seed fills it, in the same change as the gate.** Empty means the band
+is absent (ADR-047 §2 rule 1) — which is the rule that produced two outages in
+two change-sets, `ABOUT_FACTS` and then `SUPPORT_CHANNELS`. The rule is right.
+What was missing both times was the data and a test that fails when it goes
+away. So: four cards for each of the eight tools, and a guard that fails on a
+tool with no band, a glyph outside the contract, a card the save schema would
+reject, markup in either field, or a sentence that claims something about a
+broker or about what the market will do next.
+
+That last one earned its keep immediately. "Spreading the same risk across
+correlated markets concentrates it" is the correlation tool describing itself
+correctly, and a substring match on "spread" called it a claim about dealing
+costs. The phrase is "the spread" now — the cost, not the verb.
+
+**The migration carries no copy.** One nullable JSON column; `seed.ts` fills it,
+matching only rows where it is still NULL. NULL and `[]` are different facts
+here and the distinction is the whole backfill: NULL is "this row predates the
+band", `[]` is "an admin deleted every card", and a seed that overwrote the
+second would put four cards back on a page somebody deliberately cleared.
+Eight tools of English prose in SQL would also have been a second copy of
+`TOOL_SEEDS` that drifts from the first the moment a word changes.
+
+`TOOL_HIGHLIGHTS` lives in `seed-tool-highlights.ts` for `seed-articles.ts`'
+two reasons: it is starting CONTENT rather than seeding machinery, and a module
+can be imported by a test while a 5,000-line script cannot.
+
+### Market hours says what it knows, and stops drawing what it doesn't
+
+> also update the presentations of /tools/market-hours like this
+
+The page led with two form controls and closed with a 24-hour timeline, built
+in changes-25 T6 when the reference's page had nothing else on it. A reader
+there wants three facts — the time where they are, what is open, when the busy
+windows are — and a timeline is a picture that contains all three while stating
+none of them. It now leads with the clock and a list of session overlaps, and
+the timeline is gone.
+
+`sessionOverlaps()` joins `@repo/utils`' pure session clock and intersects each
+pair over the viewer's own day, on `sessionDaySegments`' three-candidate shift:
+a window is 24 hours and no session is longer, so the session shifted a day
+either way covers every case, including an overlap that straddles the reader's
+midnight. It inherits the DST correctness of everything around it — the
+London/New York window is 13:00–17:00 UTC in January and 12:00–16:00 in July,
+and it is four hours long in both, which a stored offset gets wrong twice a
+year. Pairs only, never triples: three sessions open at once is the Sunday
+shoulder and a handful of minutes, and a row that is true for less time than a
+reader spends reading it is not a fact worth printing.
+
+**The volatility wording is NOT copied.** "Highest volatility, all major pairs
+active" is a claim about the market; how many sessions overlap and for how long
+is arithmetic. ADR-088's discipline reaching the one tool that had escaped it by
+carrying no market data at all — and the guard reads the catalog, because it is
+a copy rule. It also has to read the widget through `code()`: the comment
+explaining why the page says "how long, not how volatile" uses the word, and as
+raw source it failed the rule it was describing.
+
+**The clock ticks in its own component.** `useClientSecond` is a deliberate
+exception to `use-client-clock.ts`'s minute — a marker that moves a pixel does
+not earn sixty renders a minute, and a clock that is up to 59 seconds behind is
+a clock that is wrong. `LiveClock` holds the subscription alone so the session
+arithmetic and every pairwise intersection stay on the minute, and the test
+asserts the hook does not appear in the widget body.
+
+### The calendar belongs to Tools
+
+> economic calendar should also be placed in the tools menu
+
+It had been a top-level header row since Module 13. `/tools` arrived later and
+took the eight calculators with it, leaving the header carrying two entries
+that are both "a thing you open to look something up". So it MOVES rather than
+appearing twice: a ninth child of the seeded Tools tree, in the **Timing**
+column beside market hours and pivot points, where the column heading is what
+makes it belong — all three answer "when". Eight top-level header entries become
+seven. The `footer_markets` row is untouched; a footer is a sitemap and
+repetition is its job.
+
+**It does NOT become a ninth `TOOLS` member.** `TOOLS` decides what a tool page
+IS — a registry key owning a URL segment under `/tools`, a config schema, an
+island, admin-editable prose, a related strip. The calendar has none of those:
+it is ADR-050's vendor iframe with our chrome around it, and a `Tool` row for it
+would mean a config schema for a thing with no configuration and an editor
+screen whose every field is blank. A menu is a list of destinations, and
+conflating the two would make `contracts/tools.test.ts` start lying about what a
+tool is.
+
+The `/tools` index appends it in the PAGE rather than in `getEnabledTools`,
+which reads the `Tool` table: teaching the service about a row that does not
+exist would make the admin list and the drift guard learn the same exception.
+
+**The seed's delete is scoped, and the scope is doing real work.** ADR-109's
+deletions could be broad because those routeKeys no longer resolve in
+`ROUTE_PATHS` at all. This one still does, and two other rows share it — the
+footer entry and the new Tools child — so it matches `[mainMenu,
+"economic-calendar", parentId: null]` and nothing else. Verified against the
+database after seeding: `footer_markets` root present, `main` child at sortOrder
+9, the old `main` root gone.
+
+### A latent guard that had stopped guarding
+
+Writing the calendar's panel test surfaced it. `tools-area.test.ts` sliced the
+tools panel out of `mega-menu.ts` between `"  tools: {"` and `'viewAll:
+"tools"'` — and ADR-112 deleted that `viewAll` in changes-33. `indexOf`
+returned -1, `slice(start, -1)` ran to the end of the file, and both assertions
+("names every registered tool", "names no tool twice") passed by reading every
+panel in it rather than the one they name. The end marker is the object's own
+closing line now, which cannot be removed without the panel going with it.
+
+Second instance of the same shape in two change-sets, after ADR-112's own
+`viewAll` finding: **a source guard whose anchor has been deleted does not
+fail, it widens.**
+
+### Tests
+
+278 in `@repo/utils` (8 new in `market-hours.test.ts`), 394 in
+`@repo/contracts`, 692 in `@repo/core`, 34 in `@repo/db`, 2166 in `apps/web`
+— 21 up on the 2145 this change started from: 8 new in
+`tools-highlights.test.ts`, and `tools-area.test.ts` from 33 to 46 (11 new,
+2 rewritten). All green. `check:phantom-deps`,
+`check:permission-keys`, `check:email-templates`,
+`check:catalog-completeness`, `check:home-sections`, `check:reserved-paths`
+and `governance:check` all OK; lint and typecheck clean across `web`,
+`contracts`, `core`, `db` and `utils`. Migration applied and seed re-run
+against the dev database: four cards on each of the eight tools.
+
+### Verified against a running build, not only against the suite
+
+`next build` clean, then `next start` and a Playwright pass over the
+production server:
+
+- **Thirty measurements, no horizontal overflow**: ten routes (`/tools`, the
+  eight tool pages, `/economic-calendar`) at 390px, 1024px and 1440px, every
+  one with `scrollWidth === clientWidth`. The standard the changes-33 entry
+  set, applied to the routes it did not cover.
+- The widget's container query does what ADR-114 #2 claims: `2` grid tracks at
+  1440px, `1` at 1024px, from `getComputedStyle` rather than from the class
+  list. The viewport-based version would have given two at both.
+- The clock ticks (12:15:28 → 12:15:31), and `/tools/market-hours` renders
+  three overlap rows with the current one marked.
+- The header's own hrefs are `/`, `/glossary`, `/analysis`, `/news`,
+  `/support` plus the three trees — no flat calendar row. The database agrees:
+  `footer_markets` root present, `main` child at sortOrder 9, old `main` root
+  gone.
+- The seeded band renders on every tool, its four cards read correctly, and
+  `/tools` shows nine cards.
+
+**One thing the render caught that no test would have.** The band's heading
+interpolated the tool's own title as `"Why use the {tool}?"`, which reads
+correctly for six titles and badly for two: "Why use **the** Forex Market
+Hours?" and "Why use the Currency Correlation?". The definite article is gone —
+without it every title reads as the product name it is. A grammar bug in an
+interpolated string is invisible to a type checker, to a catalog completeness
+check, and to a source guard; it took looking at the page.
+
+**Owed to Module 14**, extended by three: axe over a tool page in its
+two-column shape (the `<aside>` is a new landmark on eight routes); a 390px
+overflow measurement for `/tools/*`, which changes-33 did not cover and which
+is the standard that entry set; and an E2E that opens the Tools panel and
+follows the calendar row, since the seeded-tree half of ADR-115 is asserted
+against source rather than against a rendered header.
+
+---
+
+## 2026-09-16 — changes-35: the home page's four presentation bands (ADR-116)
+
+**Module:** 12 (public site), 07 (`@repo/ui`), 05 (`@repo/contracts`), 01
+(seed). Plan `docs/changes/changes-35-home-presentation.md`, reference
+`docs/changes/image-64.png`.
+
+### What the owner asked, and what the page actually was
+
+> make the home page data presentation like that after the The platform
+> section… the first The platform section is perfect, just need to make it the
+> smart way i mean reduce the space & size… then 2 columns… then 3 columns…
+> then 3 columns with centralized video… set news, analysis, glossary & tools,
+> questions in that format
+
+Below the platform band the page was **seven bands of one shape**: heading,
+lead, grid of cards, sometimes a button. `latest_news`, `latest_analysis`,
+`glossary_spotlight`, `popular_tools`, `testimonials` and `connect` differed in
+what they listed, not in how they presented it, so a reader scrolling past got
+no structural signal that the subject had changed. The reference's answer is
+not better cards — it is five different **compositions**.
+
+### What shipped
+
+| Band | Key                                        | Shape                                                             |
+| ---- | ------------------------------------------ | ----------------------------------------------------------------- |
+| A    | `explore_platform` (density only)          | 4-up carousel, "View all" in the heading row, arrows centred      |
+| B    | `latest_news` variant **`desk`**           | Lead story · hairline-cut 2×2 of analysis                         |
+| C    | `glossary_spotlight` variant **`feature`** | Heading + CTA · term carousel · **the term of the day**           |
+| D    | **`in_practice`** (new key)                | Quote · **video, vertically centred** · tools CTA + 3 tool rows   |
+| E    | `faq` variant **`columns`**                | Centred heading, 2-column accordion, "All questions" → `/support` |
+
+Page order ends `… in_practice → connect → faq → newsletter → quotes`:
+questions before the ask (ADR-116 §6).
+
+**`getTermOfTheDay` finally renders somewhere a reader sees it.** It has been
+built since changes-11 (D29) and no home band had ever called it — the day's
+term only appeared on `/glossary`, the page you reach once you already know you
+want a glossary.
+
+### Measured in a browser, not estimated
+
+| Viewport | Before            | After                | Change   |
+| -------- | ----------------- | -------------------- | -------- |
+| 1440px   | 8193px, 13 bands  | **6630px, 10 bands** | **−19%** |
+| 390px    | 13697px, 13 bands | **9652px, 10 bands** | **−30%** |
+
+`scrollWidth === clientWidth` at **both** widths — four new multi-column
+layouts and no phone overflow. Note the "before" column was measured with band
+A **already** tightened (its density is unconditional, not variant-gated), so
+the true saving against the pre-changes-35 page is larger than these figures.
+
+Structure confirmed live: three carousels with the right control shapes
+(platform 2 arrows / 0 dots · glossary 2 arrows / 0 dots · testimonials 0
+arrows / 3 dots), 4 analysis cells, 3 tool rows, 6 FAQ items in 2 columns, term
+of the day present, and `document.querySelectorAll("a button, button a").length
+=== 0` — ADR-068 §7's two-targets-never-nested rule survives the video tile's
+move into `in_practice`.
+
+### Three things the browser found that no test would have
+
+1. **The analysis panel left ~400px of dead page.** `items-start` is right for
+   a list beside a lead and wrong for a CARD beside one — the reference's 4-cell
+   card is exactly as tall as the feature next to it. The panel stretches now
+   and its two rows share the surplus (`flex-1` on the grid, not on a cell, or
+   the first row grows and the second stays put).
+2. **`leadRatio` was a prop solving a problem that did not exist.** 21/9 reads
+   as a letterbox at full width; in a 770px column it is a 330px cover — an
+   ordinary feature proportion, and the thing that makes the two columns land at
+   the same height. The prop was **deleted before it shipped** (code-style #28);
+   `leadSizes` stayed, because `100vw` on a 55% slot is real wasted bytes on the
+   largest image on the page.
+3. **The new FAQ q6 duplicated the existing q3 almost word for word** — "Is any
+   of this financial advice?" against "Is this financial advice?". Nothing
+   static catches this: no check compares two catalog VALUES for meaning. q6 is
+   now "What are the calculators for?", which the set did not answer.
+
+### Decisions recorded in ADR-116 rather than in a comment
+
+- **§2 narrows a rule this repo wrote.** `latest-news.tsx` said news and
+  analysis had to be separate BANDS. What the argument actually requires is that
+  they stay _distinguishable_, and two identical 3-up grids 400px apart was the
+  weakest way to do that. They are now different columns at different sizes with
+  separate calls to action. `ArticleKind`, `/news` and `/analysis` are untouched.
+- **§3 is a new rule:** a band may compose several datasets when the
+  composition is the point, and it then degrades **per dataset** — never a
+  column heading over an empty column. `in_practice` has four rendered states;
+  all four are tested.
+- **§5:** `connect` dropped its video panel. Two different "featured" videos on
+  one page is the page arguing with itself. It is a single row now, and the one
+  `next/dynamic` boundary moved with the tile.
+
+### Absorbed, not deleted
+
+`latest_analysis`, `popular_tools` and `testimonials` are seeded
+`enabled: false` on the home page and keep their components, variants, catalog
+keys and registry entries. Re-enabling any is one word. **The cost is stated
+rather than hidden:** testimonials go from three visible at once to one at a
+time on a dotted rail, and three quotes are more persuasive than one — the trade
+is that three quote cards would have been the fourth 3-up grid on a page whose
+whole purpose here is to stop repeating a shape.
+
+`risk_disclaimer` is off too (changes-34's own item): the footer's legal band
+already prints the same text from `legal.riskDisclaimer` (ADR-110), so the home
+page was carrying a second copy of it two elements above the first.
+
+### New surface area
+
+`@repo/ui`: `--width-slide-4` and `--grid-home-browse` (17rem, not the
+reference's ~14 — its left column carries a heading and a button, ours also
+carries the lead, which came out four words wide at 14). `Carousel` gains
+`controls` (`arrows` | `dots` | `both`) and `controlsAlign` (`start` |
+`center`), both defaulting to today's behaviour so no existing call site
+changes; a one-slide track now renders no controls at all, and a dropped rail is
+**absent**, not `hidden` — `display: none` would keep eight dead buttons in the
+payload of a band that asked for arrows only.
+
+`@repo/contracts`: three variants added (none traded away) and `in_practice` in
+`HOME_SECTION_BUILT_KEYS`, deliberately **not** in `HOME_SECTION_VARIANTS` —
+what varies about that band is which of its three columns have data, and a
+variant list would offer an admin a choice the band does not have.
+
+**25 new `home.*` catalog keys**, `en.json` only (ADR-043/ADR-091: `home` is
+public, only `en` is active). Two were dropped during the work rather than
+shipped: `glossaryTermOfDayEyebrow`/`…Read` duplicated `glossary.termOfTheDay`
+and `glossary.readMore`, which already existed — one string a translator would
+have rendered two ways.
+
+### Tests
+
+2197 in `apps/web` (30 new in `_sections/home-presentation.test.ts`), 452 in
+`@repo/ui` (9 new in `carousel.test.tsx`), 394 in `@repo/contracts`, 34 in
+`@repo/db`. All green. `check:home-sections`, `check:catalog-completeness`,
+`check:phantom-deps` and `check:permission-keys` OK; lint and typecheck clean
+across `web`, `ui`, `contracts` and `db`.
+
+The new suite asserts three kinds of thing, and only the first is about layout:
+**degradation** (every band renders less, or nothing, rather than a hole),
+**registration** (`in_practice` in all four places a band must exist, and not
+the fifth), and **density** (band A's `spacing="sm"`, its 4-up token and its
+centred arrows — "reduce the size" was the ask, and a later well-meant edit
+restoring `spacing="lg"` should fail a test rather than be noticed three months
+on).
+
+### Owed to Module 14
+
+axe over the recomposed `/`; a Lighthouse budget re-run (the page mounts three
+carousels where it mounted two, and one fewer `VideoTile` than `connect` +
+`learning_videos` did at their peak); an E2E walking a reader from band A to
+`/tools` and from band C to a glossary term; and RTL smoke over the four new
+multi-column layouts.
+
+### For the owner, before this is called finished
+
+Three calls made on their behalf, each a one-word seed edit to reverse, all
+recorded in ADR-116 §7 and plan §11: analysis loses its cover images;
+testimonials lose simultaneity (the most debatable); tools lose their taglines
+here, keeping them in full on `/tools`. And one fact worth knowing before it
+surprises anyone: **band D's middle column needs a published video topic with a
+playable source.** Two exist in the seed corpus; an install with none gets a
+two-column band — correct behaviour, not a bug.
+
+**NOTE: the homepage rows are create-only.** An existing database needs
+`pnpm db:reset` (or a targeted `home.sections` update) to see any of this.
+
+## 2026-09-16 — changes-36: the banners come out from under the brand, and a footer that is a sitemap again
+
+**Module 07 / 12 / 08 / 05 / 01.** Four owner asks from
+`docs/changes/changes-34-fixes-improvements.md`. That file carries a note
+saying nothing in it is outstanding; the note is wrong, and how it got that
+way is worth one paragraph.
+
+changes-34 was created as a copy of changes-33's list and then **replaced**
+with a new one. The note at the top still describes the old contents, so it
+reconciles a list of eight items against three that are not in it. Four of the
+eight had genuinely shipped — the risk disclaimer left the home page with
+changes-35's `risk_disclaimer: false`, the reveal went two-way with ADR-111,
+the platform band got its density pass in changes-35, and search shipped in
+changes-32 (ADR-108). Four had not, and nothing had noticed:
+
+| #   | Ask                                                                       | State found                                          |
+| --- | ------------------------------------------------------------------------- | ---------------------------------------------------- |
+| 1   | "remove the yellow cover/shade on all banners"                            | nine mastheads under a `--primary` gradient          |
+| 3   | "remove favicon from the general"                                         | `site.faviconUrl` seeded, typed, and read by nothing |
+| 4   | "add all the available menu options in the footer… place all tools"       | 8 footer rows against 23 header destinations         |
+| 6   | "replace some title instead of coming soon… Community Forum with courses" | untouched since ADR-113                              |
+
+Two became ADRs (117, 118) because two of them reverse something this
+repository had written down. The other two are the registries doing their job.
+
+### The banner was the picture, at a quarter strength, under a wash
+
+`PageHero` has defaulted to `tone="brand"` since changes-09 — a full-band
+gradient from `--primary` to `--primary-active` — and it renders a `backdrop`
+at `opacity-25` beneath it. Both had good reasons. The gradient is the one
+large-area pairing ADR-003 guarantees legible and exactly what ADR-018 rule 5
+allows; the 25% ceiling was there because above it generated artwork started
+eating the contrast the tone had been checked for.
+
+Then changes-33 imported the owner's photography into nine of those
+backdrops. The default brand primary is `#C28D5A`, a warm tan, so every
+section front on the site opened on a yellow panel with a ghost of a
+photograph in it. Neither decision was wrong when it was made and the
+combination was indefensible — which is the whole failure mode a default
+has.
+
+ADR-117's answer is in three parts, and the second is the one that matters.
+
+**A `backdrop` now selects a new `photo` tone.** Not a tone name nine call
+sites each have to remember: a masthead that was given artwork is a masthead
+whose job is to show it, so that IS the default, and an explicit `tone` wins.
+The next photographic masthead cannot be added under a fill by forgetting
+something.
+
+**The legibility guarantee moves from a clamp on the picture to a scrim under
+the words.** This is the half the owner's sentence turns on — "also the text
+should be visible after remove the yellow shade" — and the reason it is
+answerable at all is that the scrim is built from `--secondary`, a fill the
+theme engine has derived an ink AGAINST. A text-shadow over an arbitrary
+photograph is a hope. `--secondary-foreground` on `--secondary` is a
+derivation, and it is what the homepage hero and the footer have been running
+on since changes-31.
+
+**The scrim's two shapes are the design.** A start-aligned masthead keeps its
+words in the inline-start half, so the veil is opaque there and clears
+**completely** on the other side — which is why a reader now sees the
+photograph rather than a tint of it. A centred masthead (`/support`) has copy
+across the full width and gets a vertical scrim instead. The start-aligned
+copy column is capped at `md:max-w-3xl` so a long headline cannot walk out of
+the opaque half; `text-balance` was keeping most titles inside it already, and
+this makes it a guarantee rather than a property of the words that happen to
+be there.
+
+**The brand colour moved from the band to the button.** Every masthead's
+primary action is the filled `Button` now — `--primary` with its own paired
+ink, a small element, ADR-018 rule 5's allowed case rather than its forbidden
+one. The second action takes a new `Button variant="inverted"`, which is the
+200-character class string the homepage hero, the footer's social buttons and
+the connect band had each written out by hand. Four copies became one variant.
+
+**A band with no artwork keeps `brand`**, and that is not a compromise:
+`/sitemap`, `/economic-calendar`, `ComingSoon` and the eight tool pages have
+nothing behind them and still need a surface the engine can pair an ink with.
+Verified live — all three still report `data-tone="brand"`.
+
+### A setting that saved successfully and changed nothing
+
+`site.faviconUrl` was seeded in Module 05, typed in `@repo/contracts`, grouped
+under General, rendered as an IMAGE field — and read by nobody. The favicon
+has been a `BrandAsset` since ADR-017: Theme → Logos & Favicons writes it and
+`faviconIcons()` reads it in both root layouts. So an admin could upload a
+file there, press Save, see it succeed, and change no page on the site.
+
+code-style.md #28 was written for exactly this and named this exact row's
+siblings (`seo.robotsIndex`, `seo.googleSiteVerification`, ADR-090). Deleted
+from the seed, from `SETTING_KEYS`, from `SETTING_GROUPS`, and from existing
+databases — unconditionally, which is safe in the way overwriting a value is
+not: the key is gone from the registry, so nothing can read it, and a row
+whose key no code knows is not a preference anybody can act on.
+
+Checked rather than assumed: a database that has the row but not the
+migration does not break the General screen. Every schema lookup in
+`settings-group-form.tsx` is behind `isKnownSettingKey()`, so the field still
+draws and the action refuses it by name — a save that fails loudly, which is
+strictly better than the save that succeeded and did nothing, and which the
+migration removes anyway.
+
+### The footer said it was a sitemap for two hundred days
+
+> add all the avaialble menu options in the footer.. like place all tools in
+> the footer
+
+The sentence at the top of the footer seed — "every destination the header
+offers has a footer row too" — has been there since Module 08. It stopped
+being true twice, in silence: **ADR-065** split Learn into two schools with
+four surfaces each, and **ADR-086** put eight calculators behind a single
+"Tools" link. By the time the owner asked, the header offered 23 destinations
+and the footer listed 8.
+
+Nothing caught it, because both lists were valid data. Every row resolved,
+every column rendered, and the only symptom was a reader who could not reach a
+calculator from the bottom of a page.
+
+Five columns now, mirroring the header's own top level: **Learn Forex** and
+**Learn Crypto** (four surfaces each), **Tools** (all eight plus the economic
+calendar), **News & Markets**, **Company**. 25 rows. `LINK_GRID_CLASS` in
+`footer.tsx` already answered for five and six — column COUNT has been data
+since it was written — so the only code change was the split of the twelve
+tracks: the brand block gives up one at five columns or more, because five
+inside 8/12 of 1400px is ~150px and "Currency converter" wraps onto three
+lines there.
+
+**`footer_learn` is no longer seeded, and deliberately not deleted.** An
+install whose `footer.menuColumns` the migration could not safely rewrite
+still needs its Learn column to resolve; a fresh install simply never creates
+it. Seeding a menu that nothing lists is the same defect as seeding a setting
+nothing reads, which this change-set removed from the settings table in the
+same breath.
+
+**`packages/db/src/footer-sitemap.test.ts` is the guard**, and it is the point
+of this item rather than a formality: it extracts every `routeKey` from the
+three header blocks and the two footer ones and fails on a header destination
+with no footer row. A third school, or a ninth tool, now fails here rather
+than in six months. It reads the seed as SOURCE, like `permission-groups.test.ts`
+beside it and for the same reason — the seed is a script that connects to a
+database, so importing it to compare two lists of strings would mean standing
+up MariaDB.
+
+### "Coming Soon" over three working links
+
+ADR-113 §5 kept the reference's Coming Soon band and improved it: a card links
+when there is somewhere for it to go. Three of the four ended up linked. The
+argument for keeping the heading rested on the fourth — Community Forum, which
+this site does not have and is not building — and a heading that contradicts
+the lead under it ("Explore more ways to get the information and help you
+need") teaches a reader to scroll past both.
+
+ADR-118: the band is **"More ways to get help"**, and the forum is replaced by
+**Courses**. Not an arbitrary substitution — what a forum stands in for here
+is somewhere to go and learn the thing rather than somewhere to ask about it,
+and that is what `/learn` already is. It is also where a reader who could not
+find their answer in the FAQ actually wants to end up.
+
+The catalog subtree and the code registry are renamed with it
+(`support.comingSoon` → `support.moreHelp`, `COMING_SOON` → `MORE_HELP`),
+because a key that says the opposite of what a surface does is the next
+reader's wrong assumption. The `public.comingSoon*` keys are a different thing
+entirely and are untouched: they belong to the `ComingSoon` component, which
+renders a page for a section that genuinely does not exist yet.
+
+Every entry now has a destination, so `href: null` fires for the flag-off case
+alone. The guard fails on an entry added without one.
+
+### Tests
+
+2201 in `apps/web` (4 new in `support-page.test.ts`), 461 in `@repo/ui` (9
+new: 6 on the photo tone, 3 on the `inverted` variant), 41 in `@repo/db` (7
+new in `footer-sitemap.test.ts`), 394 in `@repo/contracts`. All green. Lint
+and typecheck clean across `web`, `ui`, `db` and `contracts`;
+`check:catalog-completeness`, `check:home-sections`, `check:reserved-paths`,
+`check:permission-keys`, `check:phantom-deps` and `check:email-templates` all
+OK. `next build` compiles clean.
+
+The footer guard was checked for vacuity before it was trusted — 23 header
+keys against 24 footer keys, the extra being `sitemap`, which has no header
+entry by design (ADR-110).
+
+### Verified against a running build, not only against the suite
+
+`next build`, then `next start`, `db:deploy`, `db:seed` and a Playwright pass
+over the production server:
+
+- **Nine mastheads report `data-tone="photo"`**, background
+  `rgb(42, 42, 41)` — the dark `--secondary` — white ink, artwork at
+  `opacity: 1`, and a `--secondary` gradient scrim. No `--primary` gradient
+  anywhere on a photographic band.
+- The scrim's direction follows the alignment, live: `linear-gradient(to
+right, …)` on the eight start-aligned bands, `linear-gradient(<vertical>)`
+  on `/support`.
+- `/sitemap`, `/economic-calendar` and `/tools/pip-value` still report
+  `data-tone="brand"`, which is ADR-117 §5 working rather than an oversight.
+- `/glossary/resistance`'s hand-written breadcrumb resolves to
+  `oklab(0.999994 … / 0.7)` — white at 70%, i.e. `--secondary-foreground/70`
+  — not the `--primary-foreground` it carried under the old fill.
+- The footer renders five columns of 4 / 4 / 9 / 6 / 2, headed Learn Forex ·
+  Learn Crypto · Tools · News & Markets · Company.
+- `/support`'s last band renders four cards, every one with an action:
+  Help Center · **Courses** · Video Tutorials · Phone Support.
+- **Eight public routes at 390px, every one with
+  `scrollWidth === clientWidth`** — including the five-column footer, which
+  stacks to two.
+- The migration's bounded `UPDATE` matched and rewrote `footer.menuColumns`;
+  `site.faviconUrl` is gone from the settings table.
+
+### Owed to Module 14
+
+axe over the nine recomposed mastheads — the ink pairing is derived and
+therefore safe by construction, but the scrim's mid-gradient alpha is a
+computed value axe should actually measure. An RTL pass over the horizontal
+scrim, which is flipped by hand under `[dir="rtl"]` the way `.reveal-start`
+is, and hand-written flips are what RTL smoke exists for. And an E2E that
+walks the footer's twenty-five rows and asserts each one resolves — the
+source guard proves the two lists agree, not that either resolves.
+
+**NOTE: the two new track menus and the Tools menu are create-only.** An
+existing database gets them from `pnpm db:seed`; `footer.menuColumns` is moved
+by `20260916150000_settings_cleanup_changes36`, bounded to a row still holding
+the previous seeded value, so an admin who edited their columns keeps their
+version — and keeps `footer_learn`, which is why it is not deleted.
+
+### What is still open in changes-34
+
+Nothing. Item 5's remaining clause — "should be more late & slow", "the
+content should appear on each side" — is judged shipped: ADR-111 made the
+reveal two-way, `--duration-slow` is its timing, and `.reveal-start` /
+`.reveal-end` are the per-side variants changes-35's bands use. If the owner
+means slower still, that is a token change (`--duration-slow`) and not a
+design question. The file's misleading note has been corrected in place.
+
+---
+
+## 2026-09-16 — changes-35 follow-up: columns that end on one line, and one band fewer
+
+**Module:** 12 (public site), 07 (`@repo/ui`), 01 (seed). Same plan and ADR as
+the entry above; this is the owner's review of what shipped that morning.
+
+### What was wrong, in the owner's words
+
+> add the pictures in right side of analysis… each section have same content
+> display area should be equal space cover… like in From the glossary section
+> the left side have button which is below the other section and slider & terms
+> of the day have some extra empty space… same like In practice the comment &
+> video have also not equally placement with Put the numbers to work… also
+> overall reduce the size of whole section in The desk vertically… merge the
+> Follow us for the & subscribe with same sections
+
+All of it was one mistake made three times: **`items-start`**. It is the right
+class for a LIST beside a lead (which `latest_news` `split` still uses) and the
+wrong one for COLUMNS that are meant to read as one band. Measured before the
+fix: the glossary band's browse button hung ~90px below the cards beside it and
+its term card stopped ~100px short of the carousel's controls; `in_practice`'s
+three columns came out **300px, 237px and 420px**. Three columns that each end
+somewhere different read as three adjacent things, not as a band.
+
+### Fixed
+
+- **Columns stretch, and each decides what to do with the surplus.** The
+  glossary band pins its browse button with `mt-auto` (it lands on the
+  carousel's control row); the term card takes `h-full` and pins its read link;
+  `in_practice`'s quote grows, its tools list grows and pins its footer link,
+  and the **video centres** — it is aspect-locked and is the one column that
+  cannot grow. `justify-center` on a full-height flex column, **not**
+  `lg:self-center` on the grid item, which was the original bug: that shrank the
+  column back to the tile and left the band ragged.
+- **`Carousel`'s track gained `grow`.** A caller that gives the carousel a
+  height now gets the surplus in the TRACK, so slides fill it and the controls
+  sit on the bottom edge. `grow`, deliberately, not `flex-1`: grow-1 with basis
+  **auto**. With no height given there is no surplus and it is inert, which is
+  what makes it safe on every existing call site — `flex-1`'s `basis-0` would
+  have collapsed every track in the repo to nothing.
+- **`TermOfTheDay` gained a `className`.** `/glossary`'s masthead passes
+  nothing and is unchanged; the home band passes `h-full`.
+- **Pictures at the inline end of each analysis cell.** `ArticleMedia`, not a
+  bare `<img>`, so a piece with no cover gets the kind-toned panel every other
+  card on the site falls back to. Inline END, not `pr-`/`ml-`: the picture is
+  simply the second child, which is the right in LTR and mirrors in RTL for
+  free (code-style #3).
+- **The desk band: 931px → 756px.** `spacing="sm"`, and the heading dropped its
+  `lead` — the title is already a full sentence about what the band holds. The
+  `deskLead` catalog key went with it rather than sitting unread (code-style
+  #28); `split` has its own `latestNewsLead`, so nothing else wanted it.
+
+### The merge
+
+Taking the video out of `connect` the previous round left its whole inline end
+empty — and the newsletter was a separate brand-coloured strip **directly
+underneath**: two bands making the same ask in two different colours, one of
+them half empty. They are one band now, follow on the start and subscribe on
+the end, and the dead half is gone.
+
+**Neither newsletter switch moved, and that is the part worth checking.**
+ADR-080 #5 still holds exactly: the `newsletter` FLAG says signup exists,
+`newsletter.placements.home` says it is drawn on this page, and the form still
+submits `source: "home"` — so an admin filtering subscribers by where an
+address came from sees precisely what they saw before. What changed is which
+element the column is nested in. The seeded `newsletter` SECTION row is the
+third, separate thing (does the standalone band draw) and is now `false`.
+
+The band needed ADR-116 §3's per-dataset rule as soon as it had two datasets:
+no active social link drops the follow half, either newsletter switch off drops
+the subscribe half, and only both empty renders nothing. The form uses the
+`onSecondary` tone, which already existed for this exact surface — `onFill` is
+for the brand-filled `CtaBand` the half used to be.
+
+### Measured
+
+| Viewport | Before this round | After      | Bands  |
+| -------- | ----------------- | ---------- | ------ |
+| 1440px   | 6630px            | **6465px** | 10 → 9 |
+| 390px    | 9652px            | 9961px     | 10 → 9 |
+
+Desktop is down again; **the phone is up ~300px and that is the thumbnails**,
+which the owner asked for — four covers the panel did not carry before, on a
+viewport where the panel is a single column. `scrollWidth === clientWidth` at
+1440, 768 and 390, and zero page errors at all three.
+
+`/news` and `/glossary` were re-checked because both share components that were
+edited for the home page (`ArticleCards`/`ArticleMedia`, `TermOfTheDay`): no
+overflow, lead cover still 16/9, term card still present.
+
+### Tests
+
+2210 in `apps/web` (10 new), 461 in `@repo/ui`. All green;
+`check:home-sections`, `check:catalog-completeness`, `check:phantom-deps`,
+typecheck and lint clean.
+
+`home-composition.test.ts`'s ADR-093 assertion was **rewritten, not deleted**.
+Its rule — a "follow us" heading over an empty row invites a visitor to follow
+nobody — is unchanged; it moved one level down, from the band to the column.
+Two assertions were added beside it: the band returns null only when both
+halves are empty, and the merged half still reads both newsletter switches, so
+a future merge cannot quietly become "signup is always on the home page".
+
+The new alignment rules are guarded in `home-presentation.test.ts`: **no
+`items-start` in either multi-column band's grid.** That is the specific class
+that caused all three complaints, it is the natural one to reach for, and it is
+correct in the other shape — which is exactly the kind of thing a comment will
+not stop and a test will.
+
+### Known, not fixed
+
+An analysis piece with **no cover** renders the kind-toned fallback panel, and
+at 72px that wash is faint enough to read as a broken image. It is the repo's
+existing fallback at the repo's existing size — `/news`'s compact cards look
+identical — so tuning it here alone would be a second fallback style on one
+surface. It wants one change in `ArticleMedia` covering both, or a cover on the
+article.
+
+## 2026-09-16 — Module 13 fix: "Sync now" that never came back
+
+**Reported:** the AlphaVantage key saved and tested fine, but a manual sync
+spun without finishing.
+
+**Cause.** It was not hung — it was running. An instrument's first sync asks
+for `outputsize=full` (FX history back to 2007, ~5,000 bars), and
+`syncDailyBars` wrote each bar with its own sequential `upsert`. Across the 28
+seeded instruments that is ~140,000 database round trips before the action
+returns, and `lastSyncAt` stays NULL the whole time. The local database showed
+four instruments being written in the same millisecond, so overlapping runs
+(repeat clicks, the cron tick) were compounding it. Separately, neither
+AlphaVantage driver set a timeout on `fetch`, so a provider that accepted the
+connection and never answered WOULD hang the sweep outright.
+
+**Fix (`packages/core/src/market.ts`, no ADR — ADR-087's semantics unchanged).**
+Only the bar on the cutoff day can exist already and carry revised values, so
+it alone is upserted; every newer bar goes through chunked
+`createMany({ skipDuplicates: true })` (1,000 rows a statement), which also
+keeps an overlapping run idempotent. Both provider requests go through
+`fetchWithTimeout` (30 s), which turns a silent provider into an ordinary
+per-instrument failure the sweep already records.
+
+### Tests
+
+`@repo/core` `market.test.ts` 26 passed (1 new: a provider that never answers
+rejects with "did not respond"); `market.integration.test.ts` 31 passed on
+MariaDB (1 new: a 2,500-bar full history backfills in bulk and a second run
+adds nothing and fails nothing). `tsc --noEmit` clean.
+
+### Known, not fixed
+
+AlphaVantage's free tier allows 25 requests a day and the sweep's default
+budget is 500, so a free key cannot backfill all 28 instruments in one run —
+the ones past the limit fail as "rate-limited" and the staleness ordering picks
+them up first next time. The non-FX rows (XAU, XAG, BTC, ETH, SPX, NDX, WTI,
+DXY) are sent to `FX_DAILY`, which does not serve them; they need a
+`providerSymbol` or a per-kind endpoint.
+
+## 2026-09-16 — Module 13 follow-up: crypto, unsupported kinds, and the hole a tail cannot reach
+
+Picks up the "Known, not fixed" list from the sync fix above. The first real
+sweep after it ran: 28 attempted, 9 synced, 41,000 bars, 19 failures, and the
+free tier's daily limit hit.
+
+**Crypto has its own endpoint.** `FX_DAILY` rejects BTC and ETH; the driver now
+asks `DIGITAL_CURRENCY_DAILY` (`symbol` + `market`) for `kind === "CRYPTO"`.
+Verified against the live endpoint with AlphaVantage's `demo` key — free tier,
+four prices a day, and the existing word-matching parser reads it unchanged.
+
+**The other kinds are declared, not attempted.** `MarketHistoryProvider` gains
+an optional `supportsKind()`, and AlphaVantage answers yes for CURRENCY, PAIR
+and CRYPTO only. XAU and XAG are absent from its physical-currency list (checked
+against the published CSV), its gold/silver and WTI series carry one price a
+day — a bar built from one price would claim a high and low nobody measured,
+against ADR-087 #2 — and `INDEX_DATA` is premium-only. The sweep spends no
+request on those rows and reports them in a new `SyncResult.unsupported`, which
+is NOT a failure and does not write `lastSyncError`: a retry changes nothing.
+The provider screen names them ("Not available from this provider") so an admin
+can switch the rows off. Both audit rows record the count.
+
+**The seeded USD row is never requested.** A currency quoted against itself is
+1 by definition, and USD/USD spent one of 25 daily requests on a guaranteed
+rejection every run. Same base/quote resolution as `getRateSnapshot`.
+
+**A gap now triggers `full` again.** The interrupted runs before the bulk-write
+fix left CHF ending 2020-12-31, EUR/CHF 2024-10 and AUD/USD 2025-12. A compact
+tail is the latest ~100 points, so it starts AFTER those bars — each later
+sweep would have "succeeded" and left the years between empty permanently. The
+sweep now asks for `full` when the newest bar is older than
+`COMPACT_REACH_DAYS` (90). This refines ADR-087 #10 ("full once, compact
+thereafter") in the direction of its own stated purpose — enough history for
+the 250-day windows — rather than changing it, so no new ADR.
+
+Net for a free key: 28 active rows now cost 22 requests a run (USD and five
+unsupported rows excluded), inside the 25-a-day limit.
+
+### Tests
+
+`@repo/core`: `market.test.ts` + `market.integration.test.ts` 62 passed on
+MariaDB (5 new — the crypto endpoint and payload, `supportsKind`, full-on-gap,
+unsupported rows spend nothing and are not failures, USD/USD never requested;
+the existing full-then-compact test now pins `now`, since it would otherwise
+start failing once its fixture dates age past the reach window).
+`apps/web` `market-sync` route 15 passed. Typecheck and lint clean in both.
+
+### Known, not fixed
+
+Gold, silver, oil and the three indices still have no bars from this provider.
+They need a second driver (or AlphaVantage premium for the indices), which is a
+provider decision rather than a code fix. The failure list on the provider
+screen shows symbols without reasons, so "rate-limited" and "rejected" read the
+same there; `lastSyncError` carries only the last one.
+
+## 2026-09-16 — Module 13 follow-up: pacing the sweep, and telling the two limits apart
+
+**Reported:** "Attempted: 21 · Synced: 15 · Bars written: 37511 · Skipped:
+0Failed: GBP, AUD, GBP/USD, EUR/GBP, GBP/JPY, AUD/JPYNot available from this
+provider: …" — six failures, and the lines running together.
+
+**Cause.** The data was fine: every served instrument held bars through
+2026-09-15 and the six had synced earlier that day. `lastSyncError` said
+"Provider rate-limited", and the failures were scattered through the run
+rather than trailing it — AlphaVantage's per-second throttle, not the 25-a-day
+cap. The sweep fired requests back to back. Both limits arrive as HTTP 200 +
+an `Information` sentence, and the driver reported both identically, so the
+screen could not say which had happened. The display ran together because
+`AlertDescription` is a plain block and its children were sibling `<span>`s.
+
+**Fix.** The AlphaVantage history driver now:
+
+- spaces requests at least 1.2 s apart (per driver instance, and
+  `loadProviderDriver()` builds one per sweep), about 26 s for 22 requests;
+- reads the notice's wording, waits out a per-second throttle once and
+  retries, and reports a repeat as "too many requests per second";
+- throws `ProviderQuotaExhaustedError` for a spent daily quota. The sweep
+  records that one failure and marks the rest SKIPPED, the same state a spent
+  budget leaves, so the staleness order reaches them first next run instead
+  of failing each after a paced wait.
+
+The provider screen draws one paragraph per fact and groups failures by
+reason: "Failed (Provider rate-limited: daily request limit reached): …".
+The live-rate `alphaVantageProvider` is untouched; it is cached and not swept.
+
+### Tests
+
+`@repo/core` market unit + integration 67 passed on MariaDB (5 new — a burst
+notice retried once, a burst that survives the retry, a daily notice not
+retried and typed, request spacing, and the sweep stopping at a spent quota
+with the rest skipped). `apps/web` form conventions + `market-sync` route 691
+passed. Typecheck and lint clean in both.
+
+### Known, not fixed
+
+The classifier matches AlphaVantage's English wording ("per day",
+"sparingly", "per second"). If they reword the notice it falls back to plain
+"Provider rate-limited", which is the old behaviour rather than a wrong one.
+
+## 2026-09-16 — changes-36 (second list): the disclaimer comes off, search finds words, and news cards take the platform cards' size
+
+**Module 08 / 12 / 13 / 15.** Six owner asks from
+`docs/changes/changes-36-fixed.md`. One ADR (119), because the first ask
+reverses a position changes-33 wrote down.
+
+| #   | Ask                                                                 | What shipped                                                                                                            |
+| --- | ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| 1   | Remove the risk disclaimer from all pages, use the subscribe banner | Footer and article page no longer read `legal.riskDisclaimer`; the footer's strip is now the `CtaBand` banner (ADR-119) |
+| 2   | Add support email / Call / Live Chat to the footer                  | Three rows under the brand description, from `SUPPORT_CONTACT`                                                          |
+| 3   | Picture on the calendar's "Using it" section                        | `/banners/calendar-how-to.webp`, a 4:3 crop of the owner's calendar card photo                                          |
+| 4   | "the search is not working on public site"                          | Search matched the typed PHRASE; it now matches words and ranks                                                         |
+| 5   | Reduce the Top stories lead vertically                              | Picture beside the words from `md`; ~690px → ~290px                                                                     |
+| 6   | News & analysis cards the same size as The platform cards           | `ArticleCards standard`: 16:10 cover, 16px title, 2-line clamp, 4/3/2-across by container                               |
+
+### Search: the endpoint worked, the matching did not
+
+The palette opened, fetched, rendered and navigated — all verified in a
+browser. What failed was the question: `searchPublicContent` sent the whole
+query to one `LIKE '%…%'`, so "Forex trading" and "what is a pip" returned
+**zero** results on a site where "forex", "trading" and "pip" each return
+several. A reader types a phrase; the rows hold the words in another order.
+
+`searchTerms()` splits on whitespace (so `EUR/USD` stays one term), drops words
+under three characters once a longer one exists (a length rule, not a
+per-language stopword list), and caps at six. A row qualifies if any field
+contains any term; `scoreMatch()` ranks in memory — whole phrase, then a title
+that IS a term, then title, then summary — over at most 40 candidates a
+section. Visibility is untouched: the same `public*Where` helpers wrap the new
+`OR`. Measured on the dev database: "Forex trading" 0 → 9 hits.
+
+### Cards at the platform cards' size
+
+`GRID_CLASS.standard` is `@xl:2 / @4xl:3 / @6xl:4` columns, so a card is
+~300–320px wherever it is drawn: four across a category band, three beside the
+listing sidebar. The byline row no longer wraps — the "Read article" words
+went (the heading is the link; the affordance was `aria-hidden` anyway) and the
+author truncates. Category bands fetch 4 stories so a row is full.
+
+### Tests
+
+`@repo/core`: `public-search.test.ts` 10 new (terms + scoring),
+`public-search.integration.test.ts` 15 passed on MariaDB (3 new: words in any
+order, filler words ignored, drafts still hidden when matching by words).
+`apps/web`: 2216 passed, **1 failed** — `admin-page-conventions.test.ts` "ai is
+a group segment", an admin breadcrumb guard in a file this change does not
+touch and already modified in the working tree before it; not investigated
+here. `home-presentation.test.ts`'s disclaimer case now asserts the inverse.
+Typecheck and lint clean in `web` and `core`; `check:catalog-completeness` and
+`check:phantom-deps` OK.
+
+Verified in a browser against the dev server: the footer renders the banner
+and the three contact rows with no disclaimer; `/news` lead card ~290px tall;
+cards 3-across (list) and 4-across (bands); the calendar callout shows the
+photo; `/`, `/news`, `/analysis`, `/economic-calendar` have no horizontal
+overflow at 390px.
+
+### Known, not fixed
+
+- On `/news` and `/analysis` there are now two filled subscribe banners near
+  the bottom (the page's and the footer's). Each has its own placement setting;
+  ADR-119 leaves the choice to an admin.
+- The owner's reference prints "Call: … | Live Chat: …" on one line; at five
+  footer columns the brand column is ~290px and it wrapped with the separator
+  hanging, so they are two rows.
+- The news skeleton's card covers are still 16:9 (`SkeletonImage` has no 16:10
+  ratio); a small jump on arrival.
+
+## 2026-09-16 — Module 18: guided AI provider setup, and six more providers (ADR-120)
+
+**Asked:** at `/admin/settings/ai`, pick a provider (Claude, OpenAI, …), get
+that provider's key field, test the connection, have the available models
+appear in dropdowns, choose models and usage limits.
+
+**Found:** the URL fell through to `settings/[group]`, which showed the three
+tiers as free-text model-ID boxes and no provider, key or test at all.
+Connecting a provider took four screens and hand-typed model IDs.
+
+**Shipped:**
+
+- `AI_PROVIDER_PRESETS` (`@repo/contracts`) and six new `AiProviderKind`
+  members: Google Gemini, xAI, DeepSeek, Mistral, OpenRouter and a custom
+  OpenAI-compatible gateway. Migration
+  `20260916180000_ai_provider_presets_adr119` widens the enum on
+  `ai_providers`, `ai_usage` and `ai_usage_daily`. All six go through the
+  existing OpenAI driver, configured by the preset (`max_tokens` vs
+  `max_completion_tokens`, `stream_options`, a key-check path for OpenRouter's
+  public model list).
+- `AiDriver.listModels()`. Anthropic's reads the Models API (name, `max_tokens`,
+  image input). OpenAI-compatible lists also read OpenRouter's name, ceiling,
+  modalities and prices when present. Anthropic's `test()` is now `models.list`
+  rather than a billed one-token Haiku message.
+- `discoverProviderModels` (`@repo/ai`); `loadAiSetupView`, `discoverAiModels`,
+  `saveAiSetup`, `saveAiUsageLimits` (`@repo/core`); three server actions.
+- `/admin/settings/ai` is a static route. It holds the connection flow (provider →
+  key → Test connection → searchable model list → tier dropdowns → prices →
+  Save and connect), then the limits form in a new `usage` variant, then links
+  to Features, Providers and Usage. The limits form's labels moved to
+  `ai/limits/_labels.ts` so both screens share them. The providers screens name
+  kinds through `admin.ai.providerKinds.*` instead of `humanizeKey`.
+
+**Decisions (ADR-120):** a stored key is never used for a row of another kind.
+Connecting makes the provider enabled AND the one default. An un-ticked model is
+disabled, never deleted. A tier must name a model the same save enables. No
+price is invented. Saving needs `ai.providers.manage` + `ai.settings.manage`.
+
+### Tests
+
+- `@repo/contracts`: 410 passed. New `ai-providers.test.ts` covers the preset
+  invariants and the setup schema: tier ∈ models, duplicates, NaN prices, the
+  custom kind's base URL, and Echo.
+- `@repo/ai`: 132 passed. New MSW cases cover the Anthropic test hitting
+  `/v1/models` and never `/v1/messages`, model mapping for both protocols,
+  OpenRouter's `/key` check, `max_tokens` on a compatible gateway, and
+  `stream_options` omitted for Mistral.
+- `@repo/core`: new `ai-setup.integration.test.ts`, 9 passed on MariaDB. It
+  covers: no key in the view; a cross-kind provider id ignored; key sealed and
+  kept on a blank save; model disabled rather than deleted; `pricedAt` stable;
+  exactly one default; tiers written; the switch back to Echo; limits saved
+  without touching tiers.
+- `apps/web`: 2222 passed, including the form, dialog and page convention guards.
+- Typecheck and lint are clean in contracts, ai, core and web. The migration is
+  deployed to the dev database, and the page renders for the seeded super admin.
+
+### Known, not fixed
+
+No preset has been exercised against a live endpoint in this session: no keys
+were available. The request shapes are pinned under MSW only. OpenAI's model list
+includes non-chat models (embeddings, TTS), shown unfiltered and searchable. The
+usage screen's "by provider and model" chart still prints the raw kind enum
+(pre-existing).
+
+## 2026-09-16 — changes-37: one pager, a row-of-cards desk, a moving quote rail (ADR-121)
+
+**Asked** (`docs/changes/changes-37-fixes.md`, `image-68.png`): news and analysis cards
+at the platform cards' size with the picture first and less height; pagination on
+courses, quizzes and videos, six a page, without a page load and styled like the rest
+of the site; the trust strip off the home page; the testimonial auto-advancing with
+arrows on hover; a real photograph behind /news "Browse by topic" and no coloured top
+line on its cards; the provider API in Settings as well; one-line descriptions for AI,
+Email templates and Email log on the settings hub; "Visit site" fixed in the admin
+sidebar.
+
+**Shipped:**
+
+| #   | Ask                                                | What changed                                                                                                                                                                                                                                                                                                         |
+| --- | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Desk band at platform size, picture first, shorter | `desk` is one row of `ArticleCards standard showKind` over four seats; `deskEntries()` splits them (news ≤ half, a short feed yields). "All news" + "All analysis" in the heading row. `home.deskAnalysisTitle` deleted                                                                                              |
+| 2   | Pagination on every learn section                  | `@repo/ui/lib/pagination` (`pageWindow`, `DEFAULT_PAGE_SIZE = 6`), `ClientPagination` + `usePagedList`. Each course track band, the quiz index and every video shelf page in client state. `/news` still navigates, now through the same window and `common.pagination.*` (moved from `news.*` in all four catalogs) |
+| 3   | Trust strip off                                    | Seeded off + `20260916200000_disable_trust_strip_changes37` (applied to the dev DB)                                                                                                                                                                                                                                  |
+| 4   | Quotes auto-advance, arrows on hover               | `Carousel` `autoplay` (opt-in: pause button, off under reduced motion, holds on hover/focus/off-screen/hidden tab, scrolls the track only, fails closed without an observer, loops) and `hoverArrows`                                                                                                                |
+| 5   | Topics band photo, no top rule                     | `NEWS_MEDIA.topics` → `/banners/spare-digital.webp` under a `--secondary` scrim on an `inverted` band; the accent rule is gone from `CategoryCards`, which now states `text-card-foreground`                                                                                                                         |
+| 6   | Provider API in Settings too                       | `/admin/settings/market` renders the market provider form via the new shared `loadProviderFormProps`, gated on `market.providers.manage`; hub + sub-nav entry                                                                                                                                                        |
+| 7   | Hub descriptions                                   | `settingsGroupDesc.{ai,emailTemplates,emailLog,market}` and `settingsGroups.ai` ("AI", was "Ai"); a non-group card's key is its camel-cased path                                                                                                                                                                     |
+| 8   | Visit site                                         | Moved out of the sidebar's scroll container, so it no longer scrolls away                                                                                                                                                                                                                                            |
+
+**Decisions (ADR-121):** ADR-116 §2's desk _shape_ is superseded, its rule (news and
+analysis visibly distinct) kept via kind chips and two CTAs. One pager appearance,
+two mechanisms — client state on the learn shelves because `searchParams` would make
+them dynamic (architecture.md #6). `Carousel`'s "no autoplay" becomes "no autoplay by
+default". The Settings copy of the provider form keeps the provider's own gate.
+
+### Tests
+
+- `@repo/ui`: 483 passed (28 files). New `lib/pagination.test.ts` (window exhaustive to
+  60 pages, arithmetic) and `client-pagination.test.tsx` (buttons not links, current
+  page, reset on filter change, clamp); `carousel.test.tsx` +6 (pause control, loop,
+  absent-not-disabled hover arrows, fails closed without an observer).
+- `apps/web`: 2235 passed (57 files). New `desk-entries.test.ts`;
+  `home-presentation.test.ts` desk assertions rewritten for the row, plus trust-strip
+  seed/migration and quote-rail autoplay guards.
+- Typecheck clean in `web` and `ui`; lint clean on every changed file;
+  `check:catalog-completeness`, `check:home-sections`, `check:phantom-deps` OK.
+- Verified in a browser against the dev server: desk band renders four cards in one
+  row; the topics band shows the photograph with legible titles (the first pass had
+  white titles on white cards — fixed); the quote rail advanced from A. to B. in 8s
+  with `scrollY` unchanged; hover arrows clear the quote text; the settings hub shows
+  all descriptions and the Market data provider card; `/admin/settings/market` renders
+  the form; "Visit site" stays in the viewport.
+
+### Known, not fixed
+
+- No learn shelf on the dev database has more than six items, so the pager was proven
+  by component tests, not seen live. It hides itself on a single page.
+- The pager's page lives in memory: reload or Back returns to page one.
+- `home.sections` is cached; a running dev server kept showing the trust strip until
+  its cache turned over after the migration.
+- `apps/web/scripts/generate-news-art.mjs` still emits `public/news/topics.svg`, which
+  nothing now reads.
+
+## 2026-09-16 — Module 18: the AI setup screen stops asking for prices
+
+The owner connected Google Gemini on `/admin/settings/ai` (test: "Connected. 58
+models are available") and was blocked twice on Save: first by a required
+input/output price per ticked model, then by "AI_SECRET_KEY is not set".
+
+### What shipped
+
+- **Prices are no longer asked for on the setup screen.** The price table and the
+  per-model price hint are gone from `ai-setup-form.tsx`; `aiSetupModelSchema`'s
+  input/output prices are `nullish`. The form still SENDS a price it already knows
+  (a stored one, or one a gateway advertises). `saveAiSetup` keeps the stored price
+  when none is sent and starts a never-priced model at 0; `pricedAt` still moves only
+  when a price moves. Prices remain editable per model on `/admin/ai/providers`.
+- 11 now-unused `admin.aiSetup.*` price keys removed from `en.json`.
+- Local `.env` only (not committed): `AI_SECRET_KEY` was absent, so the sealed key
+  could not be written. The code already said so; nothing changed there.
+
+### Decisions
+
+This narrows ADR-120's form rule 4 ("no price is invented", i.e. an unpriced model is
+a required empty field) at the owner's request. **Consequence, stated plainly:** a
+model priced at 0 estimates $0 spend, so `ai.monthlyBudgetUsd` does not bite on it
+until someone prices it. No ADR written yet — flagged for the owner.
+
+### Tests
+
+- `@repo/contracts` `ai-providers.test.ts`: 17 passed (the "unpriced is refused" case
+  became "unpriced is accepted" + "NaN is still refused").
+- `@repo/core` `ai-setup.integration.test.ts` (Testcontainers): 10 passed, including
+  the new "keeps a stored price, starts an unpriced new model at 0".
+- `apps/web` typecheck clean; eslint clean on the changed files. `@repo/core`
+  typecheck reports one PRE-EXISTING error in `account.integration.test.ts:182`,
+  untouched here.
+
+## 2026-09-16 — changes-38: a pager with numbers, the disclaimer in the footer, a learner account, consent at sign-up, and an idle timeout that times out (ADR-122/123/124)
+
+**Modules 04 / 05 / 07 / 08 / 09 / 12 / 13 / 15 / 17.** The owner's list in
+`docs/changes/changes-38-fixes.md` (`image-69.png`).
+
+| #   | Ask                                                                     | What shipped                                                                                                                                                                                                                                                             |
+| --- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | Fix the pagination buttons on news                                      | Every page link rendered as an empty box: `PaginationLink` cloned its children onto the router element, and `Button` passed its own undefined `children` over them. Children now go to the Button. New `pagination.test.tsx`                                             |
+| 2   | Popular tags; the sidebar on tag pages; symmetry                        | `/news`, `/analysis`, `/news/tag/[slug]` and `/news/category/[slug]` share `NewsMasthead` (popular-tags row, current tag marked) and a new `ArticleListing` (cards + pager + `ArticleSidebar`). `/analysis` gains the masthead and the topics band                       |
+| 3   | Disclaimer off the pages, in the footer, dynamic                        | ADR-122: the footer reads `legal.riskDisclaimer` again ("Risk warning:"); `RiskDisclaimer` is gone from `/tools`, every tool page and `/economic-calendar`; `ToolShell` has no `disclaimer` slot                                                                         |
+| 4   | Legal settings: inputs first, then the PDF controls                     | `SettingsGroupForm` renders non-`DOCUMENT` rows before `DOCUMENT` rows (a stable partition)                                                                                                                                                                              |
+| 5   | General & Theme first                                                   | `loadSettingsIndex` puts `general` first and places Theme directly after it                                                                                                                                                                                              |
+| 6   | Verify email in a dropdown; a profile page                              | ADR-123: `AuthSlot` is an account menu (verify item, then "check your inbox"); `/account` has continue learning with resume, recent quizzes, recent reading (new `ArticleRead`, client beacon), avatar, name, password, and 2FA (QR enrolment, sign-in code step)        |
+| 7   | Opt-in at sign-up; hide subscribe when signed in                        | ADR-124: an unticked checkbox creates a `signup` subscriber that EMAIL VERIFICATION confirms (auth publishes `onEmailVerified`, the app wires core to it); subscribe forms hide for a signed-in reader through a pre-paint `data-session` hint, server HTML still cached |
+| 8   | Admin resubscribe and add subscriber                                    | ADR-124: new `unsubscribedVia` column. Resubscribe restores directly only what an ADMIN unsubscribed and otherwise re-sends confirmation. "Add subscriber" in the table toolbar creates a pending row and sends confirmation                                             |
+| 9   | Remove "Figures supplied by MBX Learning Center"                        | Caption removed from the facts band; `home.factsCaption` deleted                                                                                                                                                                                                         |
+| 10  | The platform: learning path, daily analysis, news, glossary, calculator | `EXPLORE_DESTINATIONS` is those five, in that order. The calendar card left (it lives under Tools, ADR-115); `home.exploreCalendar*` deleted from all four catalogs                                                                                                      |
+| 11  | Is the admin session timeout really working?                            | **It was not.** Fixed in `@repo/auth`, below                                                                                                                                                                                                                             |
+
+### The idle timeout was written where nobody read it
+
+Checked live with the setting at 2 minutes, before the fix. After `auth()` the
+session ROW said +2 minutes. Redis still held a 7-day TTL, and Better Auth's
+`findSession` reads Redis first because `secondaryStorage` is configured. So
+`get-session` returned the 7-day expiry. Two causes:
+
+1. `slideStaffExpiry` wrote `db.session.update`, which touches only the row.
+   It now writes through `internalAdapter.updateSession`, which updates Redis
+   (TTL included) and the row together.
+2. Better Auth's own refresh fires whenever
+   `expiresAt − expiresIn + updateAge ≤ now`. A shortened session always meets
+   that, and the refresh wrote now + 7 days. The public site calls
+   get-session on every page (ADR-094), so one page view re-armed a week. A
+   `databaseHooks.session.update.before` hook now clamps a STAFF refresh to
+   now + timeout (`clampStaffRefresh`, pure and tested).
+
+The same check after the fix: Redis and the row both said +2 minutes. After
+150 idle seconds, get-session returned `null` and `/admin` redirected to
+`/admin/sign-in?redirect=%2Fadmin`. A tab left open under `next dev` is not
+idle, because HMR refreshes count as requests. That is why the first
+post-fix attempt looked like a failure. The dev setting is back to "never".
+
+This makes the code do what ADR-105 already says, so there is no new ADR.
+
+### Migrations
+
+`20260916210000_article_reads_adr123` and
+`20260916220000_newsletter_unsubscribed_via_adr124`, both applied to the dev
+database.
+
+### Tests
+
+- `apps/web`: 61 files, 2302 passed.
+- `@repo/ui`: 29 files, 484 passed (new `pagination.test.tsx`).
+- `@repo/auth`: `index.test.ts`, `account-audit.test.ts` and `email-verified.test.ts`, 22 passed (3 new `clampStaffRefresh` cases).
+- `@repo/contracts`: 437 passed.
+- `@repo/core`:
+  - unit tests: 163 passed
+  - `account.integration.test.ts`: 13 passed on MariaDB (Testcontainers)
+  - newsletter consent suite plus the existing newsletter suite: 37 passed on MariaDB
+  - the full integration suite was not run
+- Typecheck clean in contracts, auth, core, ui and web. ESLint clean on changed files. `check:catalog-completeness`, `check:phantom-deps` and `governance:check` OK.
+- Browser (Playwright against the dev server):
+  - the pager reads "1 2 Next"
+  - the footer prints the disclaimer and no tool page body does
+  - the home page has five platform cards and no caption
+  - the settings sub-nav opens with General, then Theme
+  - all four news listings show banner tags and the sidebar at 1440px and 390px
+  - learner flow: sign-up, then reading, quiz and resume on `/account`; avatar; password; 2FA enable, sign-in challenge, disable
+  - newsletter: a sign-up opt-in row appears in `/admin/newsletter`; forms hide when signed in; add subscriber and resubscribe work
+
+### Known, not fixed
+
+- The "Check your inbox" success message was not seen live, because repeated runs used up the per-IP verify limit. A source guard covers it.
+- Replaced avatars stay in the media library.
+- The staff profile's own password change probably signs the user out, for the dropped-cookie reason ADR-123 records.
+- A sign-up subscriber whose account is never verified is swept with other pending rows after 7 days.
+- A signed-in learner who did not tick the box has no subscribe form anywhere; `/account` is the natural place for a toggle.
+- `news/loading.tsx` still shows a Top stories placeholder on tag and category pages.
+- The dev server on :3000 was restarted during this work, because the Prisma client went stale after the migrations.
+
+## 2026-09-16 — Module 12/04: account and progress are two pages, verification on the profile, and a new picture reaches the header (ADR-125)
+
+**Modules 04 / 12.** Owner follow-up to changes-38 #6: split `/account` into a
+profile page and a progress/history page; resend verification from inside the
+profile; a new profile picture must show in the header menu.
+
+**What shipped**
+
+- `/account` is now profile and security only. It shows the masthead, then a new
+  `EmailVerificationPanel` (status badge; "Resend verification email" through
+  `resendVerification`; a `role="status"` "check your inbox" message; retry on a
+  failed or throttled send), then picture and details, then password and 2FA.
+  The verification link returns to `/account?verified=1`. A signed-out reader
+  goes to `/sign-in?verified=1&redirect=/account`.
+- New `/account/progress` covers courses with resume, quiz attempts and recent
+  reading. Limits are raised to 12 / 20 / 20.
+- `account/layout.tsx` draws the shared `SectionNav` over both pages and reads
+  no session. `account/_lib/learner-session.ts` is the one learner gate and
+  redirects back to the page the reader asked for.
+- In `@repo/core`, `loadLearnerAccount` is split into `loadLearnerProfile` and
+  `loadLearnerActivity`, and `LearnerAccountView` is replaced by
+  `LearnerActivityView`. In `@repo/contracts`, `ACCOUNT_PROGRESS_PATH` is new.
+- The header menu has a new "My progress" item.
+
+**The avatar bug had two causes.** First, `PublicSessionProvider` read the
+session once, and `router.refresh()` does not touch client state. Second, and
+the reason a reload did not help: `setOwnAvatar` and `updateOwnProfile` write
+through Prisma, while Better Auth serves `session.user` from its Redis copy for
+the session's lifetime and from the signed cookie cache for 5 minutes.
+
+- **Fix, server side.** New `refreshSessionUser(userId)` in `@repo/auth` calls
+  `internalAdapter.updateUser`, which rewrites every live Redis copy through
+  the library's own `refreshUserSessions`. All three learner actions call it
+  after the write.
+- **Fix, client side.** The provider exposes `useRefreshPublicSession()`, which
+  re-reads with `disableCookieCache=true` and re-signs the cookie. `SessionSync`
+  in the masthead refreshes when the server's name, image or verified flag
+  differs from the header's, at most once per distinct value.
+
+**Tests**
+
+- `apps/web`: 61 files, 2313 tests pass. `account-menu.test.ts` gains five
+  ADR-125 guards. `public-session.test.ts`'s anonymous-on-failure guard is
+  re-pointed at `readSession`; the behaviour is unchanged.
+- `@repo/contracts`: 437 pass. `@repo/auth` unit tests: 39 pass.
+- `@repo/core` `account.integration.test.ts`: 13 pass (Testcontainers MariaDB,
+  moved to the two loaders).
+- `tsc --noEmit` is clean for web, core and auth after `next typegen`. ESLint is
+  clean on the touched files. `check:catalog-completeness` is OK (en only;
+  inactive locales warn).
+
+**Not verified live.** No browser run in this session, and the avatar and
+header path is covered by source guards only. The staff `/admin/profile`
+shares `updateOwnProfile` and has the same stale-copy fault; the new helper is
+there for it (ADR-125 consequences).
+
+## 2026-09-17 — Module 18: a brief fills every editor, every text field can be regenerated, and the assistant's brief takes typing (ADR-126)
+
+**Owner request.** The writing assistant on every editor, a "top option" where
+the admin describes the page and AI fills that module's inputs for editing, a
+separate way to regenerate or update any one text, and bigger inputs. Asked,
+the owner chose review-before-replace, formatted rich text, all seven editors
+at once, and quiz questions from the brief.
+
+**Shipped**
+
+- **`form_fill`, a seventh feature key** (`standard` tier, `medium` effort, 8000
+  output-token ceiling), seeded off. Payload is `mode: "form"` (brief + current
+  text) or `mode: "field"` (one field, `regenerate | improve | shorten | expand`).
+- **`AI_FILL_FIELDS`** (`@repo/contracts`) lists what AI may write per module
+  with each field's kind and column limit. `aiFormSuggestionSchema`,
+  `aiFieldSuggestionSchema`, the prompt's JSON description and the review rows
+  all derive from it. No URL, image, slug, taxonomy or status field.
+- **Rich text as blocks.** `aiRichBlockSchema` + `aiBlocksToHtml` /
+  `aiBlocksToText` / `htmlToBlockText` (`@repo/utils`, property-tested: only
+  `h2 h3 p ul ol li blockquote strong em`, no attributes, everything escaped).
+- **`ai-fill.tsx`**: `AiFillBar` (brief, question count for quizzes, review
+  dialog ticking only empty fields, one patch on Apply) and `AiFieldMenu` (✨
+  beside each text/textarea/rich field; improve/shorten/expand are absent on an
+  empty field). **`_lib/editor-ai.ts`**: `loadEditorAi()` resolves availability,
+  `ai.use` and the module's content key once per page.
+- **Wired into all seven editors** (article, course, lesson, video topic, quiz,
+  glossary term, glossary topic), with the writing assistant on every
+  `RichTextEditor`. Quiz questions from a brief are APPENDED; the lesson-based
+  generator is unchanged and shares its mapping (`toEditorQuestions`).
+- **The run route gates `form_fill` per module** (`FILL_MODULE_PERMISSIONS`,
+  re-parsed rather than cast) and `writing_assistant` now admits
+  `courses.update` and `glossary.update`.
+- **`setDraft` merges from current state** in the course, lesson, video,
+  glossary and topic editors — it merged the last render's draft, so two
+  updates in one tick overwrote each other.
+- **Bigger inputs.** `RichTextEditor` `min-h-72` → `min-h-96`; summaries 4
+  rows; article excerpt 4, SEO/OG descriptions 3; quiz description 5, prompt 3;
+  video topic and glossary term SEO description and quiz option explanation
+  become textareas.
+- **Bug fix, same session:** the assistant's brief input inside the ✨ dropdown
+  took no typing — Base UI 1.7's menu typeahead `preventDefault`s every
+  character key that bubbles to the popup. The input now stops propagation
+  (Escape and Tab still reach the menu), and starting a draft closes the menu
+  that covered the result panel. `ai-assistant.test.ts` guards it.
+
+**Tests**
+
+- `apps/web`: 62 files, 2331 tests pass — new ADR-126 block in
+  `ai-degradation.test.ts` (no server action in the fill component, default
+  tick only on empty, derived schemas, `aiBlocksToHtml`, per-module route rows,
+  `loadEditorAi` on every editor page); `ai-output.test.ts` now scans every
+  `_components/ai-*.tsx`.
+- `@repo/contracts`: 443 pass (feature count 7, registry excludes URL/slug/
+  taxonomy keys, schema limits, field-mode refusal on list fields).
+- `@repo/ai`: 140 pass (form-fill prompt: registry limits, blocks-not-HTML,
+  forbidden fields, question count, field mode, injection markers).
+- `@repo/utils`: 285 pass (`ai-blocks.test.ts`, fast-check tag allowlist).
+- `tsc --noEmit` clean for web, contracts and ai. ESLint clean on every touched
+  file.
+
+**Not verified live.** No browser run. Two operator notes: an existing
+database needs the `form_fill` row (`pnpm db:seed`, or it was inserted by hand
+on the dev database) and **`ai.maxTokensPerRequest` raised from its seeded 2000
+to ~8000** — a long draft cut off mid-JSON reads as `invalid_output`, and the
+dialog says which setting to raise.
+
+## 2026-09-17 — Module 04/09: one idle timeout on the admin, and the dialog follows the setting (ADR-128)
+
+**Owner report:** the session timeout in Settings → General "is not working
+as per selected settings".
+
+**Cause.** Two timers had never met. ADR-041's client watcher
+(`idle-timeout.tsx`) hard-coded ten minutes, and it owned everything visible:
+the "Still there?" dialog and the redirect. ADR-105's setting was enforced only
+on the server as the session's `expiresAt`. So the dialog fired at ten minutes
+for every choice, "never" included, and the chosen value expired silently. An
+open page stayed on screen and failed on the next click. Typing is not a
+server request, so an editor could also be signed out mid-sentence.
+
+**What shipped (ADR-128, supersedes ADR-041's constant):**
+
+- `AdminShell` reads `security.adminSessionTimeout`, passes it to
+  `IdleTimeout`, and mounts nothing for "never".
+- `GET /admin/api/session` peeks through the new `peekSession()` in
+  `@repo/auth` (no refresh, no slide). `GET /admin/api/session/activity` calls
+  `auth()`. Both answer `{ remainingMs, timeoutMs }` or 401, never a redirect.
+- The watcher schedules its warning from the server's `remainingMs`. It pings
+  activity at most every 15s, and always on return to the tab. It peeks before
+  opening the dialog and again at zero, so a session another tab kept alive is
+  not ended.
+- `staffSlideThresholdMs` is a minute or a quarter of the timeout, whichever is
+  shorter. The warning window uses the same rule (`idleWarningMs`, in
+  `idle-timing.ts`).
+- `auth()` returns the post-slide expiry.
+- Both routes were added to `learner-admin-probe.spec.ts`
+  (`admin-surface.test.ts` refused the change until they were).
+
+**Tests**
+
+- `apps/web`: 64 files, all pass; new `idle-timing.test.ts` asserts that no
+  offered duration can open the warning on an active person.
+- `@repo/auth`: `index.test.ts` 13 pass (new two-minute threshold case).
+- `tsc --noEmit` clean for web and auth. ESLint clean on every touched file.
+
+**Verified live** (dev server, setting at 2 minutes, curl). A peek right after
+sign-in reported 7 days and did not slide it. Activity cut it to 119.8s. A peek
+at +60s reported 59.5s. At +130s peek and activity both answered 401 and
+`/admin` redirected 307 to `/admin/sign-in`. The dev setting was set back to
+"never". The dialog itself was not exercised in a browser.
+
+## 2026-09-17 — Module 15: an article can be read in another language (ADR-127)
+
+**Owner request.** A language dropdown on the public detail pages, like a
+"Translate" menu above the body. News first; courses, lessons, videos and the
+glossary once this is accepted.
+
+**Why not the header's locale switcher.** Only `en` is active (ADR-091), so a
+switch of the SITE locale has nothing to offer, and serving `/es` would need
+catalogs that do not exist. Meanwhile the article editor writes translations
+for all four locales, which no reader could reach.
+
+**Shipped**
+
+- `?lang=<code>` on `/news/[slug]` (and `/analysis` articles, same route). Page
+  chrome stays in the URL's locale; the title, body, takeaways, FAQ and SEO
+  fields come from the chosen translation, marked with its `lang` and `dir`.
+- `ReadingLanguageMenu` (`app/(public)/[locale]/_components/`), generic and
+  absent below two languages, placed at the inline end of the meta row. A
+  served locale links to its own page; anything else links to `?lang=`.
+- `@repo/core` `reading-languages.ts`: only `TRANSLATED` and `OUTDATED`
+  translations are readable. `MACHINE_TRANSLATED` and `DRAFT` are excluded, as
+  ADR-097's consequence requires of the first public status filter.
+  `loadArticleBySlug`/`getArticleBySlug` take an optional reading locale;
+  `ArticleView` gains `readingLanguages`, `readingLocale`, `contentDirection`.
+- `readingLanguageSearchSchema` (`@repo/contracts`). An unusable `lang` is
+  ignored, never a 404.
+- A reading view is `noindex` and canonical to the article's own URL.
+- Catalog: `public.readingLanguage`.
+
+**Tests**
+
+- `@repo/contracts` `reading-language.test.ts`: 16 pass.
+- `@repo/core` `reading-languages.test.ts`: 5 pass.
+- `apps/web` `news/[slug]/reading-language.test.ts`: 6 pass (source guards).
+- `articles.integration.test.ts` gained a reading-language case (machine
+  translation not readable → Save promotes it → `?lang=es` reads it; unknown
+  `lang` ignored). **Not run:** Testcontainers timed out starting MariaDB and
+  the Docker daemon then stopped responding on this machine.
+- `tsc --noEmit` clean for core and web. ESLint and Prettier clean on every
+  touched file.
+
+**Not verified live.** No browser run (Docker down). On the dev database the
+only non-English article translation is `es` and `MACHINE_TRANSLATED`, so no
+menu appears until an editor opens that translation and presses Save.
+
+**Known, not fixed.** The article's hreflang `languages` still lists every
+translation, including locales that 404.
+
+## 2026-09-17 — Modules 11/12: courses, lessons, videos and the glossary can be read in another language (ADR-127, continued)
+
+**Owner request, second half.** ADR-127 shipped the reading-language menu on
+news "first", with the other modules to follow. This entry is the follow-up.
+No new ADR: ADR-127 already names courses, lessons, videos and glossary terms
+as the next consumers, and nothing here departs from its five rules.
+
+**Shipped**
+
+- `?lang=` on `/learn/[track]/[course]`, `/learn/[track]/[course]/[lesson]`,
+  `/learn/[track]/videos/[topic]` and `/glossary/[slug]`. Same rules as the
+  article: only `TRANSLATED`/`OUTDATED` are readable, a reading view is
+  `noindex, follow`, an unusable `lang` is ignored.
+- `@repo/core`: `applyReadingLocale` (pure, `reading-languages.ts`) is now the
+  one step every loader runs after its fallback pick. It returns the picked
+  translation plus a `ReadingView` (`readingLanguages`, `readingLocale`,
+  `contentLocale`, `contentDirection`). The article loader moved onto it.
+  `loadLocaleMeta()` reads every seeded locale's name and direction.
+  `loadCourseBySlug`, `loadLessonBySlug`, `loadVideoTopicBySlug` and
+  `loadGlossaryTermBySlug` (and their cached wrappers) take an optional
+  reading locale. `LessonView.courseAlternates` is new, and
+  `PublicVideoTopicView` is the contract view plus the reading fields.
+- **A reading view swaps WORDS, never the ADDRESS.** Each loader keeps its
+  fallback pick's slug, so the canonical, the curriculum links and the lesson
+  pager stay where they were. The curriculum, lesson rail, pager and
+  breadcrumb parents stay in the interface locale: they are navigation.
+- `apps/web` `[locale]/_lib/reading-language.ts`: `readingLocaleFrom` and
+  `readingLanguageOptions({ pathFor })`, shared by all five pages; news moved
+  onto it. A lesson's option for a served locale needs that locale's course
+  slug and stays a `?lang=` view without one.
+- `lang`/`dir` sit on the item's own words only, never on a wrapper holding
+  interface headings. `glossary.termHeading` became
+  `<word>{term}</word> definition` so only the term is marked.
+
+**Bug found by the new integration case, fixed in the same change.** On a
+reading view the menu listed only the language on screen plus readable
+translations. A course's English row is still `DRAFT` (nothing marks a source
+row `TRANSLATED`), so `?lang=es` on a course gave a menu of one, which is
+ABSENT, and left the reader no way back. `resolveReadingLanguages` now takes
+the shown locales as a list, and `applyReadingLocale` always includes the
+fallback pick. Unit regression test added.
+
+**Tests**
+
+- `@repo/core` unit: 12 files, 171 pass before the fix; `reading-languages.test.ts`
+  9 pass after it (new `applyReadingLocale` block + the DRAFT regression).
+- Integration (Testcontainers, MariaDB 11.4). Docker was back, so ADR-127's
+  article case ran for the first time: `articles.integration.test.ts` 55 pass.
+  New cases in `learn.integration.test.ts` (course reading view, lesson
+  machine translation refused then readable, slugs unchanged) and
+  `public-content.integration.test.ts` (Arabic term read RTL, machine Spanish
+  and unknown `lang` ignored). learn + public-content + videos: 84/85 on the
+  first run (the bug above), learn 55/55 after the fix.
+- `apps/web`: 65 files, 2363 pass. `news/[slug]/reading-language.test.ts` was
+  replaced by `[locale]/_lib/reading-language.test.ts`, which unit-tests the
+  option builder and source-guards all five pages.
+- `tsc --noEmit` clean for core and web. ESLint and Prettier clean on every
+  touched file. `check:catalog-completeness` and `check:phantom-deps` OK.
+  `@repo/i18n` 26 pass.
+
+**Verified live** (dev server, curl). Temporary `TRANSLATED` Arabic rows were
+added for the glossary term `accrual` and the course `crypto-foundations`,
+then deleted. `?lang=ar` on both returned 200 with the Arabic words under
+`lang="ar" dir="rtl"`, `noindex, follow`, and the menu. `?lang=zz` returned
+the ordinary page, indexable. The dropdown was not opened in a browser, and
+the lesson and video pages were not fetched live.
+
+**Not done.** A reading choice does not carry to the next page (a sticky
+reading preference would be its own decision). Quizzes have no menu; the
+owner's list did not include them. The hreflang note from the article entry
+applies to all five pages.
+
+## 2026-09-17 — Module 18/09: an AI Writer on every admin page (ADR-129)
+
+**Owner request:** a general AI button on any page: put in text or a topic,
+generate in different tones, fix grammar, rewrite, set the number of
+characters, and show character and word counts. Scoped with the owner to
+staff; a learner-facing version stays out of scope (ADR-097).
+
+**What shipped:**
+
+- **`writing_studio`**, the eighth `AI_FEATURES` key, on a new `global`
+  surface. It streams and is seeded OFF. Its own key rather than more
+  assistant actions, so an admin can switch the open-ended tool off alone and
+  see its spend on its own line.
+- **`AI_STUDIO_ACTIONS`**: `draft` and `headlines` from a topic; `rewrite`,
+  `paraphrase`, `fix_grammar`, `expand`, `shorten` and `summarize` on a
+  passage. Each action has its own tier: grammar is light and nothing is heavy.
+  **`AI_STUDIO_TONES`** is the assistant's four plus formal, casual,
+  persuasive and educational. There are three formats, five length presets and
+  a custom character/word target. Input is capped at 10,000 characters.
+- **`buildWritingStudioPrompt`** shares the new `EDITORIAL_BASE` and
+  `PLAIN_TEXT_FORMAT` with the writing assistant, whose text is unchanged. A
+  length target is written as a ceiling. `fix_grammar` drops tone, format and
+  length.
+- **Run route**: `writing_studio: null` in `FEATURE_SURFACE_PERMISSIONS` with
+  an early return, so `ai.use` is the whole gate. `actionOverrides` now applies
+  studio tiers too.
+- **`textStats()` / `measureLength()`** in `@repo/utils`: graphemes for
+  characters, `Intl.Segmenter` for words and sentences, plus paragraphs and
+  reading time.
+- **`ai-writer.tsx`**: a header button (Ctrl/⌘+J) and a side sheet, mounted by
+  `AdminShell` only for `ai.use` + availability. It has live counts on the
+  input, and the result is measured against the target it was requested with.
+  Actions: Copy, Use as input, Regenerate, Fit to limit (only when over), and
+  Stop while streaming. The last five results are kept in memory. The result
+  is text, never HTML. A request superseded by a newer one does not overwrite
+  the panel.
+- Seed row, `admin.ai.featureNames|featureDesc|featureWhere.writing_studio`
+  and `admin.ai.writer.*` (English only, ADR-043).
+
+**Tests**
+
+- `@repo/utils` 294 pass (new `text-stats.test.ts`, 9 cases incl. emoji,
+  Arabic and Urdu).
+- `@repo/contracts` 468 pass (feature count 7→8; 9 new studio schema cases).
+- `@repo/ai` prompt, driver, pricing, provider and error suites: 99 pass. The
+  studio joins the injection corpus, plus 6 builder cases. The Testcontainers
+  integration suite was not run.
+- `apps/web` 65 files / 2374 pass, including a new "AI Writer (ADR-129)" block
+  in `ai-degradation.test.ts`. `ai-output.test.ts` picks up `ai-writer.tsx` by
+  its `ai-` prefix.
+- `tsc --noEmit` clean for utils, contracts, ai and web. ESLint clean on every
+  touched file. `check:phantom-deps`, `check:permission-keys` and
+  `check:catalog-completeness` pass.
+
+**Not verified live.** The panel was not opened in a browser, and no
+generation ran against a provider. An existing database needs `pnpm db:seed`
+for the `writing_studio` row, then the feature switched on under AI →
+Features. Ctrl/⌘+J was chosen beside ⌘K. Whether every browser lets a page
+take it was not checked.
+
+## 2026-09-17 — Module 18: "Generate with AI" gets options, on the article editor first
+
+**What shipped**
+
+- The form-fill bar takes a `withOptions` prop, passed only by the article
+  editor for now. With it: a taller brief box at a larger text size, a larger
+  Generate button, and three new choices — Tone (the AI Writer's closed list of
+  eight, labelled from `admin.ai.writer.tones.*` so a tone reads the same in
+  both places), Reader level (beginner / intermediate / advanced) and Length
+  (brief / standard / in depth).
+- The language is not a control. The bar names it ("Language: English") and
+  says it follows the Language selector on the Content section, which already
+  decided the `locale` sent. A second picker could disagree with the draft it
+  was filling.
+- `formFillPayloadSchema`'s `form` mode accepts optional `tone`, `audience` and
+  `length` (`AI_FILL_AUDIENCES`, `AI_FILL_LENGTHS` in `@repo/contracts`).
+  Length is words, not a count: one draft fills several fields, each with its
+  own column limit. `buildFormFillPrompt` adds a line per choice and none when
+  nothing was chosen. `TONE_WORDS` is exported from the studio builder, so it
+  is written once.
+- Catalog: `admin.ai.fill{Language,Tone,Audience,Length}*` (English only,
+  ADR-043).
+
+**Decisions:** no ADR. This extends ADR-126's bar inside its own rules (the
+settings stay closed lists, and the review/apply flow is unchanged).
+
+**Tests**
+
+- `@repo/ai` prompts suite 51 pass, including 2 new form_fill cases (choices
+  named, and no steering lines when none were chosen).
+- `@repo/contracts` 468 pass.
+- `apps/web` `tsc --noEmit`: no errors in touched files. The one reported error
+  is already there, in `_lib/machine-translation.test.ts`. ESLint is clean on
+  `ai-fill.tsx` and `ai-labels.ts`.
+
+**Not verified live.** The bar was not opened in a browser, and no generation
+ran against a provider.
+
+## 2026-09-17 — Modules 11/18: "Translate from English" in the course, lesson, video topic and glossary term editors (changes-29 B3, completed)
+
+**Owner report:** the news reading-language menu works; "implement on all
+other modules". The PUBLIC half was already in place for courses, lessons,
+video topics and glossary terms (entry above). What those modules lacked was
+the way the owner made the news translation: B3's "Translate from English"
+button had shipped in the article editor only, although changes-29 §14.3
+specifies it for all five editors. Without it there was no machine
+translation to review, and so nothing for the menu to offer. No new ADR:
+this finishes an accepted plan item and changes none of its rules.
+
+**Shipped**
+
+- `@repo/contracts`: `machineTranslated` on the course, lesson, video topic
+  and glossary translation schemas. `@repo/core`: `saveCourse`, `saveLesson`,
+  `saveVideoTopic` and `saveGlossaryTerm` write `MACHINE_TRANSLATED` only while
+  it is set, and `TRANSLATED` on every other save. A plain Save is still the
+  review, as ADR-097 #4 says.
+- `apps/web` admin:
+  - `_lib/editor-ai.ts` returns a `translate` affordance to every editor page.
+    It is gated on the `translation` feature AND `translations.update`, the
+    key the run route checks, so nobody sees a button that always fails.
+  - `_lib/machine-translation.ts` holds the flag rule
+    (`mergeTranslationPatch`: an edit to a translatable field clears it),
+    `textFields`, the list flattening (`learningObjectives.0`,
+    `faq.0.question`) and `holdsHumanText` (the overwrite confirm).
+  - `_components/editor/translation-controls.tsx` shows the translation's own
+    status badge and the button beside the locale switcher, on non-default
+    locales only.
+  - The four editors are wired to it. The slug is never sent to the model.
+- Status labels: new `admin.statusTranslated`; `TRANSLATION_STATUS_TONE`
+  gains `TRANSLATED`. The article editor's badge had shown the raw
+  `MACHINE_TRANSLATED` enum (no label in its map) and now names it.
+
+**Tests**
+
+- `apps/web`: 66 files, 2393 pass — new `_lib/machine-translation.test.ts`
+  (flag rule, list round-trip, overwrite test, and a source guard that each of
+  the four editors renders the controls, sends the flag and never offers the
+  slug).
+- `@repo/contracts`: 27 files, 468 pass.
+- Integration (MariaDB): learn + public-content + videos 87 pass, including
+  new cases that an AI save writes `MACHINE_TRANSLATED` and a plain save
+  promotes it, for course, lesson and glossary term.
+- `tsc --noEmit` clean for contracts, core and web; ESLint and Prettier clean
+  on every touched file.
+
+**Not verified live.** The editors were not opened in a browser.
+
+**Not done — quizzes.** The quiz editor has no locale switcher at all: a quiz,
+its questions, options and explanations are authored in English only. A
+reading-language menu on a quiz needs translation authoring first, which is a
+feature of its own and waits on the owner.
+
+## 2026-09-17 — Module 18: the body editor's ✨ draft becomes a dialog (article editor first)
+
+**What shipped**
+
+- The same day's entry above changed the "Generate with AI" section, but the
+  owner was looking at the rich-text toolbar's ✨ menu, which is the writing
+  assistant: a one-line input and a "Draft it" button inside a dropdown.
+- `AiAssistantConfig.draftDialog` (set by the article editor only): "Draft
+  something new" is now a menu item that opens a dialog. It has a large brief
+  box (2000 characters, was 500), Tone (the studio's eight), Reader level,
+  Length and Format, plus the language it will write in.
+- **Bug fixed:** the article editor never passed its `locale` to the assistant,
+  so a draft on the Spanish tab came back in English. It now passes the Content
+  section's locale.
+- `writingAssistantPayloadSchema`: `tone` widens to `AI_STUDIO_TONES` (a
+  superset, so `change_tone` is unaffected). It also gains `audience`, `length`
+  and `format`, which the prompt applies to `draft` only.
+  `AI_FILL_LENGTHS`/`AI_FILL_AUDIENCES` moved above the payload schemas
+  (module-level `const` order).
+- Catalog: `admin.ai.assistantDraft{Title,Description,Cancel}`. The option
+  labels reuse the `fill*` and `writer.*` keys.
+
+**Tests**
+
+- `@repo/ai` prompts 52 pass. A new case checks that a draft gets tone,
+  audience, length, format and language, and that `fix_grammar` gets none of
+  them.
+- `@repo/contracts` 468 pass. `apps/web` dialog/form conventions,
+  ai-degradation, ai-output and `_lib` suites: 843 pass.
+- `tsc` shows no new errors (the one in `machine-translation.test.ts` was
+  already there). ESLint is clean on the touched files.
+
+**Not verified live in a browser.**
+
+## 2026-09-17 — Module 18: the ✨ draft is an inline panel, not a modal (owner feedback)
+
+- The owner asked for no modal. `AiAssistantConfig.draftDialog` is replaced by
+  `panel`. On the article editor, the toolbar ✨ opens a dropdown-style
+  POPOVER, top to bottom:
+  - the language chip;
+  - the brief (a textarea; Ctrl/⌘+Enter drafts) and a full-width Draft button;
+  - Tone, Length, Format and Reader level as dropdowns;
+  - "Improve existing text" buttons: Expand, Summarise, Fix grammar, and
+    "Change tone: X", which appears once a tone is picked.
+
+  It is a Popover rather than a Menu because a Menu's typeahead swallows
+  keystrokes and its items close it.
+
+- The improve buttons work on the selection. With no selection they SELECT the
+  whole body first, so the result panel's Replace replaces exactly what was
+  sent. Every other editor keeps the original dropdown. `useAssistantRun` is
+  now the one request path both shapes share.
+- Catalog: `assistantDraft{Title,Description,Cancel}` is removed.
+  `assistantActions{Heading,Hint}` is added.
+- `apps/web` conventions, ai-degradation and ai-output suites: 827 pass. `tsc`
+  shows no new errors. ESLint is clean. Not verified live in a browser.
+
+## 2026-09-17 — Module 18: ✨ panel layout fix, and a language the panel can change
+
+- **Layout bug:** the "Improve existing text" buttons sat in a
+  `sm:grid-cols-2`, but the popover is 24rem at every viewport. Labels like
+  "Summarise the selection" overran their buttons, and the popover scrolled
+  sideways, clipping the start edge of every label. Now: one column of
+  full-width buttons that wrap, with `overflow-x-hidden` on the popover.
+- **Language is a dropdown.** It starts on the Content section's locale and
+  follows it when that changes, overriding a pick made for the previous tab.
+  It is React's adjust-state-during-render pattern, with no effect. The options
+  are the editor's `locales`, named through `Intl.DisplayNames`.
+- **Language defaults.** A draft writes in the chosen language. An edit
+  (expand, summarise, change tone) sends NO locale unless the person picked a
+  language different from the editor's. `buildWritingAssistantPrompt` reads an
+  absent locale on a passage as "write in the same language as the supplied
+  passage", so a Spanish quote inside an English article stays Spanish.
+  `fix_grammar` never translates: it keeps the passage's language even when a
+  locale is sent. This also fixes the old dropdown shape, which asked grammar
+  fixes to "Write in English".
+- `@repo/ai` prompts 53 pass (new language-rule case). `apps/web` conventions
+  and AI suites 827 pass. No new `tsc` errors. ESLint is clean. Not verified
+  live in a browser.
+
+## 2026-09-17 — Module 18: ✨ panel title row and word count (owner feedback)
+
+- The language dropdown shares the title's row at the inline end, showing codes
+  only (`en`, `ar`…) with no visible label. Its accessible name is
+  `aria-label`. It still starts on, and follows, the editor's locale.
+- The panel's Length preset is replaced by a **Word count** number field,
+  pre-filled with `AI_DRAFT_WORDS_DEFAULT` (300) and editable. It is clamped to
+  `AI_DRAFT_WORDS_MIN`–`AI_DRAFT_WORDS_MAX` (20–1500; the ceiling keeps a
+  draft inside the seeded 2000-token output limit) on blur and on send.
+  `writingAssistantPayloadSchema.wordCount` is added, `draft` only; the prompt
+  asks for "about N words", and a word count wins over a `length` preset.
+- The default is a code constant, not a setting. A per-install default would be
+  a new `ai.*` settings key and should be wired end to end or not seeded
+  (code-style.md #28).
+- `@repo/ai` prompts 54 pass (new word-count case). `@repo/contracts` 468 pass.
+  `apps/web` form conventions and AI suites pass. No new `tsc` errors. ESLint
+  is clean. Not verified live in a browser.
+
+## 2026-09-17 — Module 18: the ✨ panel and the larger "Generate with AI" section on every editor
+
+- Rolled out from the article editor to courses, lessons, video topics,
+  quizzes, glossary terms and glossary topics (owner request).
+- `loadEditorAi` now builds the assistant config as `panel: true` with
+  `languages: routing.locales`. Each editor spreads in its own `locale` state
+  when it hands the config to `RichTextEditor`. That value is client state the
+  server read cannot see, which is also why the language dropdown follows each
+  editor's own switcher. The glossary term editor does this once, for its four
+  prose fields.
+- Every `AiFillBar` passes `withOptions`: the taller brief, tone, reader level
+  and length. Quizzes keep their question count beside them.
+- The dropdown shape and the compact bar remain in code, for a host that sets
+  neither flag. No such host exists today.
+- Before this, none of these editors passed a locale to the assistant, so every
+  draft came back in English. Each now writes in the language being edited.
+- `apps/web`: conventions, AI suites, and the learn/glossary/_lib suites, 846
+  pass. `tsc` reports only the error that was already there
+  (`machine-translation.test.ts`). ESLint and Prettier are clean on the seven
+  touched files. Not verified live in a browser.
+
+## 2026-09-17 — Module 18: "Generate SEO" on every editor with an SEO section
+
+- The article editor's SEO review dialog (`AiSeoButton`, changes-29 B2) is added
+  to courses, lessons, video topics, glossary terms, glossary topics and tools
+  (owner request). It sits in the same place as on articles: the SEO section's
+  header `actions`. Quizzes have no SEO section and are unchanged.
+- The dialog now offers only the fields the host passes in `current`, so a
+  suggestion cannot land in a column the entity lacks. Articles pass five
+  fields, glossary terms two (the term is its own keyword), and the rest three.
+  `keywords="single"` keeps only the first keyword for the one-phrase
+  `seoFocusKeyword` columns. Glossary topics keep the comma list, because
+  `seoKeywords` is plural. An empty body falls back to the excerpt, then the
+  title, because the payload schema refuses empty content.
+- `loadEditorAi` returns `seo` under its own feature switch (`seo_generation`).
+  The tools page, which has no other AI, reads the new `loadSeoAi`. Both gate on
+  `ai.use` plus the editor's own saving key.
+- The run route's `seo_generation` surface row gains `courses.update`,
+  `lessons.update`, `glossary.update` and `tools.update`. This is ADR-097 #10's
+  rule applied to new surfaces: the key that saves the entity governs the AI
+  that writes into it. No permission key was added. The prompt says "page", not
+  "article". Catalog copy for the feature's description and location is
+  updated.
+- New guard in `ai-degradation.test.ts`: every editor listed renders
+  `<AiSeoButton` in a section `actions` slot, and the route accepts that
+  editor's key. `apps/web` `ai-degradation` 61 pass, form and dialog conventions
+  pass, and `@repo/ai` prompts 54 pass. `tsc` reports only the existing
+  `machine-translation.test.ts` error. ESLint is clean on the touched files.
+  Not verified live in a browser.
+
+## 2026-09-17 — Module 18: "Generate with AI" on the tool editor
+
+- The tool editor (`/admin/tools/[key]`) gets what the other seven editors have
+  (owner request): the "Generate with AI" brief bar, the ✨ menu beside each
+  text field, and the writing assistant on its two rich-text fields. It already
+  had "Generate SEO".
+- It joins the way ADR-126's consequences section says an eighth editor joins,
+  so there is no new ADR. `AI_FILL_MODULES` gains `tool`. `AI_FILL_FIELDS.tool`
+  is title, tagline, intro (rich), body (rich), faq, seoTitle, seoDescription
+  and seoFocusKeyword, each with its column's own limit. The run route adds
+  `tool: ["tools.update"]` to `FILL_MODULE_PERMISSIONS` and `tools.update` to
+  the `form_fill` surface row. No permission key was added.
+- **Not fillable, on purpose:** `config`, because defaults, limits and
+  instrument lists are settings rather than prose, and what the tool computes is
+  code (ADR-086 #1). Also not `highlights`, because each card has a glyph from
+  the closed `TOOL_HIGHLIGHT_ICONS` list (ADR-114 #3). The prompt calls the page
+  "the explanatory copy around a calculator", which must not describe the
+  calculator doing anything it was not told it does.
+- The tools page now reads `loadEditorAi`. `loadSeoAi` had no other caller, so
+  it is deleted. The editor gives each field its own setter instead of patching
+  a merged draft, so the one-patch rule in ADR-126 §4 holds with no merge.
+- Tests: `@repo/contracts` ai 38 pass, with a new case showing a tool
+  suggestion drops `config`. `@repo/ai` prompts 55 pass, with a new tool case.
+  `apps/web` ai-degradation + form conventions 758 pass; "reaches every editor
+  page" now lists the tools page. `tsc` reports only the existing
+  `machine-translation.test.ts` error. ESLint is clean on the touched files. Not
+  verified live in a browser.
+
+## 2026-09-17 — Module 12: home news & analysis band takes the Top stories shape; facts band off; signed-in picture in connect
+
+- **The desk band (`latest_news`, variant `desk`)** now draws the `/news` "Top
+  stories" layout (owner request): one lead story beside a numbered rail,
+  instead of a row of four equal cards. The grid moved out of `NewsSpotlight`
+  into an exported `SpotlightGrid`, and both `/news` and the home band render
+  it, so the two cannot drift apart. The home rail holds three stories (the
+  `/news` rail holds two), so the column ends near the lead card's bottom
+  instead of leaving a tall empty area. `deskEntries` and its four seats are
+  unchanged. So are the per-feed "All news" / "All analysis" buttons. The lead
+  cover is `priority` only on `/news`. A lone lead now spans the full row.
+  No ADR: ADR-121 §1's seat rule and its calls to action still hold. Only the
+  card shape changed, at the owner's request.
+- **`facts` is off** (the "60K+ Learners taught" strip). It is disabled in the
+  seed, and `20260917120000_disable_facts_changes39` disables it for an
+  existing database. That migration follows the `trust_strip` one from
+  changes-37 (bounded and idempotent). The component, the demo dataset and
+  ADR-103's rules stay in place.
+- **Connect band, signed in:** the subscribe half is still hidden by ADR-124's
+  pre-paint hint. A still picture (`/banners/spare-forex.webp`, decorative) now
+  takes that track at `lg` and up, so the band keeps its two columns. The
+  picture is hidden on a phone, where stacking it would only make the band
+  taller. The `in-data-[session=learner]:lg:grid-cols-1` override is gone.
+- Tests: `home-presentation.test.ts` replaces the "platform-sized cards" case
+  with a Top stories shape case and adds facts-off and signed-in-picture
+  guards. `_sections` + newsletter-consent + public-chrome + grid-base +
+  radius-scale: 119 pass. ESLint is clean on the touched files. `tsc` reports
+  only the existing `machine-translation.test.ts` error. The migration is
+  applied to the local database. The server HTML shows the numbered rail and
+  the picture markup. Not checked visually in a browser.
+
+## 2026-09-17 — Modules 11/12/15: every content editor can write every language, and quizzes can be translated and read
+
+**Owner report** (on `/admin/learn/videos/<id>`): the multi-language option
+should be available in the editor and on the public side, across videos,
+topics, glossary, courses, news. The review found the public `?lang=` half
+already in place for five modules; the gaps were in the editors, plus quizzes
+end to end. No new ADR: this applies ADR-127 and ADR-058 #2 and changes neither.
+
+**Bug: the switcher was hidden on five screens.** The video topic, glossary
+term and glossary topic editors, and the article category and tag dialogs,
+listed `getActiveLocales()`. Only `en` is active, so the list had one entry and
+the switcher (`locales.length > 1`) never rendered. Articles, courses and
+lessons already used `routing.locales`, which is why only they worked.
+
+- `@repo/i18n`: `getAuthoringLocales()` / `loadAuthoringLocales()`, every seeded
+  locale that `routing.locales` can route, active or not, cached under the
+  existing `locales` tag. The five pages read it.
+
+**Bug: "View live" on a non-English tab went to a 404.** Every content editor
+built `/<locale>/…` with the translation's slug, and only `en` is served. The
+course and lesson links also dropped the track segment (ADR-065), so they 404'd
+in English too.
+
+- `apps/web` `(admin)/_lib/live-href.ts`: `liveHref(path, locale, default)` plus
+  `storedSlug`. The link is the default locale's saved page, plus `?lang=` on
+  another tab. Wired into the article, course, lesson, video topic, glossary
+  term and glossary topic editors. The slug-field URL hints keep showing the
+  locale's own address, plus the missing track for courses and lessons.
+  `LessonData.courseTrack` is new.
+
+**Quizzes: translation authoring and a reading view.**
+
+- `@repo/core` `saveQuiz`: a non-default-locale save must name the stored
+  questions in order, each with the default locale's option count. Otherwise it
+  throws `QuizTranslationStructureError`. It writes words only: no
+  `deleteMany`, no question-row update, so a translation cannot move a correct
+  answer even if the payload carries a different one.
+- `loadQuizBySlug`/`getQuizBySlug` take a reading locale and return
+  `PublicQuizView` (`QuizView & ReadingView`). A language is offered only when
+  every question has its words, so a question added later in English withdraws
+  that language rather than mixing languages mid-quiz.
+- Public `/learn/[track]/quizzes/[quiz]`: `?lang=`, the `ReadingLanguageMenu`,
+  and `lang`/`dir` on the title, description, prompts, options, review prompts
+  and explanations. The runner sends the words' locale at submit, so
+  explanations come back in it. The page was already `noindex`.
+- Admin quiz editor: the language is `?locale=` in the URL (the other locale's
+  words are a second server read), with a confirm before discarding unsaved
+  edits. On a non-default language: add, remove and reorder are hidden, as are
+  both AI generators (they append questions); type, points, correct answer and
+  the option list are locked; true/false labels become editable; the English
+  text is each field's placeholder. Catalog: `admin.quizzes.languageLabel`,
+  `translatingHint`, `switchLanguage{Title,Body,Confirm}` (admin, `en` only).
+
+**Tests**
+
+- `@repo/core` integration (Testcontainers, MariaDB 11.4):
+  `quizzes.integration.test.ts`: the full run had 38 pass and 1 fail. The fail
+  was a test bug (the English re-save picked the Arabic title). After the fix,
+  the three new cases were rerun on their own and pass. The new cases: an Arabic save keeps the ids and the correct answer (even
+  with a forged one in the payload); dropping a question or adding an option is
+  refused and deletes nothing; `?lang=ar` reads RTL with no `correctAnswer` in
+  the payload, and a later English-only question withdraws Arabic.
+- `@repo/core` unit 172 pass. `@repo/i18n` unit 18 pass.
+- `apps/web`: 67 files, 2416 pass, 1 fail. The failure is
+  `_components/ai-assistant.test.ts` ("starting a run closes the menu"), in the
+  uncommitted AI assistant work, which this change does not touch. New:
+  `_lib/live-href.test.ts` (helper plus source guards on the five pages and six
+  editors), a quiz case in `[locale]/_lib/reading-language.test.ts`, and
+  translation-mode guards in `quiz-editor.test.ts`.
+- `tsc --noEmit`: core clean; web shows only the existing
+  `machine-translation.test.ts` error. ESLint and Prettier are clean on the
+  touched files. `check:catalog-completeness` OK.
+
+**Not verified live in a browser.**
+
+**Not done.**
+
+- Video categories: the dialog still edits the default locale only, and
+  category names show in the interface locale on public pages.
+- Glossary topic public pages have no `?lang=` view, so their "View live" on
+  another tab opens the English page.
+- Quizzes have no "Translate from English" (machine translation).
+- A quiz translation saves only when every question's prompt and options are
+  filled.
+
+## 2026-09-17 — Modules 07/09/12: one human-readable date format for the whole site
+
+**What shipped**
+
+- The quiz editor's status panel showed `Scheduled for: 2026-09-18T04:00:00.000Z`
+  and `Updated: 2026-09-17T11:41:18.639Z`. Its page passed `toISOString()` to
+  `ContentStatusPanel`, which prints the props as given. The other four editors
+  formatted the dates first.
+- New `formatDate` / `formatDateTime` in `@repo/utils` (`date-format.ts`), plus
+  `DATE_FORMAT_OPTIONS` / `DATE_TIME_FORMAT_OPTIONS`. These are now the only
+  definition. A day reads `Sep 18, 2026` and a moment reads
+  `Sep 18, 2026, 4:00 AM`. The formatter is cached per locale, and an invalid
+  input returns `""` instead of throwing a RangeError.
+- Moved to the helper: ~20 admin screens that each built their own
+  `new Intl.DateTimeFormat("en", …)`; the `YYYY-MM-DD` slices on users, user
+  detail, profile and employee detail; the email transport "last verified"
+  line; and the public news listing, spotlight, sidebar and article byline.
+  The byline was `dateStyle: "long"` and is now the standard `medium`.
+- The three next-intl `format.dateTime` call sites (account masthead, progress,
+  rate footnote) keep next-intl's formatter, and its configured time zone, but
+  now read `DATE_FORMAT_OPTIONS`.
+- ISO stays where a machine reads it: `<time dateTime>`, JSON-LD, OpenGraph,
+  cron/API bodies, the CSV filename stamp, and the notification bell. The bell
+  renders relative time on the client.
+- Not touched: the Website Builder versions panel (ADR-042, retained), the
+  tool widgets' clock times, and `@repo/blocks` card dates (already `medium`).
+
+**Decisions:** no ADR. This is a presentation convention and deviates from no
+plan decision. Each screen keeps the granularity it had (date vs date + time).
+
+**Tests**
+
+- `@repo/utils`: new `date-format.test.ts`. The package suite has 299 pass.
+- `apps/web`: new `app/date-format.test.ts` source guard. It fails if a screen
+  builds its own `dateStyle` formatter, prints a `toISOString().slice(0, 10)`
+  as a value, or passes an ISO `publishedAt`/`scheduledFor`/`updatedAt`/
+  `createdAt` prop. Full suite: 68 files, 2420 pass, 1 fail. The fail is the
+  same `ai-assistant.test.ts` case recorded in the entry above, which this
+  change does not touch.
+- `tsc --noEmit` (web) shows only the existing `machine-translation.test.ts`
+  error. ESLint and Prettier are clean on the touched files.
+
+**Not verified live in a browser.**
+
+## 2026-09-17 — Modules 11/15: uploaded images are stored as WebP, and news covers use the optimizer
+
+**What shipped**
+
+- The owner asked whether uploads are converted and in what format. They were
+  not. `storeMedia` stored the uploaded bytes unchanged, including full
+  resolution and EXIF/GPS. The news surfaces hard-coded `unoptimized`, so
+  covers were sent at full size, even into a 56px sidebar thumbnail.
+- New `packages/core/src/image-optimize.ts`. `optimizeImage()` applies EXIF
+  orientation, caps the longest edge at 2560px (never enlarges), encodes WebP
+  at quality 80 and strips all metadata. `storeMedia` and `replaceMedia` run
+  it before the storage driver. The row stores the WebP's MIME type, size and
+  real dimensions. The display name becomes `.webp`, and the audit entry adds
+  `originalMimeType` and `originalSize`.
+- Not converted:
+  - `brand` and `setting` uploads (logos, favicon, email logo, default share
+    image);
+  - GIF, ICO and SVG files;
+  - animated PNG and WebP;
+  - undecodable files, or files over 100 MP;
+  - a re-encode that would come out larger without a resize.
+
+  In each case the original is stored and the upload still succeeds.
+
+- The size cap and the magic-byte sniff still run on the bytes as sent.
+- The news listing card, the sidebar thumbnails, the article cover and the
+  header banner now pass `unoptimized={!canOptimizeImage(src)}`. The new
+  helper in `[locale]/_lib/image-optimizer.ts` allows a non-SVG `/uploads/`
+  path. Absolute URLs still bypass the optimizer, so `remotePatterns` stays
+  closed.
+- `sharp` 0.35.4 (exact) added to `@repo/core`, pinned in `stack.md`.
+- Existing uploads are NOT backfilled.
+
+**Decisions:** ADR-130. It supersedes the "no resizing/variants yet" lines of
+ADR-017 and ADR-034. Everything else in both ADRs stands.
+
+**Measured:** re-encoding the ten existing raster uploads in the dev library
+takes the total from 6.31 MB to 0.72 MB (89% smaller). The two 1920×1080 PNGs
+went from 2.2 MB to 86 KB and from 1.9 MB to 49 KB. On the running dev server,
+`/_next/image` served an existing 119 KB JPEG upload as a 16 KB WebP at w=828.
+
+**Tests**
+
+- `@repo/core`: new `image-optimize.test.ts` (12 cases, real encoded bytes).
+  `media.integration.test.ts` gains two MariaDB cases: an article JPEG is
+  stored as a 2560×1280 WebP whose row, stored bytes and audit agree, and a
+  brand JPEG is stored byte-for-byte.
+  - The media + account integration + media unit suites: 103 pass.
+  - The core unit suite: 184 pass.
+- `apps/web`: new `image-optimizer.test.ts`, which also guards against a bare
+  `unoptimized` in the three news files. Full suite: 2425 pass, 1 fail. The
+  fail is the same `ai-assistant.test.ts` case recorded above, untouched here.
+- `tsc --noEmit`: core is clean; web shows only the existing
+  `machine-translation.test.ts` error. ESLint and Prettier are clean on the
+  touched files, and `check:phantom-deps` is OK.
+
+**Not verified live:** an upload through the admin UI (the path is covered by
+the integration test against a real database).
+
+## 2026-09-17 — Modules 11/15: upload compression raised to medium (ADR-130 revised)
+
+**What shipped**
+
+- The owner found the first ADR-130 settings too soft. Measurement showed
+  the upload step was not what shrank the images: none of the ten dev
+  uploads is wider than 2560px. The softness came from compressing twice,
+  once at WebP quality 80 on upload and again at Next's default display
+  quality of 75.
+- `OPTIMIZE_WEBP_QUALITY` 80 → **85**, plus `smartSubsample: true` for sharper
+  colour edges. `OPTIMIZE_MAX_EDGE` 2560 → **3840** (4K), so a photograph is
+  compressed rather than downsized.
+- `next.config.ts` `images.qualities: [85]`. Every `<Image>` now resolves to
+  85, and no call site passes `quality`. An unlisted `q=` answers 400; no code
+  builds a `/_next/image` URL by hand.
+- ADR-130 (uncommitted, same day) and the content skill were updated in place
+  to the new numbers.
+
+**Measured (same ten uploads):**
+
+| Setting                                     | Total size  | Saved   |
+| ------------------------------------------- | ----------- | ------- |
+| quality 80 at 2560px                        | 0.72 MB     | 89%     |
+| **quality 85 at 3840px, smart subsampling** | **0.97 MB** | **85%** |
+| quality 90 at 3840px, smart subsampling     | 1.41 MB     | 78%     |
+
+The totals are against 6.31 MB of originals. On the dev server, a 119 KB JPEG
+upload at w=828 is served as a 24 KB WebP (it was 16 KB at quality 75).
+
+**Tests:** `image-optimize.test.ts` + `media.integration.test.ts`: 41 pass.
+The fixtures moved to 4800px so the resize path is still exercised, and the
+integration case now expects 3840×1920. Prettier is clean.
+
+## 2026-09-17 — Module 11: uploaded images are aimed at 80 KB (ADR-130 revised again)
+
+**What shipped**
+
+- The owner asked for stored images of around 80 KB. A fixed quality cannot
+  do that: at quality 85 the dev uploads ranged from 12 KB to 258 KB.
+- `optimizeImage` now works to a byte budget:
+  - `OPTIMIZE_TARGET_BYTES` is 80,000.
+  - At the upload's own size (capped at 3840px), an integer bisection looks
+    for the highest quality in `OPTIMIZE_MIN_QUALITY`–`OPTIMIZE_MAX_QUALITY`
+    (60–85) that fits.
+  - Only when 60 does not fit does the edge step down through
+    `OPTIMIZE_EDGE_STEPS` (2560 → 1920 → 1600 → 1280). Steps whose
+    pixel-scaled prediction cannot fit are skipped, and each step resizes
+    from the full decode.
+  - An image under budget at 85 is never encoded sharper, and one over
+    budget at 1280/60 is kept there.
+- The chosen quality is returned and written to the audit row beside
+  `originalMimeType` and `originalSize`.
+- `images.qualities: [85]` is unchanged. ADR-130 and the content skill were
+  updated in place (still uncommitted, same day).
+
+**Measured (the eleven dev uploads):**
+
+- The total went from 6.33 MB to 0.52 MB, and every file is between 12 and
+  79 KB.
+- The five images of 1000px or less stayed at quality 85, full size.
+- 1920×1080 PNG: 2.2 MB → 74 KB (quality 75, full size).
+- 1920×1280 JPEG: 431 KB → 79 KB (quality 63, full size).
+- 1920×1280 JPEG: 569 KB → 70 KB (quality 75 at 1600px).
+- 1920×602 panorama: 409 KB → 78 KB (quality 66 at 1280px).
+- Synthetic detailed 12 MP photograph: 5 MB → 88 KB (floor: 1280px, quality
+  60).
+- Encode time: under 100ms at 1000px, 0.3–2.2s at 1920px, 3.7s for 12 MP.
+
+**Tests:** `image-optimize.test.ts` gains three cases:
+
+- an image under budget keeps quality 85;
+- a detailed 1920px photo is brought under 80 KB, with resolution dropping
+  only after quality;
+- incompressible noise ends at 1280px and quality 60.
+
+The edge-cap cases now use a smooth fixture, so they still reach 3840. The
+image-optimize, media unit, media integration and account integration
+suites: 106 pass. `tsc` (core) is clean; ESLint and Prettier are clean on the
+touched files.
+
+## 2026-09-17 — Module 12: owner footage in the home page's "See it in practice" band
+
+**What shipped:**
+
+- `in_practice`'s middle column is now the owner's clip
+  (`storage/uploads/The platform/308077_medium.mp4`), not the featured
+  `VideoTopic` tile. It autoplays muted and looped through the existing
+  `HeroVideo` island, which starts it after hydration and keeps it still
+  under reduced motion.
+- At `lg` it fills the grid row, so it matches the quotes column on the
+  left and the tools column on the right. The video is cover-fitted in an
+  absolute layer, so it never sets the row height. Below `lg` it is a 16:9
+  box.
+- Re-encoded from 2560×1440 at 10.4 MB to 1280×720 H.264 (CRF 28, no audio,
+  `+faststart`) at 0.96 MB: `public/home/practice.mp4`.
+- The still is `public/home/practice-poster.webp`, the clip's own first
+  frame. It is painted as an image under the video, not as `poster` on
+  `HeroVideo`, whose guard forbids one.
+- The band no longer calls `getFeaturedVideoTopics` or reads the `videos`
+  flag.
+
+**Decisions:** no ADR. The column went from content to composition, the same
+move the hero made with its footage under ADR-042's split.
+
+**Tests:** `home-presentation.test.ts` guards updated: the video column's
+guard, fill-not-centre, and the one-video-on-the-page check now names
+`HOME_MEDIA.practiceVideo`. `_sections` + radius/grid suites: 102 pass. ESLint
+is clean on the touched files. `tsc` (web) is clean apart from the existing,
+unrelated `machine-translation.test.ts` error.
+
+## 2026-09-17 — Module 12/17: `/support` sends to the General setting, and says so clearly
+
+**What shipped:**
+
+- The contact form now delivers to `site.supportEmail` (Settings → General).
+  Before this, it went to the address hard-coded in `support-facts.ts`. The
+  delivery log showed the owner's test message landing at `support@mbfx.co`.
+  The Email Support card and the footer's email line read the same setting.
+- "Send Email" opens a compose window with the address and a subject line
+  filled in (`support.channels.email.mailSubject`).
+- A signed-in learner's name and email are filled in from the public session,
+  with an info line saying so.
+- Success replaces the form with a success-toned panel (check mark, title,
+  "Send another message") and moves focus to it. Refusals render in the
+  destructive `Alert`, and the action returns what was typed, so it is not
+  lost when React resets the form.
+- `sendTemplatedEmail` restores a missing template row or missing `en`
+  content from `EMAIL_TEMPLATE_DEFAULTS`. The restore is create-only: edited
+  content and the on/off switch are never touched.
+- WhatsApp links use digits only, on the page and in the footer.
+- `site.supportEmail` is `isPublic: true`: seed row plus the data migration
+  `20260917200000_support_email_public_adr131`.
+
+**Decisions:** ADR-131, which supersedes ADR-113 §2's choice of the facts file
+as the source of the address. §2's one-address rule stands.
+
+**Tests:** `support.test.ts` and `support-page.test.ts` were updated for the
+setting. New guards cover the setting-built `mailto:` with a subject, the
+digits-only WhatsApp link, the success panel and error alert, session prefill,
+and values echoed back on refusal. The 8 affected app suites pass (154
+tests). `send.integration.test.ts` passes (12): the missing-template case now
+restores and sends, and a new case proves an inactive template stays off.
+`check:email-templates` and `check:catalog-completeness` pass. `tsc` (web) is
+clean apart from the existing `machine-translation.test.ts` error. ESLint and
+Prettier are clean on the touched files. The migration is applied locally.
+
+## 2026-09-17 — Module 11/12: a quiz can carry a cover image
+
+**What shipped:**
+
+- `Quiz.coverAssetId` and `ReferenceSourceType.QUIZ`, in migration
+  `20260917230000_quiz_cover_adr132`.
+- The quiz editor has a **Cover image** upload field in its Details section,
+  with upload, library pick, replace and remove. It is hidden while a
+  translation is being edited, because the picture belongs to the quiz, not a
+  language.
+- `saveQuiz` writes the column and a `QUIZ` content reference in one
+  transaction, so `deleteMedia()` refuses an in-use cover. `duplicateQuiz`
+  copies the cover and its reference. `getQuizAdmin` resolves the URL for the
+  field.
+- `QuizCardView.coverUrl` is resolved in `loadStandaloneQuizzes`, one read for
+  the whole shelf, with deleted assets excluded. `quizCoverUrl(slug, coverUrl)`
+  prefers it and falls back to the generated panel. The card is `unoptimized`
+  only for an SVG or a generated panel.
+
+**Decisions:** ADR-132. It supersedes the 2026-09-09 claim that a quiz would
+never have a cover column. The panels stay, as the fallback.
+
+**Tests:** new integration case in `quizzes.integration.test.ts` covering
+save, admin detail, public card, reference written, then clear. 40 of 40 pass.
+`quiz-presentation.test.ts` gained the uploaded-cover preference and now calls
+`quizCoverUrl` through an arrow, because `map` would otherwise pass the index
+as `coverUrl`. The 3 app suites run pass (711 tests). `media.test.ts` passes
+(49), including the enum drift guard. `tsc` is clean on contracts and core. On
+web it is clean apart from the existing `machine-translation.test.ts` error.
+ESLint and Prettier are clean on the touched files. `prisma migrate diff`
+against the migrated local database is empty.
+
+## 2026-09-17 — Module 09: an uploaded favicon now reaches the page
+
+**What shipped:**
+
+- `apps/web/app/favicon.ico` (a Module 00 scaffold file) moved to
+  `apps/web/public/favicon.ico`. In `app/` it was a file-convention icon, and
+  Next ranks file-based metadata above `generateMetadata`. That meant the
+  `faviconIcons()` link both root layouts build from the `favicon` BrandAsset
+  was replaced on every route. An upload in Theme → Logos & Favicons showed as
+  saved in the admin and never reached the browser. The layout comment already
+  said the fallback lived in `public/`. Now it does, so `/favicon.ico` still
+  resolves when there is no upload.
+- `scripts/check-reserved-paths.mjs` looks for the file in its new location.
+  `favicon.ico` stays reserved.
+
+**Decisions:** no ADR. This fixes the code to match what ADR-017 already says.
+
+**Tests:** `favicon.test.ts` gained a placement guard. It fails if an icon
+file comes back under `app/` or either root layout's folder, and if the
+`public/` fallback goes missing (5 of 5 pass). `check-reserved-paths.test.mjs`
+8 of 8 pass, and `check:reserved-paths` is OK.
+
+## 2026-09-17 — Module 13: a tool's Cover image shows in its masthead; the glyph picker shows glyphs
+
+**What shipped:**
+
+- **The tool Cover image now shows.** It was saved, audited and
+  reference-tracked, but no public page read it (code-style.md #28).
+  `getToolPage` now resolves `coverUrl` and skips a soft-deleted asset.
+  `/tools/[tool]` passes it to `ToolShell` as the masthead backdrop, so
+  `PageHero` switches to ADR-117's photo tone. A tool without a cover keeps
+  the `brand` fill. The owner chose the masthead only. The index card and the
+  share image stay as they are.
+- **The glyph picker shows the glyphs.** In the tools editor's "Why use this
+  tool" dialog, each dropdown option now carries its lucide glyph, in the list
+  and on the trigger. The comment above the options already said they did.
+
+**Decisions:** no ADR. This wires a field that already existed into an
+existing tone.
+
+**Tests:** `tools-area.test.ts` gained two source guards: the page passes
+`page.coverUrl` as `backdrop`, and the shell forwards it to `PageHero`. The
+tools suites pass (56 tests). `tsc` is clean on `@repo/core`. On web it is
+clean apart from the existing `machine-translation.test.ts` error. ESLint is
+clean on the touched app files.
+
+## 2026-09-17 — Module 13: the tool editor takes the content editors' shape
+
+**What shipped:**
+
+- **The actions moved to the top.** The tool editor now has the action row
+  the course, lesson, glossary and article editors have. The start side
+  carries a Live/Off badge, because a tool has no status machine (ADR-086 #8).
+  The end side carries **View Live** and **Save**. View Live opens
+  `toolPath(key)` in a new tab and only renders while the tool is live, since
+  an off tool 404s. Save moved out of the bottom of the rail. It is still
+  never disabled for validation (ADR-077).
+- **The layout matches the other editors.** The columns are now
+  `--grid-2-1`, and **Artwork** moved from the main column into the right
+  column under Settings, where every other editor keeps its cover.
+- **Fix: the editor forgot the saved cover.** `page.tsx` hard-coded
+  `coverUrl: null`, so a saved cover disappeared from the upload field on
+  reload. `loadTool` now resolves `coverUrl`. `getToolPage` shares the same
+  `resolveCoverUrl` helper, which skips a soft-deleted asset.
+- `toolsAdmin.mediaDescription` now says where the cover appears (the tool
+  page masthead) instead of the tools index.
+
+**Decisions:** no ADR. This follows the existing editor convention.
+
+**Tests:** the admin convention suites, the tools suites and `_lib` all pass
+(14 files, 1245 tests). `tsc` is clean on `@repo/core`. On web it is clean
+apart from the existing `machine-translation.test.ts` error. ESLint is clean
+on `admin/tools` and the tool page.
+
+## 2026-09-17 — Module 12/14: public SEO audit fixes
+
+**What shipped** (from a read-only audit of every public `generateMetadata`,
+the sitemap and the JSON-LD):
+
+- **One helper module, `apps/web/app/_lib/seo.ts`.** Every public page now
+  uses it:
+  - `localizedPath`
+  - `descriptionFrom`, which SPREADS so an empty value never erases the
+    layout's description
+  - `alternatesFor`/`languageAlternates` (hreflang for served locales only,
+    plus `x-default`, and nothing when only one language is served)
+  - `pagedCanonical`/`listingMetadata`
+  - `shareMetadata`, which builds the whole `openGraph` + `twitter`, because
+    Next replaces the layout's card wholesale
+  - `jsonLd`, which escapes `<` so a value cannot close its `<script>`
+- **hreflang.** Articles, courses, lessons and glossary terms advertised
+  every translation row, AI drafts included, so an `es` machine translation
+  put `/es/...` into hreflang while `es` 404s. The new `advertisedAlternates`
+  in `@repo/core` keeps the default-locale row plus human-saved statuses.
+  `alternatesFor` then keeps only servable locales.
+- **Descriptions.** `description: x ?? undefined` erased the site description
+  on glossary terms, quizzes, tools, courses, lessons, videos, articles, CMS
+  pages and category archives. Glossary terms now fall back to their
+  plain-language line, and tag archives get a catalog description.
+- **Share image.** `seo.defaultOgImage` pointed at `/og-default.png`, which
+  never existed. `scripts/generate-og-default.mjs` now builds it (1200×630,
+  owner banner + logo, committed output), so the seeded value is correct with
+  no migration.
+- **Share tags everywhere.** The public layout sets site-wide `openGraph`
+  (type, siteName, locale, default image) and `twitter: summary_large_image`.
+  Pages with their own card go through `shareMetadata`. A tool's Cover image
+  is its card.
+- **Sitemap.**
+  - Quiz, video, glossary, learn, tools, calendar and news entries are gated
+    on the flags their pages 404 on.
+  - `/news`, `/analysis`, `/glossary`, non-empty category/tag archives (the
+    new `loadArticleTaxonomySitemapEntries`) and published `/legal/*`
+    documents are added.
+  - The `noindex` quiz runners are removed, since a sitemap URL its own page
+    refuses to index is a search-console error. Their unused read is gone
+    from `getSitemapEntries`.
+- **Canonicals.**
+  - `/news` and `/analysis` get a canonical: their own URL with
+    `?page=` kept, and `noindex, follow` on `?q=`. Category and tag archives
+    get the same canonical.
+  - Articles canonicalise to themselves unless an editor overrode it.
+  - Every index/tool/support/sitemap/calendar canonical now carries the
+    locale prefix.
+- **Home title.** It is the site name alone, no longer run through
+  `seo.titleTemplate` ("MBX Learning Center | MBX Pro").
+- **Structured data:**
+  - `Organization` + `WebSite` on home
+  - `BreadcrumbList` wherever a breadcrumb is drawn (`LearnBreadcrumb`, now
+    async; `ListingCrumbs`; the glossary term)
+  - `DefinedTerm` on glossary terms
+  - `FAQPage` on `/support`
+  - `url`, `mainEntityOfPage`, `publisher` and the share image on the
+    article graph
+
+**Decisions:** no ADR. These fix the implementation against rules already
+recorded (ADR-090, ADR-091, ADR-097, ADR-127). Removing quiz runners from the
+sitemap reverses a code comment, not an ADR.
+
+**Tests:**
+
+- **SEO guards.** `seo-metadata.test.ts` gained 13 source guards (22 pass):
+  - no `description` holding `undefined`
+  - every `view.alternates` reader goes through `alternatesFor`
+  - no locale-less canonical
+  - listings have canonicals
+  - the seeded share image exists
+  - no hand-built `openGraph` outside the layout
+  - the home title skips the template
+  - the sitemap uses flags, includes the added pages and omits quiz runners
+
+  I broke three of these on purpose (description, canonical, sitemap flag)
+  and each failed.
+
+- **Helpers.** New `_lib/seo.test.ts` (5) and
+  `reading-languages.test.ts` + `advertisedAlternates` (11).
+- **Web suites.** 2426 of 2427 pass. The one failure is
+  `ai-assistant.test.ts`, part of separate uncommitted AI assistant work that
+  this change does not touch.
+- **Static checks.** `tsc` is clean on `@repo/core`. On web it is clean apart
+  from the existing `machine-translation.test.ts` error. ESLint is clean on
+  every touched file. `check:phantom-deps` and `check:reserved-paths` are OK.
+- **Not run.** `next build`, and the Testcontainers integration tests for the
+  new taxonomy sitemap query.
+
+## 2026-09-17 — Modules 11/12/07: changes-39 fixes (topic covers, lesson history, one card recipe)
+
+**What shipped** (from `docs/changes/changes-39-fixeing.md`):
+
+- **`/sitemap` has a cover image.** The owner's `sitemap-banner.png` is
+  imported to `public/banners/sitemap.webp` by `import-owner-art.mjs` and read
+  through `sitemap/_content/sitemap-media.ts` + `SitemapBackdrop`, the support
+  page's pattern.
+- **Glossary topic page: the "Browse by topic 16" counter is gone** from the
+  masthead. The masthead is now the term page's compact `PageHero`.
+- **A glossary topic has a cover (ADR-133).** It has an upload field in the
+  topic editor's aside. It shows as a 16:9 box on every `/glossary/topics`
+  card (with the glossary's topic artwork as the fallback) and behind the
+  topic page's masthead. It is a `ContentReference`, cleared when the topic
+  is hard-deleted.
+- **Lesson rail (image-70):** each lesson in `CurriculumList variant="rail"`
+  is its own card, and the lesson list is indented (`ps-6`) under its section
+  header.
+- **"Mark this lesson complete" was always muted.** `ProgressProvider`
+  aborted its only request in the effect cleanup. Under Strict Mode that ran
+  between the two invocations, and the `started` ref blocked the retry, so
+  status stayed `loading` and the button stayed disabled. The same request is
+  the visit touch, so no reading history was stored either. The abort is
+  removed.
+- **Lesson reading history (ADR-134).** `LessonProgress.lastViewedAt` moves on
+  every visit (never the status), and `/account/progress` gains "Lessons
+  you've read".
+- **Symmetry.** New `@repo/ui/lib/surfaces`: `INTERACTIVE_CARD`
+  (`card-hover hover-lift sheen`, `rounded-lg`, ring surface, the
+  course/quiz/video card recipe) and `CHIP_LINK` (the learn shelves' chip).
+  - **Cards moved onto it:** topics index, topic terms, featured lessons,
+    video links, course sidebar, course recommendations, lesson attachments.
+  - **Chips moved onto it:** article tags, glossary related terms, footer
+    topics, sibling topics.
+  - **Also aligned:** tool index and related cards (lift + sheen, whole-card
+    link on the related strip), `IconCard`, `LessonNav`, the news side rail
+    and the glossary spotlight.
+  - **Dead classes removed.** `hover:ring-primary/*` and
+    `hover:border-primary/*` next to `card-hover` never showed, because
+    `.card-hover`'s hand-written rule owns both properties. They were removed
+    from 10 surfaces.
+
+**Decisions:** ADR-133 (topic cover) and ADR-134 (lesson reading history). The
+card and chip recipes need no ADR: they adopt recipes the site already used.
+
+**Tests:**
+
+- **New guard suite.** `apps/web/app/changes-39-fixes.test.ts` covers:
+  - the sitemap backdrop
+  - the topic page has no counter and uses its cover
+  - the provider never aborts
+  - no `card-hover` next to a hover tint it overrides, across every public
+    `.tsx` and `@repo/ui` component
+  - the listed call sites use `INTERACTIVE_CARD`/`CHIP_LINK`
+- **Rail test.** `curriculum-list.test.tsx` gained a card-per-lesson plus
+  indent test.
+- **Suites.** Web: 2473 of 2474 pass. The one failure is the existing
+  `ai-assistant.test.ts` failure noted in the previous entry. `@repo/ui`:
+  485/485. `@repo/core` `media.test.ts` (enum drift guard): 49/49.
+- **Static checks.** `tsc` is clean on core, ui and contracts. On web it is
+  clean apart from the existing `machine-translation.test.ts` error. ESLint is
+  clean on every touched file.
+- **Database.** Both migrations were applied to the local database, and
+  `prisma migrate diff` against the schema is empty.
+- **Not run.** `next build`, the Testcontainers integration tests for the new
+  topic-cover and lesson-read queries, and a browser check of the new cards.
+
+## 2026-09-17 — Module 15: article listings page and search in place
+
+**What shipped:** paging and searching on `/news` (and `/analysis`, the category
+and tag pages, which share `ArticleListing`) no longer look like a page load.
+
+- **Why it looked like one.** Page links already navigated client-side, but
+  nothing happened for about a second, and then the router scrolled to the top
+  of a page that had also lost its spotlight and category bands (page 1 only).
+  The sidebar search was a plain GET `<form>`, so it really did reload the
+  document.
+- **The fix.** `news/_components/listing-navigation.tsx`: a context provider
+  around the `#latest` band. `ListingLink` (the pager) and `ListingSearchForm`
+  (the search box) navigate with `router.push(href, { scroll: false })` inside
+  a transition. `ListingPendingRegion` dims the cards and sets `aria-busy`
+  while the request is pending. Once the new page arrives, the band scrolls
+  back into view, and only if its start is off screen. `#latest` gained
+  `scroll-mt-(--header-offset)`.
+- **Unchanged.** URLs are still real and indexable, the controls are still
+  `<a href>` and a GET form, and they work without JavaScript. Outside the
+  provider (the article detail page's sidebar), search navigates client-side
+  with the normal scroll.
+
+**Decisions:** no ADR; this only changes how existing URLs are reached.
+
+**Tests:** `article-listing.test.ts` gained a guard suite that checks the
+provider, the pending region, `ListingLink`, `ListingSearchForm` and
+`scroll: false`. The news suites pass 23/23. `tsc` shows no errors in the
+touched files, and ESLint is clean. A Playwright probe against the dev server
+confirmed the fix:
+
+- **Paging.** The cards were marked busy, the window state survived (no
+  document reload), and the page settled with the band just under the header.
+- **Search.** The window state survived, and the page showed "3 results for
+  'market'".
+
+## 2026-09-17 — Module 13/12: margin, profit and risk calculators, and a reviews band (changes-41)
+
+**What shipped:**
+
+- **Three new tools**, from the owner's mbfx.co pages: `/tools/margin`,
+  `/tools/profit-loss` and `/tools/risk-reward`. Each is registered in
+  `TOOLS`, `ROUTE_PATHS` and `TOOL_CONFIG_SCHEMAS`, and has its own widget
+  island, a config panel in `/admin/tools/[key]`, header and footer menu rows,
+  a row in the mega panel's position column (now six rows), and icons.
+- **The maths is pure** in `@repo/utils`: `accountMargin`, `tradeProfit`,
+  `riskReward` and `riskLevel`. Each still answers in the pair's own currency
+  with no rate stored. Margin is measured in the base currency, so USD/JPY on a
+  USD account needs no rate at all.
+- **Seeded text.** The reference title, tagline and tips lists are verbatim.
+  Intro, body, four FAQs, four highlights and an SEO focus keyword were written
+  for each tool. "Real-Time Results" became "Instant Results" (ADR-088), and
+  nothing was taken from the reference footers' regulatory claims.
+  `TOOL_SEEDS` now carries `faq` and `seoFocusKeyword`.
+- **Presentation on every tool page.** The widget enters with `Reveal start`
+  and the explainer with `Reveal end`. The highlights stagger through
+  `RevealGroup`. A masthead with no Cover image carries the chart
+  `AmbientMotif`. `tools/[tool]/loading.tsx` is new.
+- **"Share Your MBFX Experience."** `ReviewsBand` is a plain link to the new
+  public setting `site.reviewsUrl`, seeded to the Trustpilot review page. It
+  sits between highlights and related on every tool page, and at the foot of
+  `/support`. When the setting is empty, the band is absent.
+
+**Decisions:** ADR-135 covers:
+
+- the keys and why the overlaps with `gain-loss` and `position-size` stay;
+- risk thresholds as config;
+- a link rather than Trustpilot's script widget, which would need a public
+  CSP exception;
+- an anchor rather than `Button render={<a>}`, whose `role="button"`
+  misdescribes an off-site link.
+
+**Fix found during the browser check:** 1.10000 / 1.09700 / 1.10600 printed
+"1 : 2.00" next to "the reward is less than 2.0 times the risk". The pip
+distances carried floating-point noise (29.9999…), so they are now rounded to a
+millionth of a pip in `pipsBetween`. A regression test pins `ratio === 2`.
+
+**Tests:**
+
+- **`@repo/utils`:** 321 pass, 74 of them calculator tests (new hand-computed
+  tables plus fast-check properties: margin linear in size and inverse in
+  leverage, buy/sell symmetric, reward = ratio × risk, the stop loses exactly
+  the risk). `calculators.ts` coverage is 97% statements and 94% branches.
+- **Other packages:** contracts 472 pass (the registry is eleven; new schema
+  refinements), `@repo/db` 41 pass (footer sitemap counts eleven tools),
+  settings 33 pass.
+- **Web:** mega menu, tools area, highlights and public chrome guards pass.
+  The full unit suite is 2483/2484. The one failure is
+  `ai-assistant.test.ts`, which this change does not touch.
+- **Types and lint:** `tsc` is clean on utils, contracts, db, core and
+  settings. On web it is clean apart from the existing
+  `machine-translation.test.ts` error. ESLint is clean on every touched file.
+- **Browser check:** a Playwright probe against the dev server after
+  `pnpm db:seed` showed:
+  - risk: 50.00 USD at risk and 1 : 2.00;
+  - margin: 1,154.30 USD, which is 1,000 EUR at the stored rate;
+  - profit: +500.00 USD and +50.0 pips;
+  - five reveals playing on each page, and no console errors.
+- **E2E:** `e2e/public/tools.spec.ts` covers the three new paths, a
+  risk/reward journey that needs no market data, the reviews link's
+  `target`/`rel`, and `/tools/profit-loss` in the "real-time" scan. The admin
+  spec counts eleven. **Neither spec was run in this session.**
+
+## 2026-09-17 — Modules 13/12/08: live rates, volatility and market news (ADR-136)
+
+**What shipped:** the owner's three reference pages —
+`mbfx.co/tools/live-rates`, `mbfx.co/tools/volatility` and
+`mbfx.co/trading/analysis` — in our chrome, as two coded pages plus one band.
+
+- **The references were read, not assumed, and two of them are fake.**
+  `/tools/live-rates` starts from a hard-coded array (gold at 2025.45) and adds
+  `(Math.random() - .5) * .001` to every bid every three seconds;
+  `/tools/volatility` is a hard-coded array whose risk levels are typed in.
+  `/trading/analysis` is real: TradingView's Timeline widget. So the
+  presentation is copied and none of the numbers are.
+- **`/tools/live-rates`** (flag `market_data`, which was seeded in Module 01
+  and read by nothing until now — code-style.md #28). Group chips over one
+  TradingView **Market Quotes** frame, then Market hours / Spread information /
+  Risk warning, then the reviews band. **No bid, ask or spread column**: the
+  widget has none and only a broker's feed would, so the Spread card says that
+  instead.
+- **`/tools/volatility`** (flag `calculators`) is OURS, from stored bars.
+  Range % is (high − low) ÷ close × 100; Current is the mean over 1 / 5 / 22
+  **sessions**, Average over a 66-session baseline shared by all three
+  timeframes, Trend is the difference. Levels use the reference's published
+  bands. Below a window's own length the tile prints a dash and a screen reader
+  hears why (ADR-088 #3); a symbol with no bars is named as missing, never
+  zero-filled (#5). The page prints its method and its "as of" date, and says
+  neither "live" nor "real-time" (#7).
+- **Market news** is a band at the foot of `/analysis`, after our own listing
+  and taxonomy, holding the Timeline widget and saying the stories are not
+  reviewed by our editors.
+- **No vendor script anywhere.** The loaders were read: each one builds an
+  iframe at `tradingview-widget.com/embed-widget/<id>/?locale=<l>#<settings>`.
+  `tradingViewWidgetUrl` (`@repo/utils`) builds that URL, so `script-src`
+  stays closed and CSP gains one `frame-src` origin — ADR-050's pattern, second
+  use.
+
+**Decisions:** ADR-136. Both pages are coded routes, not `TOOLS` members
+(ADR-115 #2's reasoning): no `Tool` row, no config schema, no editor, and
+route keys without the `tool-` prefix that `tools.test.ts` reserves.
+`MARKET_BOARD_GROUPS` (`@repo/contracts`) is the group registry — which pair
+is "major" is composition, so it is code (ADR-042) — and the seed gains
+USD/TRY, USD/ZAR and USD/MXN so the Exotic group has rows.
+
+**Two bugs the browser caught, both fixed here:**
+
+1. **The frame did not change with the chips.** Every widget setting lives in
+   the URL **fragment**, so changing group was a same-document navigation and
+   the frame kept the previous group's symbols. The iframe is keyed by its
+   whole URL now, not by the theme.
+2. **One fixed frame height** left half a card of white under the three-row
+   Commodities board and clipped rows elsewhere. The height is a step chosen
+   from the group's row count.
+
+**Tests:** `@repo/utils` 361 pass (new: `tradingview.test.ts`,
+`statistics-volatility.test.ts` — tables plus fast-check properties for
+monotone levels and scale invariance). `@repo/contracts` 477 pass (new:
+`market-boards.test.ts`). `@repo/core` `market-analytics.integration.test.ts`
+21 pass against Testcontainers MariaDB, including four new `getVolatilityBoard`
+cases. `apps/web` tools + nav + SEO + layout suites 151 pass, including the new
+`market-boards.test.ts` source guard (flags, nav, sitemap, no `<script>`, no
+bid/ask column, the ADR-088 copy rule over the `volatility` namespace).
+`packages/db` footer-sitemap 7 pass. `tsc` clean in every touched package —
+the one error in `apps/web` is pre-existing, in
+`admin/_lib/machine-translation.test.ts`. ESLint clean.
+`check:catalog-completeness`, `check:reserved-paths`, `check:phantom-deps` and
+`governance:check` all OK.
+
+**Verified in a real browser** against the dev server: both frames load real
+TradingView data, the chips swap groups, dark mode reloads the frame with the
+dark URL, and the volatility board reads real bars (EUR/USD 0.27% daily
+against a 0.46% average, "Ranges as of Sep 15, 2026").
+
+**Still owed to Module 14:** axe and a Lighthouse budget on the two new
+routes, and an E2E journey. **Note for a running dev server:** the seeded
+header and footer rows appear only once the `navigation` cache is dropped —
+nothing in the seed invalidates a tag, so restart the server after `db:seed`.
+
+---
+
+## 2026-09-18 — Modules 07/08/09/11/12/13/15/18: changes-40, the owner's fix list
+
+**Twenty items from `docs/changes/changes-40-fixeing.md`, in one pass.** Most
+are small; four are not. Grouped by what they touch.
+
+### Public surfaces
+
+- **The glossary has a reading rail.** `GlossarySidebar` on all four pages
+  (`/glossary`, `/glossary/[term]`, `/glossary/topics`,
+  `/glossary/topics/[topic]`): "Latest posts" and "Popular tags", from the same
+  cached `getArticleFacets` the news sidebar reads. The panels were EXTRACTED
+  into `news/_components/facet-panels.tsx` rather than copied, so the cover
+  fallback, the date format and the clamp cannot drift between the two. No
+  search box and no category list — those belong to a listing. The rail is
+  absent when `news` is off or nothing is published.
+  The term page keeps its 768px prose measure through a new
+  `--grid-prose-aside` token (it reads `--container-narrow`), NOT a `max-w-*`
+  on the Container, which loses to `.container-page` at equal specificity.
+- **Two owner banners imported.** `/analysis` gets its own masthead picture
+  (`NewsMasthead` gains `backdropSlot`, defaulted so the three callers that
+  want `banner` cannot get it wrong), and `/glossary/topics` gets a `compact`
+  `PageHero` where it had a muted strip with an `h1` in it — the same file a
+  coverless topic already falls back to, so the index and the pages under it
+  are one place.
+- **"Topics / Keep exploring" is one band again.** `ArchiveTaxonomy` takes
+  `NewsTopics`' ADR-117 treatment — `inverted`, the photograph at full
+  strength, a `--secondary` scrim carrying the contrast. The two are the same
+  band to a reader and one of them had a flat ground, which made /analysis and
+  every archive look unfinished beside /news.
+- **The course page's two columns line up.** Every block in the rail now takes
+  the main column's shape: a bare `h2` and a lead, then the cards. "More
+  courses" had its heading INSIDE a `CardHeader`, inset by the card's padding
+  and a step smaller than "Curriculum" beside it.
+- **`/tools/volatility`'s explainer cards are one height.** `items-stretch`
+  plus `md:h-full` down both branches. `items-start` is right beside a much
+  taller widget and wrong between two cards making one argument.
+- **`/tools/pivot-points` reads as a table.** A header BAND, a level badge per
+  row tinted by MEANING (resistance `destructive`, support `success`, the pivot
+  filled `primary` — not five hues per method, which would be decoration that
+  looks like meaning), a hover highlight, and a staggered row entrance. The
+  reveal classes go on the `<tr>` itself: a row may not be wrapped in a div,
+  and `.reveal` only ever animates opacity and transform.
+
+### The economic calendar — ADR-137
+
+Rebuilt on TradingView's `events` widget, framed the ADR-136 way (no vendor
+script, `tradingViewWidgetUrl` builds the URL, `TradingViewFrame` follows the
+reader's colour mode). MQL5 leaves the CSP and `@repo/utils`.
+
+Our own filter row over it — impact and region, both from code registries in
+`_content/calendar-filters.ts`. **Not** the reference's Economic
+events/Earnings/Dividends tabs: those are TradingView's navigation on its own
+site, not settings the embed accepts, and a tab promising earnings would open a
+calendar that never shows any. `countryFilter` is OMITTED rather than sent
+empty — the widget reads an empty filter as "nothing passes".
+
+"How to use an economic calendar" sits inside the widget's own section. The
+masthead is `compact` with the photograph behind it, like every tool page.
+
+### Tools
+
+- **Every tool opens on a definition and then says how to use it.** `intro` is
+  `<h2>What is …?</h2>` and `body` leads with `<h2>How to use this
+calculator</h2>` plus numbered steps, on all eleven — the owner's own pip page
+  is the shape. They were headless paragraphs, which ADR-114 had put side by
+  side with a calculator as two unlabelled blocks of prose.
+- **The pip page takes the reference's title and tagline** verbatim ("Pip
+  Calculator"), the treatment ADR-135 gave margin, profit and risk. The URL is
+  unchanged: the registry key is the segment and a title is data.
+- **"Around the markets" is a page.** `/tools/market-news` renders the SAME
+  `MarketNewsBand` `/analysis` does — imported, not copied, so the sentence
+  saying nobody here reviewed these stories cannot be dropped from one of them.
+  Not a `TOOLS` member (ADR-115 #2): nothing on it to configure.
+- **The stale-rate warning is gone.** "Rates as of … — out of date, and shown
+  for reference only", under a warning triangle, was the NORMAL state of a
+  fresh install with the seeded MANUAL provider. The DATE stays, which is what
+  ADR-088 #7 actually requires; only the editorial judgement on top of it went.
+  `tools.common.staleAsOf` is deleted from all four catalogs.
+
+### Navigation
+
+- **The Tools panel is balanced.** It was 6 / 3 / 5 — a middle column a third
+  the height of its neighbours. `volatility` moves to Market timing (the one
+  entry that reads equally well under either heading) and market news joins
+  Rates & relationships, giving 6 / 4 / 5. Nothing is filed where a reader
+  would not look for it, which a forced 5 / 5 / 5 would have needed.
+- **The footer's Tools column becomes two.** Fifteen rows against a
+  next-longest column of six. `footer_tools` ("Calculators") keeps the seven a
+  reader types numbers into; `footer_tools_markets` ("Market data") takes the
+  eight that SHOW the market. `footer.menuColumns` gains a sixth entry, with
+  `20260918090000_footer_tools_split_changes40` moving an existing install —
+  bounded to a row still holding the five-column seeded value, so an admin who
+  edited theirs keeps it.
+
+### Admin
+
+- **ADR-138 — one AI affordance per field.** A rich-text field carried the
+  toolbar writing assistant AND `AiFieldMenu` a few pixels apart; the outer one
+  replaces the whole field where the inner one edits a passage. The menu is now
+  for plain-text controls only, on nine fields across seven editors. `form_fill`
+  is untouched: the key, the brief, the review dialog and every plain-text menu
+  stay.
+- **The editor can set the site's own two faces.** `EDITOR_FONTS` becomes
+  `body` / `display` / `serif` / `mono`; `--font-display` was reachable from
+  every masthead and from no editor. **`.ed-ff-sans` stays allowed** — a stored
+  class is data, and dropping it would strip the family from published articles
+  on their next save.
+- **"View live" opens a new tab everywhere.** The glossary topic editor was the
+  one that did not.
+- **The Base UI warning on /news and /analysis is fixed.** Searching became a
+  soft navigation in changes-39, so the sidebar input is no longer remounted and
+  its `defaultValue` changed under it — which both warned and left the previous
+  query on screen. `ListingSearchInput` is controlled and re-seeds from the URL.
+
+**Decisions:** ADR-137 (the calendar's vendor; ADR-050's other decisions
+stand), ADR-138 (one AI affordance per field; ADR-126 amended, not withdrawn).
+
+**Two stale guards fixed on the way past**, both pre-existing in the working
+tree and both passing for the wrong reason: `ai-assistant.test.ts` matched
+`async function run(`, which does not exist, and then asserted against an empty
+string; `loading-states.test.ts`' pulse rule caught
+`motion-safe:animate-pulse` on `LiveRatesBoard`'s 8px status dot, which is a
+placeholder for nothing.
+
+**Tests:** `apps/web` 2,573 pass across 73 files, including the new
+`changes-40-fixes.test.ts` (55 cases: the new-tab rule on all seven editors,
+the controlled search box, the footnote, the rich-text/plain-text AI split, the
+font marks, the glossary rail on all four pages, the four mastheads, the
+calendar's vendor and filters, market news, panel balance, footer balance, and
+a definition + how-to heading on every one of the eleven tools).
+`@repo/utils` 335 pass (new `events` cases on `tradingview.test.ts`; the MQL5
+suite deleted with its module). `@repo/contracts` 477 pass. `@repo/db`
+footer-sitemap and permission-groups pass. `tsc` clean in every touched
+package — the one `apps/web` error is pre-existing, in
+`admin/_lib/machine-translation.test.ts`. ESLint clean.
+`check:catalog-completeness`, `check:reserved-paths` and `check:phantom-deps`
+all OK.
+
+**Still owed to Module 14:** axe on the rebuilt calendar, on the four glossary
+pages now carrying a rail, and on `/tools/market-news`; an E2E that switches a
+calendar filter and asserts the frame's `src` changed; a Lighthouse pass on the
+glossary routes, which gained a facets read they did not have.
+
+**Note for a running dev server:** the new `footer_tools_markets` column and
+the market-news nav row appear only once the `navigation` cache is dropped —
+nothing in the seed invalidates a tag, so restart after `db:seed`.
+
+---
+
+## 2026-09-18 — Modules 08/13: changes-40 addendum, two things the browser caught
+
+Verifying the entry above against a reseeded database turned up two gaps that
+the source guards could not see, because both were about what an EXISTING
+install holds rather than what the seed says.
+
+1. **The new tool copy never reached an existing database.** The tool upsert's
+   translation branch is `update: {}` — deliberately, so an admin's words are
+   never overwritten by a reseed — which meant all eleven pages kept their
+   headless paragraphs. `20260918093000_tool_copy_headings_changes40` moves
+   them, bounded on `intro NOT LIKE '<h2>%'` (the row still shows the defect)
+   and `locale = 'en'` (source copy only; a translator's work is theirs). The
+   pip title and tagline move separately, bounded on the title the seed wrote.
+   The SQL is GENERATED from `TOOL_SEEDS`, so the migration and the seed cannot
+   say different things.
+2. **The footer drew both halves of the split.** The seed upserted each footer
+   menu's rows but never removed one that had left, so the Calculators column
+   still listed pivot points, correlation, both boards and the calendar, with
+   Market hours twice in one footer. A footer menu's rows are now REPLACED, not
+   merged — `rolePermission`'s discipline — scoped to that menu's own id,
+   because `economic-calendar` legitimately sits in two footer menus and a
+   delete by routeKey alone would take the other copy.
+
+Also: `admin.marketData`'s `staleHint` said every tool "labels its numbers as
+out of date", which stopped being true in the entry above.
+
+**Verified in a real browser** (Playwright screenshots at 1440px against the
+dev server): the glossary rail on the term and topics pages, the two new
+mastheads, the photographic "Keep exploring" band on /analysis, the calendar's
+compact masthead, filter chips and live TradingView data, /tools/market-news
+with real headlines, the pip page's definition and numbered steps with a bare
+"Rates as of" line, the pivot table's banded header and tinted level badges,
+the volatility cards at one height, "Curriculum" and "More courses" on one
+baseline, the Tools panel at 6 / 4 / 5, and a six-column footer with no
+duplicate rows.
+
+**Tests:** unchanged from the entry above — `apps/web` 2,573 pass; `@repo/db`
+footer-sitemap and permission-groups pass; both migrations applied cleanly with
+`db:deploy`.
+
+## 2026-09-18 — Module 13: a tool's common questions sit under the calculator
+
+The owner asked for "Common questions" under the calculator on every tool page.
+The FAQ had been the last card in the explainer `aside` (ADR-114 #1), so on a
+long explainer it began far below the widget's foot and read as more
+explanation. `tool-shell.tsx` now renders it full width AFTER the widget |
+explainer grid, still inside the same `Section` (a `mt-8` gap, not a second
+section's rhythm — changes-26 #2's rule holds). One file changes all eleven
+tools; the data is untouched. No ADR: ADR-114's two-column split is unchanged,
+only which column's tail the FAQ hung from.
+
+**Tests:** `tools-area.test.ts` gains a guard that `<FaqPanel` is outside the
+`<aside>` and after it; the tools suites pass (81).
+
+## 2026-09-18 — Module 08: the menus say "calculator" where a tool calculates
+
+The owner asked for the word "calculator" in the menu wherever a tool does a
+calculation. The six tools that take the reader's own numbers and work
+something out now read "Position size calculator", "Pip calculator" (the page's
+own title since the pip page took the reference's), "Margin calculator",
+"Profit & loss calculator", "Risk & reward calculator" and "Gain & loss
+calculator" — in the Tools mega panel AND the footer's Calculators column, so
+the two lists name each page the same way. Pivot points, correlation, risk
+sentiment and market hours keep their names: they read stored bars rather than
+asking for a price, which is the line the changes-40 footer split already drew.
+The currency converter stays a converter. Labels only — no route key, URL or
+order moved; the seed's `menuItemTranslation` upsert rewrites an existing
+install's `en` labels on the next `db:seed`, so no migration. No ADR.
+
+**Tests:** `@repo/db` footer-sitemap passes (7).
+
+## 2026-09-18 — Module 13: common questions go in the calculator's column
+
+Correction to the entry above, from the owner: the FAQ is not full width. It is
+the second child of the widget column in `tool-shell.tsx` — directly under the
+calculator, at the calculator's width, with the explainer still beside both.
+`tools-area.test.ts`'s band order now reads widget → faq → body, and the guard
+asserts `<FaqPanel` sits between `{widget}` and `<aside` and not inside the
+aside. Tools suites pass (81).
+
+## 2026-09-18 — Modules 11/12/13/09: changes-42, the owner's nine fixes
+
+`docs/changes/changes-42-fixeing.md`. One ADR (**ADR-139**) for the schema
+change. Everything else follows existing decisions.
+
+1. **"More about this" on the tool pages** (`related-strip.tsx`). The cards had
+   uneven heights because the list item between `RevealGroup`'s wrapper and the
+   `h-full` card had no height of its own. Titles drop to `text-sm`, summaries
+   to `text-xs`, and the type badge is tinted per type: article info, course
+   success, lesson warning, glossary primary, video secondary. All badges use
+   the same case.
+2. **A course's final quiz reached the public site at last (ADR-084, finishing
+   it).** Core had carried `CourseView.finalQuiz`, `LessonView.quiz` and
+   `courseFinalQuiz` since ADR-084, but no page rendered them. Completion
+   blocks on the final quiz, so a course with one attached could never be
+   completed through the interface. The `@repo/ui` `AssessmentCard` existed
+   with nothing using it. Now:
+   - the course page closes its curriculum with the card;
+   - a `QUIZ_PASS` lesson shows its quiz where "Mark complete" would be;
+   - the last lesson's forward step is the assessment.
+     The lock rule is `_lib/assessment-state.ts` (tested). It locks only on
+     positive evidence (a signed-in learner with required lessons left).
+3. **Guests are asked to save their progress.** A new `SaveProgressPrompt`
+   offers "Sign in" (with `?redirect=` back to the page) AND "Join us". It is
+   used by the course/lesson card, the quiz index prompt and the quiz runner's
+   guest state. A finished quiz result links to the progress page.
+4. **`/account/progress` rebuilt.** It opens with a summary row of five totals,
+   counted in core rather than read off the capped lists. Each band heading has
+   an icon tile in the band's tone. The course cards are all the same size
+   (cover, clamped title, progress, final-assessment row, footer), and each now
+   shows the course's final quiz with the learner's best score. Every history
+   band is paged six rows at a time with the site's `ClientPagination`. The
+   load caps went up (48 courses, 100 each of attempts, reads and lessons).
+5. **`/tools/market-news` (and `/analysis`) has a market filter row:** All ·
+   Forex · Crypto · Stocks · Indices · Futures · CFDs. The owner's reference
+   heads the feed with PROVIDER chips, but the Timeline embed can only filter
+   by market. So the row offers what the embed can do, which is ADR-137's
+   reasoning for the calendar's tabs.
+6. **ADR-139 — Featured / Active / Premium on every learning type.** Details
+   are in the ADR. Migration `20260918120000_content_flags_adr139` only adds
+   columns. `isActive` is inside each type's single public predicate. That
+   audit found site search using an inline copy of the video rule, which is now
+   `publicVideoWhere`.
+7. **The cover and the switches share one right-hand "Display" card** in all
+   six learning editors (`ContentFlagsFields`). The quiz cover and the lesson
+   hero image were in the LEFT column and moved; the lesson's `ResourcesPanel`
+   no longer draws the hero.
+8. **Top-level view filters** (All · Featured · Popular · Newest) on the
+   course, quiz and video shelves, plus Featured/Premium markers on the cards.
+   A featured glossary term leads the Popular terms rail, and a featured topic
+   leads the topic index. News keeps its existing featured spotlight.
+
+**Tests:**
+
+- `apps/web` 2,601 pass, including new `assessment-state.test.ts` and
+  `shelf-view.test.ts`. `market-boards.test.ts` now follows the frame into
+  `market-news-board.tsx`.
+- `@repo/ui` 485 pass. `@repo/contracts` 477 pass. `@repo/core` unit 157 pass,
+  plus the new `content-flags.test.ts`.
+- Integration (Testcontainers, one file at a time): `account` 14 (one new case
+  covering the final-quiz standing, an inactive course leaving the list and the
+  totals, and the summary), `public-search` 15, `progress` 29, `quizzes` 40,
+  `videos` 25.
+- `tsc` clean in every touched package (the known
+  `machine-translation.test.ts` error remains). ESLint clean on every touched
+  file. `check:catalog-completeness` and `governance:check` OK.
+- `check:phantom-deps` FAILS on `packages/db/prisma/seed.ts` (a string literal
+  read as an import). That file is part of earlier uncommitted work that this
+  change did not touch.
+
+**Browser:** verified at 1440px, with Playwright against the dev server:
+
+- the related strip, at equal heights with tinted badges;
+- the market-news chips; pressing Crypto re-keys the frame to the crypto feed.
+
+The learn pages could not be checked: the running dev server held the Prisma
+client from before `prisma generate` ("Unknown argument `isActive`"). **Restart
+`pnpm --filter web dev` after pulling this.**
+
+**Still owed to Module 14:**
+
+- E2E for the assessment card's three states;
+- the guest prompt's redirect round trip;
+- the progress page's pagers;
+- axe on the rebuilt progress page and on the six editors' new Display card.
+
+## 2026-09-18 — Modules 04/07: the credential screens are a split frame
+
+**What shipped:** sign-in, sign-up and both recovery screens, on BOTH
+surfaces, render one split frame taken from the owner's reference (the
+marketing launchpad): a brand panel beside the form, inside one rounded card.
+
+- `@repo/ui/components/auth-split` — `AuthSplit` (the frame, form column on a
+  faint `.bg-checker` ground, optional `topEnd` slot), `AuthBrandPanel` (small
+  logo, the site name as a gradient wordmark, the favicon mark in a glass disc,
+  an eyebrow and a tagline) and `AuthMarkTile`. Presentational only; every word
+  and URL comes from the caller.
+- `apps/web/app/_lib/auth-brand.tsx` builds the panel and the mark tile for
+  both `AuthScreen` (public) and `AdminAuthScreen` (staff). It sits at app
+  level because the public tree may not import from `(admin)`.
+- **Sign-in and sign-up now render through `AuthScreen`**, the conversion that
+  changes-21 F6 had left as a separate, mechanical change. `/admin/sign-in`
+  renders through `AdminAuthScreen` the same way. That removes three
+  hand-written copies of the old card markup.
+- Leading `Mail`/`Lock`/`User`/`KeyRound` glyphs on the credential inputs
+  (`_lib/auth-input-icon.tsx`) and `size="lg"` submit buttons.
+- New keys: `auth.panelEyebrow`, `auth.panelTagline` (public, `en` only per
+  ADR-091), `admin.signIn.panelEyebrow`, `admin.signIn.panelTagline`.
+
+**Decisions (no ADR; nothing here departs from the plan):**
+
+- The panel is `--secondary`, so it flips with the mode as the footer and the
+  hero do. The reference's always-dark panel would need a colour the theme does
+  not define. The logos are passed swapped, as the footer passes them.
+- The reference's pill button is NOT copied. ADR-107 deleted pill buttons, so
+  the button uses the derived radius scale. The only `rounded-full` is the
+  disc, whose geometry is a circle.
+- The wordmark tops out at `text-5xl`, the largest step in the type scale
+  (ADR-072), not the reference's larger size.
+- The panel is hidden below `lg`, so on a phone the form is the whole screen.
+- The staff screens have no header, so `AdminAuthScreen` puts the mode toggle
+  in the form column's corner (ADR-008). The public screens already carry one
+  in the site header.
+
+**Tests:** `apps/web` 2,603 pass. `@repo/ui` 485 pass. `@repo/i18n` 26 pass.
+ESLint is clean on every touched file. `tsc` is clean apart from the known
+`machine-translation.test.ts` error. `check:catalog-completeness` passes
+(warnings only for inactive locales). `/sign-in`, `/sign-up`,
+`/forgot-password` and `/admin/sign-in` return 200 from the dev server and
+render the new frame.
+
+**Dev note:** the running dev server had written a truncated
+`.next/dev/prerender-manifest.json` (a short write over a longer file), so
+every route answered 500 with a JSON `SyntaxError`. Trimming the trailing
+bytes fixed it. Restarting `next dev` does the same.
+
+**Still owed to Module 14:** axe and a visual check of the frame in both modes
+and in RTL.
+
+## 2026-09-18 — Modules 04/07: the credential panel shows the site's own logo and name
+
+A follow-up to the split-frame entry above, at the owner's request. The frame
+should show this site's own branding, not the reference's logo and text.
+
+- The brand panel's glass disc, favicon mark and "Learning Center" eyebrow are
+  GONE. The panel now shows the admin-uploaded logo that the header and footer
+  draw (`BrandLogo`, `h-16`, with variants swapped as on the footer's band). The
+  wordmark below it is the site's full name, `common.siteName` ("MBX Learning
+  Center"), at `text-5xl`, the largest step in the scale. The short `site.name`
+  setting ("MBX Pro") remains only as the logo's alt text.
+- The tile above the form heading is the header's own `BrandLogo` (`h-12`),
+  not a favicon tile. `AuthMarkTile` is deleted.
+- The `.bg-checker` squares are 44px rather than 28px.
+- `auth.panelEyebrow` and `admin.signIn.panelEyebrow` are deleted. The two
+  taglines no longer interpolate a name, because the wordmark directly above
+  them already prints it.
+
+**Tests:** `apps/web` and `@repo/ui` suites pass. `tsc` is clean apart from the
+known `machine-translation.test.ts` error. ESLint is clean. All four screens
+return 200 and render the wordmark.
+
+## 2026-09-19 — changes-43: owner review of both surfaces (ADR-140)
+
+**What shipped:** all eighteen items in `docs/changes/changes-43-fixeing.md`.
+ADR-140 records the rules they change.
+
+**Public site**
+
+- **Typeface.** mbfx.co declares a "Delight" webfont and applies it nowhere;
+  a headless probe shows it renders in `system-ui`. `DEFAULT_LAYOUT` now uses
+  `system` for both the sans and the display slot, and
+  `20260919090000_system_typeface_changes43` moves existing themes. Only rows
+  still on `inter` / `fraunces` are touched. Inter is no longer preloaded.
+  Display headings are `font-bold`, and `display-sm` spans the reference's
+  30→48px. `SectionHeading`'s lead is `text-xl`.
+- **Homepage hero** is a full-bleed slider of the `getSpotlightArticles` set
+  (`_components/hero-slider.tsx`). Both article flags gate it. It advances every
+  seven seconds and stops on hover, on focus and under reduced motion; pause is
+  always shown and hidden slides are `inert`. Only the first slide gets
+  `priority`. With nothing published it shows the static band. The footage and
+  `HOME_MEDIA.heroVideo` are gone. `HeroVideo` stays for `in_practice`.
+  `public/home/home-1.mp4` is untracked and left on disk.
+- **Buttons.** New engine tokens: `--primary-solid`, `-foreground` (white) and
+  `-hover`. The fill is the brand hue darkened until white clears 4.5:1
+  (`#936b44`). The default `Button` and the button-like chips use them.
+  `size="xl"` gets `sm:min-w-60`, so paired CTAs are the same size.
+- **Mobile menu** follows the reference: a full-width panel with the logo and
+  a close button, a glyph on every top-level row, and chevron sections. At the
+  bottom are Home and Sign in, or Home and My account, with Join us full width.
+- **Explore carousel.** Solid icon badges.
+- **Tools mega panel.** Gets the schools' "View all" footer, because `viewAll`
+  now also resolves against the panel's own top-level item.
+- **Pagination.** `ListingLink` prefetches in full, and /news keeps its front
+  bands on every page, so a pager click changes only the grid.
+- **Support form.** Confirms in a brand-tinted status box under Send instead of
+  replacing the form. `contact.sendAnother` is deleted. It sends to Settings →
+  General → Support email (`site.supportEmail`), the same address the page
+  shows.
+- **⌘K palettes**, public and admin: one `@repo/ui` `CommandPalette`. It is
+  wide and capped to the viewport, groups results by category with icons and
+  filter chips, shows a key legend, and renders no URL.
+
+**Admin**
+
+- **Title row.** Create buttons moved into the heading row on every list screen.
+  Layout-drawn headings receive them through `HeaderActions`
+  (`_components/header-actions.tsx`). Editors render through `EditorPage` with
+  a static "Edit …" title and the action cluster on the same row.
+  `admin-toolbar-conventions.test.ts` is inverted to match.
+- **Tabs.** `SubNav` prefetches in full, and the News & Analysis skeleton draws
+  no heading of its own (`TablePageSkeleton header={false}`). Prefetch only runs
+  in production, so `next dev` still shows the skeleton.
+- **Dialogs** are capped at `--dialog-max-h`, with sticky header and footer.
+  Sticky offsets are measured inside the popup's `p-6`, so they are
+  `-top-6` / `-bottom-6`. The first attempt used `top-0` / `bottom-0`, and the
+  screenshot showed fields below Save.
+- **Sidebar.** The logo is centred and the collapse toggle sits on the
+  sidebar's edge. The theme editor shows Save only on the tabs it saves.
+- **Dashboard.** Watermarked stat tiles with ratio bars, and a newsletter tile.
+  Every new figure is gated like its tile, and a hidden tile runs no query.
+  Publishing-output bars use the `success` token and fill their card. Recent
+  activity is a timeline.
+
+**Session timeout review:** verified live. At "After 2 minutes", one admin
+page left 116 s on the session. After 150 s idle, `/admin/api/session` answered
+401 and `/admin/articles` redirected to `/admin/sign-in`. The setting was
+restored to "Never sign out".
+
+**Tests:**
+
+- vitest: `apps/web` 2,675 pass, `@repo/ui` 496, `@repo/theme` 74 (a new
+  property test holds white on `--primary-solid` for random palettes in both
+  modes), `@repo/auth` 40, `@repo/core` unit 195.
+- `tsc` is clean apart from the known `machine-translation.test.ts` error.
+- ESLint and Prettier are clean on every touched file.
+- `check:catalog-completeness` passes.
+- Screenshots on the dev server at 1440, 1366×768 and 390: home, mobile menu,
+  admin dashboard, categories header, article editor, instrument dialog (at
+  rest and scrolled) and the admin palette.
+
+**Dev note:** the running dev server caches the theme for an hour, so the
+homepage showed Fraunces after the migration ran. Restart `next dev` to see
+the system face.
+
+**Still owed to Module 14:**
+
+- axe on the slider and the new mobile menu;
+- E2E for the header-action slot and the prefetch-backed tabs, on a production
+  build.
+
+## 2026-09-19 — Module 12: hero slider shorter, controls on the button row, no pause
+
+**Shipped (owner request, changes-43):**
+
+- `--height-hero` is `clamp(30rem, calc(72svh - var(--header-offset)), 40rem)`,
+  no longer the full viewport. Headline and excerpt clamp at two lines, not three.
+- Each slide is bottom-aligned at `lg:pb-28`. The slider controls are an `h-12`
+  row at `lg:bottom-28`, so from `lg` up they sit on the same line as the
+  `xl` buttons. Below `lg` the buttons wrap, so the controls get their own row
+  under them (`pb-40`).
+- The pause button is removed, along with `home.heroSliderPause` and
+  `home.heroSliderPlay`. Auto-advance still stops on hover, on focus and under
+  `prefers-reduced-motion`. This is a trade against WCAG 2.2.2's
+  pause-control expectation, made at the owner's request.
+
+**Tests:** `_sections/` vitest has 98 passing tests. The guard now checks the
+shared-row offsets and that no pause toggle exists. ESLint is clean. `tsc`
+shows only the known `machine-translation.test.ts` error.
+
+## 2026-09-19 — changes-44: pagination, back-to-top, editor rows, progress graphs, admin type (ADR-141)
+
+**What shipped:** all six items in `docs/changes/changes-44-fixing.md`.
+
+- **Pagination (#1).** `useUrlFilters` now writes inside a transition with
+  `scroll: false`. The new `useUrlFiltersPending()` is a module store, because
+  the filter controls and the table are often separate components. The five
+  server-paged admin tables (articles, users, newsletter subscribers, email
+  delivery log, AI usage) pass it to `DataTable`'s new `pending` prop. While
+  the next page loads, the current rows stay and dim, and a `.progress-sweep`
+  line runs along the table's top edge. When the page lands, the table scrolls
+  its own top back into view, but only if that top had scrolled under the
+  header. Before this change a pager click could jump the page (probe: up to
+  104px) and gave no feedback while waiting.
+  - The public listings already worked this way (changes-39).
+  - The learn shelves already animate each card in.
+  - `/account/progress`'s `PagedList` now fades each page up the same way.
+- **Back to top (#2).** `ScrollToTop` is 48px. It has a scroll-progress ring,
+  written to `--scroll-progress` from a passive rAF listener (no React state).
+  It flashes twice as it appears, then keeps a breathing brand glow, and the
+  arrow nudges up on hover. All motion sits behind `no-preference`; the ring
+  fills for everyone.
+- **Editor state row (#3).** The status badge, language picker and translation
+  controls now live in the course editor's tab row. On the glossary term,
+  glossary topic, lesson, video, quiz and tool editors they are in the first
+  card's header. The separate row is gone from every editor.
+- **Progress report (#4).** `/admin/learn/progress` adds:
+  - an "At a glance" card with two rings: course completion, and the quiz pass
+    rate weighted by attempts, coloured by band;
+  - completion bars per course;
+  - completed / dropped-off stacked bars per lesson;
+  - pass-rate bars per quiz, band-toned, with the percentage always printed;
+  - a diverging helpful / not-helpful chart.
+
+  All are CSS server components in theme tokens, drawing the top 8 rows each.
+  The tables stay underneath as the exact figures. New layout token:
+  `--grid-diverging-row`.
+
+- **Content flags (#5).** `ContentFlagsSection`, the "Listing" card, is now
+  the last card before Info on the course, lesson, video and glossary term
+  editors, and the last card on the quiz and topic editors. The cover card
+  keeps only the picture.
+- **Admin type and size (#6).** The admin surfaces are set in Inter again
+  through `withAdminTypeface` (ADR-141 §1); the public site stays on the system
+  face. Editor title-row buttons are the default 40px. Heading, description,
+  dialog and button sizes already matched the reference and were verified on
+  the dev server (30px/700 title, 16px description).
+
+**Tests:**
+
+- vitest: `apps/web` 2,680 pass, `@repo/ui` 497 (new: ScrollToTop visible
+  state and progress ring), `@repo/theme` 66 (new: `withAdminTypeface` pins
+  Inter and leaves the public theme and mono slot alone).
+- `tsc` is clean apart from the known `machine-translation.test.ts` error.
+- ESLint and Prettier are clean on every touched file.
+- Screenshots on the dev server at 1440: course editor, glossary editor,
+  progress report, and the public back-to-top button (ring at 0.513 mid-page).
+
+**Still owed to Module 14:**
+
+- a guard that no editor brings back a status row;
+- axe on the progress charts;
+- an E2E for the pending table state on a production build.
+
+## 2026-09-19 — changes-45: no blue, login as user, person records, admin sign-in card (ADR-142)
+
+**What shipped:** all eleven items in `docs/changes/changes-45-fixing.md`.
+ADR-142 records the four rules they change.
+
+**Public site**
+
+- **Hero (#1).** `--height-hero` is `clamp(34rem, calc(82svh - …), 46rem)`,
+  up from 30/72/40. The slider arrows are muted at rest (no fill, faint
+  outline, 60% glyph) and fill in on hover and focus.
+- **Sidebars (#2).** The news, glossary, course and lesson rails stagger
+  their panels in with `RevealGroup`. The motion is on the panels, never on
+  the sticky `<aside>`. `RevealGroup`'s wrappers are now `empty:hidden`, so a
+  child that renders null leaves no gap.
+- **Mobile header (#3).** Below `xl`, where the mobile menu is the
+  navigation, the header no longer repeats Sign in / Join us. The menu has
+  carried both since changes-43. A signed-in reader's avatar still shows at
+  every width (`AuthSlot inMenuBelowXl`).
+- **Account menu (#4).** The verify-email nudge and the avatar dot are gone
+  from the menu. Verification lives on `/account` only (ADR-142 §2). Six
+  `nav.verify*` keys are deleted.
+- **No blue (#4).** `success` is `#936B44` and `info` is `#5A524B` (ADR-142
+  §1). `20260919120000_no_blue_status_tokens_changes45` moves an existing
+  install, bounded per key to the seeded value. The CSS snapshot was updated.
+- **Page transitions (#10).** A public `template.tsx` wraps each page in
+  `.page-enter`, an opacity-only fade that plays on every navigation. It is
+  opacity only because a transform on the page wrapper would capture every
+  `position: fixed` bar inside it.
+- **News search and loader (#11), done by a delegated agent.**
+  - The listing search matches ANY word in the title or excerpt, and ranks
+    whole-phrase and title hits first (`article-search.ts`, pure and
+    unit-tested).
+  - Search and paging show an in-place loader over the results grid only:
+    `aria-busy`, a `.progress-sweep` line and placeholder cards after 150ms.
+    The new results fade and rise in.
+  - Category and tag links still navigate to their own routes and show that
+    route's `loading.tsx`.
+
+**Admin**
+
+- **Staff sign-in (#5, #6).** The three `(admin-auth)` screens are one
+  centred card: the logo, "Admin Portal", the form, and "Go to User Login".
+  The public screens keep the split frame. The `(admin-auth)` root layout now
+  sets the uploaded favicon; before this change it fell back to
+  `/favicon.ico`. `admin.signIn.panelTagline` is deleted.
+- **User record (#7).** `/admin/users/[id]` follows the owner's reference.
+  - The heading is the person's name, with the id and address underneath.
+  - Header actions: Refresh, Login as User, Edit Details, Reset password.
+  - Four figures: courses, lessons, quizzes and reading for a learner;
+    roles, overrides, sessions and last login for staff.
+  - An "Account controls" grid of switches: email verified and account active
+    work; two-factor and newsletter are shown as read-only state.
+  - Tabs: Details, Courses, Lessons, Quizzes, Reading, Roles & access,
+    Devices (with "Sign out everywhere") and Activity.
+  - New services: `adminUpdateUser`, `setUserEmailVerified`,
+    `revokeUserSessions` and `recordImpersonationStart`.
+- **Login as User (#7).** `@repo/auth`'s `staffImpersonation` plugin
+  (ADR-142 §3).
+  - The start endpoint is `SERVER_ONLY`, only a live learner can be entered,
+    and the session lasts one hour.
+  - The stop endpoint is audited, and Better Auth's own pair is disabled.
+  - The public `ImpersonationBanner` shows while it is happening and offers
+    "Return to admin".
+- **Subscriber record (#7).** `/admin/newsletter/[id]` is new, and the list's
+  email cell links to it.
+  - It shows the consent, its history and the linked account. The account is
+    a link only for a viewer with `users.view`.
+  - An "Emails sent" tab needs `email.log.view`.
+- **Employee record (#8).** `/admin/employees/[id]` has the same shape:
+  figures, then Details and Login account tabs.
+- **Slugs (#8), done by a delegated agent.** The muted `/slug` line is gone
+  from the title cell of the articles, glossary, glossary topics, courses,
+  lessons, video categories, article categories and tags tables, and from the
+  tools grid. Editable slug fields are untouched.
+
+**#9 (public site stuck loading when opened from the admin):** not
+reproduced. A probe signed in as the seeded admin and opened `/` in the same
+browser context, which is what "Visit site" does. It had a rendered `h1` and
+the full body within 3s. The only failed request was an aborted video
+preload. The first hit after a dev-server start compiles the whole public
+tree on demand, which is the likely cause. A production build prerenders
+those routes, so nothing was changed for this item.
+
+**Tests:**
+
+- vitest:
+  - `apps/web`: 2,714 pass;
+  - `@repo/ui`: 497;
+  - `@repo/theme`: 76;
+  - `@repo/contracts`: 477;
+  - `@repo/auth`: 21 in the impersonation and index files. New:
+    `impersonation.test.ts` covers the target rule and the three doors;
+  - `@repo/core` unit: 207;
+  - `users.integration.test.ts` on Testcontainers: 12. New: the edit, the
+    session revoke and its self-guard, and the impersonation start refusing
+    staff with no audit row.
+- The news agent reported `articles.integration.test.ts` at 58/58 and 12 new
+  search unit tests.
+- `tsc` is clean apart from the known `machine-translation.test.ts` error.
+- ESLint and Prettier are clean on the touched files.
+- `check:permission-keys` and `check:catalog-completeness` pass.
+- `check:phantom-deps` fails on `packages/db/prisma/seed.ts`, an uncommitted
+  change this entry did not touch.
+- Verified live on the dev server with Playwright:
+  - Login as User lands on `/account` with the banner.
+  - `/admin` answers 307 to sign-in while impersonating.
+  - Return to admin restores the staff session and clears
+    `admin_session` and `dont_remember`.
+  - Both audit rows are written, and no impersonation session is left behind.
+- Screenshots: the staff sign-in card, the user, subscriber and employee
+  records, the home hero, and the 390px header.
+
+**Dev note:** the running dev server caches the theme for an hour. The
+migration has been applied to the local database, but the dashboard still
+drew the old blue until the server is restarted.
+
+**Still owed to Module 14:**
+
+- E2E for impersonation and the three record pages;
+- a re-authentication prompt before impersonation (ADR-142, Not done);
+- axe on the record tabs and the banner.
+
+## 2026-09-19 — Modules 02/07: buttons and toggles show the saved primary exactly (ADR-143)
+
+The owner set primary to `#C8986B` and saw a darker brown on buttons
+(`#906D4D`) and toggles (`#806144`). Both were contrast-derived siblings of
+the saved colour. The owner asked for the saved colour itself.
+
+- `@repo/theme`: `--primary-solid` is now `--primary` unmodified;
+  `--primary-solid-hover` is it darkened 12%; `--primary-solid-foreground` is
+  `readableOn(primary, white, #1A1A1A)`. On the default bronze and on
+  `#C8986B` the label ink is therefore near-black, not white (supersedes
+  ADR-140 §6's fill and white-label rule).
+- `@repo/ui`: `Switch`'s checked track is `bg-primary`.
+- Unchanged: `--primary-interactive` (links, hairlines, icon ink, checkbox
+  border) still derives for legibility.
+- Accepted consequence: a light primary gives the switch track below the
+  3:1 non-text floor against the page.
+
+**Tests:** `@repo/theme` 76/76 (the ADR-140 white-label property test is
+replaced by "fill equals saved primary, label is the more legible ink"; CSS
+snapshot updated for the three tokens only). `@repo/ui` 497/497 (switch
+anatomy assertion updated). ESLint and Prettier clean on touched files.
+Dev note: the dev server caches the theme for an hour — restart it to see
+the change.
+
+## 2026-09-19 — Modules 02/07: default primary is #C8986B, button labels always white (ADR-143)
+
+Follow-up on the same day, owner request.
+
+- `DEFAULT_BRAND.primary` and `packages/db/prisma/default-theme-tokens.json`
+  are now `#C8986B` (was `#C28D5A`). A re-seed writes it to the default
+  theme row.
+- `--primary-solid-foreground` is always white. It no longer picks the more
+  legible ink. On `#C8986B` that is 2.57:1, which the owner accepted.
+- ADR-143 is updated to match. It is uncommitted and was written earlier in
+  this session.
+
+**Tests:** `@repo/theme` 76/76. The ADR-072 pinned values are moved to the
+new default: link ink `#886749`, dark ink 6.76:1, raw on ivory 2.33:1. The
+property test now asserts a white label, and the snapshot is updated.
+`seed-sync.test.ts` passes. `@repo/ui` 497/497.
+
+## 2026-09-19 — Module 02: ink on every primary fill is fixed white (ADR-143)
+
+Owner request: all icons and text on primary-coloured controls stay white,
+and do not change when the theme colour changes.
+
+- `--primary-foreground` is now the constant `#FFFFFF` in both modes. It was
+  `readableOn(primary, …)`, which flipped between white and near-black with
+  the saved colour.
+- `--primary-solid-foreground` was already white. Every `bg-primary` /
+  `bg-primary-solid` surface's text and icons are now white on any palette.
+- ADR-143 decision 3 is updated to match. It is still uncommitted.
+
+**Tests:** `@repo/theme` 76/76. The random-palette property test now also
+asserts `--primary-foreground` is white; the ADR-072 "dark ink" pin is
+replaced; the snapshot is updated. `@repo/ui` 497/497. `tsc` and ESLint are
+clean on `@repo/theme`.
+
+## 2026-09-19 — Module 02: ink on the success / destructive / info fills is fixed white (ADR-143 #7)
+
+The homepage "Daily analysis" icon box is `bg-success
+text-success-foreground`. The owner's saved `success` is `#C28D5A`, so the
+contrast pick drew a near-black glyph on a bronze box.
+
+- `--success-foreground`, `--destructive-foreground` and `--info-foreground`
+  are now the constant `#FFFFFF`, like primary's.
+- `--warning-foreground` still picks by contrast, because white on amber is
+  1.9:1.
+- Secondary and accent are neutrals and are unchanged.
+- The shipped defaults already rendered white on all three, so the CSS
+  snapshot is unchanged.
+
+**Tests:** `@repo/theme` 76/76. The random-palette property test asserts
+white on primary, primary-solid, success, destructive and info in both
+modes, so a theme edit cannot flip any of them. `tsc` and ESLint are clean.
+
+## 2026-09-20 — changes-46: live seed, shared videos, media folders, editor and record fixes (ADR-144)
+
+**What shipped:** every item in `docs/changes/changes-46-fixing.md`.
+ADR-144 records the rules that changed: the live seed, videos listed in
+both schools, media storage folders, optional video compression, the two
+removed screens, email-change authority and the proxy body limit.
+
+**Public site**
+
+- **Hero.** It is taller: `--height-hero` is `clamp(30rem, 100svh - header - 4.5rem, 60rem)`.
+  The quick-links panel is fully visible at first paint and animates in on
+  load (`.rise-enter`, respects reduced motion).
+- **Signing in to track progress.**
+  - The course page gets `TrackProgressBand`: an SVG gauge drawn in theme
+    tokens, "0 of N", and "Unlock tracking, sign in".
+  - The lesson page gets a one-line `ProgressSignInReminder`.
+  - Both render only for an anonymous public session whose progress answer
+    is `guest`, so there is no server session read (ADR-056 #1, ADR-094).
+- **Curriculum.** The `full` variant indents lessons under their section and
+  draws a guide line.
+- **Mega menu.** The footer is a tinted strip with an icon, the section name,
+  a hint line and an outlined "View all" button.
+- **/news spotlight.** It shows a lead story plus three (`SPOTLIGHT_COUNT`
+  is 4).
+- **Pivot points.** The widget read `config.symbols`, which nothing writes;
+  the config stores `symbolIds`. It now resolves ids to active instruments.
+- **Tool "More about this" links.** `tools.ts` built `/analysis/<slug>`, a
+  route that does not exist. Curated items were also filtered only on
+  soft-delete. Both halves of the list now use each module's public rule
+  (`relatedTargetWhere`) and carry the feature flag their route needs.
+- **Preview / View live stuck loading.** Root cause was `SiteLoader`'s
+  effect. On a mount-effect re-run it found the session already claimed and
+  returned before it re-armed its own dismissal. A fresh `noopener` tab
+  always shows the loader, so the overlay stayed until a refresh. Reproduced
+  with Playwright and fixed; there is a StrictMode regression test.
+- **SEO.** Checked page by page:
+  - Glossary term and video topic now emit their own share card.
+  - Tool pages emit `WebApplication` JSON-LD, plus FAQ JSON-LD when the page
+    has an FAQ.
+  - Article and course pages were already complete.
+
+**Admin**
+
+- **User, employee and subscriber records.**
+  - The header has the name, "id • email" and chips on the left, and the
+    actions on the right. `PageHeader`'s title block now flexes.
+  - Tabs are a segmented tray with no underline.
+  - A pencil icon on Personal information opens the edit dialog.
+- **Email change.** `adminUpdateUser` can now change the email. It checks
+  uniqueness (`EmailInUseError`) and needs a strictly higher role
+  (`EmailChangeForbiddenError`). The new address starts unverified unless
+  the admin vouches for it, and the change is audited with before and after.
+- **Glossary term editor.** It has one rich-text Details field, saved to
+  `simpleExplanation`. On open, the four stored prose columns are merged
+  into it under the headings the public page already uses. Listings show
+  `htmlLead()`, the body's first paragraph.
+- **Visual/HTML tabs.** `RichTextEditor` shows them by default, so glossary
+  topics, tool texts and the email body gain them. Fields rendered as plain
+  text in public (summaries, meta descriptions, FAQ answers, quiz prompts,
+  category descriptions) stay plain on purpose.
+- **SEO analysis.** It is now in the image-109 layout: reading time, content
+  length, tinted recommendation cards and SEO tips, from `seoReport()` in
+  `@repo/utils`. It appears on every editor that has SEO fields, now
+  including tools and glossary topics. Quizzes have no SEO fields, so they
+  get no panel.
+- **Email template editor.**
+  - The logo is an absolute URL in both the preview and sent mail, falling
+    back to the light brand logo.
+  - Links use the brand link colour instead of blue.
+  - The toolbar writing assistant is available.
+  - The action bar is sticky.
+  - Visual/HTML tabs replace the mode dropdown.
+  - Clicking a variable copies it.
+- **Theme editor.**
+  - Each contrast advisory is now plain language. It names the input and the
+    mode, says what the site already does about it, and offers a suggested
+    value with an "Apply suggestion" button (`@repo/theme` structured
+    `ContrastIssue` and `suggestButtonFill`).
+  - "Save as preset" and preset delete are new (`saveThemePreset` /
+    `deleteThemePreset`), gated on `theme.update`, audited, and they
+    invalidate the `theme` tag.
+- **Settings → Media.** Upload caps are a dropdown of MB values. Storage
+  stays in bytes.
+- **Removed screens.** `/admin/features` and the articles settings group are
+  gone (ADR-144 §5), along with the dashboard flags tile.
+- **Tool editor.** Instrument pickers get Select all / Clear all and a
+  filter. The default symbol stays within the ticked set.
+- **Video topic editor.** A "New category" button creates and selects a
+  category without a reload. A "Show in both schools" switch sets
+  `showOnAllTracks`.
+- **Combobox.** The search header is one clean row; the input has no focus
+  ring of its own.
+
+**Platform**
+
+- **Media folders.** Object keys are `<category>/<random>.<ext>`, served by
+  the catch-all `/uploads/[...key]`. Legacy flat keys still serve, and
+  traversal and unknown prefixes return 404.
+- **Video compression.** When `FFMPEG_PATH` is set, an uploaded video is
+  re-encoded to H.264/AAC `+faststart`, with the long edge capped at 1920.
+  The result is kept only if it is smaller; any failure stores the original.
+  Measured: a 21.8 MB file became 2.1 MB and plays with Range support.
+- **Proxy body limit.** It is now 110 MB. Every upload over 10 MB had been
+  failing with "Failed to parse body as FormData".
+- **Migrations.**
+  - `20260920090000_all_flags_on_changes46` deletes the five unread flags and
+    switches every other flag on.
+  - `20260920093000_video_topic_all_tracks_changes46` adds the
+    `showOnAllTracks` column.
+- **Live seed (`pnpm seed:live`, `packages/core/seed-live/`).** It goes
+  through the core save services and `storeMedia`, and it is idempotent: a
+  second run created nothing.
+  - Courses: four new original courses, for 3 per school.
+  - Quizzes: two, with ten checked questions each.
+  - Video topics: six, with oEmbed-verified YouTube videos.
+  - Images: covers and lesson images filled in with 16 of the owner's images,
+    optimised to 1.6 MB of WebP.
+  - A PDF cheat sheet per course.
+  - The owner's current theme, brand, settings and flags, exported by
+    `pnpm seed:export-defaults` to `defaults.json`, which holds no secrets.
+  - Keys are read from the `SEED_*` environment variables and sealed. None
+    are committed.
+- **Tool FAQs.** All 11 tools now have FAQ entries; running `db:seed`
+  filled the six that were empty locally.
+- **Docs.** `docs/ops/deploy.md` is a new runbook. `docs/ops/cron.md` now
+  covers crontab, systemd timers, Task Scheduler, GitHub Actions and
+  cron-job.org, with a troubleshooting section.
+- **Cron.** All three routes answer 401 / 405 / 200 as designed.
+  `CRON_SECRET` was empty locally and is now set in `.env`. The running dev
+  server needs a restart to pick it up.
+
+**Tests:**
+
+- vitest:
+  - `apps/web`: 2,713;
+  - `@repo/ui`: 500;
+  - `@repo/theme`: 84;
+  - `@repo/contracts`: 484;
+  - `@repo/utils`: 346;
+  - `@repo/ai`: 155;
+  - `@repo/email` layout, render and sanitize: 58;
+  - `@repo/core` unit: 228.
+- Testcontainers integration:
+  - `media`: 33;
+  - `videos`: 26;
+  - `tools`: 23. This includes two stale tests that still treated `margin`
+    as unregistered.
+  - `users`, `admin` and `admin-dashboard`: pass;
+  - `@repo/db`: 41.
+- `tsc` is clean in every package and in `apps/web`. The
+  `machine-translation.test.ts` error is fixed with an explicit type
+  argument.
+- ESLint is clean.
+- `next build` (production) succeeds: compile, type-check and page generation.
+- These checks pass: `check:permission-keys`, `check:catalog-completeness`,
+  `check:email-templates`, `check:phantom-deps`.
+
+**Owner notes:**
+
+- The active theme's `success` colour is `#4b81e2`, which is blue. It was
+  saved in the theme editor before this change set, and the export captured
+  it as the current default. It was left as is. Change it in Theme → Colors
+  if blue is not wanted (ADR-142 §1).
+- `pnpm-lock.yaml` has a hand-added `tsx` entry for `@repo/core`, because
+  the local pnpm (10.x) would have rewritten the lockfile. Run
+  `pnpm install` with the pinned pnpm to normalise it.
+
+**Still owed to Module 14:**
+
+- E2E for the record pages, the preset flow, inline category creation and
+  the live seed;
+- axe on the progress band and the new mega-menu footer.
+
+## 2026-09-20 — changes-47: one-row course filters, a shorter news masthead (no ADR)
+
+**Shipped:**
+
+- `/learn`'s search, topic chips and difficulty chips now sit in one toolbar
+  row (`course-shelf.tsx`). Below `lg` the row stacks, and on a narrow `lg`
+  width the chip groups wrap instead of shrinking the search box (`min-w-64`).
+  The visible "Filter by difficulty" text became a glyph. The group's
+  `aria-label` still names it. The result count moved under the row and now
+  shows whenever a filter is active. Before, it was hidden when only one
+  difficulty was on offer.
+- `NewsMasthead` no longer shows the popular-tags row. Its `tags` and
+  `activeTagSlug` props are removed from all four listings. The sidebar's
+  Popular tags panel and the closing `#topics` band still list the tags.
+- The banner is a little shorter. It uses a new `PageHero` `size="medium"`
+  (`section-md`, `gap-4`), which sits between `default` and `compact`.
+  `compact` cut two thirds of the height, which was more than asked for.
+
+**Tests:** `article-listing.test.ts` now checks that the masthead is `medium`
+and draws no `TagChips`, instead of checking that it carries them. The news
+suite passes (27). ESLint and `tsc` (apps/web) are clean. `/news`, `/analysis`
+and `/learn` render 200 on the dev server.
+
+## 2026-09-21 — changes-48: quiz View live, row switches, section tabs, progress filters (no ADR)
+
+**Shipped:**
+
+- **Quiz "View live".** The quiz editor was the one content editor with no
+  way to open its page. The button shows only once the quiz is published. It
+  links to `/learn/<stored track>/quizzes/<default-locale slug>` through
+  `liveHref` and opens in a new tab, like the other editors.
+- **Row switches.** Tags, article categories and social links shared one
+  `useServerAction` across all rows, and every switch was
+  `disabled={pending}`. Flipping one greyed out every switch on the page
+  until the refresh landed. The articles table's Active and Featured switches
+  had no local state, so they lagged behind the click. All of them now use
+  the new `_components/row-switch.tsx`. Each row switch has its own
+  transition, moves as soon as it is pressed, reverts if the action fails
+  (through a new `onError` on `useServerAction`), and is never disabled while
+  saving. A second press during a save is ignored and `aria-busy` is set.
+- **Section tabs.** Video categories and glossary topics are now tabs, like
+  News & Analysis (ADR-106's shape), and their sidebar rows are gone.
+  `learn/videos/(browse)/` and `glossary/(browse)/` are route groups, so no
+  URL moved. Each group's layout owns the heading and the `SubNav` strip, and
+  each page portals its own create button into the heading. The videos
+  list's "Categories" button is gone because it repeated the tab. The three
+  editors (`learn/videos/[id]`, `glossary/[id]`, `glossary/topics/[id]`)
+  stay outside the groups. The Videos and Glossary sidebar rows are no longer
+  `exact`, so they stay lit on both tabs. New key: `admin.glossaryTermsTab`.
+- **Progress filters.** `/admin/learn/progress` has a School → Course →
+  Module filter in the URL. Each choice clears the ones below it, and the
+  Module filter appears only once a course is chosen. The narrowing is
+  `filterLearnAnalytics` (`@repo/core`, pure). A quiz is kept if the chosen
+  course or section uses it, as a lesson's quiz or the final quiz, because a
+  quiz holds no course FK (ADR-058 #1). `loadLearnAnalyticsSummary(scope)`
+  counts the tiles for the same courses and quizzes. Rows now carry `track`,
+  `courseId`, `sectionId` and quiz `courseIds`/`sectionIds`, and
+  `rankLeastHelpful` ranks rows the page has already loaded.
+- **Progress pagination.** Before, the lesson table stopped at 15 rows with
+  no notice, and the other tables never stopped. Every table now shows 10
+  rows a page with the site's `ClientPagination`, and a filter change goes
+  back to page one.
+
+**Tests:**
+
+- New files:
+  - `apps/web/app/changes-48-fixes.test.ts` (17);
+  - `packages/core/src/learn-analytics-filter.test.ts` (7).
+- A scoped-summary case was added to `progress.integration.test.ts`. The
+  file passes (30, Testcontainers).
+- `admin-page-conventions.test.ts` now understands that a sibling route
+  group can serve a folder's URL (`glossary/topics/` holds only `[id]`).
+- The quiz editor was added to `live-href.test.ts`.
+- `apps/web` vitest: 2,733 pass. `@repo/core` unit tests: 235 pass.
+- `tsc` is clean in `apps/web` (apart from the stale `.next/types`, which
+  regenerate on the next dev or build) and in `@repo/core`. ESLint and
+  Prettier are clean.
+
+**Still owed to Module 14:** E2E for the two new tab sections and the
+progress filters.

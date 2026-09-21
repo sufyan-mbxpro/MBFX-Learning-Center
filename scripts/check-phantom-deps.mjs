@@ -63,10 +63,19 @@ export function findPhantomImports(pkgJson, files) {
   return phantoms;
 }
 
+// Never scanned: dependencies, BUILD OUTPUT, and generated code. The build
+// output rule is a PREFIX match on `.next`, not an equality one — the E2E
+// harness builds into `.next-e2e` (apps/web/next.config.ts, so its dev server
+// can run alongside `pnpm dev`), and an exact-match list let that directory
+// through. Every bundled chunk then read as a phantom dependency of
+// @repo/web: `lodash` nine times over, from a transitive package Turbopack
+// had inlined. A source-only check that starts reading bundles reports
+// nothing true about the source.
+const SKIP_EXACT = ["node_modules", "dist", ".turbo", "generated", "coverage"];
+
 function* walk(dir, exts) {
   for (const entry of readdirSync(dir)) {
-    if (["node_modules", ".next", "dist", ".turbo", "generated", "coverage"].includes(entry))
-      continue;
+    if (SKIP_EXACT.includes(entry) || entry.startsWith(".next")) continue;
     const full = join(dir, entry);
     if (statSync(full).isDirectory()) yield* walk(full, exts);
     else if (exts.some((e) => full.endsWith(e))) yield full;

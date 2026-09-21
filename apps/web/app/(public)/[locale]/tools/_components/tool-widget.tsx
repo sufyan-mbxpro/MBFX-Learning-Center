@@ -3,12 +3,16 @@ import { getTranslations } from "next-intl/server";
 import type { ToolKey } from "@repo/contracts";
 import { crossRate } from "@repo/utils";
 import { GainLossWidget } from "../_widgets/gain-loss.tsx";
+import { MarginWidget } from "../_widgets/margin.tsx";
+import { ProfitLossWidget } from "../_widgets/profit-loss.tsx";
+import { RiskRewardWidget } from "../_widgets/risk-reward.tsx";
 import { MarketHoursWidget } from "../_widgets/market-hours.tsx";
 import { PipValueWidget } from "../_widgets/pip-value.tsx";
 import { PivotPointsWidget } from "../_widgets/pivot-points.tsx";
 import { PositionSizeWidget } from "../_widgets/position-size.tsx";
 import { CurrencyConverterWidget } from "../_widgets/currency-converter.tsx";
 import type { PivotOhlc } from "../_widgets/pivot-points.tsx";
+import { pivotSymbols } from "./pivot-symbols.ts";
 import type { RateSnapshotView } from "./rate-footnote.tsx";
 import { CorrelationPanel } from "../_widgets/correlation-panel.tsx";
 import type { CorrelationData } from "../_widgets/correlation.tsx";
@@ -21,9 +25,9 @@ export interface WidgetInstrument {
   kind: string;
 }
 
-// One switch, eight islands (changes-25 T6/T7/T8).
+// One switch, one island per tool (changes-25 T6/T7/T8; three more in changes-41).
 //
-// **ONE island per page, never eight.** The switch runs on the SERVER, so a
+// **ONE island per page, never all of them.** The switch runs on the SERVER, so a
 // reader on `/tools/gain-loss` downloads the gain/loss island and nothing
 // else — which is the mitigation ADR-086's risk #4 names for eight
 // interactive widgets arriving on public routes.
@@ -46,8 +50,8 @@ export async function ToolWidget({
   instruments: WidgetInstrument[];
   /** ADR-087 #7's one cached read; null for the tools that need no rates. */
   snapshot: RateSnapshotView | null;
-  /** The last complete period per interval — pivot's autofill, empty for the rest. */
-  autofill: Record<string, PivotOhlc | null>;
+  /** The last complete period per symbol and interval — pivot's autofill, empty for the rest. */
+  autofill: Record<string, Record<string, PivotOhlc | null>>;
   /** Every offered window's matrix, from one read (T8). */
   correlation: {
     matrices: Record<string, CorrelationData>;
@@ -87,7 +91,43 @@ export async function ToolWidget({
         price: priceFor(i.symbol),
       }));
 
+  const accountCurrencies = (
+    Array.isArray(config.accountCurrencyIds) ? (config.accountCurrencyIds as string[]) : []
+  )
+    .map((id) => byId.get(id)?.symbol)
+    .filter((s): s is string => Boolean(s));
+
+  /** The admin's default pair, as a symbol — only when it is also offered. */
+  const pairs = pick("pairIds");
+  const defaultPair =
+    pairs.find((p) => p.symbol === byId.get(String(config.defaultPairId ?? ""))?.symbol)?.symbol ??
+    pairs[0]?.symbol;
+
   switch (toolKey) {
+    case "margin":
+      return (
+        <MarginWidget
+          config={{ ...config, pairs, defaultPair, accountCurrencies }}
+          snapshot={snapshot}
+        />
+      );
+
+    case "profit-loss":
+      return (
+        <ProfitLossWidget
+          config={{ ...config, pairs, defaultPair, accountCurrencies }}
+          snapshot={snapshot}
+        />
+      );
+
+    case "risk-reward":
+      return (
+        <RiskRewardWidget
+          config={{ ...config, pairs, defaultPair, accountCurrencies }}
+          snapshot={snapshot}
+        />
+      );
+
     case "gain-loss":
       return <GainLossWidget config={config} />;
 
@@ -128,18 +168,20 @@ export async function ToolWidget({
         />
       );
 
-    case "pivot-points":
+    case "pivot-points": {
+      // changes-46: `pivotSymbols` reads `symbolIds`, the key the registry
+      // writes. The widget used to read `config.symbols`, which nothing ever
+      // wrote, so the dropdown had no options and did not render.
+      const pivot = pivotSymbols(config, instruments);
       return (
         <PivotPointsWidget
           config={config}
+          symbols={pivot.options}
           autofill={autofill}
-          defaultSymbol={
-            byId.get(String(config.defaultSymbolId ?? ""))?.symbol ??
-            pick("symbolIds")[0]?.symbol ??
-            "EUR/USD"
-          }
+          defaultSymbol={pivot.defaultSymbol ?? "EUR/USD"}
         />
       );
+    }
 
     case "currency-converter":
       return (

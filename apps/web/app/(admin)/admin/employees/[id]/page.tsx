@@ -8,8 +8,25 @@ import {
   loadAssignableRoles,
   loadEmployeeDetail,
 } from "@repo/core";
+import {
+  BriefcaseBusiness,
+  Building2,
+  CalendarPlus,
+  KeyRound,
+  UserRound,
+  UsersRound,
+} from "lucide-react";
 import { can, requirePermission } from "@repo/rbac";
-import { AdminPage, AdminSection } from "../../_components/admin-page.tsx";
+import { Badge } from "@repo/ui/components/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@repo/ui/components/tabs";
+import { AdminPage } from "../../_components/admin-page.tsx";
+import {
+  RecordCard,
+  RecordEmpty,
+  RecordFacts,
+  RecordStat,
+  RecordStats,
+} from "../../_components/record-page.tsx";
 import {
   EMPLOYEE_STATUS_TONE,
   StatusBadge,
@@ -19,6 +36,7 @@ import {
 import { ResetPasswordButton, RoleControls } from "../../users/[id]/detail-controls.tsx";
 import { OffboardButton } from "../offboard-button.tsx";
 import { EmployeeEditDialog, EmployeeStatusControl } from "./employee-controls.tsx";
+import { formatDate } from "@repo/utils";
 
 // Dedicated employee detail page (changes-01): sectioned cards for basic
 // info, employment status, role update (via the linked user account),
@@ -28,7 +46,11 @@ export default async function EmployeeDetailPage({ params }: PageProps<"/admin/e
   const subject = await requirePermission("employees.view");
   const { id } = await params;
 
-  const [t, employee] = await Promise.all([getTranslations("admin"), loadEmployeeDetail(id)]);
+  const [t, r, employee] = await Promise.all([
+    getTranslations("admin"),
+    getTranslations("admin.employeeRecord"),
+    loadEmployeeDetail(id),
+  ]);
   if (!employee) notFound();
 
   const canUpdate = can(subject, "employees.update");
@@ -66,170 +88,234 @@ export default async function EmployeeDetailPage({ params }: PageProps<"/admin/e
     cancel: t("cancel"),
   };
 
+  const canEdit = canUpdate && employee.status !== "TERMINATED";
+  const status = (
+    <StatusBadge tone={statusTone(EMPLOYEE_STATUS_TONE, employee.status)}>
+      {fullStatusLabel}
+    </StatusBadge>
+  );
+
+  // changes-45: the user record's shape — the person's name as the heading,
+  // figures, then tabs — "with not much scope yet": an employee has no
+  // progress, so the tabs are the HR details and the linked sign-in account.
   return (
     <AdminPage
       title={`${employee.firstName} ${employee.lastName}`}
-      description={t("pageDesc.employeeDetail")}
+      description={`${employee.employeeCode} • ${employee.workEmail}`}
       backHref="/admin/employees"
       backLabel={t("backToList")}
       meta={
         <>
-          <StatusBadge tone={statusTone(EMPLOYEE_STATUS_TONE, employee.status)}>
-            {fullStatusLabel}
-          </StatusBadge>
-          <span className="text-xs text-muted-foreground">{employee.employeeCode}</span>
+          <Badge variant="outline">{r("employee")}</Badge>
+          {status}
+        </>
+      }
+      actions={
+        <>
+          {canEdit && (
+            <EmployeeEditDialog
+              employeeId={employee.id}
+              initial={{
+                firstName: employee.firstName,
+                lastName: employee.lastName,
+                phone: employee.phone ?? "",
+                location: employee.location ?? "",
+                departmentId: employee.departmentId ?? "",
+                designationId: employee.designationId ?? "",
+                reportingToId: employee.reportingToId ?? "",
+                notes: employee.notes ?? "",
+              }}
+              departments={departments}
+              designations={designations}
+              reportingOptions={allEmployees
+                .filter((e) => e.id !== employee.id && e.status !== "TERMINATED")
+                .map((e) => ({ id: e.id, name: `${e.firstName} ${e.lastName}` }))}
+              labels={{
+                edit: t("edit"),
+                editDescription: t("dialogDesc.editEmployee"),
+                save: t("save"),
+                cancel: t("cancel"),
+                firstName: t("firstNameCol"),
+                lastName: t("lastNameCol"),
+                phone: t("phoneCol"),
+                location: t("locationCol"),
+                department: t("departmentCol"),
+                designation: t("designationCol"),
+                reportingTo: t("reportingTo"),
+                notes: t("notesCol"),
+                none: t("noneOption"),
+              }}
+            />
+          )}
+          {canResetPassword && employee.linkedUser && (
+            <ResetPasswordButton
+              userId={employee.linkedUser.id}
+              userLabel={employee.linkedUser.email}
+              labels={{
+                resetPassword: t("resetPassword"),
+                resetDescription: t("resetPasswordDescription"),
+                newPassword: t("newPassword"),
+                generate: t("generatePassword"),
+                confirm: t("confirm"),
+                cancel: t("cancel"),
+                done: t("resetPasswordDone"),
+              }}
+            />
+          )}
+          {canEdit && (
+            <OffboardButton
+              employeeId={employee.id}
+              label={t("offboard")}
+              confirmText={t("offboardConfirm")}
+              confirmLabel={t("confirm")}
+              cancelLabel={t("cancel")}
+            />
+          )}
         </>
       }
     >
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <AdminSection title={t("personalInformation")}>
-          <div className="flex flex-col gap-4">
-            <dl className="grid grid-cols-(--grid-label-value) gap-x-6 gap-y-2 text-sm">
-              <dt className="text-muted-foreground">{t("nameCol")}</dt>
-              <dd>
-                {employee.firstName} {employee.lastName}
-              </dd>
-              <dt className="text-muted-foreground">{t("emailCol")}</dt>
-              <dd className="break-all">{employee.workEmail}</dd>
-              <dt className="text-muted-foreground">{t("phoneCol")}</dt>
-              <dd>{employee.phone ?? "—"}</dd>
-              <dt className="text-muted-foreground">{t("locationCol")}</dt>
-              <dd>{employee.location ?? "—"}</dd>
-              <dt className="text-muted-foreground">{t("departmentCol")}</dt>
-              <dd>{employee.departmentName ?? "—"}</dd>
-              <dt className="text-muted-foreground">{t("designationCol")}</dt>
-              <dd>{employee.designationTitle ?? "—"}</dd>
-              <dt className="text-muted-foreground">{t("reportingTo")}</dt>
-              <dd>{employee.reportingToName ?? "—"}</dd>
-              <dt className="text-muted-foreground">{t("joinedAt")}</dt>
-              <dd>{employee.joinedAt.toISOString().slice(0, 10)}</dd>
-            </dl>
-            {canUpdate && employee.status !== "TERMINATED" && (
-              <div>
-                <EmployeeEditDialog
-                  employeeId={employee.id}
-                  initial={{
-                    firstName: employee.firstName,
-                    lastName: employee.lastName,
-                    phone: employee.phone ?? "",
-                    location: employee.location ?? "",
-                    departmentId: employee.departmentId ?? "",
-                    designationId: employee.designationId ?? "",
-                    reportingToId: employee.reportingToId ?? "",
-                    notes: employee.notes ?? "",
-                  }}
-                  departments={departments}
-                  designations={designations}
-                  reportingOptions={allEmployees
-                    .filter((e) => e.id !== employee.id && e.status !== "TERMINATED")
-                    .map((e) => ({ id: e.id, name: `${e.firstName} ${e.lastName}` }))}
-                  labels={{
-                    edit: t("edit"),
-                    editDescription: t("dialogDesc.editEmployee"),
-                    save: t("save"),
-                    cancel: t("cancel"),
-                    firstName: t("firstNameCol"),
-                    lastName: t("lastNameCol"),
-                    phone: t("phoneCol"),
-                    location: t("locationCol"),
-                    department: t("departmentCol"),
-                    designation: t("designationCol"),
-                    reportingTo: t("reportingTo"),
-                    notes: t("notesCol"),
-                    none: t("noneOption"),
-                  }}
+      <RecordStats>
+        <RecordStat
+          icon={Building2}
+          label={t("departmentCol")}
+          value={employee.departmentName ?? "—"}
+        />
+        <RecordStat
+          icon={BriefcaseBusiness}
+          label={t("designationCol")}
+          value={employee.designationTitle ?? "—"}
+        />
+        <RecordStat
+          icon={CalendarPlus}
+          label={t("joinedAt")}
+          value={formatDate(employee.joinedAt)}
+        />
+        <RecordStat
+          icon={UsersRound}
+          label={t("reportingTo")}
+          value={employee.reportingToName ?? "—"}
+        />
+      </RecordStats>
+
+      <Tabs defaultValue="details">
+        <TabsList className="w-full">
+          <TabsTrigger value="details">
+            <UserRound aria-hidden /> {r("tabDetails")}
+          </TabsTrigger>
+          <TabsTrigger value="account">
+            <KeyRound aria-hidden /> {t("linkedAccount")}
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="details" className="pt-4">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <RecordCard
+              icon={UserRound}
+              title={t("personalInformation")}
+              description={r("personalDescription")}
+            >
+              <RecordFacts
+                facts={[
+                  { label: t("firstNameCol"), value: employee.firstName },
+                  { label: t("lastNameCol"), value: employee.lastName },
+                  { label: t("emailCol"), value: employee.workEmail },
+                  { label: t("phoneCol"), value: employee.phone },
+                  { label: t("locationCol"), value: employee.location },
+                  { label: r("employeeCode"), value: employee.employeeCode },
+                ]}
+              />
+            </RecordCard>
+
+            <RecordCard
+              icon={BriefcaseBusiness}
+              title={t("employmentStatus")}
+              description={r("employmentDescription")}
+            >
+              <div className="flex flex-col gap-4">
+                {canEdit && (
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm text-muted-foreground">{t("status")}</span>
+                    <EmployeeStatusControl
+                      employeeId={employee.id}
+                      status={employee.status}
+                      statusLabels={employeeStatusLabels}
+                      labels={{
+                        status: t("status"),
+                        confirmStatusChange: t("confirmStatusChange"),
+                        ...confirmLabels,
+                      }}
+                    />
+                  </div>
+                )}
+                <RecordFacts
+                  facts={[
+                    { label: t("status"), value: status },
+                    { label: t("departmentCol"), value: employee.departmentName },
+                    { label: t("designationCol"), value: employee.designationTitle },
+                    { label: t("reportingTo"), value: employee.reportingToName },
+                    { label: t("joinedAt"), value: formatDate(employee.joinedAt) },
+                  ]}
                 />
               </div>
-            )}
+            </RecordCard>
           </div>
-        </AdminSection>
+        </TabsContent>
 
-        <AdminSection title={t("employmentStatus")}>
-          {canUpdate && employee.status !== "TERMINATED" ? (
-            <div className="flex items-center gap-3">
-              <span className="text-sm text-muted-foreground">{t("status")}</span>
-              <EmployeeStatusControl
-                employeeId={employee.id}
-                status={employee.status}
-                statusLabels={employeeStatusLabels}
-                labels={{
-                  status: t("status"),
-                  confirmStatusChange: t("confirmStatusChange"),
-                  ...confirmLabels,
-                }}
-              />
-            </div>
-          ) : (
-            <StatusBadge tone={statusTone(EMPLOYEE_STATUS_TONE, employee.status)}>
-              {fullStatusLabel}
-            </StatusBadge>
-          )}
-          {canUpdate && employee.status !== "TERMINATED" && (
-            <div className="mt-2 border-t pt-4">
-              <OffboardButton
-                employeeId={employee.id}
-                label={t("offboard")}
-                confirmText={t("offboardConfirm")}
-                confirmLabel={t("confirm")}
-                cancelLabel={t("cancel")}
-              />
-            </div>
-          )}
-        </AdminSection>
-      </div>
-
-      {employee.linkedUser ? (
-        <AdminSection title={t("linkedAccount")}>
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-wrap items-center gap-3 text-sm">
-              <Link
-                href={`/admin/users/${employee.linkedUser.id}`}
-                className="text-primary-interactive underline-offset-4 hover:underline"
-              >
-                {employee.linkedUser.email}
-              </Link>
-              <StatusBadge tone={statusTone(USER_STATUS_TONE, employee.linkedUser.status)}>
-                {userStatusLabels[employee.linkedUser.status] ?? employee.linkedUser.status}
-              </StatusBadge>
-              {canResetPassword && (
-                <div className="ms-auto">
-                  <ResetPasswordButton
+        <TabsContent value="account" className="pt-4">
+          <RecordCard
+            icon={KeyRound}
+            title={t("linkedAccount")}
+            description={r("accountDescription")}
+          >
+            {employee.linkedUser ? (
+              <div className="flex flex-col gap-4">
+                <RecordFacts
+                  facts={[
+                    {
+                      label: t("emailCol"),
+                      value: (
+                        <Link
+                          href={`/admin/users/${employee.linkedUser.id}`}
+                          className="text-primary-interactive underline-offset-4 hover:underline"
+                        >
+                          {employee.linkedUser.email}
+                        </Link>
+                      ),
+                    },
+                    {
+                      label: t("status"),
+                      value: (
+                        <StatusBadge
+                          tone={statusTone(USER_STATUS_TONE, employee.linkedUser.status)}
+                        >
+                          {userStatusLabels[employee.linkedUser.status] ??
+                            employee.linkedUser.status}
+                        </StatusBadge>
+                      ),
+                    },
+                  ]}
+                />
+                {canAssign && (
+                  <RoleControls
                     userId={employee.linkedUser.id}
-                    userLabel={employee.linkedUser.email}
+                    currentRoles={employee.linkedUser.roleKeys}
+                    availableRoles={assignableRoles}
                     labels={{
-                      resetPassword: t("resetPassword"),
-                      resetDescription: t("resetPasswordDescription"),
-                      newPassword: t("newPassword"),
-                      generate: t("generatePassword"),
-                      confirm: t("confirm"),
-                      cancel: t("cancel"),
-                      done: t("resetPasswordDone"),
+                      assignRole: t("assignRole"),
+                      remove: t("removeRole"),
+                      confirmRemoveRole: t("confirmRemoveRole"),
+                      level: t("level"),
+                      ...confirmLabels,
                     }}
                   />
-                </div>
-              )}
-            </div>
-            {canAssign && (
-              <RoleControls
-                userId={employee.linkedUser.id}
-                currentRoles={employee.linkedUser.roleKeys}
-                availableRoles={assignableRoles}
-                labels={{
-                  assignRole: t("assignRole"),
-                  remove: t("removeRole"),
-                  confirmRemoveRole: t("confirmRemoveRole"),
-                  level: t("level"),
-                  ...confirmLabels,
-                }}
-              />
+                )}
+              </div>
+            ) : (
+              <RecordEmpty>{t("noLinkedAccount")}</RecordEmpty>
             )}
-          </div>
-        </AdminSection>
-      ) : (
-        <AdminSection title={t("linkedAccount")}>
-          <p className="text-sm text-muted-foreground">{t("noLinkedAccount")}</p>
-        </AdminSection>
-      )}
+          </RecordCard>
+        </TabsContent>
+      </Tabs>
     </AdminPage>
   );
 }

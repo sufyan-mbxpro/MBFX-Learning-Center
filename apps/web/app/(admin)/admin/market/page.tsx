@@ -7,6 +7,7 @@ import { Button } from "@repo/ui/components/button";
 import { AdminPage } from "../_components/admin-page.tsx";
 import { InstrumentsTable, type InstrumentsTableLabels } from "./instruments-table.tsx";
 import { NewInstrumentButton } from "./new-instrument-button.tsx";
+import { formatDate } from "@repo/utils";
 
 // Instruments (Module 13, ADR-087 #1).
 //
@@ -28,8 +29,6 @@ export default async function MarketPage() {
   // hidden menu is not security, it is only an honest screen.
   const canManage = can(subject, "market.instruments.manage");
   const canManageProvider = can(subject, "market.providers.manage");
-
-  const dateFormat = new Intl.DateTimeFormat("en", { dateStyle: "medium" });
 
   const labels: InstrumentsTableLabels = {
     search: t("marketSearch"),
@@ -90,8 +89,10 @@ export default async function MarketPage() {
     <AdminPage
       title={t("marketData.title")}
       description={t("marketData.description")}
+      // ADR-106 #3: the provider screen is a different screen, so its link is
+      // a header button. ADR-140 §3: "New instrument" joins it, last.
       actions={
-        <div className="flex items-center gap-2">
+        <>
           {canManageProvider && (
             <Button variant="outline" render={<Link href="/admin/market/provider" />}>
               <Settings2 aria-hidden data-icon="inline-start" />
@@ -101,7 +102,7 @@ export default async function MarketPage() {
           {canManage && (
             <NewInstrumentButton labels={labels} triggerLabel={t("marketData.newTrigger")} />
           )}
-        </div>
+        </>
       }
     >
       <InstrumentsTable
@@ -118,7 +119,7 @@ export default async function MarketPage() {
           isActive: row.isActive,
           sortOrder: row.sortOrder,
           barCount: row.barCount,
-          lastBarLabel: row.lastBarDate ? dateFormat.format(row.lastBarDate) : null,
+          lastBarLabel: row.lastBarDate ? formatDate(row.lastBarDate) : null,
           // The formatted label sorts lexically, which is not chronologically.
           lastBarSort: row.lastBarDate ? row.lastBarDate.getTime() : 0,
           // Derived in the service, not here: Date.now() in a render is an

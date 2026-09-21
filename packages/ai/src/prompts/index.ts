@@ -6,12 +6,14 @@
 import type { AiFeatureKey, AiPayload } from "@repo/contracts";
 
 import { buildAltTextPrompt } from "./alt-text.ts";
+import { buildFormFillPrompt } from "./form-fill.ts";
 import { buildQuizGenerationPrompt } from "./quiz-generation.ts";
 import { buildSeoGenerationPrompt } from "./seo-generation.ts";
 import type { BuiltPrompt } from "./shared.ts";
 import { buildSummarizationPrompt } from "./summarization.ts";
 import { buildTranslationPrompt } from "./translation.ts";
 import { buildWritingAssistantPrompt } from "./writing-assistant.ts";
+import { buildWritingStudioPrompt } from "./writing-studio.ts";
 
 export type PromptBuilder<K extends AiFeatureKey> = (
   payload: AiPayload<K>,
@@ -25,6 +27,8 @@ export const PROMPT_BUILDERS: { [K in AiFeatureKey]: PromptBuilder<K> } = {
   summarization: buildSummarizationPrompt,
   alt_text: buildAltTextPrompt,
   quiz_generation: buildQuizGenerationPrompt,
+  form_fill: buildFormFillPrompt,
+  writing_studio: buildWritingStudioPrompt,
 };
 
 export function buildPrompt<K extends AiFeatureKey>(
@@ -37,8 +41,10 @@ export function buildPrompt<K extends AiFeatureKey>(
 
 export { asData, buildSystem, localeName, type BuiltPrompt } from "./shared.ts";
 export { buildAltTextPrompt } from "./alt-text.ts";
+export { buildFormFillPrompt } from "./form-fill.ts";
 export { buildQuizGenerationPrompt } from "./quiz-generation.ts";
 export { buildSeoGenerationPrompt } from "./seo-generation.ts";
 export { buildSummarizationPrompt } from "./summarization.ts";
 export { buildTranslationPrompt } from "./translation.ts";
 export { buildWritingAssistantPrompt } from "./writing-assistant.ts";
+export { buildWritingStudioPrompt } from "./writing-studio.ts";

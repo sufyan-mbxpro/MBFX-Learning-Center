@@ -6,7 +6,7 @@ import { getMessages } from "next-intl/server";
 import { auth } from "@repo/auth";
 import { getBrandAssets, loadOwnProfile } from "@repo/core";
 import { loadSubject } from "@repo/rbac";
-import { buildThemeStyleSheet, getActiveTheme } from "@repo/theme";
+import { buildThemeStyleSheet, getActiveTheme, withAdminTypeface } from "@repo/theme";
 import { curatedFontVariables } from "@repo/ui/fonts";
 import { ThemeProvider } from "@repo/ui/components/theme-provider";
 import { ThemeScript } from "@repo/ui/components/theme-script";
@@ -106,10 +106,12 @@ export default async function AdminRootLayout({ children }: LayoutProps<"/">) {
         {/* ADR-064: the pre-paint mode guard, server-rendered so the browser
             actually executes it. Carries the nonce, like #brand-tokens. */}
         <ThemeScript nonce={nonce} />
+        {/* ADR-141: the admin is set in Inter, whatever face the public
+            site's theme uses. */}
         <style
           id="brand-tokens"
           nonce={nonce}
-          dangerouslySetInnerHTML={{ __html: buildThemeStyleSheet(theme) }}
+          dangerouslySetInnerHTML={{ __html: buildThemeStyleSheet(withAdminTypeface(theme)) }}
         />
         <NextIntlClientProvider messages={messages}>
           <ThemeProvider>

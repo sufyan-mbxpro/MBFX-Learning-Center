@@ -7,10 +7,11 @@
 // the cards it describes; the sub-nav is a sibling that carries only its
 // own "Settings" label.
 //
-// Used by /admin/settings/[group], /admin/settings/social, /admin/features
+// Used by /admin/settings/[group], /admin/settings/social
 // and /admin/theme — one component, so the four stay identical instead of
 // drifting into four arrangements of the same two columns.
 import { AdminPageHeading } from "../../_components/admin-page.tsx";
+import { HeaderActionsProvider } from "../../_components/header-actions.tsx";
 import { SettingsNav, type SettingsNavEntry } from "./settings-nav.tsx";
 
 export function SettingsScreen({
@@ -28,13 +29,18 @@ export function SettingsScreen({
   actions?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  // ADR-140 §3: a slot on the title row, so a client manager below (the
+  // social links table's "Add") can put its button there with
+  // `<HeaderActions>` while keeping the dialog it opens.
   return (
-    <div className="flex w-full flex-col gap-6 md:flex-row">
-      <SettingsNav heading={navHeading} entries={navEntries} />
-      <div className="flex min-w-0 flex-1 flex-col gap-6">
-        <AdminPageHeading title={title} description={description} actions={actions} />
-        {children}
+    <HeaderActionsProvider>
+      <div className="flex w-full flex-col gap-6 md:flex-row">
+        <SettingsNav heading={navHeading} entries={navEntries} />
+        <div className="flex min-w-0 flex-1 flex-col gap-6">
+          <AdminPageHeading title={title} description={description} actions={actions} actionsSlot />
+          {children}
+        </div>
       </div>
-    </div>
+    </HeaderActionsProvider>
   );
 }

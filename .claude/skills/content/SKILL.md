@@ -107,11 +107,35 @@ yet:
   upload permission gate. Type lives in `kind`; there are no per-type folders.
   `MediaPickerDialog` and `ImageUploadField` take a **required** `category`,
   so a new call site has to say where its uploads belong.
-- **`/uploads/[file]` answers a Range without reading the object**
+- **`/uploads/[...key]` (a catch-all since ADR-144 §3; keys are `<category>/<random>.<ext>`, legacy flat keys still serve) answers a Range without reading the object**
   (`StorageDriver.getRange`, optional, with a read-and-slice fallback), and a
   `DOCUMENT` is served `Content-Disposition: attachment` — nothing here embeds
   a PDF. `resolveThumbnailUrl(row)` is the derivative seam changes-12 M7 fills;
   grid tiles read it, never `url`.
+
+## Uploaded images are stored as WebP (ADR-130, 2026-09-17)
+
+- `storeMedia` and `replaceMedia` run every IMAGE through `optimizeImage()`
+  (`image-optimize.ts`) before the storage driver. It applies EXIF
+  orientation, drops all metadata (GPS too) and encodes WebP with
+  `smartSubsample` aimed at **80 KB** (`OPTIMIZE_TARGET_BYTES`). It uses the
+  highest quality in 60–85 that fits. Only when 60 does not fit does the edge
+  step down, 3840 → 2560 → 1920 → 1600 → 1280. `images.qualities` in
+  `next.config.ts` is `[85]` to match; do not add a lower display quality, or
+  uploads are compressed twice. The row stores the result's MIME type,
+  size and dimensions, and the audit row adds `originalMimeType`,
+  `originalSize` and the chosen `quality`.
+- The size cap and the magic-byte sniff run on the bytes the uploader SENT.
+- **`brand` and `setting` uploads are never converted.** These are logos, the
+  favicon, the email logo and the default share image, and Outlook and some
+  crawlers do not render WebP.
+- GIF, ICO, SVG, an animated PNG or WebP, an undecodable file, and a
+  re-encode that would come out larger are all stored as sent. A `null` from
+  the optimizer is never an upload error.
+- Existing uploads were not backfilled.
+- A public `next/image` whose src may be an absolute URL decides `unoptimized`
+  with `canOptimizeImage(src)` (`[locale]/_lib/image-optimizer.ts`), never a
+  bare `unoptimized`.
 
 ## The glossary term has its own editor (ADR-069, 2026-09-09)
 
@@ -202,3 +226,90 @@ Public: `app/(public)/[locale]/learn/[track]/videos/**` — the index, `categori
   static catches it.
 - Demo seed rows carry a body and no video, except one per track. A video URL
   is a factual claim (`_content/home-videos.ts`); the seed does not invent one.
+
+## Reading language (ADR-127 applied beyond articles, 2026-09-17)
+
+Courses, lessons, video topics, glossary terms and quizzes take `?lang=` exactly as an
+article does. Adding it to a sixth detail page is four steps, and
+`apps/web/app/(public)/[locale]/_lib/reading-language.test.ts` names the one
+you forget (add the page to its `PAGES` map):
+
+1. **Loader.** Select `translationStatus`, take an optional `readingLocale`
+   (part of the `"use cache"` key), and run the ordinary fallback pick through
+   `applyReadingLocale` (`@repo/core` `reading-languages.ts`). Take WORDS from
+   its `picked`, and keep the fallback pick for everything that is ADDRESS —
+   the slug, and so the canonical and every link — so a reading view never
+   moves URL. The view `extends ReadingView`. Locale names come from
+   `loadLocaleMeta()`, which reads inactive locales too.
+2. **Page and metadata.** Both call `readingLocaleFrom(await searchParams)`
+   (`[locale]/_lib/reading-language.ts`), and the metadata spreads
+   `robots: { index: false }` when `view.readingLocale` is set.
+3. **Menu.** `readingLanguageOptions({ …, pathFor })` builds the hrefs; `pathFor`
+   returns null when a language has no address of its own. A lesson is the
+   example: a served locale needs that locale's COURSE slug too
+   (`LessonView.courseAlternates`), and without one the option stays a
+   `?lang=` view.
+4. **Markup.** `lang={view.contentLocale} dir={view.contentDirection}` goes on
+   the item's own words ONLY — never on a wrapper that also holds interface
+   headings. The glossary heading is the worked example: `termHeading` is
+   `<word>{term}</word> definition`, so only the term carries the translation's
+   `lang`.
+
+**Where a translation comes from.** The four editors have B3's "Translate from
+English" beside the locale switcher (`TranslationControls`, rule in
+`_lib/machine-translation.ts`). Untouched AI output saves as
+`MACHINE_TRANSLATED` and is NOT offered to readers; any edit, or a Save after a
+reload, writes `TRANSLATED`. A fifth editor wires the same three pieces:
+`machineTranslated` on its translation schema and service, `mergeTranslationPatch`
+in its `setDraft`, and `<TranslationControls>`.
+
+**An editor offers every AUTHORING locale, never the active list.** Read
+`getAuthoringLocales()` (`@repo/i18n`) or `routing.locales`. Only `en` is
+active, so `getActiveLocales()` gave the video topic, glossary term, glossary
+topic and article taxonomy screens a list of one, and their switchers
+(`locales.length > 1`) never rendered. "View live" goes through
+`_lib/live-href.ts`: the default locale's page plus `?lang=`, because `/es/…`
+404s until `es` is activated. `_lib/live-href.test.ts` guards both.
+
+**Quizzes translate; only the default locale SHAPES them (2026-09-17).** The
+quiz editor's language is `?locale=` in the admin URL, because another
+language's words are a second server read. `correctAnswer` is an option INDEX
+on the question row (ADR-058 #2), so a non-default save may not add, remove or
+reorder questions or change an option count: `saveQuiz` throws
+`QuizTranslationStructureError`, writes no question rows, and the editor hides
+or disables those controls (and the AI generators, which append questions). A
+quiz is readable in a language only when EVERY question has its words there, so
+a question added in English later withdraws that language instead of mixing
+languages mid-quiz. The runner takes the words' locale, which also picks the
+explanations at submit. No machine translation for quizzes yet.
+
+What stays in the interface locale on purpose: the curriculum, the lesson
+rail and pager, the breadcrumb trail's parents, section titles. They are
+navigation, and a `?lang=` choice does not follow the reader onto the next
+page — that would be a sticky reading preference, which is its own decision.
+
+
+## Featured / Active / Premium on learning content (ADR-139, 2026-09-18)
+
+`Course`, `Lesson`, `Quiz`, `VideoTopic` and `GlossaryTerm` carry the
+article's three flags; `GlossaryTopic` gained `isFeatured` + `isPremium` beside
+its existing `isActive`. Read ADR-139 before extending them.
+
+- **`isActive: true` lives inside the public predicates** (`publicCourseWhere`,
+  `publicLessonWhere`, `publicQuizWhere`, `publicVideoWhere`,
+  `publicGlossaryTermWhere`), so it hides a row from pages, search, sitemap,
+  counts and completion at once. Never write a fresh visibility rule: site
+  search had an inline copy of the video rule and missed the flag.
+  `content-flags.test.ts` fails if a predicate loses it.
+- **Saves write them through `contentFlagsData(meta)`** (`content.ts`), which
+  only sets the flags a request sent. The schemas share `contentFlagsSchema`
+  (`@repo/contracts` `learn.ts`).
+- **Editors** draw the flags with `ContentFlagsFields` as the footer of a
+  right-hand "Display" card that also holds the cover. `featuredEffect` /
+  `premiumEffect` pick a hint that says what the flag actually does for that
+  type. A lesson has no public card, so its hints say "not shown yet".
+- **Public:** the course, quiz and video shelves have an All · Featured ·
+  Popular · Newest row (`_lib/shelf-view.ts`, `ShelfViewChips`). Cards take
+  `markers` (`@repo/ui/components/card-markers`). Popular means enrollments
+  for courses and finished attempts for quizzes; the video shelf has no count,
+  so it has no Popular view.

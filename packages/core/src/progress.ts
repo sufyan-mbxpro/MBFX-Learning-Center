@@ -497,10 +497,11 @@ export async function markLessonIncomplete(
  * The learner opened a lesson: record IN_PROGRESS and move "Continue learning"
  * here.
  *
- * **It never downgrades a completed lesson.** The `update` is empty on purpose
- * — arriving on a finished lesson is a visit, not an un-completion, and an
- * upsert that wrote IN_PROGRESS here would quietly reverse the learner's own
- * action every time they reread something.
+ * **It never downgrades a completed lesson.** The `update` writes only
+ * `lastViewedAt` (ADR-134), never the status — arriving on a finished lesson
+ * is a visit, not an un-completion, and an upsert that wrote IN_PROGRESS here
+ * would quietly reverse the learner's own action every time they reread
+ * something.
  *
  * Returns the whole view rather than `void` (the shape the plan sketched) so
  * the lesson page's island gets its state from the same request that announces
@@ -513,7 +514,9 @@ export async function touchLesson(userId: string, lessonId: string): Promise<Cou
     await tx.lessonProgress.upsert({
       where: { userId_lessonId: { userId, lessonId } },
       create: { userId, lessonId, courseId, status: LessonProgressStatus.IN_PROGRESS },
-      update: {},
+      // Only the visit time (ADR-134). The status stays whatever it was, so a
+      // reread still never un-completes a lesson.
+      update: { lastViewedAt: new Date() },
     });
     await tx.courseEnrollment.update({
       where: { userId_courseId: { userId, courseId } },

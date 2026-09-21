@@ -94,6 +94,48 @@ describe("Dialog", () => {
     );
   });
 
+  // changes-43 (image-95): a long form scrolled its own Save off the screen.
+  it("fits the screen: capped height, scrolls itself, header and footer stay", () => {
+    render(
+      <Dialog open>
+        <DialogContent closeLabel="Close">
+          <DialogHeader>
+            <DialogTitle>Title</DialogTitle>
+            <DialogDescription>Desc</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>ok</DialogFooter>
+        </DialogContent>
+      </Dialog>,
+    );
+    expect(tokens(slot("dialog-content"))).toEqual(
+      expect.arrayContaining(["max-h-(--dialog-max-h)", "overflow-y-auto"]),
+    );
+    expect(tokens(slot("dialog-content"))).not.toContain("max-h-dvh");
+    expect(tokens(slot("dialog-header"))).toEqual(
+      expect.arrayContaining(["sticky", "-top-6", "bg-background"]),
+    );
+    expect(tokens(slot("dialog-footer"))).toEqual(
+      expect.arrayContaining(["sticky", "-bottom-6", "bg-background"]),
+    );
+    const css = readFileSync(resolve(process.cwd(), "src/styles/globals.css"), "utf8");
+    expect(css).toMatch(/--dialog-max-h:\s*calc\(100dvh - 2rem\)/);
+  });
+
+  it("a visually-hidden header is not made sticky (sr-only owns its position)", () => {
+    render(
+      <Dialog open>
+        <DialogContent showCloseButton={false}>
+          <DialogHeader className="sr-only">
+            <DialogTitle>T</DialogTitle>
+            <DialogDescription>D</DialogDescription>
+          </DialogHeader>
+        </DialogContent>
+      </Dialog>,
+    );
+    expect(tokens(slot("dialog-header"))).toContain("sr-only");
+    expect(tokens(slot("dialog-header"))).not.toContain("sticky");
+  });
+
   it("closes from the reference's bare corner glyph, not a ghost button, at a logical corner", () => {
     render(
       <Dialog open>
@@ -104,8 +146,15 @@ describe("Dialog", () => {
       </Dialog>,
     );
     const close = screen.getByRole("button", { name: "Dismiss" });
-    expect(tokens(close)).toEqual(expect.arrayContaining(["top-4", "end-4", "opacity-70"]));
+    // The 16px corner is now the 24px sticky anchor (the popup's padding)
+    // less the button's own -8px, so it stays put while the body scrolls.
+    expect(tokens(close)).toEqual(expect.arrayContaining(["top-4", "-end-2", "opacity-70"]));
     expect(close.getAttribute("data-slot")).toBe("dialog-close");
+    const anchor = close.parentElement;
+    expect(anchor?.getAttribute("data-slot")).toBe("dialog-close-anchor");
+    expect(tokens(anchor)).toEqual(expect.arrayContaining(["sticky", "-top-6", "order-first"]));
+    // Last in the DOM, so Base UI's initial focus lands on the first field.
+    expect(slot("dialog-content")?.lastElementChild).toBe(anchor);
   });
 });
 
@@ -215,7 +264,9 @@ describe("Popover", () => {
 });
 
 describe("Command", () => {
-  it("border-b search row with a half-opacity glyph, h-11 input, accent-highlighted rounded-sm items", () => {
+  // ADR-140 §5: the glyph is fully opaque ("icons should be visible") and the
+  // ROW carries focus — the input drops the global ring that drew an inset box.
+  it("border-b search row with an opaque glyph, ringless h-11 input, accent-highlighted rounded-sm items", () => {
     render(
       <Command items={["Users"]}>
         <CommandInput placeholder="Search" />
@@ -228,11 +279,16 @@ describe("Command", () => {
       </Command>,
     );
     const wrapper = slot("command-input-wrapper");
-    expect(tokens(wrapper)).toEqual(expect.arrayContaining(["border-b", "px-3"]));
-    expect(tokens(wrapper?.querySelector("svg"))).toEqual(
-      expect.arrayContaining(["me-2", "opacity-50"]),
+    expect(tokens(wrapper)).toEqual(
+      expect.arrayContaining(["border-b", "px-3", "focus-within:border-ring"]),
     );
-    expect(tokens(screen.getByPlaceholderText("Search"))).toContain("h-11");
+    expect(tokens(wrapper?.querySelector("svg"))).toEqual(
+      expect.arrayContaining(["me-2", "text-muted-foreground"]),
+    );
+    expect(tokens(wrapper?.querySelector("svg"))).not.toContain("opacity-50");
+    expect(tokens(screen.getByPlaceholderText("Search"))).toEqual(
+      expect.arrayContaining(["h-11", "focus-visible:ring-0"]),
+    );
     expect(tokens(slot("command-list"))).toContain("max-h-75");
     expect(tokens(screen.getByText("Users").closest("[data-slot=command-item]"))).toEqual(
       expect.arrayContaining(["rounded-sm", "px-2", "py-1.5", "data-highlighted:bg-accent"]),

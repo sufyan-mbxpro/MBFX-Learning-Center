@@ -18,6 +18,7 @@ import { COURSE, RECOMMENDED, loadRelationTargets, replaceRelations } from "./co
 import { publicLessonWhere } from "./public-courses.ts";
 import {
   CONTENT_TRANSITIONS,
+  contentFlagsData,
   coursePath,
   createSlugRedirect,
   lessonPath,
@@ -231,6 +232,7 @@ function courseMetaData(meta: CourseMetaInput): Prisma.CourseUpdateInput {
   if (meta.externalUrl !== undefined) data.externalUrl = meta.externalUrl;
   if (meta.visibility !== undefined) data.visibility = meta.visibility;
   if (meta.sortOrder !== undefined) data.sortOrder = meta.sortOrder;
+  Object.assign(data, contentFlagsData(meta));
   // ADR-056 #7 / ADR-058 #1 — the course-level completion rule. A RELATION on
   // CourseUpdateInput, so Prisma wants connect/disconnect rather than the
   // scalar; null is the picker's "No quiz" option, not a missing field.
@@ -300,7 +302,11 @@ export async function saveCourse(actor: Subject, input: CourseInput): Promise<vo
     seoTitle: input.translation.seoTitle ?? null,
     seoDescription: input.translation.seoDescription ?? null,
     seoFocusKeyword: input.translation.seoFocusKeyword ?? null,
-    translationStatus: TranslationStatus.TRANSLATED,
+    // changes-29 B3: MACHINE_TRANSLATED only while the AI text is untouched;
+    // any other save, a human's review included, writes TRANSLATED.
+    translationStatus: input.translation.machineTranslated
+      ? TranslationStatus.MACHINE_TRANSLATED
+      : TranslationStatus.TRANSLATED,
   };
 
   await db.$transaction(async (tx) => {
@@ -514,6 +520,10 @@ export interface CourseAdminDetail {
   difficulty: Difficulty;
   estimatedHours: number | null;
   coverAssetId: string | null;
+  /** ADR-139 — the article's three flags. */
+  isFeatured: boolean;
+  isActive: boolean;
+  isPremium: boolean;
   /**
    * Resolved here rather than stored: ADR-055 #6 replaced the `*ImageUrl`
    * columns with asset ids, so the URL is a property of the asset and a
@@ -560,6 +570,9 @@ export async function loadCourseAdminDetail(courseId: string): Promise<CourseAdm
     difficulty: row.difficulty,
     estimatedHours: row.estimatedHours,
     coverAssetId: row.coverAssetId,
+    isFeatured: row.isFeatured,
+    isActive: row.isActive,
+    isPremium: row.isPremium,
     coverUrl: cover?.url ?? null,
     externalUrl: row.externalUrl,
     finalQuizId: row.finalQuizId,

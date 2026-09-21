@@ -1,11 +1,8 @@
 import type { Metadata } from "next";
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { getBrandAssets } from "@repo/core";
 import { getSetting } from "@repo/settings";
 import { getPathname, Link } from "@repo/i18n/navigation";
-import { AmbientMotif } from "@repo/ui/components/ambient-motif";
-import { BrandLogo } from "@repo/ui/components/brand-logo";
-import { Reveal } from "@repo/ui/components/reveal";
+import { AuthScreen } from "../_components/auth-screen.tsx";
 import { SignInForm } from "./sign-in-form.tsx";
 
 // LEARNER sign-in (ADR-052). The staff credential screen is a separate
@@ -29,76 +26,59 @@ export async function generateMetadata({
 export default async function SignInPage({ params }: PageProps<"/[locale]/sign-in">) {
   const { locale } = await params;
   setRequestLocale(locale);
-  const [t, siteName, brandAssets] = await Promise.all([
-    getTranslations("auth"),
-    getSetting("site.name"),
-    getBrandAssets(),
-  ]);
+  const t = await getTranslations("auth");
 
   return (
-    // `isolate` is added alongside the existing `relative`: without a
-    // stacking context the motif's -z-10 puts it BEHIND this element's
-    // own bg-glow-primary rather than between the glow and the card.
-    <main className="bg-glow-primary container-page section-lg relative isolate flex flex-1 items-center justify-center overflow-hidden">
-      <AmbientMotif variant="currency" intensity={0.8} />
-      <Reveal variant="scale" className="flex w-full max-w-sm flex-col gap-6">
-        {/* The admin-uploaded logo, same as the header/footer/admin shell —
-            a sign-in screen showing the site's NAME while every other
-            surface shows its mark is the one place a brand is most
-            noticeably absent. Falls back to the name when none is set. */}
-        <div className="flex justify-center">
-          <BrandLogo
-            light={brandAssets.logo_light?.url ?? null}
-            dark={brandAssets.logo_dark?.url ?? null}
-            alt={siteName ?? ""}
-            className="h-14"
-            fallback={<span className="text-lg font-semibold tracking-tight">{siteName}</span>}
-          />
-        </div>
-        <div className="flex flex-col gap-6 rounded-xl border bg-card p-8 shadow-card">
-          <div className="flex flex-col gap-1.5">
-            <h1 className="text-xl font-semibold">{t("signInTitle")}</h1>
-            <p className="text-sm text-muted-foreground">{t("signInDescription")}</p>
-          </div>
-          <SignInForm
-            // The form navigates with window.location.assign, which needs a
-            // real path — getPathname is next-intl's server-side way to get
-            // the localized one without a client hook.
-            homeHref={getPathname({ href: "/", locale })}
-            labels={{
-              email: t("email"),
-              password: t("password"),
-              showPassword: t("showPassword"),
-              hidePassword: t("hidePassword"),
-              submit: t("submit"),
-              failed: t("failed"),
-              learnersOnly: t("learnersOnly"),
-              resetDone: t("resetDone"),
-              verifiedDone: t("verifiedDone"),
-            }}
-          />
-          {/* Recovery is linked from the learner surface only — the staff
+    <AuthScreen
+      title={t("signInTitle")}
+      description={t("signInDescription")}
+      footer={
+        <p className="text-center text-sm text-muted-foreground">
+          {t("noAccount")}{" "}
+          <Link
+            href="/sign-up"
+            className="font-medium text-primary-interactive underline-offset-4 hover:underline"
+          >
+            {t("signUpLink")}
+          </Link>
+        </p>
+      }
+    >
+      <SignInForm
+        // The form navigates with window.location.assign, which needs a
+        // real path — getPathname is next-intl's server-side way to get
+        // the localized one without a client hook.
+        homeHref={getPathname({ href: "/", locale })}
+        labels={{
+          email: t("email"),
+          password: t("password"),
+          showPassword: t("showPassword"),
+          hidePassword: t("hidePassword"),
+          submit: t("submit"),
+          failed: t("failed"),
+          learnersOnly: t("learnersOnly"),
+          resetDone: t("resetDone"),
+          verifiedDone: t("verifiedDone"),
+          codeTitle: t("twoFactorTitle"),
+          codeHint: t("twoFactorHint"),
+          codeLabel: t("twoFactorCode"),
+          codeSubmit: t("twoFactorSubmit"),
+          invalidCode: t("twoFactorInvalid"),
+          codeExpired: t("twoFactorExpired"),
+          back: t("twoFactorBack"),
+        }}
+      />
+      {/* Recovery is linked from the learner surface only — the staff
               screen carries its own (ADR-052: the public site names no
               administrator entry point). */}
-          <p className="-mt-2 text-center text-sm">
-            <Link
-              href="/forgot-password"
-              className="font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-            >
-              {t("forgotLink")}
-            </Link>
-          </p>
-          <p className="text-center text-sm text-muted-foreground">
-            {t("noAccount")}{" "}
-            <Link
-              href="/sign-up"
-              className="font-medium text-primary-interactive underline-offset-4 hover:underline"
-            >
-              {t("signUpLink")}
-            </Link>
-          </p>
-        </div>
-      </Reveal>
-    </main>
+      <p className="-mt-2 text-end text-sm">
+        <Link
+          href="/forgot-password"
+          className="font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+        >
+          {t("forgotLink")}
+        </Link>
+      </p>
+    </AuthScreen>
   );
 }

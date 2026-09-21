@@ -222,7 +222,6 @@ export function CoursesTable({
               {row.original.title || labels.untitled}
             </Link>
             <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              {row.original.slug && <span className="truncate">/{row.original.slug}</span>}
               {row.original.isExternal && (
                 <Badge variant="outline" className="text-xs">
                   {labels.externalBadge}

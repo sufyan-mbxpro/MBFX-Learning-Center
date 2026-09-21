@@ -128,6 +128,47 @@ export const EMAIL_TEMPLATES = {
       "unsubscribe.url": "https://example.com/newsletter/unsubscribe?token=sample",
     },
   },
+  // The one template whose recipient is US (ADR-113). `audience: "staff"`
+  // rather than "public" for exactly that reason — it is read by whoever
+  // watches the support inbox, so ADR-043 #2 applies and English is enough.
+  //
+  // `{{recipient.*}}` is the support inbox, not the visitor: the globals are
+  // filled from the `to` address. The visitor's own name and address arrive
+  // as `contact.*`, which is also what makes them safe — every variable is
+  // escaped at substitution time (`render.ts`), so a message containing
+  // markup reaches the inbox as text.
+  //
+  // `contact.locale` is the locale the VISITOR was reading, printed in the
+  // body rather than used to pick a translation: the template renders in
+  // English because a staff member reads it (ADR-043 #2), and the code is
+  // there so support knows which language to reply in.
+  //
+  // Only `contact.message` is required. A support mail that lost the words is
+  // useless; one that lost the subject line is merely untidy, and refusing to
+  // SAVE a template over that would be the wrong trade.
+  "support.request": {
+    audience: "staff",
+    critical: false,
+    variables: [
+      "contact.name",
+      "contact.email",
+      "contact.subject",
+      "contact.message",
+      "contact.locale",
+    ],
+    required: ["contact.message"],
+    sample: {
+      ...SAMPLE_BASE,
+      "recipient.name": "Support",
+      "recipient.email": "support@example.com",
+      "contact.name": "Alex Morgan",
+      "contact.email": "alex@example.com",
+      "contact.subject": "I cannot sign in",
+      "contact.message":
+        "The reset link in your email says it has expired, but I only asked for it a minute ago.",
+      "contact.locale": "en",
+    },
+  },
 } as const satisfies Record<string, EmailTemplateDefinition>;
 
 export type EmailTemplateKey = keyof typeof EMAIL_TEMPLATES;

@@ -239,7 +239,6 @@ export function LessonsTable({
               {row.original.title || labels.untitled}
             </Link>
             <span className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-              {row.original.slug && <span className="truncate">/{row.original.slug}</span>}
               {row.original.kindLabels.map((kind) => (
                 <Badge key={kind} variant="outline" className="text-xs">
                   {kind}

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { descriptionFrom } from "../../../../../../_lib/seo.ts";
 import { notFound, permanentRedirect } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { getQuizBySlug, getRedirect } from "@repo/core";
@@ -9,10 +10,13 @@ import {
   LEARN_TRACKS,
   type LearnTrackKey,
 } from "@repo/contracts";
+import { getServableLocales } from "@repo/i18n";
 import { routing } from "@repo/i18n/routing";
 import { getSetting, isFeatureVisible } from "@repo/settings";
 import { Container } from "@repo/ui/components/container";
 import { Section } from "@repo/ui/components/section";
+import { ReadingLanguageMenu } from "../../../../_components/reading-language-menu.tsx";
+import { readingLanguageOptions, readingLocaleFrom } from "../../../../_lib/reading-language.ts";
 import { LearnBreadcrumb } from "../../../_components/learn-breadcrumb.tsx";
 import { QuizRunner } from "../../../_components/quiz-runner.tsx";
 
@@ -33,31 +37,34 @@ function quizPath(locale: string, track: LearnTrackKey, slug: string): string {
 
 export async function generateMetadata({
   params,
+  searchParams,
 }: PageProps<"/[locale]/learn/[track]/quizzes/[quiz]">): Promise<Metadata> {
   const { locale, track, quiz: slug } = await params;
   setRequestLocale(locale);
   if (!isLearnTrack(track)) return {};
 
+  const readingLocale = readingLocaleFrom(await searchParams);
   const [view, template] = await Promise.all([
-    getQuizBySlug(locale, slug),
+    getQuizBySlug(locale, slug, readingLocale),
     getSetting("seo.titleTemplate"),
   ]);
   if (!view) return {};
 
   return {
     title: (template ?? "%s").replace("%s", view.title),
-    description: view.description ?? undefined,
+    ...descriptionFrom(view.description),
     alternates: { canonical: quizPath(locale, view.track, view.slug) },
     // A quiz page is interactive, not reference material, and an indexed quiz
     // whose questions change is a search result that lies. The index page is
     // the indexable surface; this one is `noindex, follow` so the links out of
-    // it still count.
+    // it still count — which also covers a `?lang=` reading view (ADR-127 #4).
     robots: { index: false, follow: true },
   };
 }
 
 export default async function QuizPage({
   params,
+  searchParams,
 }: PageProps<"/[locale]/learn/[track]/quizzes/[quiz]">) {
   const { locale, track, quiz: slug } = await params;
   setRequestLocale(locale);
@@ -69,7 +76,8 @@ export default async function QuizPage({
   ]);
   if (!coursesOn || !quizzesOn) notFound();
 
-  const view = await getQuizBySlug(locale, slug);
+  const readingLocale = readingLocaleFrom(await searchParams);
+  const view = await getQuizBySlug(locale, slug, readingLocale);
   if (!view) {
     // `saveQuiz` wrote a 301 row when the slug OR the track changed.
     const target = await getRedirect(quizPath(locale, track, slug));
@@ -81,7 +89,22 @@ export default async function QuizPage({
   // (ADR-065 §1) — a moved one left a redirect row above.
   if (view.track !== track) notFound();
 
-  const t = await getTranslations({ locale, namespace: "learn" });
+  const [t, tPublic, servableLocales] = await Promise.all([
+    getTranslations({ locale, namespace: "learn" }),
+    getTranslations({ locale, namespace: "public" }),
+    getServableLocales(),
+  ]);
+  const quizzesPath = learnTrackQuizzesPath(track);
+  // ADR-127: the quiz's own words — title, description, questions, options and
+  // the explanations the result fetches. The runner's buttons stay interface.
+  const readingOptions = readingLanguageOptions({
+    languages: view.readingLanguages,
+    contentLocale: view.contentLocale,
+    interfaceLocale: locale,
+    servable: servableLocales,
+    currentPath: `${quizzesPath}/${view.slug}`,
+    pathFor: (language) => `${quizzesPath}/${language.slug}`,
+  });
 
   return (
     <Section spacing="md">
@@ -89,20 +112,35 @@ export default async function QuizPage({
         <LearnBreadcrumb
           learnLabel={t(LEARN_TRACKS[track].titleKey)}
           learnHref={learnTrackPath(track)}
-          trail={[{ href: learnTrackQuizzesPath(track), label: t("nav.quizzes") }]}
+          trail={[{ href: quizzesPath, label: t("nav.quizzes") }]}
           current={view.title}
         />
 
         <header className="flex flex-col gap-2">
-          <h1 className="text-display-sm font-semibold tracking-tight text-balance">
+          {readingOptions.length > 1 && (
+            <div className="flex justify-end">
+              <ReadingLanguageMenu options={readingOptions} label={tPublic("readingLanguage")} />
+            </div>
+          )}
+          <h1
+            lang={view.contentLocale}
+            dir={view.contentDirection}
+            className="text-display-sm font-semibold tracking-tight text-balance"
+          >
             {view.title}
           </h1>
           {view.description && (
-            <p className="text-lg text-pretty text-muted-foreground">{view.description}</p>
+            <p
+              lang={view.contentLocale}
+              dir={view.contentDirection}
+              className="text-lg text-pretty text-muted-foreground"
+            >
+              {view.description}
+            </p>
           )}
         </header>
 
-        <QuizRunner quiz={view} locale={locale} />
+        <QuizRunner quiz={view} locale={view.contentLocale} direction={view.contentDirection} />
       </Container>
     </Section>
   );

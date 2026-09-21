@@ -38,7 +38,13 @@ function PageHeader({
       className={cn("flex flex-wrap items-start justify-between gap-3", className)}
       {...props}
     >
-      <div className="min-w-0">
+      {/* `flex-1 basis-72`, not a content-sized box (changes-46, image-107):
+          a record's "ID • email" line is long, and while this block was as
+          wide as its text the actions wrapped under it at desktop width. With
+          an 18rem basis the ACTIONS keep the row and the description wraps
+          inside its own column; below ~18rem + actions, the actions still
+          drop to their own line, as they should on a phone. */}
+      <div className="min-w-0 flex-1 basis-72">
         {icon ? (
           <PageTitleCompact render={titleRender}>
             {icon}

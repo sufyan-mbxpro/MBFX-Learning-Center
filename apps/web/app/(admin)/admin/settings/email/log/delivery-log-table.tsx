@@ -20,7 +20,7 @@ import { Empty, EmptyDescription, EmptyMedia, EmptyTitle } from "@repo/ui/compon
 import { FilterBarRow } from "@repo/ui/components/filter-bar";
 import { AdminCombobox } from "../../../_components/combobox.tsx";
 import { StatusBadge, type StatusTone } from "../../../_components/status-badge.tsx";
-import { useUrlFilters } from "../../../_hooks/use-url-filters.ts";
+import { useUrlFilters, useUrlFiltersPending } from "../../../_hooks/use-url-filters.ts";
 import { useSearchParams } from "next/navigation";
 
 export interface DeliveryLogRow {
@@ -89,6 +89,7 @@ export function DeliveryLogTable({
   labels: DeliveryLogLabels;
 }) {
   const setParams = useUrlFilters();
+  const pending = useUrlFiltersPending();
   const params = useSearchParams();
   const status = params.get("status") ?? "";
   const template = params.get("template") ?? "";
@@ -222,6 +223,7 @@ export function DeliveryLogTable({
           toolbar: an empty state that replaced the table would take the search
           box with it, leaving whoever filtered to nothing no way back. */}
       <DataTable
+        pending={pending}
         data={rows}
         columns={columns}
         labels={tableLabels}

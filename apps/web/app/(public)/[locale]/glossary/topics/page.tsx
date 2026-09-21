@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { localizedPath } from "../../../../_lib/seo.ts";
 import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { ChevronRight, Tag } from "lucide-react";
@@ -9,14 +10,18 @@ import { getSetting, isFeatureVisible } from "@repo/settings";
 import { AmbientMotif } from "@repo/ui/components/ambient-motif";
 import { Badge } from "@repo/ui/components/badge";
 import { Container } from "@repo/ui/components/container";
+import { PageHero } from "@repo/ui/components/page-hero";
 import { Empty, EmptyDescription, EmptyTitle } from "@repo/ui/components/empty";
-import { Reveal } from "@repo/ui/components/reveal";
 import { Section } from "@repo/ui/components/section";
+import { GlossaryBackdrop } from "../_components/glossary-art.tsx";
+import { GlossarySidebar } from "../_components/glossary-sidebar.tsx";
 import {
   GLOSSARY_PATH,
   GLOSSARY_TOPICS_PATH,
   GlossaryTabs,
 } from "../_components/glossary-tabs.tsx";
+import { TopicCover } from "../_components/topic-cover.tsx";
+import { INTERACTIVE_CARD } from "@repo/ui/lib/surfaces";
 
 // Browse by topic (changes-11 Phase 10, D27).
 //
@@ -39,7 +44,7 @@ export async function generateMetadata({
   return {
     title: (template ?? "%s").replace("%s", t("topicsTitle")),
     description: t("topicsIntro"),
-    alternates: { canonical: GLOSSARY_TOPICS_PATH },
+    alternates: { canonical: localizedPath(locale, GLOSSARY_TOPICS_PATH) },
   };
 }
 
@@ -55,17 +60,25 @@ export default async function GlossaryTopicsPage({
 
   return (
     <>
-      <Section spacing="sm" tone="muted" className="relative isolate overflow-hidden">
-        <AmbientMotif variant="learn" />
-        <Container>
-          <Reveal variant="up">
-            <header className="flex flex-col gap-1.5">
-              <h1 className="text-display-sm font-semibold tracking-tight">{t("topicsTitle")}</h1>
-              <p className="max-w-2xl text-muted-foreground">{t("topicsIntro")}</p>
-            </header>
-          </Reveal>
-        </Container>
-      </Section>
+      {/* A masthead, not a muted strip with an h1 in it (changes-40). This is
+          the second of the glossary's two browse surfaces and it sits in the
+          header's own menus; opening on a band a third the height of /glossary
+          made it read as a subsection of the A–Z rather than the other way
+          into the same terms. `compact`, because the tabs and the first row of
+          cards are what the reader came for and they belong above the fold.
+
+          The picture is the owner's own piece for this page — the same file a
+          coverless topic falls back to, so the index and the pages under it
+          are recognisably one place (ADR-117's photo tone: `--secondary`, the
+          photograph at full strength, the scrim carrying the contrast). */}
+      <PageHero
+        size="compact"
+        backdrop={<GlossaryBackdrop slot="topicsBanner" priority />}
+        motif={<AmbientMotif variant="learn" intensity={0.7} />}
+        eyebrow={t("eyebrow")}
+        title={t("topicsTitle")}
+        lead={t("topicsIntro")}
+      />
 
       <GlossaryTabs
         ariaLabel={t("browseLabel")}
@@ -76,66 +89,73 @@ export default async function GlossaryTopicsPage({
       />
 
       <Section spacing="md">
-        <Container>
-          {topics.length === 0 ? (
-            <Empty>
-              <EmptyTitle>{t("topicsEmptyTitle")}</EmptyTitle>
-              <EmptyDescription>{t("topicsEmptyBody")}</EmptyDescription>
-            </Empty>
-          ) : (
-            <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {topics.map((topic) => (
-                <li key={topic.id} className="flex">
-                  {/* The design system's full hover vocabulary (changes-22).
-                      It was `card-hover` and a border tint — correct, and
-                      nearly imperceptible: the card did not move, nothing
-                      inside it responded, and the chevron that promises a
-                      destination sat still. Now it lifts, sweeps, tints its
-                      ring, and the mark and the chevron both answer. Each of
-                      these is an existing utility, not a new effect: `sheen`,
-                      `hover-lift`, `card-hover` and `hover-arrow` are the same
-                      four `CourseCard` and `QuizCard` already use, so the
-                      glossary stops being the one index that feels dead. */}
-                  <Link
-                    href={`${ROUTE_PATHS.glossary}/topics/${topic.slug}`}
-                    className="group card-hover hover-lift sheen flex h-full w-full flex-col gap-3 rounded-xl border bg-card p-5 ring-1 ring-transparent hover:border-primary/30 hover:ring-primary/15"
-                  >
-                    <span className="flex items-start justify-between gap-3">
-                      <span className="flex min-w-0 items-center gap-3">
-                        {/* A tinted mark, so a wall of text cards has
-                            something to scan by. Tint + `-interactive` ink is
-                            ADR-073's tonal pairing, the one combination the
-                            engine derives readable in both modes. */}
-                        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary-interactive transition-colors duration-(--duration-base) group-hover:bg-primary group-hover:text-primary-foreground">
-                          <Tag aria-hidden className="size-4.5" />
+        <Container className="grid grid-cols-1 gap-10 lg:grid-cols-(--grid-main-aside) lg:items-start">
+          <div className="min-w-0">
+            {topics.length === 0 ? (
+              <Empty>
+                <EmptyTitle>{t("topicsEmptyTitle")}</EmptyTitle>
+                <EmptyDescription>{t("topicsEmptyBody")}</EmptyDescription>
+              </Empty>
+            ) : (
+              <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {topics.map((topic) => (
+                  <li key={topic.id} className="flex">
+                    {/* The public site's one clickable-card recipe (changes-39):
+                      `card-hover hover-lift sheen` on a `rounded-lg` ring
+                      surface — the same four utilities and the same surface
+                      `CourseCard`, `QuizCard` and `VideoCard` use, so every
+                      index card on the site lifts, sweeps and tints alike. */}
+                    <Link
+                      href={`${ROUTE_PATHS.glossary}/topics/${topic.slug}`}
+                      className={`${INTERACTIVE_CARD} flex h-full w-full flex-col overflow-hidden`}
+                    >
+                      {/* ADR-133 — the editor's cover, or the glossary's topic
+                        artwork. Every card has the box, so a grid that mixes
+                        the two stays one height. */}
+                      <span className="relative block aspect-video w-full overflow-hidden bg-muted">
+                        <TopicCover
+                          coverUrl={topic.coverUrl}
+                          sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+                          className="media-zoom object-cover"
+                        />
+                      </span>
+                      <span className="flex flex-1 flex-col gap-3 p-5">
+                        <span className="flex items-start justify-between gap-3">
+                          <span className="flex min-w-0 items-center gap-3">
+                            {/* Tint + `-interactive` ink is ADR-073's tonal
+                              pairing, readable in both modes. */}
+                            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary-interactive transition-colors duration-(--duration-base) group-hover:bg-primary group-hover:text-primary-foreground">
+                              <Tag aria-hidden className="size-4.5" />
+                            </span>
+                            <span className="min-w-0 font-semibold transition-colors duration-(--duration-base) group-hover:text-primary-interactive">
+                              {topic.name}
+                            </span>
+                          </span>
+                          {/* Mirrored in RTL: a chevron pointing the wrong way
+                            in Arabic reads as "back". */}
+                          <ChevronRight
+                            aria-hidden
+                            className="hover-arrow mt-2 size-4 shrink-0 text-muted-foreground group-hover:text-primary-interactive rtl:rotate-180"
+                          />
                         </span>
-                        <span className="min-w-0 font-semibold transition-colors duration-(--duration-base) group-hover:text-primary-interactive">
-                          {topic.name}
+                        {topic.description && (
+                          <span className="line-clamp-3 text-sm text-muted-foreground">
+                            {topic.description}
+                          </span>
+                        )}
+                        <span className="mt-auto pt-1">
+                          <Badge variant="pill" className="text-xs tabular-nums">
+                            {t("topicTermCount", { count: topic.termCount })}
+                          </Badge>
                         </span>
                       </span>
-                      {/* The reference's chevron. Mirrored in RTL, because a
-                          chevron that points the wrong way in Arabic reads as
-                          "back". */}
-                      <ChevronRight
-                        aria-hidden
-                        className="hover-arrow mt-2 size-4 shrink-0 text-muted-foreground group-hover:text-primary-interactive rtl:rotate-180"
-                      />
-                    </span>
-                    {topic.description && (
-                      <span className="line-clamp-3 text-sm text-muted-foreground">
-                        {topic.description}
-                      </span>
-                    )}
-                    <span className="mt-auto pt-1">
-                      <Badge variant="pill" className="text-xs tabular-nums">
-                        {t("topicTermCount", { count: topic.termCount })}
-                      </Badge>
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <GlossarySidebar locale={locale} />
         </Container>
       </Section>
     </>

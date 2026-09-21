@@ -5,9 +5,10 @@
 // audit + invalidation. The level guards (strict <, last-super_admin) are
 // INSIDE the services, keyed to the actor's real Subject.
 import { z } from "zod";
-import { setUserPassword } from "@repo/auth";
+import { impersonateLearner, setUserPassword } from "@repo/auth";
 import {
   adminResetPasswordSchema,
+  adminUpdateUserSchema,
   createRoleSchema,
   employeeStatusSchema,
   setRolePermissionsSchema,
@@ -15,18 +16,24 @@ import {
   updateRoleSchema,
 } from "@repo/contracts";
 import {
+  adminUpdateUser,
   assignRole,
   cloneRole,
   createRole,
   deleteRole,
+  EmailChangeForbiddenError,
+  EmailInUseError,
   offboardEmployee,
   recordEmployeeUpdate,
+  recordImpersonationStart,
   recordPasswordReset,
   removePermissionOverride,
   removeRole,
+  revokeUserSessions,
   setEmployeeStatus,
   setPermissionOverride,
   setRolePermission,
+  setUserEmailVerified,
   setRolePermissions,
   setUserStatus,
   updateRoleMeta,
@@ -153,4 +160,49 @@ export async function updateEmployeeAction(employeeId: string, input: unknown): 
 export async function setEmployeeStatusAction(employeeId: string, status: string): Promise<void> {
   const subject = await requirePermission("employees.update");
   await setEmployeeStatus(subject.id, id.parse(employeeId), employeeStatusSchema.parse(status));
+}
+
+// ─── The user record page (changes-45, ADR-142) ──────────────
+
+/**
+ * The two refusals a person can act on come back as a RESULT, not a throw: a
+ * thrown message is replaced by a digest in production, and "that address is
+ * taken" belongs under the email field, not in a toast that says nothing.
+ */
+export type UpdateUserDetailsResult =
+  { ok: true } | { ok: false; error: "emailInUse" | "emailForbidden" };
+
+export async function updateUserDetailsAction(input: unknown): Promise<UpdateUserDetailsResult> {
+  const subject = await requirePermission("users.update");
+  try {
+    await adminUpdateUser(subject, adminUpdateUserSchema.parse(input));
+  } catch (error) {
+    if (error instanceof EmailInUseError) return { ok: false, error: "emailInUse" };
+    if (error instanceof EmailChangeForbiddenError) return { ok: false, error: "emailForbidden" };
+    throw error;
+  }
+  return { ok: true };
+}
+
+export async function revokeUserSessionsAction(userId: string): Promise<number> {
+  const subject = await requirePermission("users.update");
+  return revokeUserSessions(subject, id.parse(userId));
+}
+
+/**
+ * "Login as user" (ADR-142 §3). The permission check and the audit row come
+ * first; @repo/auth then parks this staff session in its signed cookie and
+ * issues the learner's. The caller navigates with a FULL load afterwards —
+ * the next page belongs to a different root layout and a different person.
+ */
+export async function impersonateUserAction(userId: string): Promise<{ ok: boolean }> {
+  const subject = await requirePermission("users.impersonate");
+  const target = id.parse(userId);
+  await recordImpersonationStart(subject, target);
+  return impersonateLearner(target);
+}
+
+export async function setEmailVerifiedAction(userId: string, verified: boolean): Promise<void> {
+  const subject = await requirePermission("users.update");
+  await setUserEmailVerified(subject, id.parse(userId), z.boolean().parse(verified));
 }

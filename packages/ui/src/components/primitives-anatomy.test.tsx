@@ -56,9 +56,18 @@ describe("Button (tokens.md §6.1)", () => {
     expect(t).not.toContain("focus-visible:ring-3");
   });
 
-  it("primary hover is the engine-derived --primary-hover (ADR-003), not an opacity", () => {
+  // ADR-140 §6 / ADR-143: the default button is the SOLID fill (the saved
+  // primary), and its hover is the engine-derived shade (ADR-003), not an opacity.
+  it("primary is the solid fill, hovering to its engine-derived shade", () => {
     render(<Button>x</Button>);
-    expect(tokens(screen.getByRole("button"))).toContain("hover:bg-primary-hover");
+    const t = tokens(screen.getByRole("button"));
+    expect(t).toEqual(
+      expect.arrayContaining([
+        "bg-primary-solid",
+        "text-primary-solid-foreground",
+        "hover:bg-primary-solid-hover",
+      ]),
+    );
   });
 
   it.each(["outline", "ghost"] as const)("%s hovers to the warm --accent", (variant) => {
@@ -277,16 +286,11 @@ describe("Form controls (tokens.md §6.14)", () => {
     );
   });
 
-  it("Switch: 44x24 track, --input when off, --primary-interactive when on, mirrored in RTL", () => {
+  it("Switch: 44x24 track, --input when off, the saved --primary when on (ADR-143), mirrored in RTL", () => {
     const { container } = render(<Switch aria-label="s" />);
     const t = tokens(screen.getByRole("switch"));
     expect(t).toEqual(
-      expect.arrayContaining([
-        "h-6",
-        "w-11",
-        "data-unchecked:bg-input",
-        "data-checked:bg-primary-interactive",
-      ]),
+      expect.arrayContaining(["h-6", "w-11", "data-unchecked:bg-input", "data-checked:bg-primary"]),
     );
     const thumb = container.querySelector("[data-slot=switch-thumb]");
     expect(tokens(thumb)).toEqual(

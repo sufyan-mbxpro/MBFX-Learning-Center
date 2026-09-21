@@ -5,6 +5,7 @@ import { isTranslatedAudience, loadEmailTemplate } from "@repo/core";
 import { getActiveLocales } from "@repo/i18n";
 import { can, requirePermission } from "@repo/rbac";
 import { richTextLabels } from "../../../../_components/editor-labels.ts";
+import { loadWritingAssistant } from "../../../../_lib/editor-ai.ts";
 import { EmailTemplateEditor } from "./template-editor.tsx";
 
 // One email template's editor (Module 17, ADR-078 #5, #7).
@@ -25,7 +26,16 @@ export default async function EmailTemplatePage({
   if (!isEmailTemplateKey(key)) notFound();
 
   const t = await getTranslations("admin");
-  const [detail, locales] = await Promise.all([loadEmailTemplate(key), getActiveLocales()]);
+  const [detail, locales, assistant] = await Promise.all([
+    loadEmailTemplate(key),
+    getActiveLocales(),
+    // changes-46 #4: the toolbar writing assistant on the body, gated on the
+    // key that saves a template (the run route checks the same one).
+    loadWritingAssistant(subject, {
+      entity: { type: "email_template", id: key },
+      contentKeys: ["email.templates.update"],
+    }),
+  ]);
   if (!detail) notFound();
 
   const localeCodes = isTranslatedAudience(detail.audience)
@@ -44,10 +54,13 @@ export default async function EmailTemplatePage({
       variables={[...detail.variables, ...GLOBAL_EMAIL_VARIABLES]}
       sample={EMAIL_TEMPLATES[key].sample}
       editorLabels={richTextLabels(t)}
+      {...(assistant ? { ai: assistant } : {})}
       canUpdate={can(subject, "email.templates.update")}
       canTest={can(subject, "email.templates.test")}
       labels={{
         backToList: t("email.backToTemplates"),
+        heading: t("editorHeading.emailTemplate"),
+        description: t("email.templateEditorDescription"),
         templatesTitle: t("email.templatesTitle"),
         critical: t("email.critical"),
         inactive: t("email.inactiveBadge"),
@@ -58,13 +71,13 @@ export default async function EmailTemplatePage({
         preheader: t("email.preheader"),
         preheaderHint: t("email.preheaderHint"),
         body: t("email.body"),
-        mode: t("email.mode"),
-        modeRich: t("email.modeRich"),
-        modeHtml: t("email.modeHtml"),
         modeHtmlHint: t("email.modeHtmlHint"),
         variablesSection: t("email.variablesSection"),
         variablesDescription: t("email.variablesDescription"),
-        insert: t("email.insertVariable"),
+        copyVariable: t("email.copyVariable"),
+        variableCopied: t("email.variableCopied", { token: "{token}" }),
+        copyFailed: t("email.copyFailed", { token: "{token}" }),
+        openActions: t("openActions"),
         senderSection: t("email.senderOverrides"),
         senderDescription: t("email.senderOverridesDescription"),
         fromName: t("email.fromName"),

@@ -11,7 +11,7 @@
 // in the same `@layer utilities`, it beats any transition utility written in
 // the class attribute — so a `hover:-translate-y-1` on this card would jump
 // rather than glide. Children are outside that rule and animate freely, which
-// is how the sweep, the icon swap and the wash all move while the card keeps
+// is how the icon swap and the wash both move while the card keeps
 // the one shared shadow/ring treatment every other surface in the app uses.
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@repo/ui/lib/utils";
@@ -19,8 +19,6 @@ import { cn } from "@repo/ui/lib/utils";
 interface AccentTone {
   /** Idle uses the `*-interactive` ink on a 10% wash — ADR-018 rule 5: a glyph is a "small" element and never takes raw --primary et al. Hover flips to the FILL with its derived foreground, which is the pairing the theme engine contrast-checks. */
   icon: string;
-  /** The rule that sweeps across the top edge on hover. */
-  bar: string;
   /** A barely-there gradient that warms the whole card. */
   wash: string;
 }
@@ -28,34 +26,28 @@ interface AccentTone {
 export const ACCENT_TONES = {
   primary: {
     icon: "bg-primary/10 text-primary-interactive group-hover:bg-primary group-hover:text-primary-foreground",
-    bar: "bg-primary",
     wash: "from-primary/8",
   },
   info: {
     icon: "bg-info/10 text-info-interactive group-hover:bg-info group-hover:text-info-foreground",
-    bar: "bg-info",
     wash: "from-info/8",
   },
   success: {
     icon: "bg-success/10 text-success-interactive group-hover:bg-success group-hover:text-success-foreground",
-    bar: "bg-success",
     wash: "from-success/8",
   },
   warning: {
     icon: "bg-warning/10 text-warning-interactive group-hover:bg-warning group-hover:text-warning-foreground",
-    bar: "bg-warning",
     wash: "from-warning/8",
   },
   destructive: {
     icon: "bg-destructive/10 text-destructive-interactive group-hover:bg-destructive group-hover:text-destructive-foreground",
-    bar: "bg-destructive",
     wash: "from-destructive/8",
   },
   // No `--muted-interactive` exists, and none is wanted: this tone is the
   // deliberately quiet one on a scale where the others shout.
   muted: {
     icon: "bg-muted-foreground/10 text-muted-foreground group-hover:bg-muted-foreground group-hover:text-background",
-    bar: "bg-muted-foreground",
     wash: "from-muted-foreground/8",
   },
 } as const satisfies Record<string, AccentTone>;
@@ -91,16 +83,6 @@ export function AccentCard({
         className={cn(
           "pointer-events-none absolute inset-0 -z-10 bg-gradient-to-br to-transparent opacity-0 transition-opacity duration-300 ease-out group-hover:opacity-100",
           accent.wash,
-        )}
-      />
-
-      {/* Top rule, sweeping from the inline start — `start-0` + `w-full` so
-          it runs the correct way in RTL with no [dir] rule of its own. */}
-      <span
-        aria-hidden
-        className={cn(
-          "pointer-events-none absolute top-0 start-0 h-1 w-0 transition-(--transition-size) duration-300 ease-out group-hover:w-full",
-          accent.bar,
         )}
       />
 

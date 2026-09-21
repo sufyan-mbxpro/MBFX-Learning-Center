@@ -8,11 +8,13 @@ import {
 } from "@repo/core";
 import { routing } from "@repo/i18n/routing";
 import { can, requirePermission } from "@repo/rbac";
-import { AdminPage } from "../../../_components/admin-page.tsx";
+import { EditorPage } from "../../../_components/admin-page.tsx";
 import { richTextLabels } from "../../../_components/editor-labels.ts";
+import { loadEditorAi } from "../../../_lib/editor-ai.ts";
 import { learnLabelMaps } from "../../_lib/learn-labels.ts";
 import { LessonEditor } from "./lesson-editor.tsx";
 import type { LessonEditorLabels } from "./editor-types.ts";
+import { formatDateTime } from "@repo/utils";
 
 // Lesson editor (changes-11 PR 3.4). Read gate here; every write re-gates in
 // its own action (security.md #1).
@@ -20,7 +22,17 @@ export default async function LessonEditPage({ params }: PageProps<"/admin/learn
   const subject = await requirePermission("lessons.view");
   const { id } = await params;
 
-  const [t, detail] = await Promise.all([getTranslations("admin"), loadLessonAdminDetail(id)]);
+  const [t, detail, ai] = await Promise.all([
+    getTranslations("admin"),
+    loadLessonAdminDetail(id),
+    // ADR-126: the "Generate with AI" bar, each field's ✨ menu, and the
+    // writing assistant on the body — each present only when available.
+    loadEditorAi(subject, {
+      module: "lesson",
+      entity: { type: "lesson", id },
+      contentKeys: ["lessons.update"],
+    }),
+  ]);
   if (!detail) notFound();
 
   // The course is loaded only AFTER the lesson resolves — the section list and
@@ -33,15 +45,11 @@ export default async function LessonEditPage({ params }: PageProps<"/admin/learn
   ]);
 
   const maps = learnLabelMaps(t);
-  const dateFormat = new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" });
 
   const courseSlug =
     course?.translations.find((tr) => tr.locale === routing.defaultLocale)?.slug ??
     course?.translations[0]?.slug ??
     "";
-
-  const defaultTranslation =
-    detail.translations.find((tr) => tr.locale === routing.defaultLocale) ?? detail.translations[0];
 
   const labels: LessonEditorLabels = {
     updateLesson: t("updateLesson"),
@@ -67,6 +75,8 @@ export default async function LessonEditPage({ params }: PageProps<"/admin/learn
 
     placementSection: t("placementSection"),
     placementSectionDescription: t("placementSectionDescription"),
+    displaySection: t("contentFlags.title"),
+    displaySectionDescription: t("contentFlags.description"),
     courseLabel: t("courseCol"),
     sectionLabel: t("sectionCol"),
     prerequisiteLabel: t("prerequisiteLabel"),
@@ -126,20 +136,6 @@ export default async function LessonEditPage({ params }: PageProps<"/admin/learn
       confirm: t("confirm"),
       cancel: t("cancel"),
     },
-    analysis: {
-      score: t("seoScoreLabel"),
-      checks: {
-        titleLength: t("seoCheckTitleLength"),
-        descriptionLength: t("seoCheckDescriptionLength"),
-        focusKeywordInTitle: t("seoCheckKeywordInTitle"),
-        focusKeywordInDescription: t("seoCheckKeywordInDescription"),
-        focusKeywordInFirstParagraph: t("seoCheckKeywordEarly"),
-        contentLength: t("seoCheckContentLength"),
-        hasSubheadings: t("seoCheckSubheadings"),
-        hasImages: t("seoCheckImages"),
-        hasInternalLink: t("seoCheckInternalLink"),
-      },
-    },
     resources: {
       section: t("resourcesSection"),
       sectionDescription: t("resourcesSectionDescription"),
@@ -196,8 +192,8 @@ export default async function LessonEditPage({ params }: PageProps<"/admin/learn
   };
 
   return (
-    <AdminPage
-      title={defaultTranslation?.title || t("untitled")}
+    <EditorPage
+      title={t("editorHeading.lesson")}
       description={t("pageDesc.lessonDetail")}
       backHref={`/admin/learn/courses/${detail.courseId}`}
       backLabel={t("backToCourse")}
@@ -209,6 +205,7 @@ export default async function LessonEditPage({ params }: PageProps<"/admin/learn
           courseId: detail.courseId,
           courseTitle: detail.courseTitle,
           courseSlug,
+          courseTrack: course?.track ?? "",
           status: detail.status,
           difficulty: detail.difficulty,
           estimatedMinutes: detail.estimatedMinutes === null ? "" : String(detail.estimatedMinutes),
@@ -216,15 +213,20 @@ export default async function LessonEditPage({ params }: PageProps<"/admin/learn
           externalUrl: detail.externalUrl ?? "",
           heroAssetId: detail.heroAssetId,
           heroUrl: detail.heroUrl,
+          flags: {
+            isFeatured: detail.isFeatured,
+            isActive: detail.isActive,
+            isPremium: detail.isPremium,
+          },
           completionRule: detail.completionRule,
           isRequired: detail.isRequired,
           quizId: detail.quizId,
           prerequisiteLessonId: detail.prerequisiteLessonId,
           visibility: detail.visibility,
-          publishedAt: detail.publishedAt ? dateFormat.format(detail.publishedAt) : null,
-          scheduledFor: detail.scheduledFor ? dateFormat.format(detail.scheduledFor) : null,
-          createdAt: dateFormat.format(detail.createdAt),
-          updatedAt: dateFormat.format(detail.updatedAt),
+          publishedAt: detail.publishedAt ? formatDateTime(detail.publishedAt) : null,
+          scheduledFor: detail.scheduledFor ? formatDateTime(detail.scheduledFor) : null,
+          createdAt: formatDateTime(detail.createdAt),
+          updatedAt: formatDateTime(detail.updatedAt),
           deleted: detail.deletedAt !== null,
           translations: detail.translations.map((tr) => ({
             locale: tr.locale,
@@ -272,7 +274,8 @@ export default async function LessonEditPage({ params }: PageProps<"/admin/learn
         canCreate={can(subject, "lessons.create")}
         canDelete={can(subject, "lessons.delete")}
         labels={labels}
+        {...(ai ? { ai } : {})}
       />
-    </AdminPage>
+    </EditorPage>
   );
 }

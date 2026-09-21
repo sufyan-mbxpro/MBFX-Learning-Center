@@ -26,19 +26,7 @@ import {
   SkeletonText,
 } from "@repo/ui/components/skeleton";
 
-/** A standard ArticleCards card: `Card`'s shell (changes-20 Phase 5) with a
- * flush 16:9 cover — the ratio ArticleMedia gives it, so the swap is a fill. */
-function CardSkeleton() {
-  return (
-    <SkeletonCard media="video">
-      <Skeleton className="h-5 w-24 rounded-full" />
-      <Skeleton className="h-5 w-full" />
-      <Skeleton className="h-5 w-3/4" />
-      <Skeleton className="h-4 w-full" />
-      <Skeleton className="mt-2 h-4 w-32" />
-    </SkeletonCard>
-  );
-}
+import { ArticleCardSkeleton } from "./_components/article-card-skeleton.tsx";
 
 export default function NewsLoading() {
   return (
@@ -51,13 +39,13 @@ export default function NewsLoading() {
           <Skeleton className="h-12 w-full max-w-xl" />
           <Skeleton className="h-5 w-full max-w-lg" />
           <div className="flex gap-3">
-            <Skeleton className="h-11 w-44 rounded-full" />
-            <Skeleton className="h-11 w-40 rounded-full" />
+            <Skeleton className="h-11 w-44 rounded-md" />
+            <Skeleton className="h-11 w-40 rounded-md" />
           </div>
         </Container>
       </Section>
 
-      {/* The spotlight: lead story beside two runners-up. The stat band that
+      {/* The spotlight: lead story beside three runners-up. The stat band that
           used to sit above it is gone from the page (news design pass, second
           pass), so its placeholder is gone too — reserving a band that never
           arrives is the jump a skeleton exists to prevent. Cards are `Card`'s
@@ -66,14 +54,20 @@ export default function NewsLoading() {
         <Container className="flex flex-col gap-8">
           <SkeletonHeading size="page" />
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-(--grid-3-2)">
-            <SkeletonCard media="video">
-              <Skeleton className="h-5 w-28 rounded-full" />
-              <Skeleton className="h-8 w-full" />
-              <Skeleton className="h-8 w-2/3" />
-              <Skeleton className="h-4 w-full" />
-            </SkeletonCard>
+            {/* Picture above the words, a 16:6 banner, matching the lead card — a
+                side-by-side placeholder would reserve a different shape from
+                the one the story arrives in. */}
+            <div className="flex flex-col overflow-hidden rounded-lg border bg-card shadow-sm">
+              <SkeletonImage ratio="16/6" className="rounded-none" />
+              <div className="flex flex-col gap-2 p-5">
+                <Skeleton className="h-5 w-28 rounded-md" />
+                <Skeleton className="h-7 w-full" />
+                <Skeleton className="h-7 w-2/3" />
+                <SkeletonText lines={2} />
+              </div>
+            </div>
             <div className="flex flex-col gap-4">
-              {Array.from({ length: 2 }, (_, index) => (
+              {Array.from({ length: 3 }, (_, index) => (
                 <SkeletonCard key={index} size="sm" className="flex-1">
                   <div className="flex items-start gap-4">
                     <SkeletonImage ratio="4/3" className="w-28 shrink-0" />
@@ -93,9 +87,9 @@ export default function NewsLoading() {
       <Section spacing="md">
         <Container className="grid grid-cols-1 gap-10 lg:grid-cols-(--grid-main-aside)">
           <div className="flex flex-col gap-8">
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {Array.from({ length: 6 }, (_, index) => (
-                <CardSkeleton key={index} />
+                <ArticleCardSkeleton key={index} />
               ))}
             </div>
             <div className="flex justify-center gap-2">

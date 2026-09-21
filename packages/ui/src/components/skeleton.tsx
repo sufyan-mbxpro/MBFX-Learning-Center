@@ -128,24 +128,21 @@ const BUTTON_SIZE = {
   "icon-sm": "size-9",
 } as const;
 
+// ADR-107 #4: a skeleton's radius is its real component's radius. The `shape`
+// prop went with `Button`'s pill — a placeholder in a shape the content will
+// not arrive in is a layout shift, which is the one thing a skeleton exists to
+// prevent.
 function SkeletonButton({
   size = "default",
-  shape = "default",
   className,
 }: {
   size?: keyof typeof BUTTON_SIZE;
-  shape?: "default" | "pill";
   className?: string;
 }) {
   return (
     <Skeleton
       data-slot="skeleton-button"
-      className={cn(
-        "shrink-0",
-        BUTTON_SIZE[size],
-        shape === "pill" ? "rounded-full" : "rounded-md",
-        className,
-      )}
+      className={cn("shrink-0 rounded-md", BUTTON_SIZE[size], className)}
     />
   );
 }

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { defaultShareImage } from "../../_lib/seo.ts";
 import { hasLocale, NextIntlClientProvider } from "next-intl";
 import { getMessages, getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
@@ -12,7 +13,9 @@ import { RevealObserver } from "@repo/ui/components/reveal-observer";
 import { ScrollToTop } from "@repo/ui/components/scroll-to-top";
 import { SiteLoader } from "@repo/ui/components/site-loader";
 import { SiteFooter } from "./_components/footer.tsx";
+import { ImpersonationBanner } from "./_components/impersonation-banner.tsx";
 import { PublicSessionProvider } from "./_components/public-session.tsx";
+import { SessionHintScript } from "./_components/session-hint-script.tsx";
 import { VisitorCta } from "./_components/visitor-cta.tsx";
 import { SiteHeader } from "./_components/header.tsx";
 import { faviconIcons } from "../../_lib/favicon.ts";
@@ -44,11 +47,12 @@ export async function generateMetadata({ params }: LayoutProps<"/[locale]">): Pr
   if (!hasLocale(routing.locales, locale)) return {};
   setRequestLocale(locale);
 
-  const [brandAssets, t, allowIndexing, googleVerification] = await Promise.all([
+  const [brandAssets, t, allowIndexing, googleVerification, shareImage] = await Promise.all([
     getBrandAssets(),
     getTranslations("common"),
     getSetting("seo.robotsIndex"),
     getSetting("seo.googleSiteVerification"),
+    defaultShareImage(),
   ]);
   return {
     // ADR-090. Every relative URL in the tree below — an OG image stored as
@@ -59,6 +63,16 @@ export async function generateMetadata({ params }: LayoutProps<"/[locale]">): Pr
     title: t("siteName"),
     description: t("siteDescription"),
     icons: faviconIcons(brandAssets.favicon),
+    // The share card every page inherits unless it builds its own
+    // (`shareMetadata`). Next fills og:title/description from the page's own
+    // title and description, and the Twitter card copies the image from here.
+    openGraph: {
+      type: "website",
+      siteName: t("siteName"),
+      locale,
+      ...(shareImage ? { images: [{ url: shareImage }] } : {}),
+    },
+    twitter: { card: "summary_large_image" },
     // ADR-090. The site-wide indexing switch — the page-side half of the rule
     // `robots.ts` applies to the crawler. A null value is an unseeded row and
     // means "do not interfere": only an explicit `false` deindexes. It reaches
@@ -148,6 +162,9 @@ export default async function PublicRootLayout({ children, params }: LayoutProps
             actually executes it. No nonce here — this layout is cached (ADR-004)
             and has no request to read one from. */}
         <ThemeScript />
+        {/* ADR-124: hides the subscribe bands before first paint for a reader
+            the last session read found signed in. Display only. */}
+        <SessionHintScript />
         <style
           id="brand-tokens"
           dangerouslySetInnerHTML={{ __html: buildThemeStyleSheet(theme) }}
@@ -165,6 +182,7 @@ export default async function PublicRootLayout({ children, params }: LayoutProps
                 consumers — the header's auth chip and the visitor band below
                 the content. It renders no markup of its own. */}
             <PublicSessionProvider>
+              <ImpersonationBanner />
               <SiteHeader locale={locale} />
               {/* overflow-x-clip: a `Reveal variant="end"` rests 1.5rem toward
                 the inline end until it scrolls into view (ADR-018 rule 2),

@@ -25,7 +25,7 @@ import {
   type AiModelRole,
   aiFeature,
 } from "@repo/contracts";
-import { db } from "@repo/db";
+import { db, type AiProviderKind } from "@repo/db";
 import { loadSetting } from "@repo/settings";
 
 import { AiError } from "./errors.ts";
@@ -37,7 +37,7 @@ export interface ResolvedModel {
   modelId: string;
   label: string;
   providerId: string;
-  providerKind: "ANTHROPIC" | "OPENAI" | "ECHO";
+  providerKind: AiProviderKind;
   maxOutputTokens: number;
   supportsVision: boolean;
   supportsStream: boolean;
@@ -140,7 +140,7 @@ type ModelRow = {
   inputPricePerMTok: unknown;
   outputPricePerMTok: unknown;
   cachedInputPricePerMTok: unknown;
-  provider: { kind: "ANTHROPIC" | "OPENAI" | "ECHO"; isEnabled: boolean };
+  provider: { kind: AiProviderKind; isEnabled: boolean };
 };
 
 function toResolvedModel(row: ModelRow): ResolvedModel {

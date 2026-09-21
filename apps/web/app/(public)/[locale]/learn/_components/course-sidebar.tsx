@@ -32,6 +32,7 @@ import { Card, CardContent, CardHeader } from "@repo/ui/components/card";
 import type { CourseLevelTone } from "@repo/ui/components/course-card";
 import { EmptyState } from "@repo/ui/components/empty";
 import { cn } from "@repo/ui/lib/utils";
+import { INTERACTIVE_CARD } from "@repo/ui/lib/surfaces";
 
 export interface SidebarCourse {
   id: string;
@@ -75,62 +76,75 @@ export function CourseSidebar({
   if (courses.length === 0) return null;
 
   return (
-    <Card className="overflow-hidden">
-      <CardHeader className="gap-2">
-        <h2 className="text-base leading-snug font-semibold">{t("course.moreCourses")}</h2>
+    // The heading sits OUTSIDE the card (changes-40). Inside a `CardHeader` it
+    // was inset by the card's own padding and a step smaller than the main
+    // column's "Curriculum", so the two columns of the same row began at
+    // visibly different heights. Every block in this rail now takes the main
+    // column's shape — bare `h2` and lead, then the cards — which is what makes
+    // the alignment hold whichever block is first.
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-1">
+        <h2 className="text-xl leading-snug font-semibold">{t("course.moreCourses")}</h2>
         <p className="text-sm text-muted-foreground">{t("course.moreCoursesIntro")}</p>
+      </div>
 
+      <Card className="overflow-hidden">
+        {/* The header is the FILTER, so with one school there is no header —
+            an empty `CardHeader` still pays its padding and would leave a
+            band of nothing above the first row. */}
         {tracks.length > 1 && (
-          <div
-            role="group"
-            aria-label={t("filters.trackLabel")}
-            className="flex flex-wrap gap-1.5 pt-1"
-          >
-            <TrackChip
-              active={track === null}
-              onClick={() => setTrack(null)}
-              label={t("filters.allTracks")}
-            />
-            {tracks.map((entry) => (
+          <CardHeader>
+            <div
+              role="group"
+              aria-label={t("filters.trackLabel")}
+              className="flex flex-wrap gap-1.5"
+            >
               <TrackChip
-                key={entry.track}
-                active={track === entry.track}
-                onClick={() => setTrack(entry.track)}
-                label={entry.title}
+                active={track === null}
+                onClick={() => setTrack(null)}
+                label={t("filters.allTracks")}
               />
-            ))}
-          </div>
-        )}
-      </CardHeader>
-
-      <CardContent className="flex flex-col gap-2">
-        {visible.length === 0 ? (
-          // Reachable: a track chip can be selected whose only course is the
-          // one being read. The way out is offered rather than described.
-          <EmptyState size="sm" title={t("course.moreCoursesEmpty")} />
-        ) : (
-          <ul className="flex flex-col gap-2">
-            {visible.map((course) => (
-              <li key={course.id}>
-                <SidebarRow course={course} />
-              </li>
-            ))}
-          </ul>
+              {tracks.map((entry) => (
+                <TrackChip
+                  key={entry.track}
+                  active={track === entry.track}
+                  onClick={() => setTrack(entry.track)}
+                  label={entry.title}
+                />
+              ))}
+            </div>
+          </CardHeader>
         )}
 
-        <Button
-          variant="ghost"
-          size="sm"
-          // Bare `group`: `.hover-arrow` selects `.group:hover`, which a named
-          // group never matches (globals.css).
-          className="group self-start"
-          render={<Link href={ROUTE_PATHS.learn} />}
-        >
-          {t("course.browseAll")}
-          <ArrowRight data-icon="inline-end" aria-hidden className="hover-arrow rtl:rotate-180" />
-        </Button>
-      </CardContent>
-    </Card>
+        <CardContent className="flex flex-col gap-2">
+          {visible.length === 0 ? (
+            // Reachable: a track chip can be selected whose only course is the
+            // one being read. The way out is offered rather than described.
+            <EmptyState size="sm" title={t("course.moreCoursesEmpty")} />
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {visible.map((course) => (
+                <li key={course.id}>
+                  <SidebarRow course={course} />
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <Button
+            variant="ghost"
+            size="sm"
+            // Bare `group`: `.hover-arrow` selects `.group:hover`, which a named
+            // group never matches (globals.css).
+            className="group self-start"
+            render={<Link href={ROUTE_PATHS.learn} />}
+          >
+            {t("course.browseAll")}
+            <ArrowRight data-icon="inline-end" aria-hidden className="hover-arrow rtl:rotate-180" />
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
@@ -141,7 +155,7 @@ export function CourseSidebar({
  */
 function SidebarRow({ course }: { course: SidebarCourse }) {
   return (
-    <div className="group card-hover relative flex items-start gap-3 rounded-xl border bg-card p-2.5 transition-colors duration-(--duration-base) hover:border-primary/30 hover:bg-muted/40">
+    <div className={`${INTERACTIVE_CARD} flex items-start gap-3 p-2.5`}>
       <span className="relative size-14 shrink-0 overflow-hidden rounded-lg bg-muted">
         {course.coverUrl && (
           <Image
@@ -191,9 +205,9 @@ function TrackChip({
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "rounded-full px-2.5 py-1 text-xs font-medium ring-1 transition duration-(--duration-base) ease-(--ease-out-quint) focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
+        "rounded-md px-2.5 py-1 text-xs font-medium ring-1 transition duration-(--duration-base) ease-(--ease-out-quint) focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
         active
-          ? "bg-primary text-primary-foreground ring-primary"
+          ? "bg-primary-solid text-primary-solid-foreground ring-primary"
           : "bg-background text-muted-foreground ring-border hover:text-foreground hover:ring-primary/25",
       )}
     >

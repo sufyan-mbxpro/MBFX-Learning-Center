@@ -18,6 +18,7 @@ import { syncReferences } from "./cms/references.ts";
 import { recomputeLessonCount } from "./courses.ts";
 import {
   CONTENT_TRANSITIONS,
+  contentFlagsData,
   createSlugRedirect,
   lessonPath,
   sanitizeRichText,
@@ -331,6 +332,7 @@ export async function saveLesson(actor: Subject, input: LessonInput): Promise<vo
   if (input.meta.isRequired !== undefined) metaData.isRequired = input.meta.isRequired;
   if (input.meta.visibility !== undefined) metaData.visibility = input.meta.visibility;
   if (input.meta.sortOrder !== undefined) metaData.sortOrder = input.meta.sortOrder;
+  Object.assign(metaData, contentFlagsData(input.meta));
   if (input.meta.prerequisiteLessonId !== undefined) {
     metaData.prerequisiteLessonId = input.meta.prerequisiteLessonId;
   }
@@ -353,7 +355,11 @@ export async function saveLesson(actor: Subject, input: LessonInput): Promise<vo
     seoDescription: input.translation.seoDescription ?? null,
     seoFocusKeyword: input.translation.seoFocusKeyword ?? null,
     sourceHash,
-    translationStatus: TranslationStatus.TRANSLATED,
+    // changes-29 B3: MACHINE_TRANSLATED only while the AI text is untouched;
+    // any other save, a human's review included, writes TRANSLATED.
+    translationStatus: input.translation.machineTranslated
+      ? TranslationStatus.MACHINE_TRANSLATED
+      : TranslationStatus.TRANSLATED,
   };
 
   await db.$transaction(async (tx) => {
@@ -731,6 +737,10 @@ export interface LessonAdminDetail {
   videoUrl: string | null;
   externalUrl: string | null;
   heroAssetId: string | null;
+  /** ADR-139 — the article's three flags. */
+  isFeatured: boolean;
+  isActive: boolean;
+  isPremium: boolean;
   heroUrl: string | null;
   completionRule: string;
   /** ADR-058 #1 — the attached quiz, or null. */
@@ -805,6 +815,9 @@ export async function loadLessonAdminDetail(lessonId: string): Promise<LessonAdm
     videoUrl: row.videoUrl,
     externalUrl: row.externalUrl,
     heroAssetId: row.heroAssetId,
+    isFeatured: row.isFeatured,
+    isActive: row.isActive,
+    isPremium: row.isPremium,
     heroUrl: row.heroAssetId ? (assetById.get(row.heroAssetId)?.url ?? null) : null,
     completionRule: row.completionRule,
     quizId: row.quizId,

@@ -32,8 +32,8 @@ export default function LearnLoading() {
           <Skeleton className="shimmer h-12 w-full max-w-2xl" />
           <Skeleton className="shimmer h-6 w-full max-w-xl" />
           <div className="flex flex-wrap gap-3 pt-1">
-            <Skeleton className="shimmer h-12 w-44 rounded-full" />
-            <Skeleton className="shimmer h-12 w-36 rounded-full" />
+            <Skeleton className="shimmer h-12 w-44 rounded-md" />
+            <Skeleton className="shimmer h-12 w-36 rounded-md" />
           </div>
         </Container>
       </Section>
@@ -41,10 +41,10 @@ export default function LearnLoading() {
       {/* The filter toolbar. */}
       <Section spacing="sm">
         <Container className="flex flex-col gap-4">
-          <Skeleton className="shimmer h-18 w-full rounded-2xl" />
+          <Skeleton className="shimmer h-18 w-full rounded-lg" />
           <div className="flex flex-wrap gap-1.5">
             {Array.from({ length: 4 }, (_, index) => (
-              <Skeleton key={index} className="shimmer h-8 w-24 rounded-full" />
+              <Skeleton key={index} className="shimmer h-8 w-24 rounded-md" />
             ))}
           </div>
         </Container>

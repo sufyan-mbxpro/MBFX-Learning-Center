@@ -43,6 +43,8 @@ function rate(numerator: number, denominator: number): number {
 export interface CourseAnalyticsRow {
   courseId: string;
   title: string;
+  /** The course's school — the progress screen's first filter (changes-48 #4). */
+  track: string;
   /** Learners with a `CourseEnrollment` row — i.e. who opened a lesson. */
   started: number;
   completed: number;
@@ -68,6 +70,7 @@ export async function loadCourseAnalytics(): Promise<CourseAnalyticsRow[]> {
     where: { deletedAt: null },
     select: {
       id: true,
+      track: true,
       lessonCount: true,
       translations: { select: { locale: true, title: true } },
     },
@@ -96,6 +99,7 @@ export async function loadCourseAnalytics(): Promise<CourseAnalyticsRow[]> {
       return {
         courseId: course.id,
         title: t?.title ?? "",
+        track: course.track,
         started,
         completed,
         completionRate: rate(completed, started),
@@ -112,7 +116,11 @@ export async function loadCourseAnalytics(): Promise<CourseAnalyticsRow[]> {
 export interface LessonAnalyticsRow {
   lessonId: string;
   title: string;
+  /** Which course and section (module) the lesson sits in — for filtering. */
+  courseId: string;
   courseTitle: string;
+  sectionId: string;
+  sectionTitle: string;
   reached: number;
   completed: number;
   completionRate: number;
@@ -136,7 +144,12 @@ export async function loadLessonAnalytics(): Promise<LessonAnalyticsRow[]> {
       id: true,
       translations: { select: { locale: true, title: true } },
       section: {
-        select: { course: { select: { translations: { select: { locale: true, title: true } } } } },
+        select: {
+          id: true,
+          courseId: true,
+          translations: { select: { locale: true, title: true } },
+          course: { select: { translations: { select: { locale: true, title: true } } } },
+        },
       },
     },
   });
@@ -178,10 +191,19 @@ export async function loadLessonAnalytics(): Promise<LessonAnalyticsRow[]> {
           defaultLocale,
           locales,
         );
+        const sectionT = pickTranslation(
+          lesson.section.translations,
+          defaultLocale,
+          defaultLocale,
+          locales,
+        );
         return {
           lessonId: lesson.id,
           title: t?.title ?? "",
+          courseId: lesson.section.courseId,
           courseTitle: courseT?.title ?? "",
+          sectionId: lesson.section.id,
+          sectionTitle: sectionT?.title ?? "",
           reached: reachedCount,
           completed: completedCount,
           completionRate: rate(completedCount, reachedCount),
@@ -208,6 +230,7 @@ export async function loadLessonAnalytics(): Promise<LessonAnalyticsRow[]> {
 export interface UnhelpfulLessonRow {
   lessonId: string;
   title: string;
+  courseId: string;
   courseTitle: string;
   helpful: number;
   notHelpful: number;
@@ -215,12 +238,23 @@ export interface UnhelpfulLessonRow {
 }
 
 export async function loadLeastHelpfulLessons(limit = 10): Promise<UnhelpfulLessonRow[]> {
-  const rows = await loadLessonAnalytics();
+  return rankLeastHelpful(await loadLessonAnalytics(), limit);
+}
+
+/**
+ * The ranking alone, over rows already loaded — so a screen that holds the
+ * lesson rows (and has narrowed them to one course) does not read them twice.
+ */
+export function rankLeastHelpful(
+  rows: readonly LessonAnalyticsRow[],
+  limit = 10,
+): UnhelpfulLessonRow[] {
   return rows
     .filter((row) => row.notHelpful > 0)
     .map((row) => ({
       lessonId: row.lessonId,
       title: row.title,
+      courseId: row.courseId,
       courseTitle: row.courseTitle,
       helpful: row.helpful,
       notHelpful: row.notHelpful,
@@ -235,6 +269,15 @@ export async function loadLeastHelpfulLessons(limit = 10): Promise<UnhelpfulLess
 export interface QuizAnalyticsRow {
   quizId: string;
   title: string;
+  track: string;
+  /**
+   * The courses and sections that USE this quiz — as a lesson's quiz or a
+   * course's final quiz. A quiz is standalone (ADR-058 #1: consumers hold the
+   * FK), so it can belong to several courses or to none; filtering by a course
+   * keeps every quiz that course uses.
+   */
+  courseIds: string[];
+  sectionIds: string[];
   attempts: number;
   /** Distinct learners, which is not the same as attempts once retakes exist. */
   learners: number;
@@ -248,8 +291,28 @@ export async function loadQuizAnalytics(): Promise<QuizAnalyticsRow[]> {
 
   const quizzes = await db.quiz.findMany({
     where: { deletedAt: null },
-    select: { id: true, translations: { select: { locale: true, title: true } } },
+    select: { id: true, track: true, translations: { select: { locale: true, title: true } } },
   });
+  const [lessonUses, finalUses] = await Promise.all([
+    db.lesson.findMany({
+      where: { deletedAt: null, quizId: { not: null } },
+      select: { quizId: true, sectionId: true, section: { select: { courseId: true } } },
+    }),
+    db.course.findMany({
+      where: { deletedAt: null, finalQuizId: { not: null } },
+      select: { id: true, finalQuizId: true },
+    }),
+  ]);
+  const coursesOf = new Map<string, Set<string>>();
+  const sectionsOf = new Map<string, Set<string>>();
+  const add = (map: Map<string, Set<string>>, key: string, value: string) =>
+    map.set(key, (map.get(key) ?? new Set<string>()).add(value));
+  for (const use of lessonUses) {
+    if (!use.quizId) continue;
+    add(coursesOf, use.quizId, use.section.courseId);
+    add(sectionsOf, use.quizId, use.sectionId);
+  }
+  for (const use of finalUses) if (use.finalQuizId) add(coursesOf, use.finalQuizId, use.id);
 
   // Completed attempts only. An abandoned attempt has a score of 0 and would
   // drag every average down while telling us nothing about the quiz.
@@ -286,6 +349,9 @@ export async function loadQuizAnalytics(): Promise<QuizAnalyticsRow[]> {
       return {
         quizId: quiz.id,
         title: t?.title ?? "",
+        track: quiz.track,
+        courseIds: [...(coursesOf.get(quiz.id) ?? [])],
+        sectionIds: [...(sectionsOf.get(quiz.id) ?? [])],
         attempts: attemptCount,
         learners: learnersBy.get(quiz.id) ?? 0,
         passed: passedCount,
@@ -313,15 +379,36 @@ export interface LearnAnalyticsSummary {
  * control for yet, and a number whose window is invisible is a number nobody
  * can interpret.
  */
-export async function loadLearnAnalyticsSummary(): Promise<LearnAnalyticsSummary> {
+export interface LearnAnalyticsScope {
+  /** Only these courses' enrolments, lesson completions and feedback. */
+  courseIds: string[];
+  /** Only attempts at these quizzes — the ones the courses above use. */
+  quizIds: string[];
+}
+
+/**
+ * With a `scope`, every figure counts only what belongs to the filtered
+ * courses (changes-48 #4), so the tiles above a filtered table describe the
+ * rows it lists. Without one, the whole platform.
+ */
+export async function loadLearnAnalyticsSummary(
+  scope?: LearnAnalyticsScope,
+): Promise<LearnAnalyticsSummary> {
+  const enrolment = scope ? { courseId: { in: scope.courseIds } } : {};
+  const lesson = scope ? { lesson: { section: { courseId: { in: scope.courseIds } } } } : {};
+  const quiz = scope ? { quizId: { in: scope.quizIds } } : {};
   const [enrolments, learners, coursesCompleted, lessonsCompleted, quizAttempts, feedbackVotes] =
     await Promise.all([
-      db.courseEnrollment.count(),
-      db.courseEnrollment.findMany({ select: { userId: true }, distinct: ["userId"] }),
-      db.courseEnrollment.count({ where: { completedAt: { not: null } } }),
-      db.lessonProgress.count({ where: { status: LessonProgressStatus.COMPLETED } }),
-      db.quizAttempt.count({ where: { completedAt: { not: null } } }),
-      db.lessonFeedback.count(),
+      db.courseEnrollment.count({ where: enrolment }),
+      db.courseEnrollment.findMany({
+        where: enrolment,
+        select: { userId: true },
+        distinct: ["userId"],
+      }),
+      db.courseEnrollment.count({ where: { ...enrolment, completedAt: { not: null } } }),
+      db.lessonProgress.count({ where: { ...lesson, status: LessonProgressStatus.COMPLETED } }),
+      db.quizAttempt.count({ where: { ...quiz, completedAt: { not: null } } }),
+      db.lessonFeedback.count({ where: lesson }),
     ]);
 
   return {

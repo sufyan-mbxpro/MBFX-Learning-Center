@@ -11,6 +11,7 @@
 // budget refusal before the call, the three-way clamp, the usage row, the abort
 // path. None of that belongs to a vendor package and all of it has to be
 // unskippable, which is why `runAiTask` is the only thing that calls in here.
+import { AI_PROVIDER_PRESETS, type AiDiscoveredModel } from "@repo/contracts";
 import { db, type AiProviderKind } from "@repo/db";
 
 import { anthropicDriver } from "./drivers/anthropic.ts";
@@ -68,6 +69,12 @@ export interface AiDriver {
   countInputTokens(req: AiRequest): Promise<number>;
   /** The "test connection" button. Throws on failure; the caller maps it. */
   test(): Promise<void>;
+  /**
+   * The provider's own model list (ADR-120). Free on every provider this
+   * platform supports, and it REQUIRES the key on all of them but one — whose
+   * preset names a `keyCheckPath` that `test()` asks first.
+   */
+  listModels(): Promise<AiDiscoveredModel[]>;
 }
 
 // ─── The provider row, and its one key reader ────────────────
@@ -108,16 +115,27 @@ export function normalizeBaseUrl(baseUrl: string | null | undefined): string | u
  * `provider.test.ts` fails any other file in this package that names the
  * column, the way `media.test.ts` guards the paged return type.
  */
-export async function loadProviderDriver(providerId: string): Promise<AiDriver> {
+export async function loadProviderDriver(
+  providerId: string,
+  options: {
+    /**
+     * The setup screen tests a stored key BEFORE the provider is switched on —
+     * connecting is what enables it. Generation never passes this.
+     */
+    includeDisabled?: boolean;
+    /** An unsaved endpoint typed beside a stored key, for the same screen. */
+    baseUrl?: string | null;
+  } = {},
+): Promise<AiDriver> {
   const row = await db.aiProvider.findUnique({
     where: { id: providerId },
     select: { id: true, kind: true, baseUrl: true, isEnabled: true, apiKeyCipher: true },
   });
 
-  if (!row || !row.isEnabled)
+  if (!row || (!row.isEnabled && !options.includeDisabled))
     throw new AiError("no_provider", `Provider ${providerId} is not enabled`);
 
-  const baseUrl = normalizeBaseUrl(row.baseUrl);
+  const baseUrl = options.baseUrl === undefined ? row.baseUrl : options.baseUrl;
 
   // ECHO needs no key and no network. It is what makes the platform
   // demonstrable, seedable and testable on a machine that has neither
@@ -138,9 +156,34 @@ export async function loadProviderDriver(providerId: string): Promise<AiDriver> 
     throw error;
   }
 
-  return row.kind === "ANTHROPIC"
-    ? anthropicDriver({ apiKey, baseUrl })
-    : openAiDriver({ apiKey, baseUrl });
+  return buildDriver({ kind: row.kind, apiKey, baseUrl });
+}
+
+/**
+ * Kind → driver, through the preset registry. The one switch on a protocol,
+ * so a vendor added to `AI_PROVIDER_PRESETS` needs no change here.
+ */
+function buildDriver(input: {
+  kind: AiProviderKind;
+  apiKey: string;
+  baseUrl?: string | null | undefined;
+}): AiDriver {
+  const preset = AI_PROVIDER_PRESETS[input.kind];
+  const baseUrl = normalizeBaseUrl(input.baseUrl) ?? preset.defaultBaseUrl ?? undefined;
+
+  if (preset.protocol === "echo") return echoDriver();
+  if (preset.baseUrlRequired && !baseUrl) {
+    throw new AiError("no_provider", `Provider kind ${input.kind} needs a base URL`);
+  }
+  if (preset.protocol === "anthropic") return anthropicDriver({ apiKey: input.apiKey, baseUrl });
+  return openAiDriver({
+    kind: input.kind,
+    apiKey: input.apiKey,
+    baseUrl,
+    maxTokensParam: preset.maxTokensParam,
+    streamUsageOption: preset.streamUsageOption,
+    keyCheckPath: preset.keyCheckPath,
+  });
 }
 
 /** Seal a provider key for storage. The one writer's one helper. */
@@ -158,8 +201,5 @@ export function driverForKey(input: {
   apiKey: string;
   baseUrl?: string | null;
 }): AiDriver {
-  const baseUrl = normalizeBaseUrl(input.baseUrl);
-  if (input.kind === "ECHO") return echoDriver();
-  if (input.kind === "ANTHROPIC") return anthropicDriver({ apiKey: input.apiKey, baseUrl });
-  return openAiDriver({ apiKey: input.apiKey, baseUrl });
+  return buildDriver(input);
 }

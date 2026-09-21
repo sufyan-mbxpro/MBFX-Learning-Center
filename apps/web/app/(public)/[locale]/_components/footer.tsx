@@ -4,8 +4,10 @@
 //
 // The footer is a SITEMAP, not a shortcut list: `footer.menuColumns` names
 // every footer-location menu, and the seed gives those menus a row for each
-// destination the header offers (Learn / Markets & Tools / Company). A
-// visitor who has scrolled to the bottom never has to scroll back up.
+// destination the header offers — since changes-36 that is five columns,
+// one per school, one for the nine Tools rows, one for the reading surfaces
+// and one for the company pages. A visitor who has scrolled to the bottom
+// never has to scroll back up.
 //
 // A NOTE ON BRAND COLOUR HERE, because it is the one thing that reads as a
 // missed opportunity: this band is `--secondary`, and both `--primary` and
@@ -21,22 +23,31 @@
 // `.sheen`'s decorative sweep, which carries no text).
 import { getTranslations } from "next-intl/server";
 import { cacheLife } from "next/cache";
-import { Apple, ChevronRight, Monitor, Smartphone } from "lucide-react";
+import { Apple, ChevronRight, Mail, MessageCircle, Monitor, Phone, Smartphone } from "lucide-react";
 import {
   buildMenu,
   getActiveSocialLinks,
   getBrandAssets,
   isNewsletterPlacementEnabled,
 } from "@repo/core";
+import {
+  LEGAL_DOCUMENT_KEYS,
+  LEGAL_DOCUMENT_SETTING,
+  legalDocumentPath,
+  ROUTE_PATHS,
+} from "@repo/contracts";
 import { Link } from "@repo/i18n/navigation";
 import { getSetting, isFeatureVisible } from "@repo/settings";
 import { BrandLogo } from "@repo/ui/components/brand-logo";
+import { CtaBand } from "@repo/ui/components/cta-band";
 import { SocialLinkIcon } from "./social-link-icon.tsx";
 import { Container } from "@repo/ui/components/container";
 import { Reveal } from "@repo/ui/components/reveal";
 import { NavLink } from "./nav-link.tsx";
 import { NewsletterForm } from "./newsletter-form.tsx";
 import { newsletterFormLabels } from "./newsletter-labels.ts";
+import { SIGNED_OUT_ONLY_CLASS } from "../../../_lib/session-hint.ts";
+import { SUPPORT_CONTACT } from "../support/_content/support-facts.ts";
 
 // Cache Components rejects a bare `new Date()` during prerender — rightly:
 // it would bake the build-time year into the static shell forever. Cached
@@ -64,11 +75,10 @@ const APP_PLATFORM_ICON = {
 // so the grid has to answer for every plausible count rather than assuming
 // today's three.
 //
-// These divide the EIGHT-of-twelve track the links share with the brand
-// block, not the whole container. Spread across the full 1400px, three
-// columns land roughly 400px apart and the band reads as three lonely lists
-// with holes between them; inside 8/12 they sit about 280px apart and read
-// as one block.
+// These divide the track the links share with the brand block, not the whole
+// container. Spread across the full 1400px, three columns land roughly 400px
+// apart and the band reads as three lonely lists with holes between them;
+// inside their own track they sit about 280px apart and read as one block.
 const LINK_GRID_CLASS: Record<number, string> = {
   1: "grid-cols-1",
   2: "grid-cols-2",
@@ -77,6 +87,22 @@ const LINK_GRID_CLASS: Record<number, string> = {
   5: "grid-cols-2 sm:grid-cols-3 lg:grid-cols-5",
   6: "grid-cols-2 sm:grid-cols-3 lg:grid-cols-6",
 };
+
+// How the twelve tracks are split between the brand block and the links.
+//
+// Four/eight was right while the footer carried three columns. changes-36
+// made it five (a column per school, one for the nine Tools rows), and five
+// inside 8/12 of a 1400px container is ~150px a column — narrow enough that
+// "Currency converter" wraps onto three lines. The brand block gives up a
+// track at that point: its contents are a logo, a sentence and a row of
+// social buttons, all of which read fine at 3/12, and none of which is a
+// list of links the reader is trying to scan.
+//
+// Static strings, keyed the same way and for the same reason `LINK_GRID_CLASS`
+// is: Tailwind scans source text, so a computed `lg:col-span-${n}` generates
+// no CSS at all.
+const BRAND_SPAN_CLASS = (cells: number) => (cells >= 5 ? "lg:col-span-3" : "lg:col-span-4");
+const LINKS_SPAN_CLASS = (cells: number) => (cells >= 5 ? "lg:col-span-9" : "lg:col-span-8");
 
 // The heading treatment shared by the menu columns and the app-store column,
 // so a column that comes from settings and one that comes from code cannot
@@ -99,7 +125,10 @@ export async function SiteFooter({ locale }: { locale: string }) {
     siteName,
     siteDescription,
     copyright,
-    disclaimer,
+    riskDisclaimer,
+    companyRegistration,
+    registeredAddress,
+    legalDocuments,
     menuColumns,
     newsletterFlag,
     newsletterPlaced,
@@ -107,12 +136,23 @@ export async function SiteFooter({ locale }: { locale: string }) {
     showPaymentBadges,
     socialLinks,
     brandAssets,
+    supportEmailSetting,
   ] = await Promise.all([
     getTranslations({ locale, namespace: "footer" }),
     getSetting("site.name"),
     getSetting("site.description"),
     getSetting("legal.copyrightNotice"),
+    // changes-38 (ADR-122, superseding ADR-119 §1 for the footer): the
+    // disclaimer is back, HERE and nowhere else — "remove within the site,
+    // visible in the footer, dynamically". Dynamic means the admin-edited
+    // setting, never catalog copy: it is a legal statement the operator owns.
     getSetting("legal.riskDisclaimer"),
+    getSetting("legal.companyRegistration"),
+    getSetting("legal.registeredAddress"),
+    // Read in registry order so the row cannot drift from LEGAL_DOCUMENT_KEYS
+    // — a fourth document is one entry there and one setting, not an edit
+    // here (ADR-110).
+    Promise.all(LEGAL_DOCUMENT_KEYS.map((key) => getSetting(LEGAL_DOCUMENT_SETTING[key]))),
     getSetting("footer.menuColumns"),
     // TWO switches with different jobs (ADR-080 #5): the FLAG says signup
     // exists, the placement SETTING says it is drawn here. One setting,
@@ -124,7 +164,10 @@ export async function SiteFooter({ locale }: { locale: string }) {
     getSetting("footer.showPaymentBadges"),
     getActiveSocialLinks(),
     getBrandAssets(),
+    // The same inbox `/support` prints and delivers to (ADR-131).
+    getSetting("site.supportEmail"),
   ]);
+  const supportEmail = supportEmailSetting ?? "";
 
   // buildMenu (Phase 3) instead of buildNavigation: the columns need the
   // menu's own NAME for their heading, which buildNavigation never returned
@@ -138,6 +181,14 @@ export async function SiteFooter({ locale }: { locale: string }) {
   // inactive) must not reserve a grid cell — otherwise turning `courses` off
   // leaves a titled, empty column behind.
   const columns = allColumns.filter((column) => column.items.length > 0);
+
+  // A document with no file behind it is ABSENT, not a link to a 404
+  // (ADR-110). An installation that has published two of the three shows two.
+  const legalLinks = LEGAL_DOCUMENT_KEYS.flatMap((key, index) =>
+    legalDocuments[index]
+      ? [{ key, href: legalDocumentPath(key), label: t(`legalDocument.${key}`) }]
+      : [],
+  );
 
   const footerSocials = socialLinks.filter((link) => link.showInFooter);
   const platformLinks = appLinks ?? [];
@@ -181,7 +232,7 @@ export async function SiteFooter({ locale }: { locale: string }) {
               of their own is what stops three columns from floating in
               1400px of empty secondary. */}
           <div className="grid grid-cols-1 gap-x-8 gap-y-12 pt-14 pb-10 lg:grid-cols-12 lg:gap-x-12">
-            <Reveal variant="up" className="lg:col-span-4">
+            <Reveal variant="up" className={BRAND_SPAN_CLASS(linkCellCount)}>
               <div className="flex flex-col items-start gap-5">
                 {/* Uploaded logo (ADR-017) via the shared BrandLogo, with
                     light/dark passed SWAPPED on purpose: this band is always
@@ -208,6 +259,68 @@ export async function SiteFooter({ locale }: { locale: string }) {
                   <p className="max-w-md text-sm leading-relaxed text-secondary-foreground/80">
                     {siteDescription}
                   </p>
+                )}
+
+                {/* How to reach a person (changes-36). The SAME facts `/support`
+                    prints — `site.supportEmail` (ADR-131) and `SUPPORT_CONTACT` —
+                    so the footer cannot advertise one
+                    inbox while the support page advertises another, and the
+                    numbers stay out of the catalog (ADR-047 §2 rule 2). Each
+                    line is absent when its fact is empty. */}
+                {(supportEmail !== "" ||
+                  SUPPORT_CONTACT.phone !== "" ||
+                  SUPPORT_CONTACT.whatsapp !== "") && (
+                  <ul className="flex flex-col gap-3 text-sm text-secondary-foreground/85">
+                    {supportEmail !== "" && (
+                      <li className="flex items-center gap-3">
+                        <Mail aria-hidden className="size-4 shrink-0 opacity-70" />
+                        <a
+                          href={`mailto:${supportEmail}`}
+                          className="underline-offset-4 hover:text-secondary-foreground hover:underline"
+                        >
+                          {supportEmail}
+                        </a>
+                      </li>
+                    )}
+                    {/* Call and Live Chat are two rows, not the reference's one
+                        "Call: … | Live Chat: …" line: the brand column is ~290px
+                        at five link columns, so one line wrapped and left the
+                        separator hanging at the end of the first row. */}
+                    {SUPPORT_CONTACT.phone !== "" && (
+                      <li className="flex items-center gap-3">
+                        <Phone aria-hidden className="size-4 shrink-0 opacity-70" />
+                        <span>
+                          {t("contactCall")}{" "}
+                          <a
+                            href={`tel:${SUPPORT_CONTACT.phone}`}
+                            dir="ltr"
+                            className="underline-offset-4 hover:text-secondary-foreground hover:underline"
+                          >
+                            {SUPPORT_CONTACT.phone}
+                          </a>
+                        </span>
+                      </li>
+                    )}
+                    {SUPPORT_CONTACT.whatsapp !== "" && (
+                      <li className="flex items-center gap-3">
+                        <MessageCircle aria-hidden className="size-4 shrink-0 opacity-70" />
+                        <span>
+                          {t("contactLiveChat")}{" "}
+                          {/* Off-site, so the one link in this list that opens
+                              a new tab and sends no referrer. */}
+                          <a
+                            href={`https://wa.me/${SUPPORT_CONTACT.whatsapp.replace(/\D/g, "")}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            dir="ltr"
+                            className="underline-offset-4 hover:text-secondary-foreground hover:underline"
+                          >
+                            {SUPPORT_CONTACT.whatsapp}
+                          </a>
+                        </span>
+                      </li>
+                    )}
+                  </ul>
                 )}
 
                 {footerSocials.length > 0 && (
@@ -244,7 +357,7 @@ export async function SiteFooter({ locale }: { locale: string }) {
 
             {linkCellCount > 0 && (
               <div
-                className={`grid gap-x-8 gap-y-10 lg:col-span-8 ${LINK_GRID_CLASS[linkCellCount] ?? "grid-cols-2 sm:grid-cols-3"}`}
+                className={`grid gap-x-8 gap-y-10 ${LINKS_SPAN_CLASS(linkCellCount)} ${LINK_GRID_CLASS[linkCellCount] ?? "grid-cols-2 sm:grid-cols-3"}`}
               >
                 {columns.map((column, index) => {
                   const headingId = `footer-col-${column.key}`;
@@ -328,60 +441,122 @@ export async function SiteFooter({ locale }: { locale: string }) {
             )}
           </div>
 
-          {/* ── Band 2: newsletter ───────────────────────────────────── */}
+          {/* ── Band 2: the subscribe banner ─────────────────────────── */}
+          {/* changes-36 (ADR-119): "replace with the subscribe banner". It
+              takes the place the risk disclaimer held, and it is the SAME
+              `CtaBand` `/news` closes on rather than the muted strip this band
+              used to be — one subscribe banner on the site, not two designs
+              of it. A `--primary` FILL with its own paired ink is ADR-018
+              rule 5's allowed case, so its contrast does not depend on this
+              band's `--secondary`. `full-width` plus a radius rather than
+              `default`, because `default` carries `.container-page` and this
+              already sits inside the footer's Container. */}
           {newsletterFlag && newsletterPlaced && (
-            <div className="border-t border-secondary-foreground/12 py-8">
-              {/* .sheen supplies its own position/overflow/isolation, so no
-                  Tailwind `relative` here — and nothing that sets `position`
-                  may follow it in the class list (the cascade trap
-                  globals.css documents beside .pulse-ring). A full-width
-                  strip rather than a card beside the brand: the sweep has
-                  room to travel, and the form is not competing with the
-                  sitemap for the same eye. */}
-              <div className="sheen rounded-2xl bg-secondary-foreground/[0.06] p-6 ring-1 ring-secondary-foreground/12 ring-inset sm:p-7">
-                <div className="relative z-2 flex flex-col gap-5 md:flex-row md:items-center md:justify-between md:gap-10">
-                  <div className="flex flex-col gap-1.5 md:max-w-lg">
-                    <p className="text-base font-semibold text-secondary-foreground">
-                      {t("newsletterHeading")}
-                    </p>
-                    <p className="text-sm leading-relaxed text-secondary-foreground/75">
-                      {t("newsletterBlurb")}
-                    </p>
-                  </div>
-                  <div className="w-full md:max-w-sm md:shrink-0">
-                    <NewsletterForm
-                      tone="onSecondary"
-                      locale={locale}
-                      source="footer"
-                      labels={newsletterFormLabels(t)}
-                    />
-                  </div>
+            <div
+              className={`border-t border-secondary-foreground/12 py-8 ${SIGNED_OUT_ONLY_CLASS}`}
+            >
+              <CtaBand
+                variant="full-width"
+                className="rounded-lg"
+                title={t("newsletterHeading")}
+                description={t("newsletterBlurb")}
+              >
+                <div className="w-full sm:w-80">
+                  <NewsletterForm
+                    tone="onFill"
+                    locale={locale}
+                    source="footer"
+                    labels={newsletterFormLabels(t)}
+                  />
                 </div>
-              </div>
+              </CtaBand>
             </div>
           )}
 
-          {/* ── Band 3: legal ────────────────────────────────────────── */}
-          <div className="flex flex-col gap-6 border-t border-secondary-foreground/12 py-8">
-            {disclaimer && (
-              // Given a label and an inset panel rather than left as loose
-              // grey text: a forex risk disclaimer is the one paragraph down
-              // here a regulator expects to find, and an unlabelled run of
-              // 11px prose reads as boilerplate nobody meant to be read.
-              <div className="rounded-xl border-s-2 border-secondary-foreground/25 bg-secondary-foreground/[0.04] px-4 py-3.5">
-                <p className="text-xs font-semibold tracking-caps text-secondary-foreground/70 uppercase">
-                  {t("riskDisclaimerLabel")}
+          {/* ── Band 3: who we are ───────────────────────────────────── */}
+          {/* The registration number and the registered address, each its own
+              setting (ADR-110) and each absent rather than labelled-and-empty
+              when an installation has not recorded it. The risk disclaimer
+              opens the band again (ADR-122): the footer is the ONE place it
+              prints, so it is on every page without being in any page's
+              body. Empty setting ⇒ no paragraph. */}
+          {(riskDisclaimer || companyRegistration || registeredAddress) && (
+            <div className="flex flex-col gap-4 border-t border-secondary-foreground/12 py-6">
+              {riskDisclaimer && (
+                <p className="text-xs leading-relaxed text-secondary-foreground/70">
+                  <span className="font-semibold text-secondary-foreground/85">
+                    {t("riskDisclaimerLabel")}
+                  </span>{" "}
+                  {riskDisclaimer}
                 </p>
-                <p className="mt-1.5 text-xs leading-relaxed text-secondary-foreground/75">
-                  {disclaimer}
-                </p>
-              </div>
-            )}
+              )}
+              <dl className="flex flex-col gap-1.5 text-xs leading-relaxed text-secondary-foreground/70">
+                {companyRegistration && (
+                  <div className="flex flex-wrap gap-x-1.5">
+                    <dt>{t("companyRegistrationLabel")}</dt>
+                    <dd className="text-secondary-foreground/85">{companyRegistration}</dd>
+                  </div>
+                )}
+                {registeredAddress && (
+                  <div className="flex flex-wrap gap-x-1.5">
+                    <dt>{t("registeredAddressLabel")}</dt>
+                    <dd className="text-secondary-foreground/85">{registeredAddress}</dd>
+                  </div>
+                )}
+              </dl>
+            </div>
+          )}
 
-            <div className="flex flex-col gap-2 text-xs text-secondary-foreground/70 sm:flex-row sm:items-center sm:justify-between">
+          {/* ── Band 4: the bottom bar ───────────────────────────────── */}
+          {/* Its own band rather than a row inside the one above, because it
+              is the only part of the footer that is chrome rather than
+              content: the copyright, and the documents the company is
+              required to publish. */}
+          <div className="flex flex-col gap-4 border-t border-secondary-foreground/12 py-6 text-xs text-secondary-foreground/70 md:flex-row md:items-center md:justify-between">
+            <div className="flex flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-5">
               <p>{copyrightLine}</p>
+              {companyRegistration && (
+                <p>
+                  {t("companyRegistrationShort")}: {companyRegistration}
+                </p>
+              )}
               {showPaymentBadges && <p>{t("paymentMethods")}</p>}
             </div>
+
+            {legalLinks.length > 0 && (
+              <nav aria-label={t("legalNavLabel")}>
+                <ul className="flex flex-wrap items-center gap-x-5 gap-y-2">
+                  {legalLinks.map((link) => (
+                    <li key={link.key}>
+                      {/* A new tab, and said out loud. The document is a PDF
+                          that opens in the browser's own viewer, and taking a
+                          reader out of the page they were on without warning
+                          is the reason `rel="noopener"` exists as a habit
+                          rather than the reason to skip the label. */}
+                      <a
+                        href={link.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="rounded-md underline-offset-4 transition-colors duration-(--duration-base) hover:text-secondary-foreground hover:underline"
+                      >
+                        {link.label}
+                      </a>
+                    </li>
+                  ))}
+                  <li>
+                    {/* The sitemap is OURS — an ordinary page, same tab. */}
+                    <NavLink
+                      href={ROUTE_PATHS.sitemap}
+                      isExternal={false}
+                      openInNewTab={false}
+                      className="rounded-md px-0 py-0 text-xs font-normal text-secondary-foreground/70 underline-offset-4 hover:text-secondary-foreground hover:underline aria-[current=page]:text-secondary-foreground"
+                    >
+                      {t("sitemapLink")}
+                    </NavLink>
+                  </li>
+                </ul>
+              </nav>
+            )}
           </div>
         </Container>
       </div>

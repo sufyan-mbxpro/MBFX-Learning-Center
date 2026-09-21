@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { descriptionFrom, shareMetadata } from "../../../_lib/seo.ts";
 import { draftMode } from "next/headers";
 import { notFound, permanentRedirect } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
@@ -46,9 +47,9 @@ export async function generateMetadata({
   const resolved = await resolvePublicPage(locale, pathFromSlug(slug), { draft });
   if (resolved.kind !== "page") return {};
 
-  const [template, defaultOgImage] = await Promise.all([
+  const [template, tCommon] = await Promise.all([
     getSetting("seo.titleTemplate"),
-    getSetting("seo.defaultOgImage"),
+    getTranslations({ locale, namespace: "common" }),
   ]);
   const seo = buildPageSeo(resolved.page, locale);
   // Suggestions (plan §9/§12 PR 3.6) come from the page's own first
@@ -56,20 +57,24 @@ export async function generateMetadata({
   // `ogImage`, one step earlier: explicit field → suggested from content →
   // site default.
   const ogImageUrls = seo.ogImageId ? await getMediaUrls([seo.ogImageId]) : {};
-  const ogImage = (seo.ogImageId && ogImageUrls[seo.ogImageId]) ?? defaultOgImage ?? undefined;
+  // The site default is `shareMetadata`'s fallback, not a step here.
+  const ogImage = seo.ogImageId ? (ogImageUrls[seo.ogImageId] ?? null) : null;
 
   return {
     title: (template ?? "%s").replace("%s", seo.title),
-    description: seo.description ?? undefined,
-    alternates: seo.canonicalUrl ? { canonical: seo.canonicalUrl } : undefined,
+    ...descriptionFrom(seo.description),
+    // Conditional spreads, never a key holding `undefined` (ADR-090).
+    ...(seo.canonicalUrl ? { alternates: { canonical: seo.canonicalUrl } } : {}),
     // Conditional spread, not `: undefined` — see ADR-090 and the article
     // route: a present-but-undefined `robots` key erases the layout's.
     ...(seo.robots?.includes("noindex") ? { robots: { index: false, follow: false } } : {}),
-    openGraph: {
+    ...(await shareMetadata({
+      locale,
+      siteName: tCommon("siteName"),
       title: seo.title,
-      description: seo.description ?? undefined,
-      images: ogImage ? [{ url: ogImage }] : undefined,
-    },
+      description: seo.description,
+      image: ogImage,
+    })),
   };
 }
 
@@ -92,7 +97,7 @@ export default async function CmsPage({ params, searchParams }: PageProps<"/[loc
     "@context": "https://schema.org",
     "@type": seo.schemaType,
     name: seo.title,
-    description: seo.description ?? undefined,
+    ...(seo.description ? { description: seo.description } : {}),
   };
 
   const layout = layoutTreeSchema.safeParse(resolved.page.layout);

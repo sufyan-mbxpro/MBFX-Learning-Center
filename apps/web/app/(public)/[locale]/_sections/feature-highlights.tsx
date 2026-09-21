@@ -2,7 +2,7 @@
 //
 // Six promises about HOW the material is written, not claims about how many
 // people read it. That distinction is deliberate and load-bearing: ADR-047 §
-// the About section's `about-facts.ts` exists because a number on a marketing
+// the About section's `about-facts.ts` existed because a number on a marketing
 // surface is a factual claim that has to be true, and nothing here is gated
 // on facts because nothing here asserts one. "Every lesson states its risk"
 // is a description of the editorial standard, checkable by reading the site.

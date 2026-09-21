@@ -3,7 +3,7 @@ import { EMAIL_TEMPLATE_KEYS, emailDeliveryFilterSchema } from "@repo/contracts"
 import { countEmailDeliveries, listEmailDeliveries } from "@repo/core";
 import { requirePermission } from "@repo/rbac";
 import { MetricCard } from "@repo/ui/components/metric-card";
-import { humanizeKey } from "@repo/utils";
+import { formatDateTime, humanizeKey } from "@repo/utils";
 import { SettingsScreen } from "../../_components/settings-screen.tsx";
 import { loadSettingsIndex } from "../../_components/settings-shared.ts";
 import { DeliveryLogTable, type DeliveryLogLabels } from "./delivery-log-table.tsx";
@@ -44,8 +44,6 @@ export default async function EmailLogPage({
     listEmailDeliveries(filter),
     countEmailDeliveries(),
   ]);
-
-  const dateFormat = new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" });
 
   const labels: DeliveryLogLabels = {
     search: t("email.searchRecipient"),
@@ -100,7 +98,7 @@ export default async function EmailLogPage({
           status: row.status,
           reason: row.reason,
           isTest: row.isTest,
-          sentAtLabel: dateFormat.format(row.createdAt),
+          sentAtLabel: formatDateTime(row.createdAt),
         }))}
         nextCursor={page.nextCursor}
         templates={EMAIL_TEMPLATE_KEYS.map((key) => ({

@@ -40,11 +40,13 @@ export function NewsBackdrop({
       alt=""
       fill
       priority={priority}
-      // `unoptimized`, not `dangerouslyAllowSVG` in next.config: a few KB of
-      // generated vector has nothing for the optimizer to win, and the config
-      // flag would relax SVG handling for EVERY image the app serves,
-      // admin-entered cover URLs included, to buy that nothing.
-      unoptimized
+      // SVG only (changes-33). The flag used to be unconditional, as the
+      // alternative to `dangerouslyAllowSVG` in next.config — which would relax
+      // SVG handling for EVERY image the app serves, admin-entered cover URLs
+      // included, to buy nothing on a few KB of generated vector. Now that the
+      // owner's photography fills this slot, an unconditional flag would also
+      // mean shipping a 1920px WebP to a phone, so it follows the FILE.
+      unoptimized={src.endsWith(".svg")}
       sizes="100vw"
       className="object-cover"
     />

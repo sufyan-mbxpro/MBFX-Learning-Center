@@ -24,6 +24,16 @@
 @source "../../../../apps/web/components/**/*.{ts,tsx}";
 @source "../**/*.{ts,tsx}";
 
+/* Automatic source detection walks up to the repo root and honours .gitignore
+   alone, so a build-output directory that slips out of it (as `.next-e2e/`
+   did) has its Turbopack cache scanned. An `.sst` frame stores text with
+   back-references, so `[&_p:not(:last-child)]:mb-4` reappears there with
+   binary bytes where `child` was — a candidate Tailwind dutifully emits and
+   Lightning CSS then refuses to parse, failing the build for a class nobody
+   wrote. Exclude the outputs here so the ignore file is not the only guard. */
+@source not "../../../../apps/web/.next";
+@source not "../../../../apps/web/.next-e2e";
+
 /* Dark mode is class-driven, not media-driven, so a user's explicit choice
    beats their OS setting (ADR-008: the USER controls mode, never admins). */
 @custom-variant dark (&:where(.dark, .dark *));
@@ -67,6 +77,10 @@
   --color-primary-hover: var(--primary-hover);
   --color-primary-active: var(--primary-active);
   --color-primary-subtle: var(--primary-subtle);
+  /* ADR-140 §6 — the solid button fill that carries a white label. */
+  --color-primary-solid: var(--primary-solid);
+  --color-primary-solid-foreground: var(--primary-solid-foreground);
+  --color-primary-solid-hover: var(--primary-solid-hover);
   --color-primary-interactive: var(--primary-interactive);
   --color-success: var(--success);
   --color-success-foreground: var(--success-foreground);
@@ -86,6 +100,11 @@
      preloads (ADR-005). */
   --font-sans: var(--brand-font-sans);
   --font-mono: var(--brand-font-mono);
+  /* The public display face (ADR-102) — `font-display` as a utility. The
+     engine resolves an unset slot to the SANS key before emitting, so a theme
+     row that predates the field renders exactly as it did; the fallback here
+     covers a page rendered with no brand stylesheet at all. */
+  --font-display: var(--brand-font-display, var(--brand-font-sans));
 
   /* A5.5 — size/line-height pairs. ONE scale for both surfaces (ADR-072,
      superseding ADR-054's reader/admin split). `--type-*` in :root (below)
@@ -190,8 +209,8 @@
   /* Display type — PUBLIC ONLY (ADR-018 rule 6). Separate from the shared
      --text-3xs..5xl ramp above, which both surfaces use (ADR-072), and
      untouched by it. Fluid, so the hero scales without breakpoints. */
-  --text-display-sm: clamp(1.75rem, 1.35rem + 2vw, 2.5rem);
-  --text-display-sm--line-height: 1.2;
+  --text-display-sm: clamp(1.875rem, 1.3rem + 2.4vw, 3rem);
+  --text-display-sm--line-height: 1.1;
   --text-display-md: clamp(2.25rem, 1.6rem + 3.2vw, 3.5rem);
   --text-display-md--line-height: 1.15;
   --text-display-lg: clamp(2.75rem, 1.8rem + 4.8vw, 4.5rem);
@@ -223,10 +242,31 @@
      the spacing-scale incident documented above is the precedent. */
   :root {
     /* Section rhythm — one scale, used by every public section, so nothing
-       hand-rolls its own py-N. Fluid: the low end is the mobile value. */
-    --section-space-sm: clamp(2rem, 4vw, 3rem);
-    --section-space-md: clamp(3rem, 6vw, 5rem);
-    --section-space-lg: clamp(4rem, 8vw, 7rem);
+       hand-rolls its own py-N. Fluid: the low end is the mobile value.
+
+       Tightened in changes-32. The numbers below are PER SECTION and every
+       band pays them TWICE, so what a reader actually sees between two bands
+       is the sum of the lower one's top and the upper one's bottom: the old
+       `lg` scale put 224px of empty page between the explore carousel and the
+       band under it, and 192px between an `lg` and an `md`. That is not
+       breathing room, it is a gap wide enough to read as the end of the page
+       — which is what the owner reported.
+
+       The ratios are unchanged (sm : md : lg stays roughly 1 : 1.4 : 1.8), so
+       the rhythm still says the same thing about which band is a major break;
+       only the amplitude came down, by about a third at the desktop end. The
+       mobile end moves least, because a phone never had the problem: the
+       clamp floor was already close to right and the viewport-relative middle
+       term is what ran away on a wide screen.
+
+       One scale, one edit, every public page — /learn, /news, /tools, /about
+       and the article pages all inherit this. */
+    --section-space-sm: clamp(1.75rem, 3vw, 2.5rem);
+    --section-space-md: clamp(2.5rem, 4.5vw, 3.5rem);
+    --section-space-lg: clamp(3rem, 5.5vw, 4.5rem);
+    /* Heading → content, INSIDE a band. Left alone: the reported gap is
+       between bands, and this one is what keeps a heading attached to what
+       it introduces. */
     --section-gap: clamp(1.5rem, 3vw, 2.5rem);
 
     /* Motion durations. Tailwind v4 has no --duration-* namespace, so these
@@ -266,8 +306,20 @@
        `3-2` a weighted pair, `label-value` a definition list. */
     --grid-main-aside: minmax(0, 1fr) 20rem;
     --grid-main-aside-wide: minmax(0, 1fr) 22rem;
+    /* `prose-aside` is `main-aside` for a page whose main column is PROSE
+       (changes-40): the measure is capped at the narrow container's own
+       768px rather than taking whatever is left, because a definition read
+       across 1080px is a definition nobody finishes. Reading
+       `--container-narrow` rather than restating 768px is what keeps the
+       glossary term page and `Container size="narrow"` the same width. */
+    --grid-prose-aside: minmax(0, var(--container-narrow)) 20rem;
     --grid-2-1: minmax(0, 2fr) minmax(0, 1fr);
+    /* A diverging-bar row: the label, then the two-sided bar (changes-44 #4). */
+    --grid-diverging-row: minmax(0, 14rem) minmax(0, 1fr);
     --grid-3-2: minmax(0, 3fr) minmax(0, 2fr);
+    /* The course page's "Track your progress" band (changes-46): the locked
+       gauge, then the offer beside it. */
+    --grid-gauge-copy: minmax(0, 17rem) minmax(0, 1fr);
     --grid-intro-main: minmax(0, 24rem) 1fr;
     /* 18rem, not 16: at 16 the lesson rail's title column came out ~78px
        after the marker and the panel padding, so a lesson title wrapped one
@@ -275,8 +327,22 @@
        skeleton, which is why widening it is a one-line change. */
     --grid-rail-main: minmax(0, 18rem) minmax(0, 1fr);
     --grid-menu-main: minmax(0, 14rem) 1fr;
+    /* The home page's browse band (changes-35, ADR-116 §1 band C): a narrow
+       intro column, the set itself, and one pick. Not `--grid-intro-main` plus
+       a third track — the last one is a CARD with a minimum width, not a
+       fraction of what is left, and at 1fr it collapsed under the carousel.
+
+       17rem, not the reference's ~14: its left column carries a heading and a
+       button, ours also carries the lead that says what the set IS, and at 14
+       that paragraph came out four words wide. */
+    --grid-home-browse: minmax(0, 17rem) minmax(0, 1fr) minmax(0, 19rem);
     --grid-label-value: max-content 1fr;
     --grid-fill-auto: 1fr auto;
+    /* The admin dashboard's stat tiles (changes-43): permissions decide how
+       many render (one to five), so the row fits whatever arrives instead of
+       a fixed count that orphans a tile or leaves a hole. 13rem is the
+       narrowest a tile holds its figure, caption and bar on one line each. */
+    --grid-stat-tiles: repeat(auto-fit, minmax(13rem, 1fr));
     /* Two equal fields with a control between them — the converter's
        from / swap / to row (changes-25 T7). The middle track is `auto` so the
        button keeps its own width while both fields stay equal. */
@@ -290,11 +356,45 @@
     --width-panel-compact: min(24rem, calc(100vw - 2rem));
     --width-slide-2: calc((100% - 1.25rem) / 2);
     --width-slide-3: calc((100% - 2.5rem) / 3);
+    /* A fourth, on the same 1.25rem track gaps: three gaps, not four — the
+       track has no gap outside its last slide (changes-35, ADR-116 §4). */
+    --width-slide-4: calc((100% - 3.75rem) / 4);
 
     /* Viewport fractions: a centred error/empty page, and a scroll region
        inside a dialog or panel. */
     --height-half-screen: 50vh;
     --height-scroll-panel: 60vh;
+    /* The ⌘K palette (ADR-140 §5): opens 6rem from the top, so it may take
+       the viewport less that and a matching margin below — tall enough to
+       show a whole grouped index, never taller than the screen. `dvh`, so a
+       phone's on-screen keyboard shrinks it rather than hiding its footer. */
+    --height-palette: min(40rem, calc(100dvh - 8rem));
+    /* Every dialog and alert dialog (changes-43): the viewport less a 1rem
+       margin top and bottom, so a long form scrolls between its sticky
+       header and footer instead of running its Save off the screen. `dvh`
+       for the same keyboard reason as the palette. */
+    --dialog-max-h: calc(100dvh - 2rem);
+
+    /* The homepage's full-bleed hero (changes-31): about two thirds of the
+       viewport under the header (changes-43 — a full screen of slider pushed
+       everything else below the fold), floored so it stays usable on a short
+       laptop window in landscape and capped so a tall monitor does not
+       stretch it back to a full screen. `svh`, not `vh` — on mobile Safari
+       `vh` is the LARGEST viewport, so a vh-sized band grows until the
+       address bar collapses, and everything at its bottom edge moves on
+       first scroll. `--header-offset` is the live measurement
+       StickyHeaderShell publishes, so the band still fits when the
+       announcement bar is on.
+
+       changes-46 (owner: "increase more size vertically ... while the small
+       banner will show on page load"): the band now fills the screen under
+       the header EXCEPT the 4.5rem the quick-start panel overhangs it by
+       (`-mt-16` pulls it up; its desktop height is ~7rem) plus a gap, so the
+       whole panel is on screen at first paint instead of being cut by the
+       fold on a laptop window, which the old 34rem floor did at 1366x768.
+       The cap moved to 60rem so a tall monitor still gets a proportionate
+       band rather than a full screen of it. */
+    --height-hero: clamp(30rem, calc(100svh - var(--header-offset) - 4.5rem), 60rem);
 
     /* The home-indicator inset on notched phones, alone and under a 12px pad. */
     --safe-area-bottom: env(safe-area-inset-bottom);
@@ -528,56 +628,78 @@
    * opacity 0 forever. */
 
   @media (prefers-reduced-motion: no-preference) {
+    /* THE path (ADR-104 §2, made two-way by ADR-111) — driven by the observer
+       island. Everything here is gated on [data-reveal-js], so the guarantee
+       above holds: no JS, no attribute, nothing hidden.
+
+       It is a TRANSITION rather than an animation, and that is what makes the
+       two-way behaviour free: the observer adds `.is-visible` on arrival and
+       removes it once the element is entirely gone, and the same declaration
+       plays the move in reverse. An @keyframes animation would need a second
+       set of frames and would restart from the beginning on every re-entry.
+
+       `:not([data-reveal-timeline])` keeps the opt-in scroll-linked elements
+       out of this path entirely; they are handled below and must never be
+       hidden by an observer that is deliberately not watching them. */
+    [data-reveal-js] .reveal:not([data-reveal-timeline]) {
+      opacity: 0;
+      /* Only opacity and transform — never a layout property. An element that
+         animates its height or margin moves the page under the reader and
+         costs CLS on exactly the sections this effect is decorating. */
+      transition:
+        opacity var(--duration-slow) var(--ease-out-quint),
+        transform var(--duration-slow) var(--ease-out-quint);
+    }
+    [data-reveal-js] .reveal-up:not([data-reveal-timeline]) {
+      transform: translateY(var(--reveal-distance));
+    }
+    [data-reveal-js] .reveal-start:not([data-reveal-timeline]) {
+      transform: translateX(calc(-1 * var(--reveal-distance)));
+    }
+    [data-reveal-js] .reveal-end:not([data-reveal-timeline]) {
+      transform: translateX(var(--reveal-distance));
+    }
+    /* translateX has no logical equivalent, so start/end swap by hand
+       in RTL — the one place direction is explicit rather than implied. */
+    [dir="rtl"] [data-reveal-js] .reveal-start:not([data-reveal-timeline]) {
+      transform: translateX(var(--reveal-distance));
+    }
+    [dir="rtl"] [data-reveal-js] .reveal-end:not([data-reveal-timeline]) {
+      transform: translateX(calc(-1 * var(--reveal-distance)));
+    }
+    [data-reveal-js] .reveal-scale:not([data-reveal-timeline]) {
+      transform: scale(0.96);
+    }
+    [data-reveal-js] .reveal.is-visible {
+      opacity: 1;
+      transform: none;
+    }
+
+    /* The opt-in progress-driven path (ADR-104 §2). Was the default until
+       changes-31: it needs no JS at all, but it is a FUNCTION of scroll
+       position rather than an event, so the element sits PART-WAY faded for
+       the whole time it crosses the viewport. That is right for scroll-LINKED
+       motion and wrong for a band of text, which is why it is something a
+       call site asks for by name — and it is still a different effect from
+       ADR-111's two-way transition, which is always either arriving or
+       arrived. */
     @supports (animation-timeline: view()) {
-      .reveal {
+      .reveal[data-reveal-timeline] {
         animation: reveal-fade auto both;
         animation-timeline: view();
         animation-range: entry 0% cover 28%;
       }
-      .reveal-up {
+      .reveal-up[data-reveal-timeline] {
         animation-name: reveal-fade, reveal-up;
       }
-      .reveal-start {
+      .reveal-start[data-reveal-timeline] {
         animation-name: reveal-fade, reveal-start;
       }
-      .reveal-end {
+      .reveal-end[data-reveal-timeline] {
         animation-name: reveal-fade, reveal-end;
       }
-      .reveal-scale {
+      .reveal-scale[data-reveal-timeline] {
         animation-name: reveal-fade, reveal-scale;
-      }
-    }
-
-    @supports not (animation-timeline: view()) {
-      [data-reveal-js] .reveal {
-        opacity: 0;
-        transition:
-          opacity var(--duration-slow) var(--ease-out-quint),
-          transform var(--duration-slow) var(--ease-out-quint);
-      }
-      [data-reveal-js] .reveal-up {
-        transform: translateY(var(--reveal-distance));
-      }
-      [data-reveal-js] .reveal-start {
-        transform: translateX(calc(-1 * var(--reveal-distance)));
-      }
-      [data-reveal-js] .reveal-end {
-        transform: translateX(var(--reveal-distance));
-      }
-      /* translateX has no logical equivalent, so start/end swap by hand
-         in RTL — the one place direction is explicit rather than implied. */
-      [dir="rtl"] [data-reveal-js] .reveal-start {
-        transform: translateX(var(--reveal-distance));
-      }
-      [dir="rtl"] [data-reveal-js] .reveal-end {
-        transform: translateX(calc(-1 * var(--reveal-distance)));
-      }
-      [data-reveal-js] .reveal-scale {
-        transform: scale(0.96);
-      }
-      [data-reveal-js] .reveal.is-visible {
-        opacity: 1;
-        transform: none;
       }
     }
   }
@@ -631,6 +753,50 @@
       transparent 1px
     );
     background-size: 20px 20px;
+  }
+
+  /* The credential screens (AuthSplit). A faint checker under the form
+     column, from currentcolor like .bg-dot-grid so it follows the mode. */
+  .bg-checker {
+    background-image: repeating-conic-gradient(
+      color-mix(in oklab, currentcolor 3%, transparent) 0% 25%,
+      transparent 0% 50%
+    );
+    background-size: 44px 44px;
+  }
+
+  /* The brand panel's light: two brand washes and a corner that falls away,
+     mixed over --secondary so it reads in either mode. Large-area fills only
+     (ADR-018 rule 5). */
+  .auth-panel-glow {
+    background-image:
+      radial-gradient(
+        55% 45% at 85% 12%,
+        color-mix(in oklab, var(--primary) 55%, transparent),
+        transparent
+      ),
+      radial-gradient(
+        50% 40% at 80% 95%,
+        color-mix(in oklab, var(--primary) 45%, transparent),
+        transparent
+      ),
+      radial-gradient(
+        60% 50% at 10% 35%,
+        color-mix(in oklab, var(--secondary-foreground) 10%, transparent),
+        transparent
+      );
+    filter: blur(8px);
+  }
+
+  /* The panel's wordmark: its own ink fading down into the band. */
+  .auth-wordmark {
+    background-image: linear-gradient(
+      to bottom,
+      var(--secondary-foreground) 35%,
+      color-mix(in oklab, var(--secondary-foreground) 55%, transparent)
+    );
+    background-clip: text;
+    color: transparent;
   }
 
   /* Soft ambient glow behind the header/CTA bands — a large-area brand
@@ -790,6 +956,32 @@
     }
   }
 
+  /* An indeterminate progress line (changes-44 #1): the thin bar a table
+     draws along its top edge while its next page is on the way. `.shimmer`'s
+     sweep in the brand hue. Under reduced motion it holds still, a faint
+     full-width line, which still says "working". */
+  .progress-sweep {
+    position: relative;
+    overflow: hidden;
+  }
+  .progress-sweep::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent 0%, var(--primary) 50%, transparent 100%);
+    opacity: 0.6;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .progress-sweep::after {
+      opacity: 1;
+      transform: translateX(-100%);
+      animation: shimmer-sweep 1.1s var(--ease-out-quint) infinite;
+    }
+    [dir="rtl"] .progress-sweep::after {
+      animation-name: shimmer-sweep-rtl;
+    }
+  }
+
   /* A chevron/arrow that nudges toward the reading direction when its group
      is hovered. The host carries `group`; this goes on the glyph. */
   .hover-arrow {
@@ -832,6 +1024,42 @@
       background-color: var(--primary);
       opacity: 0.45;
       animation: pulse-ring 1.6s var(--ease-out-quint) infinite;
+    }
+  }
+
+  /* == Scroll-to-top (changes-44 #2) ================================
+   *
+   * The ring is PROGRESS and fills for everyone: `--scroll-progress` (0–1)
+   * is written by the component from a passive, rAF-throttled listener.
+   * Everything that MOVES — the arrival flash, the breathing glow, the
+   * arrow's nudge — sits behind no-preference, like every other motion here.
+   *
+   * The flash is `pulse-ring`'s halo run twice, on a pseudo-element of the
+   * already-`fixed` button (the positioned host `.pulse-ring` requires). The
+   * glow is a `--primary` box-shadow mixed toward transparent — a token, not
+   * a colour literal (code-style.md #1). */
+  [data-slot="scroll-to-top-progress"] {
+    stroke-dashoffset: calc(100 - var(--scroll-progress, 0) * 100);
+    transition: stroke-dashoffset 120ms linear;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    [data-slot="scroll-to-top"][data-visible] {
+      animation: scroll-top-glow 3s ease-in-out 0.6s infinite;
+    }
+    [data-slot="scroll-to-top"][data-visible]::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      background-color: var(--primary);
+      opacity: 0;
+      pointer-events: none;
+      animation: pulse-ring 0.9s var(--ease-out-quint) 2;
+    }
+    [data-slot="scroll-to-top"]:hover [data-slot="scroll-to-top-arrow"],
+    [data-slot="scroll-to-top"]:focus-visible [data-slot="scroll-to-top-arrow"] {
+      animation: scroll-top-nudge 0.9s var(--ease-out-quint) infinite;
     }
   }
 
@@ -962,12 +1190,99 @@
         alternate;
     }
   }
+
+  /* == The header's entrance (changes-33, ADR-111 §4) ==============
+   *
+   * "The menu should also show the late loading for the whole site."
+   *
+   * An ANIMATION, not a `.reveal`, and not because it is easier: the header
+   * is `position: sticky` and therefore never leaves the viewport, so the
+   * observer would add `.is-visible` on the first frame and never remove it
+   * — the reveal machinery would be doing nothing at all. What is wanted
+   * here is an entrance on page load, which is what an animation IS.
+   *
+   * Applied to the <header> INSIDE `StickyHeaderShell`, never to the shell
+   * itself: a transform on the sticky element's own wrapper is how a sticky
+   * bar stops sticking. `translateY` only while it plays; the final frame is
+   * `none`, so no containing block survives the 450ms to catch a portalled
+   * popup.
+   *
+   * It runs once per document load, not once per navigation: the header
+   * element persists across client-side routing, so the app router never
+   * remounts it. */
+  @media (prefers-reduced-motion: no-preference) {
+    .header-enter {
+      animation: header-enter var(--duration-slow) var(--ease-out-quint) both;
+    }
+  }
+
+  /* == A floated panel rising into place on load (changes-46) =====
+   *
+   * The homepage quick-start panel. It is ON SCREEN at first paint (the
+   * hero's height leaves room for it), so it gets a short load entrance, not
+   * a scroll `Reveal` — a reveal would hold it invisible until an observer
+   * fired. `both` + a small delay so it lands just after the hero copy; the
+   * final frame is `none`, so no transform outlives the animation. */
+  @media (prefers-reduced-motion: no-preference) {
+    .rise-enter {
+      animation: rise-enter var(--duration-slow) var(--ease-out-quint) 120ms both;
+    }
+  }
+
+  /* == The page's entrance on every navigation (changes-45) ========
+   *
+   * "Smooth page loading when moving to the next or back pages." Applied by
+   * the public `template.tsx`, which the app router REMOUNTS on every
+   * navigation — unlike the layout, whose header and footer persist — so the
+   * content between them fades in each time a new page arrives, forward or
+   * back.
+   *
+   * OPACITY ONLY, and `backwards` fill, both on purpose. This wraps the whole
+   * page, and a transform on it would make it the containing block for every
+   * `position: fixed` element inside (the lesson pager, the reading-progress
+   * bar) while it plays; `both` would keep a finished animation "in effect"
+   * after the last frame. `backwards` applies the first frame only during the
+   * short delay-free start and leaves nothing behind once it ends. The scroll
+   * reveals inside the page still do their own movement. */
+  @media (prefers-reduced-motion: no-preference) {
+    .page-enter {
+      animation: page-enter var(--duration-base) var(--ease-out-quint) backwards;
+    }
+  }
 }
 
 /* Keyframes for the reveal and marquee utilities above. Deliberately at top
    level, not inside @layer — @keyframes is not layered, and nesting it in
    one reads as though it were. Transform and opacity only: nothing here
    triggers layout. */
+@keyframes page-enter {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes rise-enter {
+  from {
+    opacity: 0;
+    transform: translateY(1rem);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes header-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 @keyframes pulse-ring {
   from {
     transform: scale(1);
@@ -976,6 +1291,32 @@
   to {
     transform: scale(2.4);
     opacity: 0;
+  }
+}
+
+/* Scroll-to-top (changes-44 #2): a breathing brand glow, and the arrow's
+   upward nudge on hover. */
+@keyframes scroll-top-glow {
+  0%,
+  100% {
+    box-shadow:
+      var(--shadow-float),
+      0 0 0 0 color-mix(in oklab, var(--primary) 0%, transparent);
+  }
+  50% {
+    box-shadow:
+      var(--shadow-float),
+      0 0 1.25rem 0.25rem color-mix(in oklab, var(--primary) 45%, transparent);
+  }
+}
+
+@keyframes scroll-top-nudge {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-0.2rem);
   }
 }
 
@@ -1279,12 +1620,31 @@
   background-color: var(--muted);
 }
 
-/* Families: two of the three are the theme's own (ADR-039 brand sans,
-   ADR-005 curated mono). The serif is a generic stack — a family name is
-   not a colour literal, and adding a fourth webfont to the public bundle
-   for an occasional pull-quote is not a trade worth making. */
+/* Families: three of the four are the theme's OWN — the brand sans an admin
+   picked in Theme → Layout (ADR-072), the display face beside it (ADR-102),
+   and the curated mono (ADR-005). None is spelled out here, so an admin who
+   changes the brand typeface changes what `.ed-ff-body` renders in, on every
+   article already written.
+
+   `.ed-ff-display` is changes-40's addition: the public site's heading face
+   was reachable from every masthead and from no editor, so a pull quote meant
+   to match a heading could only approximate it.
+
+   The serif stays a GENERIC stack — a family name is not a colour literal,
+   and adding another webfont to the public bundle for an occasional pull
+   quote is not a trade worth making.
+
+   `.ed-ff-sans` survives for CONTENT ALREADY SAVED. The mark was renamed to
+   `body` in changes-40 (a menu entry called "Sans" says nothing about which
+   sans), and every `<span class="ed-ff-sans">` in a published article would
+   otherwise have lost its family on the next render — a stored class is
+   data, and renaming it in the registry does not rewrite the database. */
+.ed-ff-body,
 .ed-ff-sans {
   font-family: var(--font-sans);
+}
+.ed-ff-display {
+  font-family: var(--font-display);
 }
 .ed-ff-serif {
   font-family: Georgia, "Times New Roman", "Noto Serif", serif;

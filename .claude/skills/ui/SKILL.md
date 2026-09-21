@@ -139,3 +139,89 @@ component or variant is added THERE in the same change, and every string it
 shows is an `admin.designSystem.*` key (`admin-design-system.test.ts` fails on
 a missing one). It replaced the dev-only kitchen sink, which is deleted. Zero
 physical-property utilities in the repo.
+
+## A reveal replays (changes-33, ADR-111 — supersedes ADR-104 §1)
+
+The observer no longer unobserves, and `.is-visible` comes off again when the
+element is gone.
+
+- **Two thresholds, and the asymmetry is the design.** Arriving needs the
+  element's own threshold; leaving needs `intersectionRatio === 0`. A single
+  threshold has a failure run-once could never reach: an element taller than
+  the viewport can never show 15% of itself and would fade out from under a
+  reader still in the middle of it. Both ratios must be in the `threshold`
+  ARRAY — that array is the set of ratios that fire a callback, not a filter.
+- `rootMargin` is symmetric (`-10% 0px -10% 0px`). One-way, an element
+  re-entering through the top snapped in at the viewport edge.
+- **The header's entrance is `.header-enter`, an animation, not a `.reveal`.**
+  A sticky header never leaves the viewport, so the observer would mark it on
+  the first frame and never unmark it. It goes on the `<header>` INSIDE
+  `StickyHeaderShell` — a transform on the sticky element's own wrapper is how
+  a sticky bar stops sticking.
+- A `delay` is a `transition-delay`, so it applies in BOTH directions now.
+  `RevealGroup`'s `maxDelay` cap matters more than it did.
+- The `timeline` opt-in is unchanged and is still a DIFFERENT effect:
+  progress-driven means part-way faded at every point in between.
+
+## CurriculumList's section header (changes-33)
+
+The header carries the section's **ordinal**, the title at
+`text-base font-semibold`, and the count as `Badge variant="pill"`.
+
+**One accent, never a hue per section.** Cycling `success`/`warning`/`info`
+would be decoration that looks like meaning — those three already carry
+difficulty and lesson state on the same pages. The count is `pill` (neutral
+card metadata) for the same reason: a lesson count is not a status.
+`curriculum-list.test.tsx` fails on any of the three tonal backgrounds
+appearing in a section header.
+
+ADR-082's two structural rules are untouched and still guarded: the timeline
+marker stays OUTSIDE the anchor, and nothing between the title and the `<li>`
+may be positioned.
+
+## A masthead shows its photograph (changes-36, ADR-117)
+
+`PageHero`'s `tone` is OPTIONAL. It resolves to **`photo` when a `backdrop`
+is supplied** and `brand` when one is not; an explicit `tone` always wins.
+
+A default that keys off another prop, deliberately: a masthead that was given
+artwork is a masthead whose job is to show it, and nine call sites that each
+have to remember a tone name is nine chances to add the tenth photographic
+masthead under a fill again.
+
+**`photo` is `--secondary` / `--secondary-foreground`** — the pair the
+homepage hero and the footer already run on. Not because it is neutral (it is
+light in light mode, dark in dark mode) but because it is a fill the engine
+has derived an ink AGAINST, which is the only property that matters when the
+thing actually behind the words is a photograph.
+
+- The backdrop renders at **full strength** under `photo`. The `opacity-25`
+  ceiling stays for every other tone, where art sits under a fill.
+- **The scrim carries the contrast**, built from `--secondary` at varying
+  alpha. Two shapes, and the asymmetry is the design: a start-aligned band's
+  scrim is opaque at the inline start and clears COMPLETELY on the other side
+  (so the reader sees the picture, not a tint of it); a centred band gets a
+  vertical one, softest through the middle. Flipped by hand under
+  `[dir="rtl"]`, like `.reveal-start`.
+- The start-aligned copy column is capped `md:max-w-3xl` so a headline cannot
+  walk out of the opaque half.
+- **The brand colour moved to the button.** A masthead's primary action is the
+  default filled `Button` (small element, own paired ink — ADR-018 rule 5's
+  allowed case); the second takes `Button variant="inverted"`.
+- A band with **no artwork keeps `brand`** — `/sitemap`,
+  `/economic-calendar`, `ComingSoon`, the eight tool pages.
+- **A missing piece of art now yields a plain `--secondary` band**, not the
+  brand gradient: `backdrop={<XBackdrop …/>}` is a JSX element, so it is
+  truthy even when the component returns `null`.
+
+Guarded by the `PageHero — the photo tone` block in
+`about-primitives.test.tsx` and the `inverted` block in `button.test.tsx`.
+
+## `Button variant="inverted"` (changes-36)
+
+The button for a band that IS `--secondary`: the homepage hero, a photographic
+masthead, the footer, the connect band. `outline` is a pale chip there
+(`border-input bg-background`) and `secondary` is a control the same colour as
+the surface under it. This is opacities of `--secondary-foreground`, readable
+on `--secondary` by construction — the 200-character class string four call
+sites had each written out, once.

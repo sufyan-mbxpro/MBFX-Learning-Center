@@ -13,12 +13,21 @@
 import { z } from "zod";
 
 /**
- * Where an address came from. It is a closed set rather than free text
- * because the four values ARE the four placements (ADR-080 #5) and the admin
- * screen filters on them — a fifth placement is a code change that lands
- * here, its setting key and its render site together.
+ * Where the public FORM is drawn. A closed set rather than free text because
+ * the four values ARE the four placement settings (ADR-080 #5) — a fifth
+ * placement is a code change that lands here, its setting key and its render
+ * site together. The anonymous form may only ever claim one of these.
  */
-export const NEWSLETTER_SOURCES = ["footer", "home", "news", "analysis"] as const;
+export const NEWSLETTER_PLACEMENTS = ["footer", "home", "news", "analysis"] as const;
+export type NewsletterPlacement = (typeof NEWSLETTER_PLACEMENTS)[number];
+
+/**
+ * Where an address came from: a placement, the sign-up checkbox, or an
+ * administrator (ADR-124). Wider than the placements on purpose — `signup`
+ * and `admin` have no setting and no form, so nothing that takes a placement
+ * may accept them, while the admin screen filters on all six.
+ */
+export const NEWSLETTER_SOURCES = [...NEWSLETTER_PLACEMENTS, "signup", "admin"] as const;
 export type NewsletterSource = (typeof NEWSLETTER_SOURCES)[number];
 
 export const SUBSCRIBER_STATUSES = ["PENDING", "ACTIVE", "UNSUBSCRIBED"] as const;
@@ -46,7 +55,7 @@ export const NEWSLETTER_HONEYPOT_FIELD = "website";
 export const newsletterSubscribeSchema = z.object({
   email: z.string().trim().toLowerCase().pipe(z.email().max(255)),
   locale: z.string().min(2).max(10),
-  source: z.enum(NEWSLETTER_SOURCES),
+  source: z.enum(NEWSLETTER_PLACEMENTS),
   /** Absent or empty for a human. Any value refuses the write. */
   [NEWSLETTER_HONEYPOT_FIELD]: z.string().max(255).optional(),
 });
@@ -95,3 +104,27 @@ export type SubscriberExportFilter = z.infer<typeof subscriberExportSchema>;
 
 /** A row action on the admin screen. */
 export const subscriberIdSchema = z.object({ id: z.string().min(1).max(64) });
+
+/**
+ * The sign-up checkbox's opt-in (ADR-124). No address and no user id: the
+ * only address this can subscribe is the one on the SESSION, so there is
+ * nothing here a caller could point at somebody else's mailbox.
+ */
+export const newsletterAccountOptInSchema = z.object({
+  locale: z.string().min(2).max(10),
+});
+
+export type NewsletterAccountOptInInput = z.infer<typeof newsletterAccountOptInSchema>;
+
+/**
+ * "Add subscriber" on the admin screen (ADR-124). The address is lower-cased
+ * here for the reason `newsletterSubscribeSchema` gives: the unique
+ * constraint must see the string the admin typed the way the form would have
+ * sent it. The locale decides which language the confirmation email is in.
+ */
+export const adminAddSubscriberSchema = z.object({
+  email: z.string().trim().toLowerCase().pipe(z.email().max(255)),
+  locale: z.string().min(2).max(10),
+});
+
+export type AdminAddSubscriberInput = z.infer<typeof adminAddSubscriberSchema>;

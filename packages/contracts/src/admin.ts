@@ -129,6 +129,34 @@ export const updateOwnProfileSchema = z.object({
 });
 export type UpdateOwnProfileInput = z.infer<typeof updateOwnProfileSchema>;
 
+// ─── Admin user record (changes-45, ADR-142) ─────────────────
+
+/** "Login as user": the one field the start endpoint accepts. */
+export const impersonateUserSchema = z.object({ userId: z.string().min(1).max(64) });
+export type ImpersonateUserInput = z.infer<typeof impersonateUserSchema>;
+
+/**
+ * The admin user page's "Edit details" dialog. Only columns the User row
+ * actually has — the reference's address, city and KYC fields describe a
+ * brokerage account, and a field that saves nowhere is code-style #28's bug.
+ * `name` is derived from first + last by the service, as the learner's own
+ * profile form does.
+ *
+ * changes-46: the address is editable too. Lower-cased and trimmed here, as
+ * newsletter signup does and as Better Auth stores a sign-up, so "Ada@X.com"
+ * and "ada@x.com" cannot become two accounts through this dialog.
+ */
+export const adminUpdateUserSchema = z.object({
+  userId: z.string().min(1).max(64),
+  email: z.string().trim().toLowerCase().pipe(z.email().max(255)),
+  firstName: z.string().trim().min(1).max(100),
+  lastName: z.string().trim().max(100),
+  phone: z.string().trim().max(32),
+  status: z.enum(["ACTIVE", "INACTIVE", "SUSPENDED", "PENDING_VERIFICATION"]),
+  emailVerified: z.boolean(),
+});
+export type AdminUpdateUserInput = z.infer<typeof adminUpdateUserSchema>;
+
 // ─── Theme ───────────────────────────────────────────────────
 
 export const hexColorSchema = z.string().regex(/^#[0-9A-Fa-f]{6}$/, "6-digit hex color");
@@ -167,6 +195,11 @@ const layoutTokensSchema = z.object({
   containerWidth: z.string().trim().min(1).max(20),
   fontSans: z.string().trim().min(1).max(200),
   fontMono: z.string().trim().min(1).max(200),
+  // ADR-102. Optional for the same reason baseFontSize is: every Theme row
+  // that exists predates the field, and requiring it would reject saves this
+  // change was never scoped to touch. Absent resolves to fontSans at the read
+  // layer, so an old row keeps rendering exactly as it does today.
+  fontDisplay: z.string().trim().min(1).max(200).optional(),
   baseFontSize: z.string().trim().min(1).max(20).optional(),
 });
 
@@ -179,6 +212,19 @@ export const saveThemeSchema = z.object({
   layoutTokens: layoutTokensSchema,
 });
 export type SaveThemeSchemaInput = z.infer<typeof saveThemeSchema>;
+
+/**
+ * "Save as preset" (changes-46): the editor's current tokens under a new
+ * name. The same token schemas as a save, so a preset cannot hold a palette a
+ * save would refuse; the key is derived by the service, never typed.
+ */
+export const saveThemePresetSchema = saveThemeSchema.omit({ themeKey: true }).extend({
+  name: z.string().trim().min(1).max(100),
+  description: z.string().trim().max(500),
+});
+export type SaveThemePresetInput = z.infer<typeof saveThemePresetSchema>;
+
+export const themePresetKeySchema = z.string().trim().min(1).max(50);
 
 // ─── Users listing filters & admin search ────────────────────
 

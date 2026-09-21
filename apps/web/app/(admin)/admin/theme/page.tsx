@@ -1,7 +1,7 @@
 import { getTranslations } from "next-intl/server";
 import { loadActiveThemeTokens, loadBrandAssets, loadThemePresets } from "@repo/core";
 import { requirePermission } from "@repo/rbac";
-import { BRAND_FIELD_REGISTRY, CURATED_FONTS, deriveInteractive } from "@repo/theme";
+import { BRAND_FIELD_REGISTRY, CURATED_FONTS, deriveInteractive, validateTheme } from "@repo/theme";
 import { ThemeEditor } from "./theme-editor.tsx";
 import { AdminSection } from "../_components/admin-page.tsx";
 import { SettingsScreen } from "../settings/_components/settings-screen.tsx";
@@ -34,9 +34,16 @@ export default async function ThemePage() {
     >
       <AdminSection>
         <ThemeEditor
+          // Keyed by the active row: activating a preset re-renders this page
+          // with another theme's tokens, and the editor's local state must
+          // start again from them rather than keep the previous theme's.
+          key={tokens.themeKey}
           themeKey={tokens.themeKey}
           initial={{ brand, light, dark, overrides, layout }}
           derived={derived}
+          // The saved palette's advisories on arrival (changes-46), not only
+          // after the next Save — the same server-side check the save runs.
+          initialIssues={validateTheme(brand, light, dark, overrides).issues}
           presets={presets}
           brandAssets={{
             logo_light: brandAssets.logo_light?.url ?? null,
@@ -86,6 +93,7 @@ export default async function ThemePage() {
               containerWidth: t("themeFieldContainerWidth"),
               baseFontSize: t("themeFieldBaseFontSize"),
               fontSans: t("themeFieldFontSans"),
+              fontDisplay: t("themeFieldFontDisplay"),
               fontMono: t("themeFieldFontMono"),
             },
           }}

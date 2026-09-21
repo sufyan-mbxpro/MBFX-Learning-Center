@@ -36,9 +36,11 @@ import {
   updateSocialLinkAction,
 } from "../../_actions/admin-actions.ts";
 import { AdminCombobox } from "../../_components/combobox.tsx";
+import { RowSwitch } from "../../_components/row-switch.tsx";
 import { useClientTable } from "../../_hooks/use-client-table.ts";
 import { useFieldErrors } from "../../_hooks/use-field-errors.ts";
 import { useServerAction } from "../../_hooks/use-server-action.ts";
+import { HeaderActions } from "../../_components/header-actions.tsx";
 
 export interface SocialLinkRow {
   platform: string;
@@ -261,13 +263,10 @@ export function SocialLinksManager({
         meta: { label: labels.active },
         enableSorting: false,
         cell: ({ row }) => (
-          <Switch
+          <RowSwitch
             aria-label={`${labels.active}: ${row.original.label}`}
             checked={row.original.isActive}
-            disabled={pending}
-            onCheckedChange={(next) =>
-              run(() => toggleSocialLinkAction(row.original.platform, next === true))
-            }
+            onToggle={(next) => toggleSocialLinkAction(row.original.platform, next)}
           />
         ),
       },
@@ -309,17 +308,18 @@ export function SocialLinksManager({
         ),
       },
     ],
-    [labels, pending, run, openEdit],
+    [labels, run, openEdit],
   );
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex justify-end">
+      {/* ADR-140 §3: the primary action sits on the page heading's row, not in
+          the table toolbar; the dialog it opens stays owned here. */}
+      <HeaderActions>
         <Button onClick={openCreate}>
           <Plus data-icon="inline-start" aria-hidden /> {labels.add}
         </Button>
-      </div>
-
+      </HeaderActions>
       <DataTable
         columns={columns}
         labels={tableLabels}

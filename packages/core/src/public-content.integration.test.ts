@@ -167,6 +167,78 @@ describe("loadGlossaryTermBySlug", () => {
   });
 });
 
+// ADR-127: a glossary term read in another language without changing the site's.
+// changes-29 B3 reaches the glossary term editor.
+describe("saveGlossaryTranslation machine flag", () => {
+  it("saves an AI translation as MACHINE_TRANSLATED until a human saves it", async () => {
+    const termId = await publishedTerm("Rollover");
+    const save = (machineTranslated?: boolean) =>
+      content.saveGlossaryTranslation(actor, {
+        termId,
+        locale: "es",
+        term: "Renovación",
+        simpleExplanation: "<p>Explicación</p>",
+        ...(machineTranslated ? { machineTranslated } : {}),
+      });
+    const status = async () =>
+      (
+        await db.glossaryTermTranslation.findUniqueOrThrow({
+          where: { termId_locale: { termId, locale: "es" } },
+        })
+      ).translationStatus;
+
+    await save(true);
+    expect(await status()).toBe("MACHINE_TRANSLATED");
+    await save();
+    expect(await status()).toBe("TRANSLATED");
+  });
+});
+
+describe("loadGlossaryTermBySlug reading language", () => {
+  it("reads a human RTL translation by ?lang=, keeps the URL's slug, and ignores a machine one", async () => {
+    const termId = await publishedTerm("Spread");
+    const { slug } = await db.glossaryTermTranslation.findFirstOrThrow({
+      where: { termId, locale: "en" },
+      select: { slug: true },
+    });
+    await db.glossaryTermTranslation.create({
+      data: {
+        termId,
+        locale: "ar",
+        term: "الفارق",
+        slug: `${slug}-ar`,
+        simpleExplanation: "<p>شرح</p>",
+        translationStatus: "TRANSLATED",
+      },
+    });
+    await db.glossaryTermTranslation.create({
+      data: {
+        termId,
+        locale: "es",
+        term: "Diferencial",
+        slug: `${slug}-es`,
+        simpleExplanation: "<p>máquina</p>",
+        translationStatus: "MACHINE_TRANSLATED",
+      },
+    });
+
+    const reading = await pub.loadGlossaryTermBySlug("en", slug, "ar");
+    expect(reading?.term).toBe("الفارق");
+    expect(reading?.slug).toBe(slug);
+    expect(reading?.readingLocale).toBe("ar");
+    expect(reading?.contentLocale).toBe("ar");
+    expect(reading?.contentDirection).toBe("rtl");
+    expect(reading?.readingLanguages.map((l) => l.locale)).toEqual(["en", "ar"]);
+
+    for (const lang of [undefined, "es", "fr"]) {
+      const view = await pub.loadGlossaryTermBySlug("en", slug, lang);
+      expect(view?.term).toBe("Spread");
+      expect(view?.readingLocale).toBeNull();
+      expect(view?.contentDirection).toBe("ltr");
+    }
+  });
+});
+
 describe("loadGlossarySitemapEntries", () => {
   it("feeds every published translation's locale+slug and nothing unpublished", async () => {
     const entries = await pub.loadGlossarySitemapEntries();

@@ -8,10 +8,20 @@
 // lockout hooks and the session cookies all live on those endpoints
 // (ADR-001 finding #4), so a server action wrapping the same logic would
 // quietly lose all three.
+import { rememberSession } from "./session-hint.ts";
 
-/** What the credential POST returns — `userType` drives the surface check. */
+/**
+ * What the credential POST returns — `userType` drives the surface check.
+ *
+ * `twoFactor` (ADR-123): the password was right, the account has two-factor
+ * on, and Better Auth has NOT created a session — it set a short-lived
+ * challenge cookie instead. The screen must ask for a code and call
+ * `verifyTwoFactorSignIn`; navigating on would land a signed-out reader.
+ */
 export type SignInResult =
-  { status: "ok"; userType: "LEARNER" | "STAFF" | null } | { status: "failed" };
+  | { status: "ok"; userType: "LEARNER" | "STAFF" | null }
+  | { status: "twoFactor" }
+  | { status: "failed" };
 
 /**
  * `userType` is one of `@repo/auth`'s `additionalFields`, and Better Auth
@@ -30,12 +40,61 @@ export async function signInWithPassword(email: string, password: string): Promi
   });
   if (!response.ok) return { status: "failed" };
 
-  const body = (await response.json().catch(() => null)) as { user?: { userType?: string } } | null;
+  const body = (await response.json().catch(() => null)) as {
+    user?: { userType?: string };
+    twoFactorRedirect?: boolean;
+  } | null;
+  if (body?.twoFactorRedirect === true) return { status: "twoFactor" };
   const userType = body?.user?.userType;
   return {
     status: "ok",
     userType: userType === "STAFF" || userType === "LEARNER" ? userType : null,
   };
+}
+
+export type TwoFactorSignInResult =
+  | { status: "ok"; userType: "LEARNER" | "STAFF" | null }
+  | { status: "invalidCode" }
+  | { status: "expired" }
+  | { status: "failed" };
+
+/**
+ * The second step of a two-factor sign-in: the authenticator code, checked
+ * against the challenge cookie the credential POST set. Better Auth's own
+ * endpoint, so its per-challenge attempt cap and per-account lockout apply
+ * (ADR-001 #4).
+ *
+ * `expired` is the challenge itself gone (ten minutes, or too many wrong
+ * codes): the reader has to start again from the password, which a wrong-code
+ * message would not tell them.
+ */
+export async function verifyTwoFactorSignIn(code: string): Promise<TwoFactorSignInResult> {
+  const response = await fetch("/api/auth/two-factor/verify-totp", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code }),
+  }).catch(() => null);
+  if (!response) return { status: "failed" };
+
+  const body = (await response.json().catch(() => null)) as {
+    user?: { userType?: string };
+    code?: string;
+  } | null;
+  if (response.ok) {
+    const userType = body?.user?.userType;
+    return {
+      status: "ok",
+      userType: userType === "STAFF" || userType === "LEARNER" ? userType : null,
+    };
+  }
+  if (body?.code === "INVALID_CODE") return { status: "invalidCode" };
+  if (
+    body?.code === "INVALID_TWO_FACTOR_COOKIE" ||
+    body?.code === "TOO_MANY_ATTEMPTS_REQUEST_NEW_CODE"
+  ) {
+    return { status: "expired" };
+  }
+  return { status: "failed" };
 }
 
 export type SignUpResult = { status: "ok" } | { status: "taken" } | { status: "failed" };
@@ -95,6 +154,9 @@ export async function signOut(): Promise<boolean> {
     headers: { "content-type": "application/json" },
     body: "{}",
   });
+  // ADR-124 §3: forget the pre-paint "signed in" hint, so the page this
+  // sign-out navigates to shows its subscribe bands at first paint.
+  if (response.ok) rememberSession(false);
   return response.ok;
 }
 

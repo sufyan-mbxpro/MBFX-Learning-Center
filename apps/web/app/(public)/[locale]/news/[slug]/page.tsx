@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { alternatesFor, descriptionFrom, shareMetadata } from "../../../../_lib/seo.ts";
+import { siteUrl } from "../../../../_lib/site-url.ts";
 import Image from "next/image";
 import { notFound, permanentRedirect } from "next/navigation";
 import { UserRound } from "lucide-react";
@@ -11,7 +13,8 @@ import {
   getRelatedArticles,
   type ArticleView,
 } from "@repo/core";
-import { parseVideoUrl } from "@repo/utils";
+import { formatDate, parseVideoUrl } from "@repo/utils";
+import { getServableLocales } from "@repo/i18n";
 import { LOCALE_DIRECTION, routing } from "@repo/i18n/routing";
 import { Link } from "@repo/i18n/navigation";
 import { getSetting, isFeatureVisible } from "@repo/settings";
@@ -25,8 +28,13 @@ import { FaqPanel } from "@repo/ui/components/faq-panel";
 import { KeyTakeaways } from "@repo/ui/components/key-takeaways";
 import { RichText } from "@repo/ui/components/rich-text";
 import { ListingHeader } from "../_components/listing-header.tsx";
+import { ReadBeacon } from "../_components/read-beacon.tsx";
 import { ShareRow } from "../_components/share-row.tsx";
+import { ReadingLanguageMenu } from "../../_components/reading-language-menu.tsx";
+import { canOptimizeImage } from "../../_lib/image-optimizer.ts";
+import { readingLanguageOptions, readingLocaleFrom } from "../../_lib/reading-language.ts";
 import { VideoFacade } from "../../_components/video-facade.tsx";
+import { CHIP_LINK } from "@repo/ui/lib/surfaces";
 
 function featureKeyFor(view: ArticleView): "news" | "analysis" {
   return view.kind === "NEWS" ? "news" : "analysis";
@@ -34,38 +42,41 @@ function featureKeyFor(view: ArticleView): "news" | "analysis" {
 
 export async function generateMetadata({
   params,
+  searchParams,
 }: PageProps<"/[locale]/news/[slug]">): Promise<Metadata> {
   const { locale, slug } = await params;
   setRequestLocale(locale);
-  const [view, template, defaultOgImage] = await Promise.all([
-    getArticleBySlug(locale, slug),
+  const readingLocale = readingLocaleFrom(await searchParams);
+  const [view, template, tCommon] = await Promise.all([
+    getArticleBySlug(locale, slug, readingLocale),
     getSetting("seo.titleTemplate"),
-    getSetting("seo.defaultOgImage"),
+    getTranslations({ locale, namespace: "common" }),
   ]);
   if (!view) return {};
 
-  const languages = Object.fromEntries(
-    view.alternates.map((alt) => [
-      alt.locale,
-      articlePath(alt.locale, routing.defaultLocale, alt.slug),
-    ]),
-  );
-
-  // OG image fallback chain (ADR-015 #7): article OG → cover → site default.
-  const ogImage = view.ogImageUrl ?? view.coverImageUrl ?? defaultOgImage ?? undefined;
+  // OG image fallback chain (ADR-015 #7): article OG → cover → site default,
+  // the last step being `shareMetadata`'s.
+  const ogImage = view.ogImageUrl ?? view.coverImageUrl ?? null;
+  const ownPath = articlePath(locale, routing.defaultLocale, slug);
   // changes-07: OG/Twitter overrides fall back through the SEO fields to the
   // article itself — a null override means "inherit", never "render empty".
   const ogTitle = view.ogTitle ?? view.seoTitle ?? view.title;
   const ogDescription = view.ogDescription ?? view.seoDescription ?? view.excerpt ?? undefined;
-  const twitterImage = view.twitterImageUrl ?? ogImage;
 
   return {
     title: (template ?? "%s").replace("%s", view.seoTitle ?? view.title),
-    description: view.seoDescription ?? view.excerpt ?? undefined,
-    alternates: {
-      languages,
-      ...(view.canonicalUrl ? { canonical: view.canonicalUrl } : {}),
-    },
+    ...descriptionFrom(view.seoDescription, view.excerpt),
+    alternates: await alternatesFor({
+      // ADR-127 #4: a reading view points back at the article's own URL. An
+      // editor's canonical override wins otherwise, and the page's own URL is
+      // the default — a page with no canonical invites every `?utm_` variant
+      // to count as its own.
+      canonical: view.readingLocale ? ownPath : (view.canonicalUrl ?? ownPath),
+      languages: view.alternates.map((alt) => ({
+        locale: alt.locale,
+        href: articlePath(alt.locale, routing.defaultLocale, alt.slug),
+      })),
+    }),
     // index and follow are now INDEPENDENT (changes-07): the editor exposes
     // them as two checkboxes, so noIndex no longer implies nofollow.
     //
@@ -73,31 +84,40 @@ export async function generateMetadata({
     // merges parent and child metadata by iterating the child's PRESENT keys,
     // and `resolveRobots(undefined)` is null — so the key being there at all
     // erases the root layout's site-wide directive.
-    ...(view.noIndex || view.noFollow
-      ? { robots: { index: !view.noIndex, follow: !view.noFollow } }
-      : {}),
-    openGraph: {
+    //
+    // ADR-127 #4: a `?lang=` reading view is never indexed — it is this
+    // article's words under another language's chrome, and a language that
+    // earns an index gets its own locale URL when it is activated.
+    ...(view.readingLocale
+      ? { robots: { index: false, follow: !view.noFollow } }
+      : view.noIndex || view.noFollow
+        ? { robots: { index: !view.noIndex, follow: !view.noFollow } }
+        : {}),
+    ...(await shareMetadata({
+      locale,
+      siteName: tCommon("siteName"),
+      url: ownPath,
       type: "article",
       title: ogTitle,
       description: ogDescription,
-      publishedTime: view.publishedAt?.toISOString(),
+      image: ogImage,
+      ...(view.publishedAt ? { publishedTime: view.publishedAt.toISOString() } : {}),
       modifiedTime: view.updatedAt.toISOString(),
-      images: ogImage ? [{ url: ogImage }] : undefined,
-    },
-    twitter: {
-      card: view.twitterCard === "summary" ? "summary" : "summary_large_image",
-      title: ogTitle,
-      description: ogDescription,
-      images: twitterImage ? [twitterImage] : undefined,
-    },
+      twitterCard: view.twitterCard === "summary" ? "summary" : "summary_large_image",
+      twitterImage: view.twitterImageUrl,
+    })),
   };
 }
 
-export default async function ArticlePage({ params }: PageProps<"/[locale]/news/[slug]">) {
+export default async function ArticlePage({
+  params,
+  searchParams,
+}: PageProps<"/[locale]/news/[slug]">) {
   const { locale, slug } = await params;
   setRequestLocale(locale);
 
-  const view = await getArticleBySlug(locale, slug);
+  const readingLocale = readingLocaleFrom(await searchParams);
+  const view = await getArticleBySlug(locale, slug, readingLocale);
 
   if (!view) {
     // Old slug? articles.ts wrote a 301 row when it changed.
@@ -108,13 +128,23 @@ export default async function ArticlePage({ params }: PageProps<"/[locale]/news/
 
   if (!(await isFeatureVisible(featureKeyFor(view), null))) notFound();
 
-  const [t, disclaimer, showAuthor, showReadingTime, relatedCount] = await Promise.all([
+  // No risk disclaimer under the article any more (ADR-119, changes-36): the
+  // owner took it off every page.
+  const [t, showAuthor, showReadingTime, relatedCount, servableLocales] = await Promise.all([
     getTranslations(),
-    getSetting("legal.riskDisclaimer"),
     getSetting("articles.showAuthor"),
     getSetting("articles.showReadingTime"),
     getSetting("articles.relatedCount"),
+    getServableLocales(),
   ]);
+  const readingOptions = readingLanguageOptions({
+    languages: view.readingLanguages,
+    contentLocale: view.locale,
+    interfaceLocale: locale,
+    servable: servableLocales,
+    currentPath: `/news/${slug}`,
+    pathFor: (language) => `/news/${language.slug}`,
+  });
   // Same kind grouping as the listing pages (ADR-015 #11: analysis + trade
   // ideas share one feed) — the sidebar facets match whichever feed this
   // article belongs to, not just its own single kind.
@@ -127,10 +157,13 @@ export default async function ArticlePage({ params }: PageProps<"/[locale]/news/
       : Promise.resolve([]),
     getArticleFacets(locale, { kinds: [...sidebarKinds] }),
   ]);
-
-  const dateFormat = new Intl.DateTimeFormat(locale, { dateStyle: "long" });
   const video = view.videoUrl ? parseVideoUrl(view.videoUrl) : null;
   const backHref = view.kind === "NEWS" ? "/news" : "/analysis";
+
+  const tCommon = await getTranslations({ locale, namespace: "common" });
+  const origin = siteUrl();
+  const absolute = (url: string) => (url.startsWith("http") ? url : `${origin}${url}`);
+  const articleUrl = `${origin}${articlePath(locale, routing.defaultLocale, view.slug)}`;
 
   // JSON-LD (ADR-015 #11): NewsArticle for news, AnalysisNewsArticle for
   // analysis/trade ideas — values are our own sanitized/plain columns.
@@ -138,10 +171,18 @@ export default async function ArticlePage({ params }: PageProps<"/[locale]/news/
     "@context": "https://schema.org",
     "@type": view.kind === "NEWS" ? "NewsArticle" : "AnalysisNewsArticle",
     headline: view.title,
-    description: view.seoDescription ?? view.excerpt ?? undefined,
-    datePublished: view.publishedAt?.toISOString(),
+    ...descriptionFrom(view.seoDescription, view.excerpt),
+    // The article's own address, and the page it is the main entity of — the
+    // two fields Google's article guidance asks for first.
+    url: articleUrl,
+    mainEntityOfPage: { "@type": "WebPage", "@id": articleUrl },
+    ...(view.publishedAt ? { datePublished: view.publishedAt.toISOString() } : {}),
     dateModified: view.updatedAt.toISOString(),
-    ...(view.coverImageUrl ? { image: [view.coverImageUrl] } : {}),
+    // The share image first, like the card: OG override, then the cover.
+    ...(view.ogImageUrl || view.coverImageUrl
+      ? { image: [absolute(view.ogImageUrl ?? view.coverImageUrl ?? "")] }
+      : {}),
+    publisher: { "@type": "Organization", name: tCommon("siteName"), url: `${origin}/` },
     ...(showAuthor !== false && view.authorName
       ? { author: [{ "@type": "Person", name: view.authorName }] }
       : {}),
@@ -166,6 +207,9 @@ export default async function ArticlePage({ params }: PageProps<"/[locale]/news/
 
   return (
     <main className="flex flex-col">
+      {/* ADR-123: signed-in learners' "recent reading". A client island, so
+          this page stays cached and reads no session. */}
+      <ReadBeacon articleId={view.articleId} />
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
@@ -185,14 +229,19 @@ export default async function ArticlePage({ params }: PageProps<"/[locale]/news/
             src={view.headerImageUrl}
             alt=""
             fill
-            unoptimized
+            unoptimized={!canOptimizeImage(view.headerImageUrl)}
             sizes="100vw"
             className="object-cover"
             priority
           />
         </div>
       )}
-      <ListingHeader title={view.title} crumbs={[{ label: view.title }]} />
+      <ListingHeader
+        title={view.title}
+        titleLang={view.locale}
+        titleDir={view.contentDirection}
+        crumbs={[{ label: view.title }]}
+      />
 
       <Section spacing="md">
         <Container className="grid grid-cols-1 gap-10 lg:grid-cols-(--grid-main-aside)">
@@ -212,7 +261,7 @@ export default async function ArticlePage({ params }: PageProps<"/[locale]/news/
                       src={view.coverImageUrl}
                       alt=""
                       fill
-                      unoptimized
+                      unoptimized={!canOptimizeImage(view.coverImageUrl)}
                       sizes="(max-width: 1024px) 100vw, 768px"
                       className="media-zoom object-cover"
                       priority
@@ -238,14 +287,24 @@ export default async function ArticlePage({ params }: PageProps<"/[locale]/news/
                     {view.authorName}
                   </span>
                 )}
-                {view.publishedAt && <time>{dateFormat.format(view.publishedAt)}</time>}
+                {view.publishedAt && <time>{formatDate(view.publishedAt, locale)}</time>}
                 {showReadingTime !== false && view.readingMinutes > 0 && (
                   <span>{t("news.minRead", { minutes: view.readingMinutes })}</span>
                 )}
+                {/* ADR-127: the reading-language menu closes the meta row, at
+                    its inline end, rather than taking a row of its own. */}
+                <div className="ms-auto">
+                  <ReadingLanguageMenu
+                    options={readingOptions}
+                    label={t("public.readingLanguage")}
+                  />
+                </div>
               </div>
             </Reveal>
 
-            <Reveal variant="up" delay={120}>
+            {/* `lang`/`dir` follow the TRANSLATION on screen, not the page:
+                an Arabic reading view is RTL inside an LTR page (ADR-127 #1). */}
+            <Reveal variant="up" delay={120} lang={view.locale} dir={view.contentDirection}>
               {view.requestedLocaleMissing ? (
                 // ADR-007: an RTL locale with no translation gets the notice
                 // in its own direction — never LTR English content inside
@@ -257,6 +316,7 @@ export default async function ArticlePage({ params }: PageProps<"/[locale]/news/
               ) : (
                 <>
                   {view.locale !== locale &&
+                    !view.readingLocale &&
                     LOCALE_DIRECTION[locale as keyof typeof LOCALE_DIRECTION] === "ltr" && (
                       <p className="text-xs text-muted-foreground">({view.locale})</p>
                     )}
@@ -276,7 +336,7 @@ export default async function ArticlePage({ params }: PageProps<"/[locale]/news/
                 filled it — which is the proof that no field here exists only
                 because AI does (ADR-097 / §2.2 #8). */}
             {view.keyTakeaways.length > 0 && (
-              <Reveal variant="up">
+              <Reveal variant="up" lang={view.locale} dir={view.contentDirection}>
                 <KeyTakeaways heading={t("news.keyTakeaways")} items={view.keyTakeaways} />
               </Reveal>
             )}
@@ -297,7 +357,7 @@ export default async function ArticlePage({ params }: PageProps<"/[locale]/news/
                  third detail page cannot invent a fourth shape. `format`
                  defaults to `"html"` — an article's answers are sanitized
                  rich text (ADR-009), the same as its body. */
-              <Reveal variant="up">
+              <Reveal variant="up" lang={view.locale} dir={view.contentDirection}>
                 <FaqPanel
                   title={t("news.faqTitle")}
                   lead={t("news.faqLead")}
@@ -318,10 +378,7 @@ export default async function ArticlePage({ params }: PageProps<"/[locale]/news/
                 <ul className="flex flex-wrap items-center gap-2 border-b pb-4">
                   {view.tags.map((tag) => (
                     <li key={tag.slug}>
-                      <Link
-                        href={`/news/tag/${tag.slug}`}
-                        className="rounded-md border bg-card px-2.5 py-1 text-xs transition duration-(--duration-fast) hover:-translate-y-0.5 hover:bg-primary/10 hover:text-primary-interactive"
-                      >
+                      <Link href={`/news/tag/${tag.slug}`} className={CHIP_LINK}>
                         {tag.name}
                       </Link>
                     </li>
@@ -338,14 +395,6 @@ export default async function ArticlePage({ params }: PageProps<"/[locale]/news/
                 copiedLabel={t("news.linkCopied")}
               />
             </Reveal>
-
-            {disclaimer && (
-              <Reveal variant="fade">
-                <p className="rounded-lg border bg-muted/40 p-4 text-sm leading-relaxed text-muted-foreground">
-                  {disclaimer}
-                </p>
-              </Reveal>
-            )}
 
             {related.length > 0 && (
               <Reveal variant="up" className="flex flex-col gap-3 border-t pt-6">

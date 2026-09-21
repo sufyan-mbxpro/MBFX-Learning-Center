@@ -2,10 +2,9 @@
 // CACHED data (tags: navigation, settings:layout, settings:general, theme,
 // locales); auth state is a CLIENT chip (auth-slot.tsx), so the server
 // shell carries zero per-request reads and navigations stay cheap.
-import { Search } from "lucide-react";
 import { buildNavigation, getBrandAssets } from "@repo/core";
 import { getActiveLocales } from "@repo/i18n";
-import { getPathname, Link } from "@repo/i18n/navigation";
+import { Link } from "@repo/i18n/navigation";
 import { getSetting } from "@repo/settings";
 import { BrandLogo } from "@repo/ui/components/brand-logo";
 import { Button } from "@repo/ui/components/button";
@@ -15,6 +14,7 @@ import { AnnouncementBar } from "./announcement-bar.tsx";
 import { AuthSlot } from "./auth-slot.tsx";
 import { LocaleSwitcher } from "./locale-switcher.tsx";
 import { MobileNav } from "./mobile-nav.tsx";
+import { SiteSearch } from "./site-search.tsx";
 import { ModeToggle } from "./mode-toggle.tsx";
 import { StickyHeaderShell } from "./sticky-header-shell.tsx";
 import { TopBar } from "./top-bar.tsx";
@@ -64,11 +64,26 @@ export async function SiteHeader({ locale }: { locale: string }) {
       {topBar?.enabled && (
         <TopBar phone={topBar.phone} promoText={topBar.promoText} promoUrl={topBar.promoUrl} />
       )}
-      <header className="bg-glow-primary relative isolate border-b border-border/70 bg-background/95 shadow-sm backdrop-blur-md">
+      {/* `.header-enter` is the menu's own entrance on page load (ADR-111 §4).
+          It sits on the <header>, not on StickyHeaderShell's div: a transform
+          on the sticky element's wrapper is how a sticky bar stops sticking. */}
+      <header className="header-enter bg-glow-primary relative isolate border-b border-border/70 bg-background/95 shadow-sm backdrop-blur-md">
         <Container className="flex h-(--height-header) items-center gap-3 md:gap-6">
           {/* Below xl the nav lives behind the hamburger; same rows
               (changes-21 D-1 — the desktop nav does not fit under 1280). */}
-          <MobileNav items={navItems} menuLabel={t("openMenu")} />
+          <MobileNav
+            items={navItems}
+            menuLabel={t("openMenu")}
+            brand={
+              <BrandLogo
+                light={brandAssets.logo_light?.url ?? null}
+                dark={brandAssets.logo_dark?.url ?? null}
+                alt={siteName ?? ""}
+                className="h-9"
+                fallback={<span className="text-lg font-semibold tracking-tight">{siteName}</span>}
+              />
+            }
+          />
 
           {/* Uploaded logo (changes-02, ADR-017) when set — light/dark
               variants swap via the `dark:` class variant, same as every
@@ -93,19 +108,43 @@ export async function SiteHeader({ locale }: { locale: string }) {
           <SiteNav items={navItems} ariaLabel={t("mainNavigation")} />
 
           <div className="ms-auto flex items-center gap-2">
-            {/* No site-wide search backend exists yet (admin-search.tsx is
-                admin-only and must not be imported here — architecture #5),
-                so this is a link into the article listing's own `q` filter
-                rather than a fake global search. */}
+            {/* ADR-108: a real site-wide search, reachable with ⌘K from any
+                page. It used to be a magnifying glass linking to `/news` —
+                the article listing's own `q` filter, standing in for a
+                backend that did not exist. `admin-search.tsx` is still
+                admin-only and still must not be imported here
+                (architecture #5); this is its public twin over published
+                content, sharing @repo/ui's Command and nothing else. */}
             {showSearch && (
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label={t("search")}
-                render={<Link href="/news" />}
-              >
-                <Search aria-hidden className="size-4" />
-              </Button>
+              <SiteSearch
+                locale={locale}
+                menu={navItems}
+                labels={{
+                  trigger: t("searchTrigger"),
+                  title: t("searchTitle"),
+                  description: t("searchDescription"),
+                  placeholder: t("searchPlaceholder"),
+                  empty: t("searchEmpty"),
+                  prompt: t("searchPrompt"),
+                  searching: t("searchSearching"),
+                  pages: t("searchPages"),
+                  close: t("searchClose"),
+                  filterAll: t("searchFilterAll"),
+                  filterLabel: t("searchFilterLabel"),
+                  legendOpen: t("searchLegendOpen"),
+                  legendNavigate: t("searchLegendNavigate"),
+                  legendClose: t("searchLegendClose"),
+                  kinds: {
+                    article: t("searchKindArticle"),
+                    glossary: t("searchKindGlossary"),
+                    course: t("searchKindCourse"),
+                    lesson: t("searchKindLesson"),
+                    quiz: t("searchKindQuiz"),
+                    video: t("searchKindVideo"),
+                    tool: t("searchKindTool"),
+                  },
+                }}
+              />
             )}
             <LocaleSwitcher locales={locales} />
             {/* Below sm the header row cannot hold hamburger + logo + toggle
@@ -117,16 +156,9 @@ export async function SiteHeader({ locale }: { locale: string }) {
             <div className={navItems.length > 0 ? "hidden sm:flex" : "flex"}>
               <ModeToggle />
             </div>
-            {/* The localized destination Better Auth's verification callback
-                returns to, resolved on the server: the slot is a client
-                component and cannot call getPathname itself. */}
-            <AuthSlot verifiedHref={`${getPathname({ href: "/sign-in", locale })}?verified=1`} />
+            <AuthSlot inMenuBelowXl={navItems.length > 0} />
             {cta?.enabled && (
-              <Button
-                shape="pill"
-                className="glow-on-hover"
-                render={<a href={cta.url}>{cta.label}</a>}
-              />
+              <Button className="glow-on-hover" render={<a href={cta.url}>{cta.label}</a>} />
             )}
           </div>
         </Container>

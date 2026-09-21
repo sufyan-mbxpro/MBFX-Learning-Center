@@ -23,18 +23,18 @@ export default function CourseLoading() {
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-(--grid-2-1) lg:items-start">
             <div className="flex flex-col gap-4">
-              <Skeleton className="shimmer aspect-16/6 w-full rounded-2xl" />
+              <Skeleton className="shimmer aspect-16/6 w-full rounded-lg" />
               <div className="flex flex-wrap gap-1.5">
-                <Skeleton className="shimmer h-5 w-24 rounded-full" />
-                <Skeleton className="shimmer h-5 w-20 rounded-full" />
-                <Skeleton className="shimmer h-5 w-20 rounded-full" />
+                <Skeleton className="shimmer h-5 w-24 rounded-md" />
+                <Skeleton className="shimmer h-5 w-20 rounded-md" />
+                <Skeleton className="shimmer h-5 w-20 rounded-md" />
               </div>
               <Skeleton className="shimmer h-10 w-full max-w-lg" />
               <Skeleton className="shimmer h-6 w-full max-w-md" />
             </div>
 
             {/* The sticky rail: progress bar, CTA, then the meta list. */}
-            <div className="flex flex-col gap-4 rounded-2xl border bg-card p-5">
+            <div className="flex flex-col gap-4 rounded-lg border bg-card p-5">
               <Skeleton className="shimmer h-2 w-full rounded-full" />
               <Skeleton className="shimmer h-11 w-full rounded-md" />
               <div className="flex flex-col gap-2 border-t pt-3">
@@ -70,8 +70,8 @@ export default function CourseLoading() {
           </div>
 
           <div className="flex flex-col gap-6">
-            <Skeleton className="shimmer h-40 w-full rounded-2xl" />
-            <Skeleton className="shimmer h-64 w-full rounded-2xl" />
+            <Skeleton className="shimmer h-40 w-full rounded-lg" />
+            <Skeleton className="shimmer h-64 w-full rounded-lg" />
           </div>
         </Container>
       </Section>

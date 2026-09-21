@@ -114,6 +114,31 @@ describe("syncDailyBars", () => {
     expect(await db.marketDailyBar.count()).toBe(2);
   });
 
+  it("backfills a provider-sized full history in bulk, not a round trip per bar", async () => {
+    // Regression: ~5,000 bars per instrument were written by sequential
+    // upserts, so a first "Sync now" looked stuck. 2,500 bars crosses the
+    // insert chunk boundary more than once.
+    await makeInstrument("EUR/USD");
+    const start = Date.UTC(2016, 0, 1);
+    const bars = Array.from({ length: 2500 }, (_, i) => ({
+      date: new Date(start + i * 86_400_000),
+      open: 1,
+      high: 1.1,
+      low: 0.9,
+      close: 1 + i / 100_000,
+    }));
+    const provider = fakeProvider({ "EUR/USD": bars });
+
+    const result = await market.syncDailyBars({ provider });
+    expect(result.barsWritten).toBe(2500);
+    expect(await db.marketDailyBar.count()).toBe(2500);
+
+    // A second, overlapping-style run re-inserts nothing and fails nothing.
+    const again = await market.syncDailyBars({ provider });
+    expect(again.failures).toHaveLength(0);
+    expect(await db.marketDailyBar.count()).toBe(2500);
+  }, 60_000);
+
   it("asks for FULL history on the first sync and COMPACT after that", async () => {
     // ADR-087 #10. Correlation at 250d needs ~250 bars, and an
     // incremental-only sweep would leave it rendering "—" for months.
@@ -122,12 +147,107 @@ describe("syncDailyBars", () => {
       bar(`2026-09-${String(i + 1).padStart(2, "0")}`, 1, 1.1, 0.9, 1 + i / 100),
     );
     const provider = fakeProvider({ "EUR/USD": bars });
+    const now = new Date("2026-09-13T00:00:00Z");
 
-    await market.syncDailyBars({ provider });
+    await market.syncDailyBars({ provider, now });
     expect(provider.calls.at(-1)!.size).toBe("full");
 
-    await market.syncDailyBars({ provider });
+    await market.syncDailyBars({ provider, now });
     expect(provider.calls.at(-1)!.size).toBe("compact");
+  });
+
+  it("asks for FULL again when the newest bar is older than a compact tail reaches", async () => {
+    // Regression: an interrupted backfill left CHF ending in 2020. A compact
+    // tail (the latest ~100 points) starts after that, so every later sweep
+    // "succeeded" and the years between stayed empty for good.
+    const instrument = await makeInstrument("EUR/USD");
+    await db.marketDailyBar.create({
+      data: {
+        instrumentId: instrument.id,
+        date: new Date("2020-12-31T00:00:00Z"),
+        open: 1,
+        high: 1,
+        low: 1,
+        close: 1,
+      },
+    });
+    const provider = fakeProvider({
+      "EUR/USD": [bar("2020-12-31", 1, 1, 1, 1), bar("2021-01-04", 1, 1, 1, 1.01)],
+    });
+
+    const result = await market.syncDailyBars({
+      provider,
+      now: new Date("2026-09-16T00:00:00Z"),
+    });
+
+    expect(provider.calls[0]!.size).toBe("full");
+    expect(result.barsWritten).toBe(2);
+    expect(await db.marketDailyBar.count()).toBe(2);
+  });
+
+  it("spends no request on a kind the provider cannot serve, and names it", async () => {
+    await makeInstrument("EUR/USD");
+    await db.marketInstrument.create({
+      data: { symbol: "SPX/USD", displayName: "S&P 500", kind: "INDEX", base: "SPX", quote: "USD" },
+    });
+    const provider = {
+      ...fakeProvider({ "EUR/USD": [bar("2026-09-01", 1, 1, 1, 1)] }),
+      supportsKind: (kind: string) => kind !== "INDEX",
+    };
+
+    const result = await market.syncDailyBars({ provider });
+
+    expect(provider.calls.map((c) => c.symbol)).toEqual(["EUR/USD"]);
+    expect(result.unsupported).toEqual(["SPX/USD"]);
+    // Not a failure: nothing went wrong, and a retry would change nothing.
+    expect(result.failures).toHaveLength(0);
+    const row = await db.marketProvider.findUnique({ where: { id: "default" } });
+    expect(row!.lastSyncError).toBeNull();
+  });
+
+  it("stops at a spent daily quota and leaves the rest SKIPPED, not failed", async () => {
+    // Each request after the quota is gone comes back the same way, and on a
+    // paced driver costs the admin ~1.2 s apiece to learn nothing.
+    await makeInstrument("AUD/USD", 0);
+    await makeInstrument("EUR/USD", 1);
+    await makeInstrument("GBP/USD", 2);
+    const calls: string[] = [];
+    const provider: MarketModule.MarketHistoryProvider = {
+      name: "quota",
+      async fetchDailySeries(symbol) {
+        calls.push(symbol);
+        if (symbol === "AUD/USD") return [bar("2026-09-01", 1, 1, 1, 1)];
+        throw new market.ProviderQuotaExhaustedError();
+      },
+    };
+
+    const result = await market.syncDailyBars({ provider });
+
+    expect(calls).toEqual(["AUD/USD", "EUR/USD"]);
+    expect(result.synced).toBe(1);
+    expect(result.failures.map((f) => f.symbol)).toEqual(["EUR/USD"]);
+    expect(result.skipped).toBe(1);
+  });
+
+  it("never asks for a currency quoted against itself", async () => {
+    // The seeded USD row: USD/USD is 1 by definition, and requesting it spent
+    // one of a free tier's 25 daily requests on a guaranteed rejection.
+    await db.marketInstrument.create({
+      data: {
+        symbol: "USD",
+        displayName: "US Dollar",
+        kind: "CURRENCY",
+        base: "USD",
+        quote: "USD",
+      },
+    });
+    const provider = fakeProvider({});
+
+    const result = await market.syncDailyBars({ provider });
+
+    expect(provider.calls).toHaveLength(0);
+    expect(result.attempted).toBe(0);
+    expect(result.failures).toHaveLength(0);
   });
 
   it("is idempotent within a day — a second run adds no rows", async () => {

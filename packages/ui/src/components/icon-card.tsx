@@ -32,8 +32,10 @@ function IconCard({
   const merged = mergeProps<"div">(
     {
       className: cn(
-        "card-hover group/icon-card flex flex-col gap-3 rounded-xl bg-card p-6 ring-1 ring-foreground/10",
-        lifts && "hover-lift hover:ring-primary/25",
+        // `rounded-lg` and, when it lifts, `sheen`: the public site's one
+        // clickable-card recipe (`INTERACTIVE_CARD`, changes-39).
+        "card-hover group/icon-card flex flex-col gap-3 rounded-lg bg-card p-6 ring-1 ring-foreground/10",
+        lifts && "hover-lift sheen",
         className,
       ),
     },

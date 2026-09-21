@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { alternatesFor, descriptionFrom } from "../../../../../_lib/seo.ts";
 import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { ChevronRight } from "lucide-react";
@@ -10,13 +11,16 @@ import { getSetting, isFeatureVisible } from "@repo/settings";
 import { AmbientMotif } from "@repo/ui/components/ambient-motif";
 import { Badge } from "@repo/ui/components/badge";
 import { Container } from "@repo/ui/components/container";
-import { Reveal } from "@repo/ui/components/reveal";
+import { PageHero } from "@repo/ui/components/page-hero";
 import { Section } from "@repo/ui/components/section";
 import {
   GLOSSARY_PATH,
   GLOSSARY_TOPICS_PATH,
   GlossaryTabs,
 } from "../../_components/glossary-tabs.tsx";
+import { TopicCover } from "../../_components/topic-cover.tsx";
+import { GlossarySidebar } from "../../_components/glossary-sidebar.tsx";
+import { INTERACTIVE_CARD, CHIP_LINK } from "@repo/ui/lib/surfaces";
 
 // One topic and its terms (changes-11 Phase 10, D27).
 //
@@ -46,14 +50,16 @@ export async function generateMetadata({
   // Every locale this topic actually HAS a translation in — not every active
   // locale. An hreflang pointing at a URL that 404s is worse than a missing
   // pair, the same rule the course and lesson pages follow.
-  const languages = Object.fromEntries(
-    view.alternates.map((alt) => [alt.locale, topicPath(alt.locale, alt.slug)]),
-  );
-
   return {
     title: (template ?? "%s").replace("%s", view.seoTitle ?? view.name),
-    description: view.seoDescription ?? view.description ?? undefined,
-    alternates: { canonical: topicPath(locale, view.slug), languages },
+    ...descriptionFrom(view.seoDescription, view.description),
+    alternates: await alternatesFor({
+      canonical: topicPath(locale, view.slug),
+      languages: view.alternates.map((alt) => ({
+        locale: alt.locale,
+        href: topicPath(alt.locale, alt.slug),
+      })),
+    }),
   };
 }
 
@@ -78,71 +84,53 @@ export default async function GlossaryTopicPage({
 
   return (
     <>
-      {/* The masthead the design pass gave `/glossary` and `/learn`, applied to
-          the page the owner actually landed on. Generated ambient art rather
-          than a stock photograph (ADR-047 §3's system) — a topic has no cover
-          column and is never getting one. */}
-      <Section spacing="sm" tone="muted" className="relative isolate overflow-hidden">
-        <AmbientMotif variant="learn" />
-        <Container>
-          <Reveal variant="up">
-            <div className="flex flex-col gap-3">
-              <nav
-                aria-label={t("breadcrumbLabel")}
-                className="flex items-center gap-1.5 text-sm text-muted-foreground"
-              >
+      {/* The term page's masthead (changes-39): a compact `PageHero` whose
+          backdrop is the topic's own cover (ADR-133), or the glossary's topic
+          artwork when it has none. The counted strip that used to close this
+          band is gone — "Browse by topic 16" repeated the tab below it and a
+          number the cards already say. */}
+      <PageHero
+        size="compact"
+        backdrop={<TopicCover coverUrl={view.coverUrl} sizes="100vw" priority />}
+        motif={<AmbientMotif variant="learn" intensity={0.7} />}
+        breadcrumb={
+          // On the `photo` tone the band is `--secondary`, so the trail rides
+          // on `--secondary-foreground` (ADR-117), as on the term page.
+          <nav aria-label={t("breadcrumbLabel")} className="min-w-0">
+            <ol className="flex flex-wrap items-center gap-1.5 text-sm text-secondary-foreground/70">
+              <li className="flex items-center gap-1.5">
                 <Link
                   href={ROUTE_PATHS.glossary}
-                  className="transition-colors duration-(--duration-base) hover:text-foreground"
+                  className="transition-colors duration-(--duration-base) hover:text-secondary-foreground"
                 >
                   {t("title")}
                 </Link>
                 <ChevronRight aria-hidden className="size-3.5 shrink-0 rtl:rotate-180" />
+              </li>
+              <li className="flex items-center gap-1.5">
                 <Link
                   href={`${ROUTE_PATHS.glossary}/topics`}
-                  className="transition-colors duration-(--duration-base) hover:text-foreground"
+                  className="transition-colors duration-(--duration-base) hover:text-secondary-foreground"
                 >
                   {t("browseTopics")}
                 </Link>
-                {/* The current page is named but NOT linked — a breadcrumb
-                    whose last crumb links to itself gives a reader a control
-                    that does nothing. `ArchiveTaxonomy` on /news draws the
-                    same line. */}
                 <ChevronRight aria-hidden className="size-3.5 shrink-0 rtl:rotate-180" />
-                <span aria-current="page" className="text-foreground">
+              </li>
+              {/* Named, NOT linked — a last crumb that links to itself is a
+                  control that does nothing. */}
+              <li className="min-w-0">
+                <span
+                  aria-current="page"
+                  className="truncate font-medium text-secondary-foreground"
+                >
                   {view.name}
                 </span>
-              </nav>
-
-              <h1 className="text-display-sm font-semibold tracking-tight text-balance">
-                {view.name}
-              </h1>
-
-              {/* Rich text since changes-18 PR 3, and rendered as prose here —
-                  the ONE surface that does. Everywhere else reads the
-                  flattened `description`. Sanitized server-side on save
-                  (security.md #8); this renders already-clean HTML. */}
-              {view.descriptionHtml && (
-                <div
-                  className={PROSE_CLASS}
-                  dangerouslySetInnerHTML={{ __html: view.descriptionHtml }}
-                />
-              )}
-
-              {/* The counted strip `/glossary` and `/learn` both open with. One
-                  number, because a topic only has one worth stating. */}
-              <dl className="flex flex-wrap gap-x-8 gap-y-2 pt-1">
-                <div className="flex flex-col">
-                  <dt className="text-xs tracking-wide text-muted-foreground uppercase">
-                    {t("browseTopics")}
-                  </dt>
-                  <dd className="text-2xl font-semibold tabular-nums">{view.termCount}</dd>
-                </div>
-              </dl>
-            </div>
-          </Reveal>
-        </Container>
-      </Section>
+              </li>
+            </ol>
+          </nav>
+        }
+        title={view.name}
+      />
 
       <GlossaryTabs
         ariaLabel={t("browseLabel")}
@@ -153,65 +141,81 @@ export default async function GlossaryTopicPage({
       />
 
       <Section spacing="md">
-        <Container className="flex flex-col gap-10">
-          {/* Cards rather than a divided list: the owner asked for the topic's
+        <Container className="grid grid-cols-1 gap-10 lg:grid-cols-(--grid-main-aside) lg:items-start">
+          <div className="flex min-w-0 flex-col gap-10">
+            {/* Rich text since changes-18 PR 3, rendered as prose — the ONE
+              surface that does. It moved out of the masthead because the hero's
+              lead is a single `<p>`, and markup cannot sit inside one.
+              Sanitized server-side on save (security.md #8). */}
+            {view.descriptionHtml && (
+              <div
+                className={`${PROSE_CLASS} max-w-3xl`}
+                dangerouslySetInnerHTML={{ __html: view.descriptionHtml }}
+              />
+            )}
+
+            {/* Cards rather than a divided list: the owner asked for the topic's
               terms to read as cards with real hover, and a term with a
               definition under it is a card's worth of content. `card-hover` is
               the design system's own treatment, the same one the topics index
               uses, so the two pages match. */}
-          <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {view.terms.map((term) => (
-              <li key={term.termId}>
-                <Link
-                  href={`${ROUTE_PATHS.glossary}/${term.slug}`}
-                  className="card-hover flex h-full flex-col gap-2 rounded-xl border bg-card p-5 transition-colors duration-(--duration-base) hover:border-primary/25"
-                >
-                  <span className="flex items-start justify-between gap-3">
-                    <span className="font-semibold">{term.term}</span>
-                    <ChevronRight
-                      aria-hidden
-                      className="mt-0.5 size-4 shrink-0 text-muted-foreground rtl:rotate-180"
-                    />
-                  </span>
-                  {term.definition && (
-                    <span className="line-clamp-3 text-sm text-muted-foreground">
-                      {term.definition}
+            <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {view.terms.map((term) => (
+                <li key={term.termId}>
+                  <Link
+                    href={`${ROUTE_PATHS.glossary}/${term.slug}`}
+                    className={`${INTERACTIVE_CARD} flex h-full flex-col gap-2 p-5`}
+                  >
+                    <span className="flex items-start justify-between gap-3">
+                      <span className="font-semibold transition-colors duration-(--duration-base) group-hover:text-primary-interactive">
+                        {term.term}
+                      </span>
+                      <ChevronRight
+                        aria-hidden
+                        className="hover-arrow mt-0.5 size-4 shrink-0 text-muted-foreground group-hover:text-primary-interactive rtl:rotate-180"
+                      />
                     </span>
-                  )}
-                  {/* "clearly show the category exists" — every card says which
+                    {term.definition && (
+                      <span className="line-clamp-3 text-sm text-muted-foreground">
+                        {term.definition}
+                      </span>
+                    )}
+                    {/* "clearly show the category exists" — every card says which
                       topic it belongs to, so a term arriving here from search
                       carries its filing with it. */}
-                  <span className="mt-auto pt-2">
-                    <Badge variant="outline">{view.name}</Badge>
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
+                    <span className="mt-auto pt-2">
+                      <Badge variant="outline">{view.name}</Badge>
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
 
-          {/* Related topics. Not a recommender — the sibling list, ordered by
+            {/* Related topics. Not a recommender — the sibling list, ordered by
               the editor's own `sortOrder`, which is the `ArchiveTaxonomy`
               pattern from /news rather than a second thing to maintain. */}
-          {siblings.length > 0 && (
-            <section className="flex flex-col gap-4 border-t pt-8">
-              <h2 className="text-xl font-semibold tracking-tight">{t("topicsTitle")}</h2>
-              <ul className="flex flex-wrap gap-2">
-                {siblings.map((topic) => (
-                  <li key={topic.id}>
-                    <Link
-                      href={`${ROUTE_PATHS.glossary}/topics/${topic.slug}`}
-                      className="inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors duration-(--duration-base) hover:border-primary/25 hover:bg-muted/60"
-                    >
-                      {topic.name}
-                      <span className="text-xs text-muted-foreground tabular-nums">
-                        {topic.termCount}
-                      </span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
+            {siblings.length > 0 && (
+              <section className="flex flex-col gap-4 border-t pt-8">
+                <h2 className="text-xl font-semibold tracking-tight">{t("topicsTitle")}</h2>
+                <ul className="flex flex-wrap gap-2">
+                  {siblings.map((topic) => (
+                    <li key={topic.id}>
+                      <Link
+                        href={`${ROUTE_PATHS.glossary}/topics/${topic.slug}`}
+                        className={CHIP_LINK}
+                      >
+                        {topic.name}
+                        <span className="text-xs text-muted-foreground tabular-nums">
+                          {topic.termCount}
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+          </div>
+          <GlossarySidebar locale={locale} />
         </Container>
       </Section>
     </>

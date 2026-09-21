@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { alternatesFor, descriptionFrom, pagedCanonical } from "../../../../../_lib/seo.ts";
 import { notFound, permanentRedirect } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import {
@@ -10,35 +11,35 @@ import {
 } from "@repo/core";
 import { routing } from "@repo/i18n/routing";
 import { getSetting, isFeatureVisible } from "@repo/settings";
-import { Badge } from "@repo/ui/components/badge";
-import { Container } from "@repo/ui/components/container";
-import { Reveal } from "@repo/ui/components/reveal";
-import { Section } from "@repo/ui/components/section";
-import { ArchiveTaxonomy, TagChips } from "../../_components/archive-taxonomy.tsx";
-import { ArticleCards } from "../../_components/article-list.tsx";
-import { ListingCrumbs } from "../../_components/listing-crumbs.tsx";
-import { NumberedPagination } from "../../_components/numbered-pagination.tsx";
+import { SectionHeading } from "@repo/ui/components/section-heading";
+import { ArchiveTaxonomy } from "../../_components/archive-taxonomy.tsx";
+import { ArticleListing } from "../../_components/article-listing.tsx";
+import { NewsMasthead } from "../../_components/news-masthead.tsx";
 
 export async function generateMetadata({
   params,
+  searchParams,
 }: PageProps<"/[locale]/news/category/[slug]">): Promise<Metadata> {
   const { locale, slug } = await params;
+  const search = await searchParams;
+  const page = Math.max(0, Number.parseInt(String(search.page ?? "0"), 10) || 0);
   setRequestLocale(locale);
   const [view, template] = await Promise.all([
     getArticleCategoryBySlug(locale, slug),
     getSetting("seo.titleTemplate"),
   ]);
   if (!view) return {};
-  const languages = Object.fromEntries(
-    view.alternates.map((alt) => [
-      alt.locale,
-      articleCategoryPath(alt.locale, routing.defaultLocale, alt.slug),
-    ]),
-  );
+  const alternates = await alternatesFor({
+    canonical: pagedCanonical(articleCategoryPath(locale, routing.defaultLocale, slug), page),
+    languages: view.alternates.map((alt) => ({
+      locale: alt.locale,
+      href: articleCategoryPath(alt.locale, routing.defaultLocale, alt.slug),
+    })),
+  });
   return {
     title: (template ?? "%s").replace("%s", view.seoTitle ?? view.name),
-    description: view.seoDescription ?? view.description ?? undefined,
-    alternates: { languages },
+    ...descriptionFrom(view.seoDescription, view.description),
+    alternates,
   };
 }
 
@@ -51,6 +52,12 @@ export async function generateMetadata({
 // Facets are read with this category's id, which scopes `tags` to what
 // actually occurs here while leaving the category counts global — see
 // `ArticleFacetOptions`. One cached read serves both the chips and the band.
+//
+// changes-38: the refinement row moved INTO the masthead (`NewsMasthead`'s
+// tag chips; changes-47 took them back out — the sidebar's panel and the
+// closing band already list them), and the listing is `ArticleListing` with the sidebar beside it,
+// this category marked current — the same shape as /news, /analysis and the
+// tag archive.
 export default async function ArticleCategoryPage({
   params,
   searchParams,
@@ -90,50 +97,38 @@ export default async function ArticleCategoryPage({
 
   return (
     <main className="flex flex-col">
-      <Section tone="muted" spacing="sm">
-        <Container className="flex flex-col items-center gap-3 text-center">
-          <ListingCrumbs
-            crumbs={[{ label: t("title"), href: "/news" }, { label: view.name }]}
-            className="flex justify-center"
-          />
-          <p className="text-sm text-muted-foreground">{t("categoryArchive")}</p>
-          <h1 className="text-display-sm font-semibold">{view.name}</h1>
-          {view.description && (
-            <p className="max-w-2xl text-muted-foreground">{view.description}</p>
-          )}
-          <Badge variant="pill">{t("topicsCount", { count })}</Badge>
+      {/* The category's own description is its lead when it has one; the
+          count stands in otherwise, so the banner always says something the
+          title does not. */}
+      <NewsMasthead
+        eyebrow={t("categoryArchive")}
+        title={view.name}
+        lead={view.description ?? t("topicsCount", { count })}
+        crumbs={[{ label: t("title"), href: "/news" }, { label: view.name }]}
+      />
 
-          {/* The tags that occur IN this category, as a refinement row. Above
-              the articles because it narrows what follows; the full taxonomy
-              band at the foot of the page is for moving elsewhere entirely. */}
-          {facets.tags.length > 0 && (
-            <div className="flex flex-col items-center gap-2 pt-2">
-              <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                {t("popularTags")}
-              </p>
-              <TagChips tags={facets.tags} />
-            </div>
-          )}
-        </Container>
-      </Section>
-
-      <Section spacing="md">
-        <Container className="flex flex-col gap-8">
-          <Reveal variant="up">
-            <ArticleCards
-              entries={result.entries}
-              locale={locale}
-              showKind
-              showAuthor={showAuthor !== false}
-            />
-          </Reveal>
-          <NumberedPagination
-            basePath={`/news/category/${slug}`}
-            page={page}
-            pageCount={result.pageCount}
+      <ArticleListing
+        locale={locale}
+        heading={
+          <SectionHeading
+            eyebrow={t("latestEyebrow")}
+            title={t("archiveLatestTitle", { name: view.name })}
+            lead={view.description ? t("topicsCount", { count }) : undefined}
           />
-        </Container>
-      </Section>
+        }
+        entries={result.entries}
+        total={result.total}
+        page={page}
+        pageCount={result.pageCount}
+        paginationBasePath={`/news/category/${slug}`}
+        // An archive has no search of its own; the sidebar's box searches
+        // the section.
+        searchBasePath="/news"
+        facets={facets}
+        showKind
+        showAuthor={showAuthor !== false}
+        activeCategorySlug={slug}
+      />
 
       <ArchiveTaxonomy
         categories={facets.categories}

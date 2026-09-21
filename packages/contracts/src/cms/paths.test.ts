@@ -113,14 +113,25 @@ describe("reserved paths", () => {
   });
 
   it("flags coded route sections that used to be CMS pages", () => {
-    expect(isReservedFirstSegment("about")).toBe(true); // ADR-047
     expect(isReservedFirstSegment("economic-calendar")).toBe(true); // ADR-050
-    // ADR-081 #1: `/tools` and `/markets` are coded routes rendering
-    // `ComingSoon`. Plan v2.2 had them down as CMS STATIC pages, which
-    // ADR-042 cancelled, so the reservation is what stops a retained CMS row
-    // from shadowing the real route.
+    // ADR-081 #1: `/tools` is a coded route section. Plan v2.2 had it down as
+    // a CMS STATIC page, which ADR-042 cancelled, so the reservation is what
+    // stops a retained CMS row from shadowing the real route.
     expect(isReservedFirstSegment("tools")).toBe(true);
-    expect(isReservedFirstSegment("markets")).toBe(true);
+    // changes-33, ADR-110: reserved in the same PR as their routes.
+    expect(isReservedFirstSegment("support")).toBe(true);
+    expect(isReservedFirstSegment("sitemap")).toBe(true);
+    expect(isReservedFirstSegment("legal")).toBe(true);
+  });
+
+  it("does NOT flag the segments ADR-109 withdrew", () => {
+    // Not an oversight, and not merely tidying: `resolvePublicPage` returns
+    // not-found for a reserved segment BEFORE it consults the redirect table,
+    // so `/about/support` -> `/support` only works because `about` left this
+    // list. Re-reserving either would silently break the redirects the same
+    // change seeded.
+    expect(isReservedFirstSegment("about")).toBe(false);
+    expect(isReservedFirstSegment("markets")).toBe(false);
   });
 
   it("does not flag the empty segment", () => {

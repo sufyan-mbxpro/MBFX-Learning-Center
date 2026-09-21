@@ -22,8 +22,8 @@ export default function QuizRunnerLoading() {
           <SkeletonCard>
             <SkeletonText lines={3} />
             <div className="flex flex-wrap gap-2 pt-2">
-              <Skeleton className="h-5 w-24 rounded-full" />
-              <Skeleton className="h-5 w-28 rounded-full" />
+              <Skeleton className="h-5 w-24 rounded-md" />
+              <Skeleton className="h-5 w-28 rounded-md" />
             </div>
             <SkeletonButton size="lg" className="mt-2" />
           </SkeletonCard>

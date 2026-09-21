@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
+import { alternatesFor, descriptionFrom, shareMetadata } from "../../../../../../_lib/seo.ts";
 import { notFound, permanentRedirect } from "next/navigation";
 import Image from "next/image";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { Download, ExternalLink, FileText, Target } from "lucide-react";
 import { getCourseBySlug, getLessonBySlug, getRedirect, lessonPath } from "@repo/core";
 import { isLearnTrack, learnTrackPath, LEARN_TRACKS } from "@repo/contracts";
+import { getServableLocales } from "@repo/i18n";
 import { Link } from "@repo/i18n/navigation";
 import { routing } from "@repo/i18n/routing";
 import { getSetting, isFeatureVisible } from "@repo/settings";
@@ -14,17 +16,23 @@ import { Container } from "@repo/ui/components/container";
 import { EmptyState } from "@repo/ui/components/empty";
 import { ExternalBadge } from "@repo/ui/components/external-badge";
 import { LessonNav } from "@repo/ui/components/lesson-nav";
+import { RevealGroup } from "@repo/ui/components/reveal";
 import { RichText } from "@repo/ui/components/rich-text";
 import { Section } from "@repo/ui/components/section";
 import { LearnBreadcrumb } from "../../../_components/learn-breadcrumb.tsx";
 import { LessonContentsSheet } from "../../../_components/lesson-contents-sheet.tsx";
 import { CurriculumWithProgress } from "../../../_components/curriculum-with-progress.tsx";
-import { ProgressSignInCard } from "../../../_components/course-progress.tsx";
+import { ProgressSignInReminder } from "../../../_components/track-progress-band.tsx";
+import { LessonAssessment } from "../../../_components/course-assessment.tsx";
+import { quizHref } from "../../../_lib/assessment-state.ts";
 import { LessonFeedback } from "../../../_components/lesson-feedback.tsx";
 import { LessonProgressActions } from "../../../_components/lesson-progress-actions.tsx";
 import { ProgressProvider } from "../../../_components/progress-provider.tsx";
 import { practiceCtaFor } from "../../../_content/practice-cta.ts";
 import { VideoFacade } from "../../../../_components/video-facade.tsx";
+import { ReadingLanguageMenu } from "../../../../_components/reading-language-menu.tsx";
+import { readingLanguageOptions, readingLocaleFrom } from "../../../../_lib/reading-language.ts";
+import { INTERACTIVE_CARD } from "@repo/ui/lib/surfaces";
 
 // Lesson page (changes-11 PR 4.3 + its share of 4.4).
 //
@@ -41,11 +49,13 @@ import { VideoFacade } from "../../../../_components/video-facade.tsx";
 // also returns the view, so the page costs one progress request in total.
 export async function generateMetadata({
   params,
+  searchParams,
 }: PageProps<"/[locale]/learn/[track]/[course]/[lesson]">): Promise<Metadata> {
   const { locale, track, course: courseSlug, lesson: lessonSlug } = await params;
   setRequestLocale(locale);
+  const readingLocale = readingLocaleFrom(await searchParams);
   const [view, template] = await Promise.all([
-    getLessonBySlug(locale, courseSlug, lessonSlug),
+    getLessonBySlug(locale, courseSlug, lessonSlug, readingLocale),
     getSetting("seo.titleTemplate"),
   ]);
   if (!view) return {};
@@ -58,44 +68,48 @@ export async function generateMetadata({
     (course?.alternates ?? []).map((alt) => [alt.locale, alt.slug]),
   );
 
-  const languages = Object.fromEntries(
-    view.alternates.flatMap((alt) => {
-      const localisedCourse = courseSlugByLocale.get(alt.locale);
-      if (!localisedCourse) return [];
-      return [
-        [
-          alt.locale,
-          lessonPath(alt.locale, routing.defaultLocale, track, localisedCourse, alt.slug),
-        ],
-      ];
-    }),
+  const languages = view.alternates.flatMap((alt) => {
+    const localisedCourse = courseSlugByLocale.get(alt.locale);
+    if (!localisedCourse) return [];
+    return [
+      {
+        locale: alt.locale,
+        href: lessonPath(alt.locale, routing.defaultLocale, track, localisedCourse, alt.slug),
+      },
+    ];
+  });
+  const ownPath = lessonPath(
+    locale,
+    routing.defaultLocale,
+    view.courseTrack,
+    view.courseSlug,
+    view.slug,
   );
+  const tCommon = await getTranslations({ locale, namespace: "common" });
 
   return {
     title: (template ?? "%s").replace("%s", view.seoTitle ?? view.title),
-    description: view.seoDescription ?? view.summary ?? undefined,
-    alternates: {
-      canonical: lessonPath(
-        locale,
-        routing.defaultLocale,
-        view.courseTrack,
-        view.courseSlug,
-        view.slug,
-      ),
-      languages,
-    },
-    openGraph: {
+    ...descriptionFrom(view.seoDescription, view.summary),
+    alternates: await alternatesFor({ canonical: ownPath, languages }),
+    // ADR-127 #4: a `?lang=` reading view is never indexed. A conditional
+    // SPREAD, never `robots: undefined` (ADR-090).
+    ...(view.readingLocale ? { robots: { index: false, follow: true } } : {}),
+    ...(await shareMetadata({
+      locale,
+      siteName: tCommon("siteName"),
+      url: ownPath,
       type: "article",
       title: view.seoTitle ?? view.title,
-      description: view.seoDescription ?? view.summary ?? undefined,
+      description: view.seoDescription ?? view.summary,
+      image: view.heroUrl,
       modifiedTime: view.updatedAt.toISOString(),
-      images: view.heroUrl ? [{ url: view.heroUrl }] : undefined,
-    },
+    })),
   };
 }
 
 export default async function LessonPage({
   params,
+  searchParams,
 }: PageProps<"/[locale]/learn/[track]/[course]/[lesson]">) {
   const { locale, track, course: courseSlug, lesson: lessonSlug } = await params;
   setRequestLocale(locale);
@@ -103,7 +117,8 @@ export default async function LessonPage({
 
   if (!(await isFeatureVisible("courses", null))) notFound();
 
-  const view = await getLessonBySlug(locale, courseSlug, lessonSlug);
+  const readingLocale = readingLocaleFrom(await searchParams);
+  const view = await getLessonBySlug(locale, courseSlug, lessonSlug, readingLocale);
   if (!view) {
     // Old address? `saveLesson` wrote a 301 when the lesson slug changed, and
     // `saveCourse` wrote one PER LESSON when the course slug or its TRACK did
@@ -119,10 +134,29 @@ export default async function LessonPage({
   // (ADR-065 §1). A course that genuinely moved left a redirect row above.
   if (view.courseTrack !== track) notFound();
 
-  const [t, course] = await Promise.all([
+  const [t, tPublic, course, servableLocales] = await Promise.all([
     getTranslations({ locale, namespace: "learn" }),
+    getTranslations({ locale, namespace: "public" }),
     getCourseBySlug(locale, view.courseSlug),
+    getServableLocales(),
   ]);
+
+  // ADR-127: the lesson's own words only. A served locale's option needs that
+  // locale's COURSE slug too; without one it stays a reading view here.
+  const courseSlugByLocale = new Map(view.courseAlternates.map((alt) => [alt.locale, alt.slug]));
+  const readingOptions = readingLanguageOptions({
+    languages: view.readingLanguages,
+    contentLocale: view.contentLocale,
+    interfaceLocale: locale,
+    servable: servableLocales,
+    currentPath: `${learnTrackPath(track)}/${view.courseSlug}/${view.slug}`,
+    pathFor: (language) => {
+      const localisedCourse = courseSlugByLocale.get(language.locale);
+      return localisedCourse
+        ? `${learnTrackPath(track)}/${localisedCourse}/${language.slug}`
+        : null;
+    },
+  });
 
   const video = view.videoUrl ? parseVideoUrl(view.videoUrl) : null;
 
@@ -171,41 +205,44 @@ export default async function LessonPage({
         <Container className="grid grid-cols-1 gap-8 pb-24 md:grid-cols-(--grid-rail-main) md:items-start md:pb-0">
           {/* Sidebar from md; a Sheet below it (§9.3). Both render the SAME
             CurriculumWithProgress — see lesson-contents-sheet.tsx. */}
-          <aside className="hidden md:sticky md:top-24 md:flex md:flex-col md:gap-3">
-            {/* The rail is a panel, not a heading with a list under it: a
+          {/* The rail's panels stagger in from the inline start, the side
+              it sits on (changes-45); the motion is on the panels, never on
+              the sticky aside itself. */}
+          <aside className="hidden md:sticky md:top-24 md:block">
+            <RevealGroup variant="start" step={80} className="flex flex-col gap-3">
+              {/* The rail is a panel, not a heading with a list under it: a
                 titled header band, a rule, then the sections (changes-24).
                 Before this the title, the section names and the lesson names
                 were three weights of the same thing in one column, with no
                 edge anywhere to say where the contents began. */}
-            <div className="overflow-hidden rounded-xl border bg-card">
-              <div className="flex items-baseline justify-between gap-2 border-b bg-muted/40 px-3 py-2.5">
-                <p className="text-2xs font-semibold tracking-caps text-muted-foreground uppercase">
-                  {t("lesson.contents")}
-                </p>
-                <span className="text-2xs text-muted-foreground tabular-nums">
-                  {t("card.lessons", { count: lessonCount })}
-                </span>
+              <div className="overflow-hidden rounded-xl border bg-card">
+                <div className="flex items-baseline justify-between gap-2 border-b bg-muted/40 px-3 py-2.5">
+                  <p className="text-2xs font-semibold tracking-caps text-muted-foreground uppercase">
+                    {t("lesson.contents")}
+                  </p>
+                  <span className="text-2xs text-muted-foreground tabular-nums">
+                    {t("card.lessons", { count: lessonCount })}
+                  </span>
+                </div>
+                <div className="max-h-(--height-scroll-panel) overflow-y-auto">
+                  <CurriculumWithProgress
+                    sections={sections}
+                    variant="rail"
+                    defaultOpenSectionIds={openSectionIds}
+                  />
+                </div>
               </div>
-              <div className="max-h-(--height-scroll-panel) overflow-y-auto">
-                <CurriculumWithProgress
-                  sections={sections}
-                  variant="rail"
-                  defaultOpenSectionIds={openSectionIds}
-                />
-              </div>
-            </div>
 
-            <ProgressSignInCard />
-
-            <div className="flex flex-col gap-2 rounded-xl border border-primary/20 bg-primary/5 p-4">
-              <p className="text-sm font-semibold">{t(practice.titleKey)}</p>
-              <p className="text-xs text-muted-foreground">{t(practice.descriptionKey)}</p>
-              <div>
-                <Button size="sm" variant="outline" render={<Link href={practice.href} />}>
-                  {t(practice.actionKey)}
-                </Button>
+              <div className="flex flex-col gap-2 rounded-xl border border-primary/20 bg-primary/5 p-4">
+                <p className="text-sm font-semibold">{t(practice.titleKey)}</p>
+                <p className="text-xs text-muted-foreground">{t(practice.descriptionKey)}</p>
+                <div>
+                  <Button size="sm" variant="outline" render={<Link href={practice.href} />}>
+                    {t(practice.actionKey)}
+                  </Button>
+                </div>
               </div>
-            </div>
+            </RevealGroup>
           </aside>
 
           <article className="flex min-w-0 flex-col gap-6">
@@ -224,7 +261,12 @@ export default async function LessonPage({
                 </span>
               </div>
 
-              <h1 className="text-display-sm font-semibold tracking-tight text-balance">
+              {/* `lang`/`dir` follow the TRANSLATION on screen (ADR-127 #1). */}
+              <h1
+                lang={view.contentLocale}
+                dir={view.contentDirection}
+                className="text-display-sm font-semibold tracking-tight text-balance"
+              >
                 {view.title}
               </h1>
               <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
@@ -237,11 +279,29 @@ export default async function LessonPage({
                     newTabLabel={t("external.opensInNewTab")}
                   />
                 )}
+                <div className="ms-auto">
+                  <ReadingLanguageMenu
+                    options={readingOptions}
+                    label={tPublic("readingLanguage")}
+                  />
+                </div>
               </div>
               {view.summary && (
-                <p className="text-lg text-pretty text-muted-foreground">{view.summary}</p>
+                <p
+                  lang={view.contentLocale}
+                  dir={view.contentDirection}
+                  className="text-lg text-pretty text-muted-foreground"
+                >
+                  {view.summary}
+                </p>
               )}
             </div>
+
+            {/* changes-46: the signed-out reminder, in the reading column at
+                every width. It replaces the rail's sign-in card, which was
+                hidden below md with the rest of the rail, so ADR-056 #3's
+                "one inline card" stays one. */}
+            <ProgressSignInReminder />
 
             {view.heroUrl && (
               <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-muted">
@@ -262,7 +322,11 @@ export default async function LessonPage({
                   <Target aria-hidden className="size-4 text-primary-interactive" />
                   {t("lesson.objectives")}
                 </h2>
-                <ul className="flex list-disc flex-col gap-1 ps-5 text-sm">
+                <ul
+                  lang={view.contentLocale}
+                  dir={view.contentDirection}
+                  className="flex list-disc flex-col gap-1 ps-5 text-sm"
+                >
                   {view.learningObjectives.map((objective) => (
                     <li key={objective}>{objective}</li>
                   ))}
@@ -283,7 +347,9 @@ export default async function LessonPage({
             )}
 
             {view.content ? (
-              <RichText html={view.content} />
+              <div lang={view.contentLocale} dir={view.contentDirection}>
+                <RichText html={view.content} />
+              </div>
             ) : (
               <EmptyState size="sm" icon={<FileText aria-hidden />} title={t("lesson.emptyBody")} />
             )}
@@ -316,7 +382,7 @@ export default async function LessonPage({
                       <a
                         href={attachment.url}
                         download
-                        className="card-hover flex items-center gap-3 rounded-lg border bg-card p-3 transition-colors duration-(--duration-base) hover:border-primary/25"
+                        className={`${INTERACTIVE_CARD} flex items-center gap-3 p-3`}
                       >
                         <FileText aria-hidden className="size-5 shrink-0 text-muted-foreground" />
                         <span className="flex min-w-0 flex-1 flex-col">
@@ -341,6 +407,9 @@ export default async function LessonPage({
               would invite a press before anything was read. */}
             <div className="flex flex-col gap-4 border-t pt-6">
               <LessonProgressActions lessonId={view.id} completionRule={view.completionRule} />
+              {/* ADR-084 #4: a QUIZ_PASS lesson's quiz sits where the manual
+                  "Mark complete" control would — it IS the completion control. */}
+              {view.quiz && <LessonAssessment quiz={view.quiz} lessonId={view.id} />}
               <LessonFeedback lessonId={view.id} />
               <Link
                 href={coursePathname}
@@ -363,11 +432,18 @@ export default async function LessonPage({
                         href: `${coursePathname}/${view.next.slug}`,
                         title: view.next.title,
                       }
-                    : null
+                    : view.courseFinalQuiz
+                      ? // ADR-084 #5: the last lesson's forward step is the
+                        // course's final assessment, with its own eyebrow.
+                        { href: quizHref(view.courseFinalQuiz), title: view.courseFinalQuiz.title }
+                      : null
                 }
                 labels={{
                   previous: t("lesson.previous"),
-                  next: t("lesson.next"),
+                  next:
+                    !view.next && view.courseFinalQuiz
+                      ? t("assessment.courseEyebrow")
+                      : t("lesson.next"),
                   navAria: t("lesson.navAria"),
                 }}
               />

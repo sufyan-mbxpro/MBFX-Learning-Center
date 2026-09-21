@@ -59,7 +59,7 @@ function openingTags(src: string, tag: string): string[] {
   }
 }
 
-const HEADED = ["AdminPage", "AdminPageHeading", "SettingsScreen"];
+const HEADED = ["AdminPage", "AdminPageHeading", "SettingsScreen", "EditorPage"];
 const headedScreens = inScope
   .map((path) => ({ path, src: readFileSync(path, "utf8") }))
   .flatMap(({ path, src }) =>
@@ -144,6 +144,18 @@ describe("the breadcrumb never links to a route that does not exist", () => {
     ].map((m) => m[1]),
   );
   const ADMIN = resolve(ADMIN_ROOT, "admin");
+  /**
+   * Does this folder answer its own URL? Its own `page.tsx`, or one inside a
+   * route GROUP it contains — `(group)` adds no URL segment, so
+   * `articles/(browse)/page.tsx` is what `/admin/articles` renders (ADR-106).
+   * Reading only the folder's own `page.tsx` called that a dead crumb.
+   */
+  const hasPage = (dir: string): boolean =>
+    existsSync(resolve(dir, "page.tsx")) ||
+    readdirSync(dir, { withFileTypes: true }).some(
+      (entry) =>
+        entry.isDirectory() && entry.name.startsWith("(") && hasPage(resolve(dir, entry.name)),
+    );
   const pageless = (dir: string, rel = ""): string[] =>
     readdirSync(dir, { withFileTypes: true })
       .filter(
@@ -158,7 +170,19 @@ describe("the breadcrumb never links to a route that does not exist", () => {
       )
       .flatMap((e) => {
         const path = resolve(dir, e.name);
-        const own = existsSync(resolve(path, "page.tsx")) ? [] : [e.name];
+        // Or a SIBLING group answers it: `glossary/topics/` holds only the
+        // `[id]` editor, and `/admin/glossary/topics` is the tab at
+        // `glossary/(browse)/topics/page.tsx` (changes-48 #3).
+        const answered =
+          hasPage(path) ||
+          readdirSync(dir, { withFileTypes: true }).some(
+            (group) =>
+              group.isDirectory() &&
+              group.name.startsWith("(") &&
+              existsSync(resolve(dir, group.name, e.name)) &&
+              hasPage(resolve(dir, group.name, e.name)),
+          );
+        const own = answered ? [] : [e.name];
         return [...own, ...pageless(path, `${rel}${e.name}/`)];
       });
 
@@ -192,5 +216,66 @@ describe("the admin top bar fits a phone", () => {
   it("lets the search trigger shrink", () => {
     const src = readFileSync(resolve(COMPONENTS, "admin-search.tsx"), "utf8");
     expect(src).toMatch(/className="[^"]*\bw-full\b[^"]*\bmin-w-0\b[^"]*\bshrink\b(?!-)/);
+  });
+});
+
+describe("ADR-140 §3 — an editor's heading is static, and its actions share the row", () => {
+  // The record's title is the editor's first field. Repeating it as the h1 at
+  // page-title size is what pushed Save / Preview / View live onto a second
+  // row, so the heading is a catalog string ("Edit course") and never an
+  // expression over the loaded record.
+  // ADR-142 §4: the three PERSON records are not editors. They have no title
+  // field for the heading to repeat, and the owner's reference puts the
+  // person's name in the heading with their id and address under it, so a
+  // support admin knows at a glance whose account they are about to change.
+  const RECORD_PAGES = /[\\/](users|employees|newsletter)[\\/]\[id\][\\/]page\.tsx$/;
+  const editorRoutes = inScope.filter(
+    (path) =>
+      /[\\/](\[[a-z]+\]|new)[\\/]page\.tsx$/.test(path) &&
+      !path.includes("settings") &&
+      !RECORD_PAGES.test(path),
+  );
+
+  it("exempts exactly the three person records", () => {
+    expect(inScope.filter((path) => RECORD_PAGES.test(path))).toHaveLength(3);
+  });
+  // `title={t("…")}` or a catalog key picked by kind, `title={t(`….${kind}`)}`.
+  const RECORD_TITLE = /\btitle=\{(?!\s*t(?:Ai)?\(["`])/;
+
+  it("finds editor routes to check at all", () => {
+    expect(editorRoutes.length).toBeGreaterThan(10);
+  });
+
+  it.each(editorRoutes.map((path) => [path.slice(ADMIN_ROOT.length + 1), path] as const))(
+    "%s titles its page from the catalog",
+    (_name, path) => {
+      const src = readFileSync(path, "utf8");
+      for (const tag of [...openingTags(src, "AdminPage"), ...openingTags(src, "EditorPage")]) {
+        expect(tag).not.toMatch(RECORD_TITLE);
+      }
+    },
+  );
+
+  const EDITORS = [
+    "articles/[id]/article-editor.tsx",
+    "glossary/[id]/glossary-editor.tsx",
+    "glossary/topics/[id]/topic-editor.tsx",
+    "learn/courses/[id]/course-editor.tsx",
+    "learn/lessons/[id]/lesson-editor.tsx",
+    "learn/quizzes/[id]/quiz-editor.tsx",
+    "learn/videos/[id]/video-editor.tsx",
+    "tools/[key]/tool-editor.tsx",
+  ];
+
+  it.each(EDITORS)("%s portals its actions into the heading row", (file) => {
+    const src = readFileSync(resolve(ADMIN_ROOT, "admin", file), "utf8");
+    expect(src).toContain("<HeaderActions>");
+    // The old free-standing sticky bar under the heading.
+    expect(src).not.toMatch(/sticky top-\(--height-header\)/);
+  });
+
+  it.each(EDITORS)("%s's page renders the pinned EditorPage frame", (file) => {
+    const page = resolve(ADMIN_ROOT, "admin", file.replace(/[^/]+$/, "page.tsx"));
+    expect(readFileSync(page, "utf8")).toContain("<EditorPage");
   });
 });

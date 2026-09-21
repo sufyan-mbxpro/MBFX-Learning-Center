@@ -1,65 +1,124 @@
 "use client";
 
-// The reference editor's "SEO Analysis" tab (changes-07 §1.2). Rule ids come
-// from `@repo/utils`'s pure `seoChecks`; the WORDING lives in the catalogs
-// (code-style.md #2), which is why the helper returns ids and not sentences.
-
+// The "SEO Analysis" panel, one shape on every module (changes-46 #3, the
+// owner's image-109): two stat cards (reading time, content length), one
+// tinted card per concern with a verdict and a reason, then a tips card.
+//
+// The verdicts come from `@repo/utils`'s pure `seoReport`, which returns ids,
+// reasons and numbers; every sentence lives in `admin.seoAnalysis.*`
+// (code-style.md #2). The panel labels itself through `useTranslations` — the
+// admin root layout mounts the client provider — so no host has to thread
+// forty strings through its page for a panel that is the same everywhere.
+//
+// Colour is theme tokens only, and status is never colour alone: every card
+// carries its glyph AND its words. Nothing here blocks a save; the report is
+// advice (changes-07-plan §9 risk 5).
 import { useMemo } from "react";
-import { Check, X } from "lucide-react";
-import { parseKeywords, seoChecks, seoScore, type SeoCheckId } from "@repo/utils";
-import { Progress } from "@repo/ui/components/progress";
+import { useTranslations } from "next-intl";
+import { AlertTriangle, Check, CircleX, Clock, FileText, Lightbulb } from "lucide-react";
+import { parseKeywords, seoReport, type SeoRecommendation, type SeoTone } from "@repo/utils";
+import { cn } from "@repo/ui/lib/utils";
 
-export interface SeoAnalysisLabels {
-  score: string;
-  checks: Record<SeoCheckId, string>;
-}
+const TONE_CLASS: Record<SeoTone, string> = {
+  success: "border-success/30 bg-success/10 text-success-interactive",
+  warning: "border-warning/30 bg-warning/10 text-warning-interactive",
+  error: "border-destructive/30 bg-destructive/10 text-destructive-interactive",
+};
+
+const TONE_ICON: Record<SeoTone, typeof Check> = {
+  success: Check,
+  warning: AlertTriangle,
+  error: CircleX,
+};
+
+const TIPS = ["keywords", "headings", "links", "images", "paragraphs"] as const;
 
 export function SeoAnalysis({
   title,
   description,
   body,
   focusKeywords,
-  labels,
 }: {
   title: string;
   description: string;
+  /** The prose the page is about — HTML, stripped before counting. */
   body: string;
+  /** Comma-separated; the FIRST is the focus keyword. */
   focusKeywords: string;
-  labels: SeoAnalysisLabels;
 }) {
-  const checks = useMemo(
-    () =>
-      seoChecks({
-        title,
-        description,
-        body,
-        keywords: parseKeywords(focusKeywords),
-      }),
+  const t = useTranslations("admin.seoAnalysis");
+  const report = useMemo(
+    () => seoReport({ title, description, body, keywords: parseKeywords(focusKeywords) }),
     [title, description, body, focusKeywords],
   );
-  const score = seoScore(checks);
+
+  const message = (rec: SeoRecommendation) => {
+    if (rec.missing) {
+      const places = rec.missing.map((place) => t(`places.${place}`)).join(", ");
+      return t(`messages.${rec.id}.${rec.reason}` as "messages.title.optimal", { places });
+    }
+    return t(`messages.${rec.id}.${rec.reason}` as "messages.title.optimal", rec.values);
+  };
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-3">
-        <span className="text-sm font-medium">{labels.score}</span>
-        <Progress value={score} className="flex-1" />
-        <span className="text-sm font-semibold tabular-nums">{score}%</span>
+    <div className="flex flex-col gap-5">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="flex flex-col gap-1 rounded-lg bg-muted p-4">
+          <p className="flex items-center gap-2 text-base font-semibold">
+            <Clock aria-hidden className="size-4 text-muted-foreground" />
+            {t("readingTime")}
+          </p>
+          <p className="text-2xl font-bold tabular-nums">
+            {t("minutes", { count: report.readingMinutes })}
+          </p>
+          <p className="text-sm text-muted-foreground">{t("words", { count: report.words })}</p>
+        </div>
+        <div className="flex flex-col gap-1 rounded-lg bg-muted p-4">
+          <p className="flex items-center gap-2 text-base font-semibold">
+            <FileText aria-hidden className="size-4 text-muted-foreground" />
+            {t("contentLength")}
+          </p>
+          <p className="text-2xl font-bold tabular-nums">{report.words}</p>
+          <p className="text-sm text-muted-foreground">{t(`verdict.${report.lengthVerdict}`)}</p>
+        </div>
       </div>
-      <ul className="flex flex-col gap-1.5">
-        {checks.map((check) => (
-          <li key={check.id} className="flex items-start gap-2 text-sm">
-            {check.passed ? (
-              <Check aria-hidden className="mt-0.5 size-4 shrink-0 text-success-interactive" />
-            ) : (
-              <X aria-hidden className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-            )}
-            <span className={check.passed ? "" : "text-muted-foreground"}>
-              {labels.checks[check.id]}
-            </span>
-          </li>
-        ))}
-      </ul>
+
+      <section className="flex flex-col gap-3" aria-labelledby="seo-recommendations">
+        <h3 id="seo-recommendations" className="text-sm font-semibold">
+          {t("recommendations")}
+        </h3>
+        <ul className="flex flex-col gap-2.5">
+          {report.recommendations.map((rec) => {
+            const Icon = TONE_ICON[rec.tone];
+            return (
+              <li
+                key={rec.id}
+                data-tone={rec.tone}
+                className={cn("flex flex-col gap-1 rounded-lg border p-3", TONE_CLASS[rec.tone])}
+              >
+                <p className="flex items-center gap-2 text-sm font-semibold">
+                  <Icon aria-hidden className="size-4 shrink-0" />
+                  {t(`titles.${rec.id}`)}
+                  <span className="sr-only">— {t(`tones.${rec.tone}`)}</span>
+                </p>
+                <p className="ps-6 text-sm">{message(rec)}</p>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
+
+      <section className="flex flex-col gap-2 rounded-lg border border-info/30 bg-info/10 p-4 text-info-interactive">
+        <h3 className="flex items-center gap-2 text-base font-semibold">
+          <Lightbulb aria-hidden className="size-4" />
+          {t("tipsTitle")}
+        </h3>
+        <ul className="flex list-disc flex-col gap-1 ps-5 text-sm">
+          {TIPS.map((tip) => (
+            <li key={tip}>{t(`tips.${tip}`)}</li>
+          ))}
+        </ul>
+      </section>
     </div>
   );
 }

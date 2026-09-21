@@ -1,0 +1,444 @@
+{
+  "exportedAt": "2026-09-19T19:40:11.417Z",
+  "theme": {
+    "key": "mbx-pro-default",
+    "name": "MBX Pro",
+    "description": "Default brand theme.",
+    "brandColors": {
+      "primary": "#c8986b",
+      "secondary": "#2A2A29",
+      "success": "#4b81e2",
+      "error": "#D93A34",
+      "warning": "#FFA310",
+      "info": "#5A524B",
+      "accent": "#e9e4dd"
+    },
+    "lightSurface": {
+      "background": "#FFFFFF",
+      "surface": "#FFFFFF",
+      "surfaceMuted": "#F0EBE3",
+      "textPrimary": "#14110F",
+      "textSecondary": "#6F6862",
+      "textMuted": "#8F877E",
+      "borderLight": "#E6DFD4",
+      "borderMedium": "#8C837A"
+    },
+    "darkSurface": {
+      "background": "#14110F",
+      "surface": "#1B1714",
+      "surfaceMuted": "#241F1A",
+      "textPrimary": "#F7F3EE",
+      "textSecondary": "#A79E94",
+      "textMuted": "#7E766C",
+      "borderLight": "#2B251F",
+      "borderMedium": "#756B60"
+    },
+    "darkBrandOverrides": {
+      "secondary": "#E8E6E3",
+      "accent": "#241F1A"
+    },
+    "layoutTokens": {
+      "radiusBase": "6px",
+      "containerWidth": "1400px",
+      "fontSans": "system",
+      "fontMono": "systemmono",
+      "fontDisplay": "system",
+      "baseFontSize": "16px"
+    },
+    "defaultMode": "SYSTEM"
+  },
+  "brandAssets": [
+    {
+      "key": "favicon",
+      "altText": null,
+      "file": "defaults/brand-favicon.jpg"
+    },
+    {
+      "key": "logo_dark",
+      "altText": "MBX Pro",
+      "url": "/brand/logo-dark.png"
+    },
+    {
+      "key": "logo_light",
+      "altText": "MBX Pro",
+      "url": "/brand/logo-light.png"
+    }
+  ],
+  "settings": {
+    "ai.budgetWarnPercent": 80,
+    "ai.capBehavior": "NOTIFY_ONLY",
+    "ai.enabled": true,
+    "ai.maxTokensPerRequest": 2000,
+    "ai.model.heavy": "models/gemini-3.5-flash-lite",
+    "ai.model.light": "models/gemini-3.5-flash-lite",
+    "ai.model.standard": "models/gemini-3.5-flash-lite",
+    "ai.monthlyBudgetUsd": 50,
+    "ai.rateLimitPerUserHour": 120,
+    "articles.perPage": 6,
+    "articles.relatedCount": 3,
+    "articles.showAuthor": true,
+    "articles.showReadingTime": true,
+    "cms.dataBudget": {
+      "page": {
+        "collections": {
+          "warn": 6,
+          "block": 10
+        },
+        "items": {
+          "warn": 36,
+          "block": 72
+        }
+      },
+      "part": {
+        "collections": {
+          "warn": 2,
+          "block": 4
+        },
+        "items": {
+          "warn": 12,
+          "block": 24
+        }
+      }
+    },
+    "email.enabled": true,
+    "email.footerText": "You are receiving this because you have an account with MBX Learning Center.",
+    "email.fromEmail": "no-reply@mbxpro.com",
+    "email.fromName": "MBX Learning Center",
+    "email.logo": {
+      "$file": "defaults/setting-email-logo.png"
+    },
+    "email.postalAddress": "",
+    "email.replyTo": "",
+    "footer.appLinks": [],
+    "footer.menuColumns": [
+      {
+        "menuKey": "footer_learn_forex",
+        "order": 1
+      },
+      {
+        "menuKey": "footer_learn_crypto",
+        "order": 2
+      },
+      {
+        "menuKey": "footer_tools",
+        "order": 3
+      },
+      {
+        "menuKey": "footer_tools_markets",
+        "order": 4
+      },
+      {
+        "menuKey": "footer_markets",
+        "order": 5
+      },
+      {
+        "menuKey": "footer_company",
+        "order": 6
+      }
+    ],
+    "footer.showPaymentBadges": false,
+    "header.announcementBar": {
+      "enabled": false,
+      "text": "",
+      "dismissible": true
+    },
+    "header.cta": {
+      "enabled": false,
+      "label": "Get Started",
+      "url": "/sign-up"
+    },
+    "header.showSearch": true,
+    "header.sticky": true,
+    "header.topBar": {
+      "enabled": false,
+      "phone": "",
+      "promoText": "",
+      "promoUrl": ""
+    },
+    "home.sections": [
+      {
+        "key": "hero",
+        "enabled": true,
+        "order": 1,
+        "variant": "split"
+      },
+      {
+        "key": "learning_videos",
+        "enabled": false,
+        "order": 2,
+        "variant": "grid",
+        "limit": 6
+      },
+      {
+        "key": "trust_strip",
+        "enabled": false,
+        "order": 3
+      },
+      {
+        "key": "facts",
+        "enabled": false,
+        "order": 4
+      },
+      {
+        "key": "explore_platform",
+        "enabled": true,
+        "order": 5,
+        "variant": "carousel"
+      },
+      {
+        "key": "feature_highlights",
+        "enabled": false,
+        "order": 6,
+        "variant": "grid",
+        "limit": 6
+      },
+      {
+        "key": "latest_news",
+        "enabled": true,
+        "order": 7,
+        "variant": "desk"
+      },
+      {
+        "key": "latest_analysis",
+        "enabled": false,
+        "order": 8,
+        "variant": "standard",
+        "limit": 3
+      },
+      {
+        "key": "glossary_spotlight",
+        "enabled": true,
+        "order": 9,
+        "variant": "feature",
+        "limit": 8
+      },
+      {
+        "key": "learning_paths",
+        "enabled": false,
+        "order": 8,
+        "variant": "elevated",
+        "limit": 3
+      },
+      {
+        "key": "forex_rates",
+        "enabled": false,
+        "order": 9,
+        "variant": "marquee"
+      },
+      {
+        "key": "economic_events",
+        "enabled": false,
+        "order": 10,
+        "limit": 5
+      },
+      {
+        "key": "popular_tools",
+        "enabled": false,
+        "order": 11,
+        "variant": "default",
+        "limit": 4
+      },
+      {
+        "key": "featured_lessons",
+        "enabled": false,
+        "order": 12,
+        "variant": "default",
+        "limit": 3
+      },
+      {
+        "key": "market_sentiment",
+        "enabled": false,
+        "order": 13
+      },
+      {
+        "key": "trading_sessions",
+        "enabled": false,
+        "order": 14
+      },
+      {
+        "key": "in_practice",
+        "enabled": true,
+        "order": 12
+      },
+      {
+        "key": "testimonials",
+        "enabled": false,
+        "order": 13,
+        "limit": 3
+      },
+      {
+        "key": "connect",
+        "enabled": true,
+        "order": 14
+      },
+      {
+        "key": "faq",
+        "enabled": true,
+        "order": 15,
+        "variant": "columns"
+      },
+      {
+        "key": "newsletter",
+        "enabled": false,
+        "order": 16,
+        "variant": "full-width"
+      },
+      {
+        "key": "quotes",
+        "enabled": true,
+        "order": 17,
+        "variant": "single"
+      },
+      {
+        "key": "risk_disclaimer",
+        "enabled": false,
+        "order": 18
+      }
+    ],
+    "layout.containerWidth": "1400px",
+    "layout.pageLoader": true,
+    "layout.showBreadcrumbs": true,
+    "legal.agreementDocument": "/legal/agreement.pdf",
+    "legal.companyRegistration": "2023-00532",
+    "legal.copyrightNotice": "© {year} MBFX Global Limited. All rights reserved.",
+    "legal.privacyDocument": "/legal/privacy.pdf",
+    "legal.registeredAddress": "Ground Floor, Rodney Court Building, Rodney Bay, Gros Islet, Saint Lucia.",
+    "legal.riskDisclaimer": "Trading Contracts for Difference (CFDs) and spread bets involves a high level of risk due to the use of leverage. These instruments may not be suitable for all investors, as they can result in rapid losses as well as potential gains. Before trading with MBFX Global Limited (\"MBFX\"), please ensure that you fully understand how CFDs and spread bets work and carefully consider whether you can afford to take the high risk of losing your money.\n\nMBFX Global Limited is incorporated in Saint Lucia under registration number 2023-00532. In line with its commitment to regulatory compliance and due diligence, MBFX adheres to international KYC standards and may not be able to extend certain services in jurisdictions where local regulations restrict such activities. These regions currently include Australia, the United States, Brazil, Curaçao, Indonesia, Sint Eustatius, Tahiti, Saipan, Turkey, Guinea-Bissau, Japan, Bonaire, East Timor, Liberia, Micronesia, Northern Mariana Islands, Jan Mayen, South Sudan, Svalbard, the UAE, and other regions with similar restrictions. For more details, please review our Privacy Policy.",
+    "legal.termsDocument": "/legal/terms.pdf",
+    "media.maxBytes.audio": 20971520,
+    "media.maxBytes.document": 20971520,
+    "media.maxBytes.image": 5242880,
+    "media.maxBytes.video": 104857600,
+    "newsletter.placements.analysis": true,
+    "newsletter.placements.footer": true,
+    "newsletter.placements.home": true,
+    "newsletter.placements.news": true,
+    "security.adminSessionTimeout": "30",
+    "seo.defaultOgImage": "/og-default.png",
+    "seo.googleSiteVerification": "",
+    "seo.robotsIndex": true,
+    "seo.titleTemplate": "%s | MBX Pro",
+    "site.contactEmail": "hello@mbxpro.com",
+    "site.defaultLocale": "en",
+    "site.defaultThemeMode": "system",
+    "site.defaultTimezone": "UTC",
+    "site.description": "Free forex and trading education, market tools, and analysis.",
+    "site.name": "MBX Pro",
+    "site.reviewsUrl": "https://www.trustpilot.com/review/mbfx.co",
+    "site.supportEmail": "support@mbxpro.com",
+    "site.tagline": "Learn to trade the markets"
+  },
+  "flags": {
+    "analysis": true,
+    "calculators": true,
+    "courses": true,
+    "currency_converter": true,
+    "economic_calendar": true,
+    "glossary": true,
+    "market_data": true,
+    "news": true,
+    "newsletter": true,
+    "progress_tracking": true,
+    "quizzes": true,
+    "videos": true
+  },
+  "market": {
+    "driver": "ALPHAVANTAGE",
+    "baseUrl": "https://www.alphavantage.co/",
+    "refreshSeconds": 86400,
+    "staleSeconds": 86400,
+    "isEnabled": true
+  },
+  "ai": {
+    "kind": "GOOGLE",
+    "baseUrl": null,
+    "models": [
+      {
+        "modelId": "models/gemini-2.5-flash",
+        "label": "Gemini 2.5 Flash",
+        "inputPricePerMTok": 0,
+        "outputPricePerMTok": 0,
+        "cachedInputPricePerMTok": null,
+        "maxOutputTokens": 4096,
+        "supportsVision": false
+      },
+      {
+        "modelId": "models/gemini-2.5-flash-lite",
+        "label": "Gemini 2.5 Flash-Lite",
+        "inputPricePerMTok": 0,
+        "outputPricePerMTok": 0,
+        "cachedInputPricePerMTok": null,
+        "maxOutputTokens": 4096,
+        "supportsVision": false
+      },
+      {
+        "modelId": "models/gemini-3-pro-image",
+        "label": "Nano Banana Pro",
+        "inputPricePerMTok": 0,
+        "outputPricePerMTok": 0,
+        "cachedInputPricePerMTok": null,
+        "maxOutputTokens": 4096,
+        "supportsVision": false
+      },
+      {
+        "modelId": "models/gemini-3.5-flash-lite",
+        "label": "Gemini 3.5 Flash Lite",
+        "inputPricePerMTok": 0,
+        "outputPricePerMTok": 0,
+        "cachedInputPricePerMTok": null,
+        "maxOutputTokens": 4096,
+        "supportsVision": false
+      }
+    ],
+    "features": [
+      {
+        "key": "alt_text",
+        "isEnabled": true,
+        "maxOutputTokens": null,
+        "extraInstructions": null
+      },
+      {
+        "key": "form_fill",
+        "isEnabled": true,
+        "maxOutputTokens": null,
+        "extraInstructions": null
+      },
+      {
+        "key": "quiz_generation",
+        "isEnabled": true,
+        "maxOutputTokens": null,
+        "extraInstructions": null
+      },
+      {
+        "key": "seo_generation",
+        "isEnabled": true,
+        "maxOutputTokens": null,
+        "extraInstructions": null
+      },
+      {
+        "key": "summarization",
+        "isEnabled": true,
+        "maxOutputTokens": null,
+        "extraInstructions": null
+      },
+      {
+        "key": "translation",
+        "isEnabled": true,
+        "maxOutputTokens": null,
+        "extraInstructions": null
+      },
+      {
+        "key": "writing_assistant",
+        "isEnabled": true,
+        "maxOutputTokens": null,
+        "extraInstructions": null
+      },
+      {
+        "key": "writing_studio",
+        "isEnabled": true,
+        "maxOutputTokens": null,
+        "extraInstructions": null
+      }
+    ]
+  }
+}

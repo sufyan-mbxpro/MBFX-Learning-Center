@@ -4,8 +4,10 @@ import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "@repo/ui/lib/utils";
 
-// changes-20 / ADR-072 — the reference's badge (tokens.md §6.6): a pill,
-// semibold, in three sizes. The status language is TONAL (hue at /10, its
+// changes-20 / ADR-072 — the reference's badge (tokens.md §6.6): semibold, in
+// three sizes. It was a pill until ADR-107 put every text-bearing surface on
+// the derived radius scale; the `pill` VARIANT keeps its name because what it
+// describes is the muted-tint treatment, not the corner. The status language is TONAL (hue at /10, its
 // own ink) exactly as the reference draws it, with one correction under
 // ADR-072 §1 / ADR-073: the ink is the hue's *-interactive derivation, which
 // holds 4.5:1 inside its own /10–/15 tint. The reference's raw-hue ink
@@ -13,8 +15,8 @@ import { cn } from "@repo/ui/lib/utils";
 const badgeVariants = cva(
   // `items-center justify-center` centres the label in every size (ADR-044's
   // "Badge centres its own text"); the fixed-height sizes add `leading-none`
-  // so the glyph box cannot push the pill off its height.
-  "group/badge inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-full border font-semibold whitespace-nowrap transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background [&>svg]:pointer-events-none [&>svg]:size-3!",
+  // so the glyph box cannot push the badge off its height.
+  "group/badge inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-md border font-semibold whitespace-nowrap transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background [&>svg]:pointer-events-none [&>svg]:size-3!",
   {
     // `size` is declared BEFORE `variant` on purpose: cva emits classes in
     // key order and tailwind-merge keeps the last, so a variant that owns its
@@ -60,6 +62,25 @@ const badgeVariants = cva(
           "h-auto gap-1.5 border-transparent bg-primary/10 px-2.5 py-1 tracking-wide text-primary-interactive uppercase",
         // A larger neutral chip for card metadata (article category tags).
         pill: "h-6 gap-1.5 border-transparent bg-muted px-3 font-medium text-foreground [a]:hover:bg-muted/70",
+        // changes-31 / ADR-101 — the corner MARKER the reference lays over a
+        // card's cover ("FEATURED", "NEW"). Two fills and no third, because
+        // the reference has two and because a marker's job is to be read at a
+        // glance over photography, which more hues make harder, not easier.
+        //
+        // Tighter than the base radius, not squared FROM a pill any more:
+        // ADR-107 put every badge on the derived scale, and this declares
+        // `rounded-sm` one step in from it. The mechanism is unchanged —
+        // this object's classes come after the base string, so tailwind-merge
+        // keeps it. Uppercase at `tracking-caps`, which is the reference's own
+        // eyebrow tracking and already a token.
+        //
+        // The label ink is engine-derived on both (`--primary-foreground` is
+        // #1A1A1A on bronze at 6.01:1, not the reference's white at 2.77:1 —
+        // ADR-072 §1), so a marker stays legible whatever an admin rebrands to.
+        marker:
+          "h-5 rounded-sm border-transparent bg-primary px-2 text-3xs tracking-caps text-primary-foreground uppercase",
+        "marker-dark":
+          "h-5 rounded-sm border-transparent bg-secondary px-2 text-3xs tracking-caps text-secondary-foreground uppercase",
       },
     },
     defaultVariants: {

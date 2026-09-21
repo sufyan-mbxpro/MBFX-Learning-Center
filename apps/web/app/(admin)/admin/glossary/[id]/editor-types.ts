@@ -1,23 +1,30 @@
 // Shared shapes for the glossary term editor (ADR-069, changes-17 PR 2).
 import type { GlossaryFaqItemInput } from "@repo/contracts";
 import type { ContentStatusLabels } from "../../_components/editor/content-status-panel.tsx";
-import type { SeoAnalysisLabels } from "../../_components/editor/seo-analysis.tsx";
 import type { RichTextLabels } from "../../_components/rich-text-editor.tsx";
 import type { FaqLabels } from "../../_components/editor/faq-panel.tsx";
+
+import type { ContentFlags } from "../../_components/editor/content-flags-fields.tsx";
 
 export interface GlossaryTranslationDraft {
   locale: string;
   term: string;
   slug: string;
-  /** The only required body — it is what the A–Z list and the term-of-the-day card render. */
-  simpleExplanation: string;
-  detailedExplanation: string;
-  advancedExplanation: string;
-  exampleScenario: string;
+  /**
+   * The ONE rich body (changes-46 #1), saved to `simpleExplanation`. Its
+   * opening paragraph is what the A–Z list and the related cards print
+   * (`htmlLead`); the whole of it is the term page.
+   */
+  details: string;
   faq: GlossaryFaqItemInput[];
   seoTitle: string;
   seoDescription: string;
   translationStatus: string;
+  /**
+   * Untouched AI output (changes-29 B3). Set by "Translate", cleared by any
+   * edit to a translatable field; the save turns it into `MACHINE_TRANSLATED`.
+   */
+  machineTranslated?: boolean;
 }
 
 export interface GlossaryTermData {
@@ -30,6 +37,8 @@ export interface GlossaryTermData {
   difficulty: string;
   formula: string;
   imageUrl: string | null;
+  /** ADR-139 â€” Featured / Active / Premium, edited in the Display card. */
+  flags: ContentFlags;
   viewCount: number;
   publishedAt: string | null;
   scheduledFor: string | null;
@@ -60,18 +69,14 @@ export interface GlossaryEditorLabels {
   termLabel: string;
   slugLabel: string;
   termUrl: string;
-  simpleLabel: string;
-  simpleHint: string;
-  detailedLabel: string;
-  detailedHint: string;
-  advancedLabel: string;
-  advancedHint: string;
-  exampleLabel: string;
-  exampleHint: string;
+  detailsLabel: string;
+  detailsHint: string;
 
   // Filing
   filingSection: string;
   filingSectionDescription: string;
+  displaySection: string;
+  displaySectionDescription: string;
   topicLabel: string;
   topicHint: string;
   topicNone: string;
@@ -111,7 +116,6 @@ export interface GlossaryEditorLabels {
 
   // Nested panels
   status: ContentStatusLabels;
-  analysis: SeoAnalysisLabels;
   faq: FaqLabels;
   editor: RichTextLabels;
   upload: {

@@ -1,22 +1,25 @@
 import type { Metadata } from "next";
+import { listingMetadata } from "../../../_lib/seo.ts";
 import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { publicArticleSearchSchema } from "@repo/contracts";
 import { getArticleFacets, getPublishedArticles, isNewsletterPlacementEnabled } from "@repo/core";
 import { getSetting, isFeatureVisible } from "@repo/settings";
-import { Container } from "@repo/ui/components/container";
 import { CtaBand } from "@repo/ui/components/cta-band";
 import { Reveal } from "@repo/ui/components/reveal";
 import { Section } from "@repo/ui/components/section";
-import { ArticleCards } from "../news/_components/article-list.tsx";
-import { ArticleSidebar } from "../news/_components/article-sidebar.tsx";
-import { ListingHeader } from "../news/_components/listing-header.tsx";
+import { SectionHeading } from "@repo/ui/components/section-heading";
+import { ArchiveTaxonomy } from "../news/_components/archive-taxonomy.tsx";
+import { ArticleListing } from "../news/_components/article-listing.tsx";
+import { NewsMasthead } from "../news/_components/news-masthead.tsx";
 import { NewsletterForm } from "../_components/newsletter-form.tsx";
 import { newsletterFormLabels } from "../_components/newsletter-labels.ts";
-import { NumberedPagination } from "../news/_components/numbered-pagination.tsx";
+import { SIGNED_OUT_ONLY_CLASS } from "../../../_lib/session-hint.ts";
+import { MarketNewsBand } from "./_components/market-news-band.tsx";
 
 export async function generateMetadata({
   params,
+  searchParams,
 }: PageProps<"/[locale]/analysis">): Promise<Metadata> {
   const { locale } = await params;
   setRequestLocale(locale);
@@ -24,11 +27,22 @@ export async function generateMetadata({
     getTranslations("news"),
     getSetting("seo.titleTemplate"),
   ]);
-  return { title: (template ?? "%s").replace("%s", t("analysisTitle")) };
+  const search = await searchParams;
+  const parsed = publicArticleSearchSchema.safeParse({ q: search.q, page: search.page });
+  const { q, page = 0 } = parsed.success ? parsed.data : {};
+  return {
+    title: (template ?? "%s").replace("%s", t("analysisTitle")),
+    description: t("analysisIntro"),
+    ...listingMetadata(locale, "/analysis", page, q),
+  };
 }
 
 // Analysis + trade ideas share one feed (ADR-015 #11); the detail pages
 // live under /news/[slug] alongside the news kind.
+//
+// changes-38: the same shape as /news and both archives — `NewsMasthead`
+// with the popular tags, then `ArticleListing` (cards beside the sidebar),
+// then the taxonomy band the masthead's second action anchors to.
 export default async function AnalysisPage({
   params,
   searchParams,
@@ -67,42 +81,46 @@ export default async function AnalysisPage({
 
   return (
     <main className="flex flex-col">
-      <ListingHeader
+      <NewsMasthead
+        eyebrow={t("analysisEyebrow")}
         title={t("analysisTitle")}
-        intro={t("analysisIntro")}
+        lead={t("analysisIntro")}
         crumbs={[{ label: t("analysisTitle") }]}
+        // The owner's own piece for this section (changes-40). /news keeps
+        // the default.
+        backdropSlot="analysisBanner"
       />
 
-      <Section spacing="md">
-        <Container className="grid grid-cols-1 gap-10 lg:grid-cols-(--grid-main-aside)">
-          <div className="flex flex-col gap-8">
-            {q && (
-              <p className="text-sm text-muted-foreground">
-                {t("searchResults", { query: q, count: result.total })}
-              </p>
-            )}
-            <Reveal variant="up">
-              <ArticleCards
-                entries={result.entries}
-                locale={locale}
-                showKind
-                variant="standard"
-                showAuthor={showAuthor !== false}
-              />
-            </Reveal>
-            <NumberedPagination
-              basePath="/analysis"
-              page={page}
-              pageCount={result.pageCount}
-              query={q}
-            />
-          </div>
-          <ArticleSidebar facets={facets} locale={locale} basePath="/analysis" query={q} />
-        </Container>
-      </Section>
+      <ArticleListing
+        locale={locale}
+        heading={
+          <SectionHeading
+            eyebrow={t("latestEyebrow")}
+            title={t("analysisLatestTitle")}
+            lead={t("analysisLatestLead")}
+          />
+        }
+        entries={result.entries}
+        total={result.total}
+        page={page}
+        pageCount={result.pageCount}
+        paginationBasePath="/analysis"
+        searchBasePath="/analysis"
+        query={q}
+        facets={facets}
+        showKind
+        showAuthor={showAuthor !== false}
+      />
+
+      {/* The masthead's "Browse topics" anchor lands here, as it lands on
+          `NewsTopics` on /news. */}
+      <ArchiveTaxonomy categories={facets.categories} tags={facets.tags} />
+
+      {/* The vendor's headline feed, after our own analysis (ADR-136 §6). */}
+      <MarketNewsBand locale={locale} />
 
       {newsletterFlag && newsletterPlaced && (
-        <Section spacing="sm">
+        <Section spacing="sm" className={SIGNED_OUT_ONLY_CLASS}>
           <Reveal variant="up">
             <CtaBand title={t("subscribeTitle")} description={t("subscribeBody")}>
               <div className="w-full sm:w-80">

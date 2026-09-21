@@ -292,7 +292,7 @@ describe("Tabs (tokens.md §6.8)", () => {
 });
 
 describe("ViewChips (tokens.md §6.8)", () => {
-  it("a scrollable row of equal pills; the selected one is brand-filled and aria-pressed", () => {
+  it("a scrollable row of equal chips; the selected one is brand-filled and aria-pressed", () => {
     const onValueChange = vi.fn();
     render(
       <ViewChips value="default" onValueChange={onValueChange} aria-label="Column preset">
@@ -308,7 +308,8 @@ describe("ViewChips (tokens.md §6.8)", () => {
     expect(selected.getAttribute("aria-pressed")).toBe("true");
     expect(tokens(selected)).toEqual(
       expect.arrayContaining([
-        "rounded-full",
+        // ADR-107: a chip is a row of text, so it takes the derived scale.
+        "rounded-md",
         "min-w-27.5",
         "flex-1",
         "text-xs",

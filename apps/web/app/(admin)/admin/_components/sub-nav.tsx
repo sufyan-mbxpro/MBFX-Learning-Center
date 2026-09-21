@@ -60,6 +60,16 @@ export function SubNav({
           <Link
             key={item.href}
             href={item.href}
+            // Full prefetch (ADR-140 §4). The admin routes are dynamic, and a
+            // dynamic route's default prefetch stops at its first
+            // `loading.tsx` — so every tab click rendered that skeleton, a
+            // whole-page placeholder under a heading that never left, which
+            // is the "reload" the owner kept seeing. `true` fetches the full
+            // RSC payload as the strip enters the viewport and keeps it for
+            // `staleTimes.static` (5 min); a mutation's `revalidateTag`
+            // refreshes it. Production only — `next dev` never prefetches,
+            // so the skeleton still shows there.
+            prefetch={true}
             aria-current={isActive ? "page" : undefined}
             className={cn(
               // Active = a raised --background pill inside the muted tray.

@@ -23,9 +23,10 @@ import { AI_CAP_BEHAVIORS } from "./ai.ts";
  * variant class of bug this exists to kill.
  */
 export const HOME_SECTION_VARIANTS = {
-  // The video rail that opens the page: `carousel` is the scroll-snap shelf,
-  // `grid` lays the same tiles out statically.
-  learning_videos: ["carousel", "grid"],
+  // The video rail, now `/learn` only (changes-31). `carousel` is gone with
+  // the homepage placement it existed for: a scroll-snap shelf of tiles was
+  // the shape it had there, and the learn index has always asked for `grid`.
+  learning_videos: ["grid"],
   hero: ["centered", "split", "background"],
   // "Explore the platform" — one card per destination the site offers.
   // `carousel` is the scroll-snap track; `grid` lays the same cards out
@@ -38,15 +39,29 @@ export const HOME_SECTION_VARIANTS = {
   // `split` is this section's own layout (one lead at half width, a compact
   // listing beside it) and is not an ArticleCards variant; the other three
   // pass straight through to it, so the section can still be a plain grid.
-  latest_news: ["split", "standard", "featured", "compact"],
+  //
+  // changes-35 (ADR-116 §2) adds `desk`, the home page's seeded variant: the
+  // lead story in one column and a hairline-cut 2x2 of ANALYSIS beside it. It
+  // is the one variant of this section that reads a second kind, which is why
+  // `latest_analysis` is seeded off on the home page and still keeps every
+  // variant of its own.
+  latest_news: ["split", "desk", "standard", "featured", "compact"],
   latest_analysis: ["standard", "featured", "compact"],
   // changes-28 added `cards` and made it the default: term PLUS its
   // plain-language line. `chips` and `grid` are kept — a site with three
   // hundred published terms may well want the dense row back.
-  glossary_spotlight: ["cards", "chips", "grid"],
+  //
+  // changes-35 (ADR-116 §1 band C) adds `feature`: the heading and its call to
+  // action in a narrow first column, the terms on a track in the middle, and
+  // the TERM OF THE DAY in a card at the end. `getTermOfTheDay` has been built
+  // since changes-11 and no home band had ever called it.
+  glossary_spotlight: ["cards", "feature", "chips", "grid"],
   forex_rates: ["marquee", "grid"],
   newsletter: ["default", "full-width"],
-  faq: ["accordion", "split"],
+  // changes-35 (ADR-116 §1 band E) adds `columns`: a centred heading over a
+  // two-column accordion, which is the reference's close. `accordion` (stacked)
+  // and `split` (heading beside the list) are both kept.
+  faq: ["accordion", "split", "columns"],
   // changes-28 (ADR-093). `single` shows the day's quote (deterministic, the
   // term-of-the-day technique); `carousel` offers the whole set in the
   // scroll-snap rail. `connect` is deliberately ABSENT from this registry:
@@ -55,6 +70,12 @@ export const HOME_SECTION_VARIANTS = {
   // like it configured something — the case `settings.test.ts` pins — and
   // `risk_disclaimer` sets the precedent for a built band with no vocabulary.
   quotes: ["single", "carousel"],
+  // changes-31 (ADR-103) adds `trust_strip`, `facts` and `testimonials`, and
+  // deliberately gives none of them an entry here. Each has exactly one shape;
+  // what varies about `testimonials` is the COUNT, which is `limit`. An empty
+  // list would reject every variant while looking like it configured
+  // something — the case `settings.test.ts` pins, and the reason `connect` and
+  // `risk_disclaimer` have no entry either.
 } as const satisfies Record<string, readonly string[]>;
 
 export type HomeSectionKey = keyof typeof HOME_SECTION_VARIANTS;
@@ -92,6 +113,17 @@ export const HOME_SECTION_BUILT_KEYS = [
   "connect",
   "quotes",
   "risk_disclaimer",
+  // Built by changes-31 (ADR-103), in the same PR that seeded them. Each
+  // renders NOTHING until the owner supplies its data — which is why they are
+  // seeded enabled: a band that is absent when empty needs no second off
+  // switch, and disabled-and-empty is two reasons for one absence.
+  "trust_strip",
+  "facts",
+  "testimonials",
+  // Built by changes-35 (ADR-116 §3). The first home band that composes THREE
+  // datasets — a testimonial, a published video topic, the enabled tools — and
+  // therefore the first that degrades per COLUMN rather than per band.
+  "in_practice",
 ] as const satisfies readonly string[];
 
 /**
@@ -152,6 +184,28 @@ const footerMenuColumnSchema = z.object({
   order: z.number().int(),
 });
 
+/**
+ * What a legal-document setting may hold (ADR-110): **a site-relative path,
+ * or nothing**.
+ *
+ * Two shapes reach it and both are internal. A seeded install points at a
+ * committed file under `public/legal/`; an admin who uploads a replacement
+ * points at `/uploads/<key>`. An empty string is the third legitimate state —
+ * an installation that has not published this document yet — and it means the
+ * footer link is ABSENT rather than pointing at a 404.
+ *
+ * External URLs are refused. A legal document hosted somewhere else can be
+ * moved, paywalled or edited by someone who does not work here, while the
+ * footer link keeps asserting it is ours. The negative lookahead is the same
+ * one `internalPathSchema` carries: `//evil.example` is a protocol-relative
+ * URL that passes every naive startsWith("/").
+ */
+export const legalDocumentValueSchema = z
+  .string()
+  .trim()
+  .max(500)
+  .regex(/^(|\/(?!\/)[\w\-./~%+:@]*)$/, "must be a site-relative path beginning with /");
+
 // Public design system (changes-03-plan.md §5.1). The reference's header
 // carries a slim contact/promo bar above the main nav; these make it
 // admin-controlled rather than hardcoded chrome.
@@ -187,6 +241,29 @@ export const dataBudgetSchema = z.object({
 });
 export type DataBudget = z.infer<typeof dataBudgetSchema>;
 
+/**
+ * How long a STAFF session survives without admin activity (ADR-105). The
+ * values are minutes; `"never"` is the one sentinel, and it is a word rather
+ * than a `0` so nothing has to explain it.
+ *
+ * ORDER IS THE DROPDOWN'S ORDER — shortest first, "never" last, which is the
+ * order the owner asked for and also the order a reader scanning for "how
+ * locked down is this" expects.
+ */
+export const ADMIN_SESSION_TIMEOUTS = ["2", "5", "15", "30", "60", "120", "never"] as const;
+
+export type AdminSessionTimeout = (typeof ADMIN_SESSION_TIMEOUTS)[number];
+
+/**
+ * The setting as milliseconds, or `null` for "no timeout". One reader, so the
+ * string→number step cannot be done differently in two places — and `null`
+ * rather than `Infinity` so a caller that forgets to handle it fails loudly
+ * instead of scheduling an expiry in the year 275760.
+ */
+export function adminSessionTimeoutMs(value: AdminSessionTimeout): number | null {
+  return value === "never" ? null : Number(value) * 60_000;
+}
+
 export const SETTINGS_SCHEMAS = {
   "site.name": z.string().min(1).max(150),
   "site.tagline": z.string().max(200),
@@ -196,9 +273,22 @@ export const SETTINGS_SCHEMAS = {
   "site.defaultLocale": z.string().min(2).max(10),
   "site.defaultTimezone": z.string().min(1).max(64),
   "site.defaultThemeMode": z.enum(["light", "dark", "system"]),
-  // IMAGE type: a site-relative path or absolute URL — not literally any
-  // string (plan.md's own example of what this registry exists to prevent).
-  "site.faviconUrl": z.string().regex(/^(\/|https?:\/\/)/, "must be a path or URL"),
+  // changes-41 / ADR-135 — where "Share your experience" sends a reader (a
+  // Trustpilot review page). https only, because it is printed as a link on
+  // every tool page; empty makes the band absent rather than a dead button.
+  "site.reviewsUrl": z.union([
+    z.literal(""),
+    z
+      .string()
+      .max(500)
+      .regex(/^https:\/\/[^\s/]+\.[^\s]+$/, "must be an https:// address"),
+  ]),
+  // ADR-105 — how long a STAFF session survives without admin activity.
+  // Minutes as strings with an explicit "never", not a number with 0 meaning
+  // unlimited: a sentinel a reader has to be told about is one the screen
+  // then has to explain in prose, which is what `ai.monthlyBudgetUsd` already
+  // costs. Learner sessions are not affected by this value at all.
+  "security.adminSessionTimeout": z.enum(ADMIN_SESSION_TIMEOUTS),
 
   "seo.titleTemplate": z.string().max(100),
   "seo.defaultOgImage": z.string().regex(/^(\/|https?:\/\/)/, "must be a path or URL"),
@@ -224,6 +314,24 @@ export const SETTINGS_SCHEMAS = {
 
   "legal.riskDisclaimer": z.string().min(1).max(5000),
   "legal.copyrightNotice": z.string().min(1).max(500),
+  // changes-33: the registration number and the registered address are their
+  // OWN keys rather than two more sentences inside the disclaimer. The footer
+  // prints them as separate lines, a translator handles an address
+  // differently from a paragraph of risk prose, and a jurisdiction that wants
+  // one of them on a page the disclaimer does not appear on can read it
+  // alone. Both may be empty — an installation that is not a registered
+  // company prints neither line rather than an empty label.
+  "legal.companyRegistration": z.string().max(200),
+  "legal.registeredAddress": z.string().max(500),
+
+  // Legal documents (ADR-110). Each holds a site-relative PATH — a committed
+  // file under `public/legal/` on a seeded install, `/uploads/<key>` once an
+  // admin has uploaded a replacement. The public address is `/legal/<doc>`,
+  // which is ours and does not move when the file does. Empty means the
+  // footer link is ABSENT — a legal link that 404s is worse than no link.
+  "legal.termsDocument": legalDocumentValueSchema,
+  "legal.privacyDocument": legalDocumentValueSchema,
+  "legal.agreementDocument": legalDocumentValueSchema,
 
   // News & Analysis (Module 15, ADR-015 #7 — module on/off is the `news`/
   // `analysis` feature flags; title template, OG fallback and disclaimer
@@ -306,7 +414,8 @@ export const SETTING_GROUPS: Record<SettingKey, string> = {
   "site.defaultLocale": "general",
   "site.defaultTimezone": "general",
   "site.defaultThemeMode": "general",
-  "site.faviconUrl": "general",
+  "site.reviewsUrl": "general",
+  "security.adminSessionTimeout": "general",
 
   "seo.titleTemplate": "seo",
   "seo.defaultOgImage": "seo",
@@ -329,6 +438,11 @@ export const SETTING_GROUPS: Record<SettingKey, string> = {
 
   "legal.riskDisclaimer": "legal",
   "legal.copyrightNotice": "legal",
+  "legal.companyRegistration": "legal",
+  "legal.registeredAddress": "legal",
+  "legal.termsDocument": "legal",
+  "legal.privacyDocument": "legal",
+  "legal.agreementDocument": "legal",
 
   "articles.perPage": "articles",
   "articles.showAuthor": "articles",
@@ -371,19 +485,74 @@ export const SETTING_GROUPS: Record<SettingKey, string> = {
 // deserve a smarter control than a text box. Declared here, beside the
 // schema, so the widget choice is registry data rather than a per-screen
 // special case. "timezone" → IANA zone dropdown (Intl.supportedValuesOf);
-// "locale" → active-locale dropdown; "select" → the options listed below.
-export type SettingWidget = "timezone" | "locale" | "select";
+// "locale" → active-locale dropdown; "select" → the options listed below;
+// "megabytes" → a dropdown of MB sizes over a value STORED in bytes.
+export type SettingWidget = "timezone" | "locale" | "select" | "megabytes";
 
 export const SETTING_WIDGETS: Partial<Record<SettingKey, SettingWidget>> = {
   "site.defaultTimezone": "timezone",
   "site.defaultLocale": "locale",
   "site.defaultThemeMode": "select",
+  "security.adminSessionTimeout": "select",
+  "media.maxBytes.image": "megabytes",
+  "media.maxBytes.video": "megabytes",
+  "media.maxBytes.audio": "megabytes",
+  "media.maxBytes.document": "megabytes",
 };
 
 /** Options for "select"-widget keys — mirrors each key's z.enum above. */
 export const SETTING_SELECT_OPTIONS: Partial<Record<SettingKey, readonly string[]>> = {
   "site.defaultThemeMode": ["light", "dark", "system"],
+  "security.adminSessionTimeout": ADMIN_SESSION_TIMEOUTS,
 };
+
+// ─── Upload caps in megabytes (changes-46) ────────────────────
+//
+// "the sizes should be uploaded in MB & should be a dropdown". The four
+// `media.maxBytes.*` caps stay STORED in bytes — `storeMedia()` compares a
+// byte length against them and no migration is owed — and the form offers
+// megabytes. One MB is 1024 × 1024 bytes, the unit `storeMedia()`'s own
+// "larger than N MB" message already divides by.
+
+export const BYTES_PER_MEGABYTE = 1024 * 1024;
+
+/** The sizes offered per kind, in MB. Sensible for the kind, not one list. */
+export const SETTING_MEGABYTE_OPTIONS: Partial<Record<SettingKey, readonly number[]>> = {
+  "media.maxBytes.image": [1, 2, 5, 10, 15, 20, 25, 50],
+  "media.maxBytes.video": [10, 25, 50, 100, 200, 250, 500, 1000],
+  "media.maxBytes.audio": [5, 10, 20, 25, 50, 100, 200],
+  "media.maxBytes.document": [1, 2, 5, 10, 20, 25, 50, 100],
+};
+
+/** Bytes → megabytes, rounded to two places for display. */
+export function bytesToMegabytes(bytes: number): number {
+  return Math.round((bytes / BYTES_PER_MEGABYTE) * 100) / 100;
+}
+
+/** Megabytes → the whole number of bytes the setting stores. */
+export function megabytesToBytes(megabytes: number): number {
+  return Math.round(megabytes * BYTES_PER_MEGABYTE);
+}
+
+/**
+ * The dropdown's rows for a megabyte setting: the kind's sizes, plus the
+ * CURRENT value when it is not one of them (a value saved before the dropdown
+ * existed, or seeded by hand). Dropping it would show a blank control and
+ * make the next save silently change a cap nobody touched. Sorted ascending.
+ */
+export function megabyteChoices(
+  key: SettingKey,
+  currentBytes: number | null,
+): { bytes: number; megabytes: number }[] {
+  const sizes = (SETTING_MEGABYTE_OPTIONS[key] ?? []).map((mb) => megabytesToBytes(mb));
+  const all =
+    currentBytes !== null && Number.isInteger(currentBytes) && currentBytes > 0
+      ? [...new Set([...sizes, currentBytes])]
+      : sizes;
+  return [...all]
+    .sort((a, b) => a - b)
+    .map((bytes) => ({ bytes, megabytes: bytesToMegabytes(bytes) }));
+}
 
 // ─── Structured editors for JSON settings (Phase 9c) ──────────
 //

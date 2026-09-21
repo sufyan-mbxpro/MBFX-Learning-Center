@@ -81,6 +81,8 @@ export const TRANSLATION_STATUS_TONE: Record<string, StatusTone> = {
   IN_REVIEW: "info",
   PUBLISHED: "success",
   OUTDATED: "warning",
+  // Reviewed by a person, and so readable on the public site (ADR-127 #2).
+  TRANSLATED: "success",
   // changes-29 B3. `info`, not `success`: a machine translation is finished
   // text that nobody has read, which is a different claim from a reviewed one
   // and must not look the same as `TRANSLATED`.

@@ -13,14 +13,15 @@
 // The quiz CONTENT arrives as props from a cached page. Only the attempt is
 // client-driven, exactly as progress is (ADR-056 #1).
 import { useState } from "react";
-import { ArrowRight, Check, RotateCcw, X } from "lucide-react";
+import { ArrowRight, ChartNoAxesColumn, Check, RotateCcw, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type { AnswerValue, QuizResultView, QuizView } from "@repo/contracts";
-import { ROUTE_PATHS } from "@repo/contracts";
+import { ACCOUNT_PROGRESS_PATH } from "@repo/contracts";
 import { Link } from "@repo/i18n/navigation";
 import { Button } from "@repo/ui/components/button";
 import { Progress } from "@repo/ui/components/progress";
 import { cn } from "@repo/ui/lib/utils";
+import { SaveProgressPrompt } from "./course-progress.tsx";
 
 type Phase =
   /** Nothing started yet — the cover card with the Start button. */
@@ -36,7 +37,21 @@ interface Feedback {
   correct: boolean | null;
 }
 
-export function QuizRunner({ quiz, locale }: { quiz: QuizView; locale: string }) {
+export function QuizRunner({
+  quiz,
+  locale,
+  direction = "ltr",
+}: {
+  quiz: QuizView;
+  /**
+   * The locale of the quiz's WORDS, which on a `?lang=` reading view is not the
+   * interface's (ADR-127). It picks the explanations' translation at submit and
+   * marks every question and option with its `lang`.
+   */
+  locale: string;
+  direction?: "ltr" | "rtl";
+}) {
+  const words = { lang: locale, dir: direction };
   const t = useTranslations("learn");
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
   const [selection, setSelection] = useState<number[]>([]);
@@ -144,32 +159,22 @@ export function QuizRunner({ quiz, locale }: { quiz: QuizView; locale: string })
   }
 
   if (phase.kind === "result")
-    return <Result result={phase.result} quiz={quiz} onRetake={retake} />;
+    return <Result words={words} result={phase.result} quiz={quiz} onRetake={retake} />;
 
   if (phase.kind === "blocked") {
+    // A guest gets the same two doors as every other "save your progress"
+    // prompt on the learn pages (changes-42): sign in, and come back here.
+    if (phase.reason === "guest") {
+      return <SaveProgressPrompt title={t("quizzes.guestTitle")} body={t("quizzes.guestBody")} />;
+    }
     return (
       <div className="flex flex-col gap-3 rounded-xl border border-primary/20 bg-primary/5 p-5">
         <p className="font-semibold">
-          {phase.reason === "guest"
-            ? t("quizzes.guestTitle")
-            : phase.reason === "limit"
-              ? t("quizzes.limitTitle")
-              : t("quizzes.errorTitle")}
+          {phase.reason === "limit" ? t("quizzes.limitTitle") : t("quizzes.errorTitle")}
         </p>
         <p className="text-sm text-muted-foreground">
-          {phase.reason === "guest"
-            ? t("quizzes.guestBody")
-            : phase.reason === "limit"
-              ? t("quizzes.limitBody")
-              : t("quizzes.errorBody")}
+          {phase.reason === "limit" ? t("quizzes.limitBody") : t("quizzes.errorBody")}
         </p>
-        {phase.reason === "guest" && (
-          <div>
-            <Button size="sm" render={<Link href={ROUTE_PATHS["sign-in"]} />}>
-              {t("progress.signInAction")}
-            </Button>
-          </div>
-        )}
       </div>
     );
   }
@@ -228,7 +233,9 @@ export function QuizRunner({ quiz, locale }: { quiz: QuizView; locale: string })
       </div>
 
       <fieldset className="flex flex-col gap-3">
-        <legend className="mb-2 text-lg font-semibold text-balance">{question.prompt}</legend>
+        <legend {...words} className="mb-2 text-lg font-semibold text-balance">
+          {question.prompt}
+        </legend>
         {question.multiple && (
           <p className="text-sm text-muted-foreground">{t("quizzes.chooseAll")}</p>
         )}
@@ -239,6 +246,7 @@ export function QuizRunner({ quiz, locale }: { quiz: QuizView; locale: string })
               <button
                 key={option}
                 type="button"
+                {...words}
                 // A real pressed state rather than a checkbox: these are
                 // buttons that answer a question, and `aria-pressed` says
                 // "selected" without claiming to be a form control.
@@ -246,7 +254,7 @@ export function QuizRunner({ quiz, locale }: { quiz: QuizView; locale: string })
                 disabled={answered || busy}
                 onClick={() => toggle(index)}
                 className={cn(
-                  "rounded-full border px-4 py-3 text-start text-sm transition-colors duration-(--duration-base) focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
+                  "rounded-md border px-4 py-3 text-start text-sm transition-colors duration-(--duration-base) focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
                   picked
                     ? "border-primary bg-primary/10 font-medium"
                     : "border-border bg-card hover:border-primary/30",
@@ -313,10 +321,13 @@ function Fact({ label, value }: { label: string; value: string }) {
  * means "not yet". Both simply omit the list.
  */
 function Result({
+  words,
   result,
   quiz,
   onRetake,
 }: {
+  /** The quiz's own words' `lang`/`dir` (ADR-127), never the chrome's. */
+  words: { lang: string; dir: "ltr" | "rtl" };
   result: QuizResultView;
   quiz: QuizView;
   onRetake: () => void;
@@ -378,7 +389,9 @@ function Result({
                       <X aria-hidden className="mt-0.5 size-4 shrink-0 text-destructive" />
                     )}
                     <div className="flex min-w-0 flex-col gap-1.5">
-                      <p className="font-medium">{question.prompt}</p>
+                      <p {...words} className="font-medium">
+                        {question.prompt}
+                      </p>
                       <p className="text-sm text-muted-foreground">
                         {t("quizzes.correctAnswerIs", {
                           answer: correctIndices
@@ -389,7 +402,7 @@ function Result({
                       </p>
                       {correctIndices.map((index) =>
                         item.explanations[index] ? (
-                          <p key={index} className="text-sm">
+                          <p key={index} {...words} className="text-sm">
                             {item.explanations[index]}
                           </p>
                         ) : null,
@@ -403,14 +416,20 @@ function Result({
         </section>
       )}
 
-      {canRetake && (
-        <div>
+      {/* A result only exists for a signed-in learner (the attempt endpoint
+          answers a guest 401), and it is saved: say where it went (changes-42). */}
+      <div className="flex flex-wrap gap-2">
+        {canRetake && (
           <Button variant="outline" onClick={onRetake}>
             <RotateCcw data-icon="inline-start" aria-hidden />
             {t("quizzes.retake")}
           </Button>
-        </div>
-      )}
+        )}
+        <Button variant="ghost" render={<Link href={ACCOUNT_PROGRESS_PATH} />}>
+          <ChartNoAxesColumn data-icon="inline-start" aria-hidden />
+          {t("quizzes.viewProgress")}
+        </Button>
+      </div>
     </div>
   );
 }

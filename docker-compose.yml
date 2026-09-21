@@ -15,6 +15,9 @@ services:
       - "3306:3306"
     volumes:
       - mariadb_data:/var/lib/mysql
+      # Runs once, on a fresh volume: grants the app user rights on the
+      # databases the E2E suite creates for itself (docker/mariadb-init).
+      - ./docker/mariadb-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 5s

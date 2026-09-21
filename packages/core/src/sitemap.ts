@@ -17,10 +17,9 @@
 // this alongside the page it added.
 import { cacheLife, cacheTag } from "next/cache";
 import { loadGlossarySitemapEntries } from "./public-content.ts";
-import { loadArticleSitemapEntries } from "./public-articles.ts";
+import { loadArticleSitemapEntries, loadArticleTaxonomySitemapEntries } from "./public-articles.ts";
 import { loadPageSitemapEntries } from "./cms/public-pages.ts";
 import { loadLearnSitemapEntries, type LearnSitemapEntry } from "./public-courses.ts";
-import { loadQuizSitemapEntries, type QuizSitemapEntry } from "./quizzes.ts";
 import {
   loadGlossaryTopicSitemapEntries,
   type GlossaryTopicSitemapEntry,
@@ -44,9 +43,12 @@ export interface PathSitemapEntry {
 export interface SitemapEntries {
   glossary: SlugSitemapEntry[];
   articles: SlugSitemapEntry[];
+  /** `/news/category/<slug>` archives with at least one public article. */
+  articleCategories: SlugSitemapEntry[];
+  /** `/news/tag/<slug>` archives with at least one public article. */
+  articleTags: SlugSitemapEntry[];
   pages: PathSitemapEntry[];
   learn: LearnSitemapEntry[];
-  quizzes: QuizSitemapEntry[];
   glossaryTopics: GlossaryTopicSitemapEntry[];
   videos: VideoSitemapEntry[];
 }
@@ -65,15 +67,24 @@ export async function getSitemapEntries(): Promise<SitemapEntries> {
   cacheTag("content");
   cacheLife({ revalidate: 3600 });
 
-  const [glossary, articles, pages, learn, quizzes, glossaryTopics, videos] = await Promise.all([
+  const [glossary, articles, taxonomy, pages, learn, glossaryTopics, videos] = await Promise.all([
     loadGlossarySitemapEntries(),
     loadArticleSitemapEntries(),
+    loadArticleTaxonomySitemapEntries(),
     loadPageSitemapEntries(),
     loadLearnSitemapEntries(),
-    loadQuizSitemapEntries(),
     loadGlossaryTopicSitemapEntries(),
     loadVideoSitemapEntries(),
   ]);
 
-  return { glossary, articles, pages, learn, quizzes, glossaryTopics, videos };
+  return {
+    glossary,
+    articles,
+    articleCategories: taxonomy.categories,
+    articleTags: taxonomy.tags,
+    pages,
+    learn,
+    glossaryTopics,
+    videos,
+  };
 }

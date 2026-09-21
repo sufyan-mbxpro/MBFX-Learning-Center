@@ -10,11 +10,13 @@ import {
 import { LEARN_TRACK_KEYS } from "@repo/contracts";
 import { routing } from "@repo/i18n/routing";
 import { can, requirePermission } from "@repo/rbac";
-import { AdminPage } from "../../../_components/admin-page.tsx";
+import { EditorPage } from "../../../_components/admin-page.tsx";
 import { richTextLabels } from "../../../_components/editor-labels.ts";
+import { loadEditorAi } from "../../../_lib/editor-ai.ts";
 import { learnLabelMaps } from "../../_lib/learn-labels.ts";
 import { CourseEditor } from "./course-editor.tsx";
 import type { CourseEditorLabels } from "./editor-types.ts";
+import { formatDateTime } from "@repo/utils";
 
 // Course builder (changes-11 PRs 3.2/3.3). The read gate is here; every write
 // re-gates inside its own action (security.md #1) — the `can()` results below
@@ -23,25 +25,28 @@ export default async function CourseEditPage({ params }: PageProps<"/admin/learn
   const subject = await requirePermission("courses.view");
   const { id } = await params;
 
-  const [t, detail, sections, allCourses, quizzes] = await Promise.all([
+  const [t, detail, sections, allCourses, quizzes, ai] = await Promise.all([
     getTranslations("admin"),
     loadCourseAdminDetail(id),
     loadCourseCurriculum(id),
     listCoursesAdmin(),
     listQuizzesAdmin(),
+    // ADR-126: the "Generate with AI" bar, each field's ✨ menu, and the
+    // writing assistant on the description — each present only when available.
+    loadEditorAi(subject, {
+      module: "course",
+      entity: { type: "course", id },
+      contentKeys: ["courses.update"],
+    }),
   ]);
   if (!detail) notFound();
 
   const maps = learnLabelMaps(t);
-  const dateFormat = new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" });
 
   // What a learner would actually be offered today: the curated set topped up
   // with same-track courses. Plan §8.2 asks for this preview so the editor is
   // not guessing what an empty list produces.
   const fallback = await resolveRecommendations(routing.defaultLocale, detail.id, detail.track, 3);
-
-  const defaultTranslation =
-    detail.translations.find((tr) => tr.locale === routing.defaultLocale) ?? detail.translations[0];
 
   const labels: CourseEditorLabels = {
     tabDetails: t("courseTabDetails"),
@@ -71,6 +76,8 @@ export default async function CourseEditPage({ params }: PageProps<"/admin/learn
 
     settingsSection: t("courseSettingsSection"),
     settingsSectionDescription: t("courseSettingsSectionDescription"),
+    displaySection: t("contentFlags.title"),
+    displaySectionDescription: t("contentFlags.description"),
     trackLabel: t("trackLabel"),
     difficultyLabel: t("difficultyLabel"),
     visibilityLabel: t("visibility"),
@@ -124,20 +131,6 @@ export default async function CourseEditPage({ params }: PageProps<"/admin/learn
       confirmArchiveBody: t("confirmArchiveCourseBody"),
       confirm: t("confirm"),
       cancel: t("cancel"),
-    },
-    analysis: {
-      score: t("seoScoreLabel"),
-      checks: {
-        titleLength: t("seoCheckTitleLength"),
-        descriptionLength: t("seoCheckDescriptionLength"),
-        focusKeywordInTitle: t("seoCheckKeywordInTitle"),
-        focusKeywordInDescription: t("seoCheckKeywordInDescription"),
-        focusKeywordInFirstParagraph: t("seoCheckKeywordEarly"),
-        contentLength: t("seoCheckContentLength"),
-        hasSubheadings: t("seoCheckSubheadings"),
-        hasImages: t("seoCheckImages"),
-        hasInternalLink: t("seoCheckInternalLink"),
-      },
     },
     curriculum: {
       section: t("curriculumSection"),
@@ -206,8 +199,8 @@ export default async function CourseEditPage({ params }: PageProps<"/admin/learn
   };
 
   return (
-    <AdminPage
-      title={defaultTranslation?.title || t("untitled")}
+    <EditorPage
+      title={t("editorHeading.course")}
       description={t("pageDesc.courseDetail")}
       backHref="/admin/learn/courses"
       backLabel={t("backToCourses")}
@@ -221,15 +214,20 @@ export default async function CourseEditPage({ params }: PageProps<"/admin/learn
           estimatedHours: detail.estimatedHours === null ? "" : String(detail.estimatedHours),
           coverAssetId: detail.coverAssetId,
           coverUrl: detail.coverUrl,
+          flags: {
+            isFeatured: detail.isFeatured,
+            isActive: detail.isActive,
+            isPremium: detail.isPremium,
+          },
           externalUrl: detail.externalUrl ?? "",
           finalQuizId: detail.finalQuizId,
           visibility: detail.visibility,
           sortOrder: detail.sortOrder,
           lessonCount: detail.lessonCount,
-          publishedAt: detail.publishedAt ? dateFormat.format(detail.publishedAt) : null,
-          scheduledFor: detail.scheduledFor ? dateFormat.format(detail.scheduledFor) : null,
-          createdAt: dateFormat.format(detail.createdAt),
-          updatedAt: dateFormat.format(detail.updatedAt),
+          publishedAt: detail.publishedAt ? formatDateTime(detail.publishedAt) : null,
+          scheduledFor: detail.scheduledFor ? formatDateTime(detail.scheduledFor) : null,
+          createdAt: formatDateTime(detail.createdAt),
+          updatedAt: formatDateTime(detail.updatedAt),
           deleted: detail.deletedAt !== null,
           // DB nulls → "" at this boundary: the editor's fields are controlled
           // inputs, and the save maps "" back to null on the way out.
@@ -288,7 +286,8 @@ export default async function CourseEditPage({ params }: PageProps<"/admin/learn
         canCreateLesson={can(subject, "lessons.create")}
         canDeleteLesson={can(subject, "lessons.delete")}
         labels={labels}
+        {...(ai ? { ai } : {})}
       />
-    </AdminPage>
+    </EditorPage>
   );
 }

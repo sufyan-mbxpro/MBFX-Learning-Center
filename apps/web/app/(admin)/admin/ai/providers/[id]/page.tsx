@@ -2,15 +2,14 @@ import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { listAiModels, loadAiProvider } from "@repo/core";
 import { requirePermission } from "@repo/rbac";
-import { AdminPage } from "../../../_components/admin-page.tsx";
+import { EditorPage } from "../../../_components/admin-page.tsx";
 import { providerFormLabels } from "../_labels.ts";
 import { ModelsTable, type ModelsTableLabels } from "../models-table.tsx";
 import { AiProviderForm } from "../provider-form.tsx";
+import { formatDate } from "@repo/utils";
 
 // One provider, and the models behind it.
-export default async function AiProviderPage({
-  params,
-}: PageProps<"/admin/ai/providers/[id]">) {
+export default async function AiProviderPage({ params }: PageProps<"/admin/ai/providers/[id]">) {
   await requirePermission("ai.providers.manage");
   const { id } = await params;
   const t = await getTranslations("admin");
@@ -18,12 +17,10 @@ export default async function AiProviderPage({
 
   const [provider, models] = await Promise.all([loadAiProvider(id), listAiModels(id)]);
   if (!provider) notFound();
-
-  const dateFormat = new Intl.DateTimeFormat("en", { dateStyle: "medium" });
   // Formatted server-side so the client component renders no locale logic of
   // its own — and so the dates match every other date on the surface.
   const pricedDates = Object.fromEntries(
-    models.map((model) => [model.id, dateFormat.format(model.pricedAt)]),
+    models.map((model) => [model.id, formatDate(model.pricedAt)]),
   );
 
   const modelLabels: ModelsTableLabels = {
@@ -57,8 +54,8 @@ export default async function AiProviderPage({
   };
 
   return (
-    <AdminPage
-      title={provider.label}
+    <EditorPage
+      title={t("editorHeading.provider")}
       description={tAi("providerEditDescription")}
       backHref="/admin/ai/providers"
       backLabel={tAi("providersTitle")}
@@ -88,6 +85,6 @@ export default async function AiProviderPage({
           dateFormatter={pricedDates}
         />
       )}
-    </AdminPage>
+    </EditorPage>
   );
 }

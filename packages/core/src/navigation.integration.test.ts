@@ -353,10 +353,21 @@ describe("loadMenuData carries the menu's own name (what buildMenu exposes)", ()
   });
 });
 
-// ─── About section (ADR-047 / ADR-048) ───────────────────────
+// ─── A parent with children (ADR-048) ────────────────────────
 
-describe("the About parent and its five children, as the seed writes them", () => {
-  it("resolves five children with registry hrefs and their one-line titles", async () => {
+describe("a menu root and its children, as the seed writes them", () => {
+  // This covered the About tree until ADR-109 withdrew that section, and it is
+  // exercised against a LEARN TRACK now — the seed's other root-with-children
+  // that the mega-menu panel machinery reads. Deliberately not the tools tree,
+  // which would look like the closer match: a tool row is additionally pruned
+  // unless the `Tool` table says it is enabled (changes-26 #1, the branch
+  // above `toNavItem`), so that fixture would need eight more rows to test
+  // something this file is not about.
+  //
+  // What it guards is unchanged and is not obvious: the panel's one-line
+  // descriptions ride on `MenuItemTranslation.title`, so a child with no title
+  // renders a description-less row rather than failing anywhere.
+  it("resolves every child with its registry href and its one-line title", async () => {
     await db.locale.upsert({
       where: { code: "en" },
       update: {},
@@ -371,24 +382,22 @@ describe("the About parent and its five children, as the seed writes them", () =
       },
     });
     const menu = await db.menu.create({
-      data: { key: `about-${Date.now()}`, name: "Main", location: "header" },
+      data: { key: `track-${Date.now()}`, name: "Main", location: "header" },
     });
     const root = await db.menuItem.create({
-      data: { menuId: menu.id, routeKey: "about", sortOrder: 8, isActive: true },
+      data: { menuId: menu.id, routeKey: "learn-forex", sortOrder: 1, isActive: true },
     });
     await db.menuItemTranslation.create({
-      data: { menuItemId: root.id, locale: "en", label: "About" },
+      data: { menuItemId: root.id, locale: "en", label: "Learn Forex" },
     });
 
-    // Same shape as seed.ts's ABOUT_NAV.children — the panel's descriptions
-    // ride on MenuItemTranslation.title, so a child with no title would
-    // silently render a description-less row rather than fail.
+    // Same shape as seed.ts's TRACK_NAV children, minus their
+    // `requiresFeature` — flag pruning has its own tests above.
     const children = [
-      { routeKey: "about", label: "About MBX", title: "Who we are and what we teach" },
-      { routeKey: "about-why-us", label: "Why MBX", title: "Five reasons" },
-      { routeKey: "about-transparency", label: "How we operate", title: "Data and funding" },
-      { routeKey: "about-security", label: "Security & trust", title: "Account and data" },
-      { routeKey: "about-support", label: "Support", title: "Reach a human" },
+      { routeKey: "learn-forex", label: "Courses", title: "Start at the first lesson" },
+      { routeKey: "learn-forex-videos", label: "Videos", title: "Watch it explained" },
+      { routeKey: "learn-forex-quizzes", label: "Quizzes", title: "Check what stuck" },
+      { routeKey: "learn-forex-glossary", label: "Glossary", title: "Look a term up" },
     ];
     for (const [index, child] of children.entries()) {
       const record = await db.menuItem.create({
@@ -412,24 +421,38 @@ describe("the About parent and its five children, as the seed writes them", () =
 
     const built = assembleNavigation(await nav.loadMenuData(menu.key), "en", null);
     expect(built).toHaveLength(1);
-    const about = built[0];
-    expect(about?.href).toBe("/about");
-    expect(about?.children.map((c) => c.href)).toEqual([
-      "/about",
-      "/about/why-us",
-      "/about/transparency",
-      "/about/security",
-      "/about/support",
+    const track = built[0];
+    expect(track?.href).toBe("/learn/forex");
+    expect(track?.children.map((c) => c.href)).toEqual([
+      "/learn/forex",
+      "/learn/forex/videos",
+      "/learn/forex/quizzes",
+      "/learn/forex/glossary",
     ]);
-    expect(about?.children.map((c) => c.title)).toEqual([
-      "Who we are and what we teach",
-      "Five reasons",
-      "Data and funding",
-      "Account and data",
-      "Reach a human",
+    expect(track?.children.map((c) => c.title)).toEqual([
+      "Start at the first lesson",
+      "Watch it explained",
+      "Check what stuck",
+      "Look a term up",
     ]);
-    // No feature flag gates these — they are coded routes that always exist,
-    // unlike the flag-gated areas beside them in the seeded menu.
-    expect(about?.children.every((c) => !c.isExternal)).toBe(true);
+    expect(track?.children.every((c) => !c.isExternal)).toBe(true);
+  });
+
+  // ADR-109 deleted the About routes AND their `ROUTE_PATHS` keys. A seeded
+  // row whose key is no longer in the registry cannot resolve to a URL, so
+  // the builder must PRUNE it rather than emit a hrefless entry — which is
+  // also why the seed deletes those rows outright.
+  it("prunes a row whose routeKey the registry no longer has", async () => {
+    const menu = await db.menu.create({
+      data: { key: `withdrawn-${Date.now()}`, name: "Main", location: "header" },
+    });
+    const root = await db.menuItem.create({
+      data: { menuId: menu.id, routeKey: "about", sortOrder: 8, isActive: true },
+    });
+    await db.menuItemTranslation.create({
+      data: { menuItemId: root.id, locale: "en", label: "About" },
+    });
+
+    expect(assembleNavigation(await nav.loadMenuData(menu.key), "en", null)).toEqual([]);
   });
 });

@@ -24,7 +24,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import Image from "next/image";
-import { FileText, Music, Sparkles, Trash2, Upload, Video } from "lucide-react";
+import { Download, FileText, Music, Sparkles, Trash2, Upload, Video } from "lucide-react";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { ConfirmDialog } from "@repo/ui/components/confirm-dialog";
@@ -104,6 +104,7 @@ interface MediaLabels {
   tagsLabel: string;
   tagsHint: string;
   usageCount: string;
+  download: string;
   replace: string;
   save: string;
   delete: string;
@@ -117,7 +118,25 @@ interface MediaLabels {
 const KIND_TABS = ["all", "IMAGE", "VIDEO", "AUDIO", "DOCUMENT"] as const;
 type KindTab = (typeof KIND_TABS)[number];
 
-function AssetThumbnail({ asset }: { asset: MediaAssetRow }) {
+/**
+ * `sizes` is a REQUIRED prop rather than a default (changes-32). It was
+ * hard-coded to `200px`, which is right for a grid tile and was also what the
+ * detail dialog's 480px-wide preview got — Next served a 200px-wide file into
+ * it and upscaled, which is the "compressed the resolution too low" the owner
+ * reported. The bytes on disk are untouched; only the variant chosen for the
+ * box was wrong. A required prop means the next caller has to answer for its
+ * own box.
+ */
+function AssetThumbnail({
+  asset,
+  sizes,
+  fit = "cover",
+}: {
+  asset: MediaAssetRow;
+  sizes: string;
+  /** `contain` for a preview of the whole image, `cover` for a tile. */
+  fit?: "cover" | "contain";
+}) {
   if (asset.kind === "IMAGE" && asset.thumbnailUrl) {
     return (
       <div className="relative size-full">
@@ -125,8 +144,8 @@ function AssetThumbnail({ asset }: { asset: MediaAssetRow }) {
           src={asset.thumbnailUrl}
           alt={asset.altText ?? ""}
           fill
-          sizes="200px"
-          className="object-cover"
+          sizes={sizes}
+          className={fit === "contain" ? "object-contain" : "object-cover"}
         />
       </div>
     );
@@ -211,15 +230,38 @@ function AssetDetailDialog({
           <DialogDescription>{labels.detailDescription}</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-3">
-          <div className="aspect-video overflow-hidden rounded-md border">
-            <AssetThumbnail asset={asset} />
+          {/* A ROW, not a banner (changes-32). The preview used to be a
+              full-width `aspect-video` block — ~270px of picture at the top of
+              the dialog, which pushed every field below the fold and made the
+              form look like it had none. Beside the metadata it says the same
+              thing in a third of the height, and `object-contain` on a muted
+              ground shows the whole image rather than a crop of it. */}
+          <div className="flex items-start gap-3">
+            <div className="h-24 w-32 shrink-0 overflow-hidden rounded-md border bg-muted">
+              <AssetThumbnail asset={asset} sizes="256px" fit="contain" />
+            </div>
+            <div className="flex min-w-0 flex-col gap-1">
+              <p className="truncate text-xs text-muted-foreground">{asset.fileName}</p>
+              <p className="text-xs text-muted-foreground">
+                {asset.mimeType} · {Math.round(asset.size / 1024)} KB
+                {asset.width && asset.height ? ` · ${asset.width}×${asset.height}` : ""}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {labels.usageCount}: {asset.usageCount}
+              </p>
+              {/* The ORIGINAL bytes, not a rendered variant: nothing in the
+                  pipeline resizes on upload, so this is the file as it was
+                  uploaded. `?download=1` is what makes it an attachment
+                  rather than a same-origin navigation into the image. */}
+              <a
+                href={`${asset.url}?download=1`}
+                className="inline-flex w-fit items-center gap-1.5 text-xs font-medium text-primary-interactive hover:underline"
+              >
+                <Download aria-hidden className="size-3.5" />
+                {labels.download}
+              </a>
+            </div>
           </div>
-          <p className="text-xs text-muted-foreground">
-            {asset.fileName} · {asset.mimeType} · {Math.round(asset.size / 1024)} KB
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {labels.usageCount}: {asset.usageCount}
-          </p>
           <Field invalid={form.invalid("title")}>
             <FieldLabel>{labels.titleLabel}</FieldLabel>
             <Input value={title} onChange={(e) => setTitle(e.target.value)} disabled={!canManage} />
@@ -592,7 +634,7 @@ export function MediaLibrary({
                 onClick={() => setSelected(asset)}
               >
                 <div className="aspect-square w-full overflow-hidden bg-muted">
-                  <AssetThumbnail asset={asset} />
+                  <AssetThumbnail asset={asset} sizes="200px" />
                 </div>
                 <div className="flex flex-col gap-1 p-2">
                   <span className="truncate text-xs font-medium">

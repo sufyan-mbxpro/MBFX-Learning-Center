@@ -7,10 +7,12 @@ import {
   parseKeywords,
   SEO_THRESHOLDS,
   seoChecks,
+  SEO_GOOD_LENGTH,
+  seoReport,
   seoScore,
   type SeoCheckId,
 } from "./content-analysis.ts";
-import { countWords, htmlToText } from "./html-text.ts";
+import { countWords, htmlLead, htmlToText } from "./html-text.ts";
 
 describe("htmlToText", () => {
   it("strips tags and collapses whitespace", () => {
@@ -282,5 +284,132 @@ describe("seoScore", () => {
     const checks = seoChecks({ ...GOOD, keywords: [] }); // 6 of 9 pass
     expect(Number.isInteger(seoScore(checks))).toBe(true);
     expect(seoScore(checks)).toBe(67);
+  });
+});
+
+describe("seoReport", () => {
+  const words = (n: number, word = "trade") => Array.from({ length: n }, () => word).join(" ");
+  const base = {
+    title: "x".repeat(SEO_THRESHOLDS.titleLength.min),
+    description: "x".repeat(SEO_THRESHOLDS.descriptionLength.min),
+    body: `<h2>Heading</h2><p>${words(700)}</p>`,
+    keywords: [] as string[],
+  };
+  const rec = (report: ReturnType<typeof seoReport>, id: string) =>
+    report.recommendations.find((entry) => entry.id === id);
+
+  it("counts words and reading time from the stripped body", () => {
+    const report = seoReport(base);
+    expect(report.words).toBe(701);
+    expect(report.readingMinutes).toBeGreaterThan(0);
+  });
+
+  it("gives a length verdict per band", () => {
+    expect(seoReport({ ...base, body: "" }).lengthVerdict).toBe("empty");
+    expect(seoReport({ ...base, body: `<p>${words(10)}</p>` }).lengthVerdict).toBe("short");
+    expect(
+      seoReport({ ...base, body: `<p>${words(SEO_THRESHOLDS.contentWords.min)}</p>` })
+        .lengthVerdict,
+    ).toBe("fair");
+    expect(seoReport({ ...base, body: `<p>${words(SEO_GOOD_LENGTH)}</p>` }).lengthVerdict).toBe(
+      "good",
+    );
+  });
+
+  it("grades title and description as missing, short, long or optimal", () => {
+    expect(rec(seoReport({ ...base, title: "" }), "title")).toMatchObject({
+      tone: "error",
+      reason: "missing",
+    });
+    expect(rec(seoReport({ ...base, title: "short" }), "title")).toMatchObject({
+      tone: "warning",
+      reason: "short",
+    });
+    expect(rec(seoReport({ ...base, title: "x".repeat(99) }), "title")).toMatchObject({
+      tone: "warning",
+      reason: "long",
+    });
+    expect(rec(seoReport(base), "title")).toMatchObject({ tone: "success", reason: "optimal" });
+    expect(rec(seoReport({ ...base, description: "x".repeat(400) }), "description")).toMatchObject({
+      reason: "long",
+    });
+  });
+
+  it("asks for a focus keyword and skips placement when there is none", () => {
+    const report = seoReport(base);
+    expect(rec(report, "keyword")).toMatchObject({ tone: "warning", reason: "missing" });
+    expect(rec(report, "keywordPlacement")).toBeUndefined();
+  });
+
+  it("rates keyword density low, optimal and high, to one decimal", () => {
+    const low = seoReport({ ...base, keywords: ["pip"], body: `<p>pip ${words(999)}</p>` });
+    expect(rec(low, "keyword")).toMatchObject({ reason: "low", values: { density: 0.1 } });
+    const ok = seoReport({
+      ...base,
+      keywords: ["pip"],
+      body: `<p>${words(5, "pip")} ${words(195)}</p>`,
+    });
+    expect(rec(ok, "keyword")).toMatchObject({ tone: "success", reason: "optimal" });
+    const high = seoReport({
+      ...base,
+      keywords: ["pip"],
+      body: `<p>${words(50, "pip")} ${words(50)}</p>`,
+    });
+    expect(rec(high, "keyword")).toMatchObject({ reason: "high" });
+  });
+
+  it("names every place the focus keyword is missing from", () => {
+    const report = seoReport({ ...base, keywords: ["pip"] });
+    expect(rec(report, "keywordPlacement")).toMatchObject({
+      tone: "warning",
+      missing: ["title", "description", "opening"],
+    });
+    const everywhere = seoReport({
+      ...base,
+      title: "pip",
+      description: "pip",
+      keywords: ["pip"],
+      body: "<p>pip</p>",
+    });
+    expect(rec(everywhere, "keywordPlacement")).toMatchObject({
+      tone: "success",
+      reason: "everywhere",
+    });
+  });
+
+  it("counts headings, images and internal links", () => {
+    const rich = seoReport({
+      ...base,
+      body: '<h2>a</h2><h3>b</h3><img src="/x.png"><a href="/learn">l</a><a href="//evil">e</a>',
+    });
+    expect(rec(rich, "structure")).toMatchObject({ tone: "success", values: { count: 2 } });
+    expect(rec(rich, "images")).toMatchObject({ tone: "success", values: { count: 1 } });
+    expect(rec(rich, "links")).toMatchObject({ tone: "success", values: { count: 1 } });
+    const bare = seoReport({ ...base, body: "<p>plain</p>" });
+    expect(rec(bare, "structure")?.tone).toBe("warning");
+    expect(rec(bare, "images")?.tone).toBe("warning");
+    expect(rec(bare, "links")?.tone).toBe("warning");
+  });
+});
+
+describe("htmlLead", () => {
+  it("returns the first non-empty paragraph as text", () => {
+    expect(
+      htmlLead("<h2>Heading</h2><p></p><p>A <strong>pip</strong> is small.</p><p>More.</p>"),
+    ).toBe("A pip is small.");
+  });
+
+  it("falls back to all of the text when there is no paragraph", () => {
+    expect(htmlLead("A bare <em>legacy</em> value")).toBe("A bare legacy value");
+  });
+
+  it("caps on a word boundary with an ellipsis", () => {
+    const lead = htmlLead(`<p>${"word ".repeat(100)}</p>`, 50);
+    expect(lead.length).toBeLessThanOrEqual(50);
+    expect(lead.endsWith("word…")).toBe(true);
+  });
+
+  it("cuts mid-word only when there is no usable space", () => {
+    expect(htmlLead(`<p>${"x".repeat(80)}</p>`, 20)).toBe(`${"x".repeat(19)}…`);
   });
 });

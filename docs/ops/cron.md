@@ -1,9 +1,11 @@
 # Running the scheduled jobs
 
 Three routes do work on a timer. They share one bearer token, one shape and one
-guarantee: **nothing on the site breaks if they never run.** A page falls back
-to its last good data and says so. Schedule them because the data goes stale,
-not because the site stops working.
+guarantee: **no page breaks if they never run.** A page falls back to its last
+good data and says so. Schedule `market-sync` and `publish-due` because data
+goes stale; schedule `housekeeping` because it is a **retention obligation** —
+if it never runs, email-delivery rows, unconfirmed newsletter addresses and
+per-user AI usage rows (all PII) are kept forever.
 
 | Route                         | What it does                                                           | Sensible cadence |
 | ----------------------------- | ---------------------------------------------------------------------- | ---------------- |
@@ -18,11 +20,13 @@ How often it actually fetches is **Sync interval** on `/admin/market/provider`
 decide; a call that arrives early returns `{"swept": false, "reason":
 "not_due"}` with HTTP 200 and spends nothing.
 
+All three routes export **only `POST`**. A `GET` answers **405**.
+
 ## Before anything: the token
 
 Every route answers **503 `not_configured`** until `CRON_SECRET` is set. That is
 deliberate — an unset variable must never mean "anyone may spend the provider's
-request budget".
+request budget" or "anyone may delete rows".
 
 ```bash
 node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
@@ -32,21 +36,41 @@ Put it in `.env` (local) or the host's environment (production), then **restart
 the app**. `.env` is read once at startup; editing it under a running server
 changes nothing.
 
-## Calling a route by hand
+## The routes, and how to verify each
+
+Load the token into a shell variable without echoing it:
 
 ```bash
-curl -fsS -X POST http://localhost:3000/api/cron/market-sync \
-  -H "Authorization: Bearer $CRON_SECRET"
+S=$(grep -E '^CRON_SECRET=' .env | cut -d= -f2- | tr -d '"\r')
+BASE=http://localhost:3000   # or https://example.com
 ```
 
-Add `?force=1` to skip the interval check and fetch immediately:
+### `market-sync`
 
 ```bash
-curl -fsS -X POST "http://localhost:3000/api/cron/market-sync?force=1" \
-  -H "Authorization: Bearer $CRON_SECRET"
+curl -fsS -X POST "$BASE/api/cron/market-sync" -H "Authorization: Bearer $S"
 ```
 
-A successful sweep answers with what it did:
+Add `?force=1` to skip the interval check and fetch immediately (spends
+provider quota):
+
+```bash
+curl -fsS -X POST "$BASE/api/cron/market-sync?force=1" -H "Authorization: Bearer $S"
+```
+
+Not due yet (HTTP 200, nothing spent):
+
+```json
+{
+  "swept": false,
+  "reason": "not_due",
+  "lastSyncAt": "…",
+  "nextDueAt": "…",
+  "intervalSeconds": 86400
+}
+```
+
+A sweep answers with what it did:
 
 ```json
 {
@@ -65,31 +89,213 @@ A successful sweep answers with what it did:
 swept **stalest first**, so whatever failed is at the front of the next run.
 Watch for `synced` trending to zero over days, not for a non-empty `failures`.
 
-Responses to expect: **200** swept · **200** `not_due` · **401** wrong or
-missing token · **503** no `CRON_SECRET` set.
+**Verify:** `/admin/market/provider` shows last run, last error and the next
+scheduled sync; every real sweep writes an audit row `market.sync` (no user,
+entity `MarketProvider`) — the admin's **Sync now** button writes
+`market.sync.manual` instead. A `not_due` answer writes nothing.
+
+### `publish-due`
+
+```bash
+curl -fsS -X POST "$BASE/api/cron/publish-due" -H "Authorization: Bearer $S"
+```
+
+```json
+{ "sweptAt": "2026-09-20T09:15:00.000Z", "articles": 0, "content": 2 }
+```
+
+`articles` counts news articles flipped to `PUBLISHED`; `content` counts
+courses, lessons, glossary terms, quizzes and video topics. Scheduled content is
+already public at its minute (visibility is decided in the query), so this is
+bookkeeping: it makes `status` true and stamps `publishedAt` with the promised
+time.
+
+**Verify:** when something was due, the audit log has `articles.publishDue`
+and/or `courses.publishDue`, `lessons.publishDue`, `glossary.publishDue`,
+`quizzes.publishDue`, `videos.publishDue` (no user; `changes.after` lists the
+ids). A run with nothing due writes no audit row.
+
+### `housekeeping`
+
+```bash
+curl -fsS -X POST "$BASE/api/cron/housekeeping" -H "Authorization: Bearer $S"
+```
+
+```json
+{ "sweptAt": "2026-09-20T03:30:00.000Z", "pendingSubscribers": 0, "deliveries": 0, "aiUsage": 0 }
+```
+
+Each number is rows deleted. **It writes no audit row** by design — an age
+purge has no actor, and a row per purge would be a second copy of the
+retention clock. Verify through the response, or check that the oldest row in
+the delivery log (`/admin/settings/email/log`) is inside 90 days.
 
 ## Local
 
 You usually don't need a scheduler locally — press **Sync now** on
-`/admin/market/provider`. If you want one anyway:
-
-**Windows Task Scheduler**, every 15 minutes:
-
-```powershell
-$action  = New-ScheduledTaskAction -Execute "curl.exe" -Argument '-fsS -X POST http://localhost:3000/api/cron/market-sync -H "Authorization: Bearer PASTE_SECRET"'
-$trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 15)
-Register-ScheduledTask -TaskName "mbx-market-sync" -Action $action -Trigger $trigger
-```
-
-**macOS / Linux**, `crontab -e`:
-
-```cron
-*/15 * * * * curl -fsS -X POST http://localhost:3000/api/cron/market-sync -H "Authorization: Bearer PASTE_SECRET" >/dev/null
-```
+`/admin/market/provider`. If you want one anyway, see
+[Windows Task Scheduler](#windows-task-scheduler) or the crontab below with
+`BASE=http://localhost:3000`.
 
 ## Production
 
-Pick whichever matches the host. All four do the same thing.
+Pick whichever matches the host. They all do the same thing: POST, bearer
+token, fail loudly on non-2xx.
+
+### Linux: a wrapper script (used by crontab and systemd)
+
+Keep the token in a root-only file, never inline in a crontab or unit — a
+crontab is readable by more people than you think, and a command line shows
+up in `ps`.
+
+```bash
+# /etc/mbx/cron.env   (chmod 600, owner root)
+CRON_SECRET=...
+MBX_BASE_URL=https://example.com
+```
+
+```bash
+#!/bin/sh
+# /usr/local/bin/mbx-cron  (chmod 755) — usage: mbx-cron <market-sync|publish-due|housekeeping>
+set -eu
+. /etc/mbx/cron.env
+case "$1" in
+  market-sync|publish-due|housekeeping) ;;
+  *) echo "unknown route: $1" >&2; exit 2 ;;
+esac
+# The token goes through a header file on stdin so it never appears in argv.
+printf 'Authorization: Bearer %s\n' "$CRON_SECRET" |
+  curl -fsS --max-time 300 -X POST -H @- "$MBX_BASE_URL/api/cron/$1"
+echo
+```
+
+### Linux: crontab
+
+`crontab -e` as root (the script reads a root-only file):
+
+```cron
+*/15 * * * * /usr/local/bin/mbx-cron market-sync  >>/var/log/mbx-cron.log 2>&1
+*/15 * * * * /usr/local/bin/mbx-cron publish-due  >>/var/log/mbx-cron.log 2>&1
+30 3 * * *   /usr/local/bin/mbx-cron housekeeping >>/var/log/mbx-cron.log 2>&1
+```
+
+### Linux: systemd timers
+
+Better logs, and a run missed while the machine was off fires on boot (`Persistent=true` applies to `OnCalendar=` timers). One templated
+service serves all three routes; the instance name is the route.
+
+```ini
+# /etc/systemd/system/mbx-cron@.service
+[Unit]
+Description=MBX cron: %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/mbx-cron %i
+```
+
+```ini
+# /etc/systemd/system/mbx-cron@market-sync.timer
+# (copy to mbx-cron@publish-due.timer with the same schedule)
+[Unit]
+Description=MBX cron: market-sync every 15 minutes
+
+[Timer]
+OnCalendar=*:0/15
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+```
+
+```ini
+# /etc/systemd/system/mbx-cron@housekeeping.timer
+[Unit]
+Description=MBX cron: housekeeping daily
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+```
+
+```bash
+systemctl daemon-reload
+systemctl enable --now mbx-cron@market-sync.timer mbx-cron@publish-due.timer mbx-cron@housekeeping.timer
+systemctl list-timers 'mbx-cron@*'
+journalctl -u 'mbx-cron@*' --since today
+systemctl start mbx-cron@publish-due.service   # run one now
+```
+
+### Windows Task Scheduler
+
+PowerShell (as the user the task runs under). The secret is read from an
+environment variable at run time rather than stored in the task definition:
+
+```powershell
+[Environment]::SetEnvironmentVariable("CRON_SECRET", "PASTE_SECRET", "User")
+$base = "http://localhost:3000"
+$jobs = @(
+  @{ Route = "market-sync";  Trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 15) },
+  @{ Route = "publish-due";  Trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 15) },
+  @{ Route = "housekeeping"; Trigger = New-ScheduledTaskTrigger -Daily -At 3:30am }
+)
+foreach ($j in $jobs) {
+  $cmd = "curl.exe -fsS -X POST $base/api/cron/$($j.Route) -H ('Authorization: Bearer ' + `$env:CRON_SECRET)"
+  $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -NonInteractive -Command `"$cmd`""
+  Register-ScheduledTask -TaskName "mbx-$($j.Route)" -Action $action -Trigger $j.Trigger -Force
+}
+Start-ScheduledTask -TaskName "mbx-publish-due"   # run one now; check "Last Run Result"
+```
+
+### GitHub Actions
+
+Needs no infrastructure, but scheduled workflows are best-effort and can be
+delayed by many minutes under load. Fine for the daily sweep, loose for 15
+minutes. Secrets: `SITE_URL`, `CRON_SECRET`.
+
+```yaml
+name: cron
+on:
+  schedule:
+    - cron: "*/15 * * * *" # market-sync + publish-due
+    - cron: "30 3 * * *" # housekeeping
+  workflow_dispatch:
+jobs:
+  call:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        route: [market-sync, publish-due, housekeeping]
+    steps:
+      - name: POST /api/cron/${{ matrix.route }}
+        # Every-15 ticks skip housekeeping; the daily tick runs all three.
+        if: matrix.route != 'housekeeping' || github.event.schedule == '30 3 * * *' || github.event_name == 'workflow_dispatch'
+        run: curl -fsS --max-time 300 -X POST "$URL/api/cron/${{ matrix.route }}" -H "Authorization: Bearer $SECRET"
+        env:
+          URL: ${{ secrets.SITE_URL }}
+          SECRET: ${{ secrets.CRON_SECRET }}
+```
+
+### cron-job.org (or any hosted pinger)
+
+Create one job per route:
+
+| Field          | Value                                                                     |
+| -------------- | ------------------------------------------------------------------------- |
+| URL            | `https://example.com/api/cron/<route>`                                    |
+| Request method | **POST** (the default GET gets 405)                                       |
+| Headers        | `Authorization: Bearer <CRON_SECRET>`                                     |
+| Schedule       | every 15 min (`market-sync`, `publish-due`), daily 03:30 (`housekeeping`) |
+| Timeout        | the maximum the plan allows (`market-sync` can take a while)              |
+| Notify on      | failure (non-2xx) — `not_due` is a 200 and will not alert                 |
+
+The token is stored by the third party; rotate it if you stop using them.
 
 ### Vercel Cron
 
@@ -108,72 +314,9 @@ token goes in this file:
 ```
 
 **Check this before relying on it:** Vercel Cron issues **GET**, and these
-routes export only `POST`. Either add a `GET` export that delegates to `POST`,
-or drive them from an external scheduler. A cron that 405s is silent.
-
-### GitHub Actions
-
-Needs no infrastructure, but scheduled workflows are best-effort and can be
-delayed by many minutes under load. Fine for a daily sweep, poor for 15.
-
-```yaml
-name: market-sync
-on:
-  schedule:
-    - cron: "*/15 * * * *"
-  workflow_dispatch:
-jobs:
-  sync:
-    runs-on: ubuntu-latest
-    steps:
-      - run: curl -fsS -X POST "$URL/api/cron/market-sync" -H "Authorization: Bearer $SECRET"
-        env:
-          URL: ${{ secrets.SITE_URL }}
-          SECRET: ${{ secrets.CRON_SECRET }}
-```
-
-### A plain VPS: crontab
-
-```cron
-*/15 * * * * curl -fsS -X POST https://example.com/api/cron/market-sync -H "Authorization: Bearer $CRON_SECRET" >/dev/null 2>&1
-30 3 * * *   curl -fsS -X POST https://example.com/api/cron/housekeeping -H "Authorization: Bearer $CRON_SECRET" >/dev/null 2>&1
-```
-
-Keep the secret in a root-only file that cron sources, not inline in the
-crontab — a crontab is readable by more people than you think.
-
-### systemd timer
-
-Better logs, and no lost run after a reboot (`Persistent=true`).
-
-```ini
-# /etc/systemd/system/mbx-market-sync.service
-[Unit]
-Description=MBX market sync
-
-[Service]
-Type=oneshot
-EnvironmentFile=/etc/mbx/cron.env
-ExecStart=/usr/bin/curl -fsS -X POST https://example.com/api/cron/market-sync -H "Authorization: Bearer ${CRON_SECRET}"
-```
-
-```ini
-# /etc/systemd/system/mbx-market-sync.timer
-[Unit]
-Description=MBX market sync every 15 minutes
-
-[Timer]
-OnBootSec=5min
-OnUnitActiveSec=15min
-Persistent=true
-
-[Install]
-WantedBy=timers.target
-```
-
-```bash
-systemctl enable --now mbx-market-sync.timer
-```
+routes export only `POST` (still true as of 2026-09-20). Either add a `GET`
+export that delegates to `POST`, or drive them from an external scheduler. A
+cron that 405s is silent.
 
 ## Data provider limits
 
@@ -212,15 +355,19 @@ and every AI call is something a member of staff pressed.
 
 ## When something looks wrong
 
-| Symptom                                   | Cause                                                                                            |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| 503 `not_configured`                      | `CRON_SECRET` unset — or set, but the app was not restarted                                      |
-| 401                                       | Token mismatch; check for a trailing newline in the stored secret                                |
-| `{"swept": false, "reason": "not_due"}`   | Working as intended. Shorten **Sync interval**, or pass `?force=1`                               |
-| Every symbol in `failures`                | The provider rejected the key, or `MARKET_SECRET_KEY` changed and the stored key no longer opens |
-| Tools show an empty state with an "as of" | No bars yet. Press **Sync now** — this is the pre-first-sync state                               |
-| AI features are absent from every editor  | `ai.enabled` is off, the feature is off, or the month's budget is spent — `/admin/ai` says which |
-| An AI call fails with `secret_unreadable` | `AI_SECRET_KEY` is unset or changed, so the stored provider key no longer opens                  |
+| Symptom                                   | Cause / fix                                                                                                                       |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| 503 `{"error":"not_configured"}`          | `CRON_SECRET` unset — or set, but the app was not restarted                                                                       |
+| 401 `{"error":"unauthorized"}`            | Token missing or wrong. Check for a trailing newline/`\r` or quotes in the stored secret, and that the header is `Bearer <token>` |
+| 405                                       | The scheduler sent GET (Vercel Cron, cron-job.org's default). Switch to POST                                                      |
+| 404                                       | Wrong path or base URL (e.g. a locale prefix, or `/admin/api/...`). The routes are exactly `/api/cron/<route>`                    |
+| 502 / 504 from nginx                      | The proxy, not the app: raise `proxy_read_timeout` (see [deploy.md](./deploy.md)) and the scheduler's timeout                     |
+| curl exit 28 / scheduler "timeout"        | `market-sync` with many instruments on a slow provider. Raise the client timeout to 300 s; the next run resumes stalest-first     |
+| `{"swept": false, "reason": "not_due"}`   | Working as intended. Shorten **Sync interval**, or pass `?force=1`                                                                |
+| Every symbol in `failures`                | The provider rejected the key, or `MARKET_SECRET_KEY` changed and the stored key no longer opens                                  |
+| Tools show an empty state with an "as of" | No bars yet. Press **Sync now** — this is the pre-first-sync state                                                                |
+| AI features are absent from every editor  | `ai.enabled` is off, the feature is off, or the month's budget is spent — `/admin/ai` says which                                  |
+| An AI call fails with `secret_unreadable` | `AI_SECRET_KEY` is unset or changed, so the stored provider key no longer opens                                                   |
 
 The last sweep's outcome is also on `/admin/market/provider` (last run, last
 error, next scheduled sync) and in the audit log as `market.sync` for an

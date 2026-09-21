@@ -740,4 +740,35 @@ describe("learning analytics", () => {
     const after = await analytics.loadLearnAnalyticsSummary();
     expect(after.quizAttempts).toBe(before.quizAttempts);
   });
+
+  // changes-48 #4 — the progress screen's course filter. The tiles must count
+  // the chosen course alone, and a quiz must be found by the courses that USE
+  // it, since a quiz holds no course FK (ADR-058 #1).
+  it("scopes the summary to a course, and knows which courses use a quiz", async () => {
+    const { courseId, lessonIds } = await makeCourse({ lessons: 2 });
+    const other = await makeCourse({ lessons: 1 });
+    await progress.markLessonComplete(alice, lessonIds[0]!);
+    await progress.touchLesson(bob, lessonIds[1]!);
+    await progress.markLessonComplete(bob, other.lessonIds[0]!);
+    const quizId = await makeQuiz();
+    await db.course.update({ where: { id: courseId }, data: { finalQuizId: quizId } });
+
+    const quizRow = (await analytics.loadQuizAnalytics()).find((row) => row.quizId === quizId);
+    expect(quizRow!.courseIds).toEqual([courseId]);
+
+    const scoped = await analytics.loadLearnAnalyticsSummary({
+      courseIds: [courseId],
+      quizIds: [quizId],
+    });
+    expect(scoped.enrolments).toBe(2);
+    expect(scoped.activeLearners).toBe(2);
+    // alice's one completion here; bob's completion was in the OTHER course.
+    expect(scoped.lessonsCompleted).toBe(1);
+    expect(scoped.quizAttempts).toBe(0);
+
+    const lessonRow = (await analytics.loadLessonAnalytics()).find(
+      (row) => row.lessonId === lessonIds[0],
+    );
+    expect(lessonRow!.courseId).toBe(courseId);
+  });
 });

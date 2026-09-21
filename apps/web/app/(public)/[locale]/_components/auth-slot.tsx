@@ -7,28 +7,51 @@
 // whole page. The reasoning for reading the session on the CLIENT at all — a
 // cached public shell must not carry an uncached `auth()` — moved with it, and
 // lives in `public-session.tsx`.
-import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
+import { ChevronDown, GraduationCap, LogOut, UserRound } from "lucide-react";
+import { ACCOUNT_PATH, ACCOUNT_PROGRESS_PATH } from "@repo/contracts";
 import { Link } from "@repo/i18n/navigation";
+import { Avatar, AvatarFallback, AvatarImage } from "@repo/ui/components/avatar";
 import { Button } from "@repo/ui/components/button";
-import { resendVerification } from "../../../_lib/credentials.ts";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@repo/ui/components/dropdown-menu";
 import { Skeleton, SkeletonButton } from "@repo/ui/components/skeleton";
+import { signOut } from "../../../_lib/credentials.ts";
+import { rememberSession } from "../../../_lib/session-hint.ts";
 import { usePublicSession } from "./public-session.tsx";
 
-export function AuthSlot({ verifiedHref }: { verifiedHref: string }) {
+export function AuthSlot({
+  inMenuBelowXl = false,
+}: {
+  /**
+   * The mobile menu already carries Sign in and Join us (changes-43), so on
+   * the widths where that menu is the navigation the header shows the pair a
+   * second time for nothing and crowds the logo (changes-45). When true, the
+   * anonymous pair — and its loading placeholder — render from `xl` only,
+   * where the mobile menu is hidden. A signed-in reader's avatar still shows
+   * at every width: that is the account menu, and the sheet has no copy of it.
+   */
+  inMenuBelowXl?: boolean;
+}) {
   const t = useTranslations("nav");
   const state = usePublicSession();
-  const [resent, setResent] = useState<"idle" | "sent" | "failed">("idle");
-  const [resending, startResend] = useTransition();
+  const anonymousDisplay = inMenuBelowXl ? "hidden xl:flex" : "flex";
 
   // The anonymous pair's own shape — the link and the 36px pill — because that
   // is what most visitors resolve to, so the header does not shift when the
   // session answers (changes-21 Phase A; it was an ad-hoc pulsing span).
   if (state.status === "loading") {
     return (
-      <div aria-hidden className="flex items-center gap-2 sm:gap-3">
+      <div aria-hidden className={`${anonymousDisplay} items-center gap-2 sm:gap-3`}>
         <Skeleton className="h-5 w-12" />
-        <SkeletonButton size="sm" shape="pill" />
+        <SkeletonButton size="sm" />
       </div>
     );
   }
@@ -42,55 +65,97 @@ export function AuthSlot({ verifiedHref }: { verifiedHref: string }) {
   // the row inside the page gutter once it stays on one.
   if (state.status === "anonymous") {
     return (
-      <div className="flex items-center gap-2 sm:gap-3">
+      <div className={`${anonymousDisplay} items-center gap-2 sm:gap-3`}>
         <Link
           href="/sign-in"
           className="text-sm font-medium whitespace-nowrap text-primary-interactive underline-offset-4 hover:underline"
         >
           {t("signIn")}
         </Link>
-        <Button size="sm" shape="pill" render={<Link href="/sign-up" />}>
+        <Button size="sm" render={<Link href="/sign-up" />}>
           {t("signUp")}
         </Button>
       </div>
     );
   }
 
-  // The account menu proper lands with the user-facing account area
-  // (Module 12); until then the chip reflects auth state, plus the one thing
-  // an unverified learner can act on.
+  // ADR-123: the signed-in learner's account menu. It holds the profile page,
+  // the progress page (ADR-125) and sign-out.
   //
-  // ADR-079 #7 asked for this in an account MENU. There is no menu yet, so it
-  // renders beside the chip instead of waiting for one — the nudge is the
-  // whole point of sending verification without blocking sign-in, and a nudge
-  // deferred to a later module is a verification email nobody ever acts on.
+  // The verify-email nudge is NOT here any more (changes-45, ADR-142 §2). It
+  // put a tinted notice box inside a navigation menu, on every page, for as
+  // long as the address stayed unverified — and verification blocks nothing
+  // (ADR-079 #7). It lives on the profile page alone, in
+  // `EmailVerificationPanel`, which already sent through the same
+  // rate-limited helper.
   return (
-    <div className="flex items-center gap-2">
-      {!state.emailVerified && state.email && (
-        <span className="flex items-center gap-1.5">
-          {resent === "sent" ? (
-            <span role="status" className="text-xs text-success-interactive">
-              {t("verifySent")}
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button variant="ghost" size="sm" className="gap-2 px-1.5" aria-label={t("accountMenu")}>
+            <Avatar className="size-7">
+              {state.image && <AvatarImage src={state.image} alt="" />}
+              <AvatarFallback className="text-xs">{initialsOf(state.name)}</AvatarFallback>
+            </Avatar>
+            <span className="hidden max-w-32 truncate text-sm font-medium md:inline">
+              {state.name}
             </span>
-          ) : (
-            <Button
-              size="2xs"
-              variant="outline"
-              loading={resending}
-              className="text-warning-interactive"
-              onClick={() =>
-                startResend(async () => {
-                  const ok = await resendVerification(state.email, verifiedHref);
-                  setResent(ok ? "sent" : "failed");
-                })
-              }
-            >
-              {resent === "failed" ? t("verifyRetry") : t("verifyEmail")}
-            </Button>
-          )}
-        </span>
-      )}
-      <span className="max-w-32 truncate text-sm text-muted-foreground">{state.name}</span>
-    </div>
+            <ChevronDown aria-hidden className="hidden size-4 text-muted-foreground md:block" />
+          </Button>
+        }
+      />
+      <DropdownMenuContent align="end" className="w-72">
+        {/* Base UI: GroupLabel must live inside a Group. */}
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>
+            <span className="block truncate font-medium">{state.name}</span>
+            <span className="block truncate text-xs font-normal text-muted-foreground">
+              {state.email}
+            </span>
+          </DropdownMenuLabel>
+        </DropdownMenuGroup>
+
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          render={
+            <Link href={ACCOUNT_PATH}>
+              <UserRound aria-hidden /> {t("myAccount")}
+            </Link>
+          }
+        />
+        {/* ADR-125: the account's second page. */}
+        <DropdownMenuItem
+          render={
+            <Link href={ACCOUNT_PROGRESS_PATH}>
+              <GraduationCap aria-hidden /> {t("myProgress")}
+            </Link>
+          }
+        />
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          variant="destructive"
+          onClick={async () => {
+            await signOut().catch(() => false);
+            rememberSession(false);
+            // A reload, not a router push: every cached page reads the session
+            // on the client, and a reload is how they all re-read it. On the
+            // profile page itself, the page sends a signed-out reader to sign in.
+            window.location.reload();
+          }}
+        >
+          <LogOut aria-hidden /> {t("signOut")}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
+}
+
+function initialsOf(name: string): string {
+  return name
+    .split(/\s+/)
+    .map((part) => part[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
 }

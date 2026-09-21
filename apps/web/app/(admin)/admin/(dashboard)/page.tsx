@@ -25,10 +25,10 @@ import {
   GraduationCap,
   Layers,
   Mail,
+  MailCheck,
   Newspaper,
   Settings as SettingsIcon,
   SlidersHorizontal,
-  ToggleRight,
   TrendingUp,
   UserPlus,
   Users,
@@ -48,6 +48,7 @@ import {
   ENTITY_HREFS,
   ENTITY_ICONS,
   ENTITY_LABEL_KEYS,
+  PIPELINE_BUCKETS,
   PIPELINE_LABEL_KEYS,
   type PipelineBucketKey,
 } from "../_lib/dashboard-content.ts";
@@ -123,6 +124,23 @@ export default async function AdminHome({ searchParams }: PageProps<"/admin">) {
     Object.entries(PIPELINE_LABEL_KEYS).map(([bucket, key]) => [bucket, t(key)]),
   ) as Record<PipelineBucketKey, string>;
 
+  // A share of a REAL denominator, or nothing. A zero or unread denominator
+  // gets no bar at all: an empty bar would claim "0%", which is a fact about
+  // the data nobody measured (changes-43, the same rule as an absent tile).
+  const percentFormat = new Intl.NumberFormat(locale, {
+    style: "percent",
+    maximumFractionDigits: 1,
+  });
+  const share = (
+    value: number,
+    total: number | undefined,
+    caption: (percent: string) => string,
+  ): { percent: number; caption: string } | undefined => {
+    if (total === undefined || total <= 0) return undefined;
+    const fraction = Math.min(value / total, 1);
+    return { percent: fraction * 100, caption: caption(percentFormat.format(fraction)) };
+  };
+
   // Built by FILTER, not as a list of four: a tile the loader did not query is
   // absent from `overview` entirely, and a hidden tile must not fall back to
   // zero — a zero is a claim about the data, and it would be a false one.
@@ -133,6 +151,17 @@ export default async function AdminHome({ searchParams }: PageProps<"/admin">) {
       value: overview.totalUsers.value,
       previousValue: overview.totalUsers.previousValue,
       accent: "primary" as const,
+      // `newUsers` takes the same key as this tile, so the companion figure
+      // is gated with it rather than leaking through it.
+      detail: overview.newUsers
+        ? t("dashboardNewThisPeriod", { count: overview.newUsers.value })
+        : undefined,
+      ratio:
+        overview.activeUsers === undefined
+          ? undefined
+          : share(overview.activeUsers, overview.totalUsers.value, (percent) =>
+              t("dashboardShareActive", { percent }),
+            ),
     },
     overview.newUsers && {
       icon: UserPlus,
@@ -140,6 +169,10 @@ export default async function AdminHome({ searchParams }: PageProps<"/admin">) {
       value: overview.newUsers.value,
       previousValue: overview.newUsers.previousValue,
       accent: "success" as const,
+      detail: undefined,
+      ratio: share(overview.newUsers.value, overview.totalUsers?.value, (percent) =>
+        t("dashboardShareOfUsers", { percent }),
+      ),
     },
     overview.publishedArticles && {
       icon: Newspaper,
@@ -147,6 +180,17 @@ export default async function AdminHome({ searchParams }: PageProps<"/admin">) {
       value: overview.publishedArticles.value,
       previousValue: overview.publishedArticles.previousValue,
       accent: "info" as const,
+      detail: overview.articleTotals
+        ? t("dashboardLiveOfTotal", {
+            live: overview.articleTotals.live,
+            total: overview.articleTotals.total,
+          })
+        : undefined,
+      ratio: overview.articleTotals
+        ? share(overview.articleTotals.live, overview.articleTotals.total, (percent) =>
+            t("dashboardShareLive", { percent }),
+          )
+        : undefined,
     },
     overview.activeEmployees && {
       icon: Briefcase,
@@ -154,6 +198,34 @@ export default async function AdminHome({ searchParams }: PageProps<"/admin">) {
       value: overview.activeEmployees.value,
       previousValue: overview.activeEmployees.previousValue,
       accent: "warning" as const,
+      detail:
+        overview.totalEmployees === undefined
+          ? undefined
+          : t("dashboardRecordsOfTotal", {
+              active: overview.activeEmployees.value,
+              total: overview.totalEmployees,
+            }),
+      ratio: share(overview.activeEmployees.value, overview.totalEmployees, (percent) =>
+        t("dashboardShareActive", { percent }),
+      ),
+    },
+    overview.newsletterSubscribers && {
+      icon: MailCheck,
+      label: t("dashboardNewsletterSubscribers"),
+      value: overview.newsletterSubscribers.value,
+      previousValue: overview.newsletterSubscribers.previousValue,
+      accent: "primary" as const,
+      detail: t("dashboardAwaitingConfirmation", {
+        count: overview.newsletterSubscribers.pending,
+      }),
+      // Confirmed over everyone who signed up and has not left. Pending rows
+      // are purged after seven days (ADR-080), so this reads as "how many of
+      // the recent sign-ups finished", which is what a low number asks.
+      ratio: share(
+        overview.newsletterSubscribers.value,
+        overview.newsletterSubscribers.value + overview.newsletterSubscribers.pending,
+        (percent) => t("dashboardShareConfirmed", { percent }),
+      ),
     },
   ].filter((card): card is NonNullable<typeof card> => Boolean(card));
 
@@ -173,14 +245,6 @@ export default async function AdminHome({ searchParams }: PageProps<"/admin">) {
   // Email deliveries takes its place: a real number, with a live screen behind
   // it, and the one an admin actually goes looking for ("did the mail go out").
   const secondaryCards = [
-    overview.enabledFlags === undefined
-      ? undefined
-      : {
-          href: "/admin/features",
-          icon: ToggleRight,
-          label: t("dashboardFeatureFlags"),
-          value: overview.enabledFlags,
-        },
     overview.settings === undefined
       ? undefined
       : {
@@ -188,6 +252,7 @@ export default async function AdminHome({ searchParams }: PageProps<"/admin">) {
           icon: SettingsIcon,
           label: t("dashboardSettings"),
           value: overview.settings,
+          detail: undefined,
         },
     overview.emailDeliveries === undefined
       ? undefined
@@ -196,6 +261,10 @@ export default async function AdminHome({ searchParams }: PageProps<"/admin">) {
           icon: Mail,
           label: t("dashboardEmailDeliveries"),
           value: overview.emailDeliveries,
+          detail:
+            overview.failedDeliveries === undefined
+              ? undefined
+              : t("dashboardDeliveriesFailed", { count: overview.failedDeliveries }),
         },
   ].filter((card): card is NonNullable<typeof card> => card !== undefined);
 
@@ -208,7 +277,10 @@ export default async function AdminHome({ searchParams }: PageProps<"/admin">) {
       }
     >
       {statCards.length > 0 && (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+        // `auto-fit`, because the number of tiles is decided by permissions:
+        // five for a super admin, one for an employees-only viewer, and a
+        // fixed column count left gaps or orphans for everyone in between.
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-(--grid-stat-tiles)">
           {statCards.map((card) => (
             <DashboardStatCard
               key={card.label}
@@ -218,6 +290,9 @@ export default async function AdminHome({ searchParams }: PageProps<"/admin">) {
               previousValue={card.previousValue}
               trendLabel={t("dashboardVsPrevious")}
               accent={card.accent}
+              detail={card.detail}
+              ratio={card.ratio}
+              watermark
             />
           ))}
         </div>
@@ -286,6 +361,13 @@ export default async function AdminHome({ searchParams }: PageProps<"/admin">) {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {contentStats.map((row) => {
               const Icon = ENTITY_ICONS[row.entity];
+              // The pipeline card's own folding, so this line and that bar
+              // cannot tell an editor two different stories.
+              const inBucket = (key: PipelineBucketKey) =>
+                PIPELINE_BUCKETS.find((bucket) => bucket.key === key)!.statuses.reduce(
+                  (sum: number, status) => sum + row.byStatus[status],
+                  0,
+                );
               return (
                 <Link
                   key={row.entity}
@@ -307,6 +389,14 @@ export default async function AdminHome({ searchParams }: PageProps<"/admin">) {
                     note={t("dashboardPublishedInPeriod", {
                       count: row.publishedInPeriod,
                     })}
+                    detail={t("dashboardLibraryInProgress", {
+                      draft: inBucket("draft"),
+                      review: inBucket("review"),
+                    })}
+                    ratio={share(row.published, row.total, (percent) =>
+                      t("dashboardLibraryShareLive", { percent, total: row.total }),
+                    )}
+                    watermark
                   />
                 </Link>
               );
@@ -325,12 +415,16 @@ export default async function AdminHome({ searchParams }: PageProps<"/admin">) {
               </SectionTitleCompact>
               <CardDescription>{t("dashboardPublishingOutputDescription")}</CardDescription>
             </CardHeader>
-            <CardContent>
+            {/* `flex-1`: the grid row is as tall as the learning card beside
+                it, and the panels grow into that height instead of leaving
+                the bottom half of this card empty (changes-43). */}
+            <CardContent className="flex flex-1 flex-col">
               <DashboardOutputPanels
                 series={contentSeries}
                 entities={contentEntities}
                 entityLabels={entityLabels}
                 emptyLabel={t("dashboardNothingPublished")}
+                peakLabel={(count) => t("dashboardPeakDay", { count })}
               />
             </CardContent>
           </Card>
@@ -400,6 +494,7 @@ export default async function AdminHome({ searchParams }: PageProps<"/admin">) {
                   emptyLabel={t("dashboardActivityEmpty")}
                   systemLabel={t("dashboardSystemUser")}
                   byLabel={t("dashboardActivityBy")}
+                  entityLabel={(entity) => t("dashboardActivityEntity", { entity })}
                 />
               </CardContent>
             </Card>
@@ -415,12 +510,26 @@ export default async function AdminHome({ searchParams }: PageProps<"/admin">) {
                   href={card.href}
                   className="rounded-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
                 >
-                  <Card size="sm">
+                  <Card size="sm" className="relative isolate">
+                    {/* The overview tiles' watermark, at this card's scale. */}
+                    <card.icon
+                      className="pointer-events-none absolute -end-2 -bottom-2 -z-10 size-16 stroke-1 text-primary opacity-15"
+                      aria-hidden
+                    />
                     <CardContent className="flex items-center gap-3">
-                      <card.icon className="size-4 shrink-0 text-primary-interactive" aria-hidden />
-                      <span className="flex flex-col">
-                        <span className="text-sm font-semibold tabular-nums">
-                          {card.value.toLocaleString()}
+                      <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary-subtle">
+                        <card.icon className="size-4 text-primary-interactive" aria-hidden />
+                      </span>
+                      <span className="flex min-w-0 flex-col">
+                        <span className="flex items-baseline gap-1.5">
+                          <span className="text-lg font-semibold tabular-nums">
+                            {card.value.toLocaleString()}
+                          </span>
+                          {card.detail && (
+                            <MetaText render={<span />} className="tabular-nums">
+                              {card.detail}
+                            </MetaText>
+                          )}
                         </span>
                         <MetaText render={<span />}>{card.label}</MetaText>
                       </span>

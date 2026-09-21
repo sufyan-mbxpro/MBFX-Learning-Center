@@ -5,7 +5,7 @@ import { can, requirePermission } from "@repo/rbac";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardContent } from "@repo/ui/components/card";
-import { humanizeKey } from "@repo/utils";
+import { formatDate, humanizeKey } from "@repo/utils";
 import { Pencil } from "lucide-react";
 import { AdminPage } from "../_components/admin-page.tsx";
 import { ToolEnableSwitch } from "./tool-enable-switch.tsx";
@@ -26,8 +26,6 @@ export default async function ToolsPage() {
   // copy. The switch re-checks server-side regardless (security.md #1).
   const canPublish = can(subject, "tools.publish");
 
-  const dateFormat = new Intl.DateTimeFormat("en", { dateStyle: "medium" });
-
   return (
     <AdminPage title={t("toolsAdmin.title")} description={t("toolsAdmin.description")}>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -40,7 +38,6 @@ export default async function ToolsPage() {
                     {/* ADR-044 #5 — a registry key never renders raw. */}
                     {tool.title ?? humanizeKey(tool.key)}
                   </span>
-                  <span className="text-xs text-muted-foreground">/tools/{tool.key}</span>
                 </div>
                 <Badge variant={tool.isEnabled ? "success" : "outline"}>
                   {tool.isEnabled ? t("toolsAdmin.enabled") : t("toolsAdmin.disabled")}
@@ -56,7 +53,7 @@ export default async function ToolsPage() {
                   {tool.curatedCount}/{tool.relatedCount} {t("toolsAdmin.relatedSuffix")}
                 </span>
                 <span>
-                  {t("toolsAdmin.updated")} {dateFormat.format(tool.updatedAt)}
+                  {t("toolsAdmin.updated")} {formatDate(tool.updatedAt)}
                 </span>
               </div>
 

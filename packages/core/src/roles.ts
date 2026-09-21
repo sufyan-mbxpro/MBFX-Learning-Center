@@ -374,16 +374,47 @@ export interface UserDetail {
   id: string;
   email: string;
   name: string;
+  firstName: string | null;
+  lastName: string | null;
+  image: string | null;
   userType: string;
   status: string;
   phone: string | null;
+  locale: string;
+  timezone: string;
+  emailVerified: boolean;
+  twoFactorEnabled: boolean;
   createdAt: Date;
+  updatedAt: Date;
   lastLoginAt: Date | null;
+  lastLoginIp: string | null;
+  failedLoginCount: number;
+  lockedUntil: Date | null;
   roleKeys: string[];
   overrides: { permissionKey: string; effect: string; reason: string | null }[];
+  /** The newest consent row linked to this account, if any (ADR-080 #6). */
+  newsletter: { status: string; source: string; confirmedAt: Date | null } | null;
+  /** Unexpired sessions, newest first — the "Devices" tab (changes-45). */
+  sessions: {
+    id: string;
+    createdAt: Date;
+    expiresAt: Date;
+    ipAddress: string | null;
+    userAgent: string | null;
+    impersonated: boolean;
+  }[];
+  /** The 20 newest audit rows this account wrote OR that were written about it. */
+  activity: {
+    id: string;
+    action: string;
+    actorName: string | null;
+    aboutThisUser: boolean;
+    createdAt: Date;
+  }[];
 }
 
 export async function loadUserDetail(userId: string): Promise<UserDetail | null> {
+  const now = new Date();
   const user = await db.user.findFirst({
     where: { id: userId, deletedAt: null },
     include: {
@@ -391,23 +422,91 @@ export async function loadUserDetail(userId: string): Promise<UserDetail | null>
       permissions: {
         select: { effect: true, reason: true, permission: { select: { key: true } } },
       },
+      subscriptions: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: { status: true, source: true, confirmedAt: true },
+      },
+      sessions: {
+        where: { expiresAt: { gt: now } },
+        orderBy: { createdAt: "desc" },
+        take: 20,
+        select: {
+          id: true,
+          createdAt: true,
+          expiresAt: true,
+          ipAddress: true,
+          userAgent: true,
+          impersonatedBy: true,
+        },
+      },
     },
   });
   if (!user) return null;
+
+  const activity = await db.auditLog.findMany({
+    where: { OR: [{ userId }, { entityType: "user", entityId: userId }] },
+    orderBy: { createdAt: "desc" },
+    take: 20,
+    select: {
+      id: true,
+      action: true,
+      userId: true,
+      createdAt: true,
+      user: { select: { name: true } },
+    },
+  });
+
+  const subscription = user.subscriptions[0];
   return {
     id: user.id,
     email: user.email,
     name: user.name,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    image: user.image,
     userType: user.userType,
     status: user.status,
     phone: user.phone,
+    locale: user.locale,
+    timezone: user.timezone,
+    emailVerified: user.emailVerified,
+    twoFactorEnabled: user.twoFactorEnabled === true,
     createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
     lastLoginAt: user.lastLoginAt,
+    lastLoginIp: user.lastLoginIp,
+    failedLoginCount: user.failedLoginCount,
+    lockedUntil: user.lockedUntil,
     roleKeys: user.roles.map((r) => r.role.key),
     overrides: user.permissions.map((p) => ({
       permissionKey: p.permission.key,
       effect: p.effect,
       reason: p.reason,
+    })),
+    newsletter: subscription
+      ? {
+          status: subscription.status,
+          source: subscription.source,
+          confirmedAt: subscription.confirmedAt,
+        }
+      : null,
+    // A session row's token never leaves this function: the tab lists
+    // devices, and a token on an admin page is a session anyone can replay.
+    sessions: user.sessions.map((row) => ({
+      id: row.id,
+      createdAt: row.createdAt,
+      expiresAt: row.expiresAt,
+      ipAddress: row.ipAddress,
+      userAgent: row.userAgent,
+      impersonated: row.impersonatedBy !== null,
+    })),
+    activity: activity.map((row) => ({
+      id: row.id,
+      action: row.action,
+      actorName: row.user?.name ?? null,
+      aboutThisUser: row.userId !== userId,
+      createdAt: row.createdAt,
     })),
   };
 }

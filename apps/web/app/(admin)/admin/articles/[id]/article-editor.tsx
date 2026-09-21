@@ -22,7 +22,7 @@
 // description; the header's actions carry intent colours; and the whole grid
 // is width-constrained so nothing pasted into the body can widen the page.
 // The save payload below is byte-for-byte what it was.
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -35,7 +35,7 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { saveArticleSchema, updateArticleMetaSchema, type SaveArticleInput } from "@repo/contracts";
-import { parseVideoUrl } from "@repo/utils";
+import { htmlToBlockText, parseVideoUrl } from "@repo/utils";
 import { Button } from "@repo/ui/components/button";
 import { Checkbox } from "@repo/ui/components/checkbox";
 import { ConfirmDialog } from "@repo/ui/components/confirm-dialog";
@@ -62,15 +62,19 @@ import { Textarea } from "@repo/ui/components/textarea";
 import { ImageUploadField } from "../../_components/image-upload-field.tsx";
 import { RichTextEditor } from "../../_components/rich-text-editor.tsx";
 import type { AiAssistantConfig, AiAssistantLabels } from "../../_components/ai-assistant.tsx";
+import {
+  AiFieldMenu,
+  AiFillButton,
+  type AiFaqValue,
+  type AiFillConfig,
+  type AiFillPatch,
+} from "../../_components/ai-fill.tsx";
 import { AiSeoButton, type AiSeoLabels } from "../../_components/ai-seo-dialog.tsx";
 import {
   AiTranslateButton,
   type AiTranslateLabels,
 } from "../../_components/ai-translate-button.tsx";
-import {
-  TakeawaysField,
-  type TakeawaysLabels,
-} from "../../_components/takeaways-field.tsx";
+import { TakeawaysField, type TakeawaysLabels } from "../../_components/takeaways-field.tsx";
 import {
   duplicateArticleAction,
   saveArticleAction,
@@ -90,6 +94,7 @@ import { EditorSection, Field } from "../../_components/editor/editor-section.ts
 import { SeoAnalysis } from "../../_components/editor/seo-analysis.tsx";
 import { FaqPanel } from "../../_components/editor/faq-panel.tsx";
 import { RelatedPanel } from "./_panels/related-panel.tsx";
+import { liveHref, storedSlug } from "../../_lib/live-href.ts";
 import { PublishPanel } from "./_panels/publish-panel.tsx";
 import { TaxonomyPanel } from "./_panels/taxonomy-panel.tsx";
 import {
@@ -100,6 +105,7 @@ import {
   type FaqDraft,
   type TranslationDraft,
 } from "./editor-types.ts";
+import { HeaderActions } from "../../_components/header-actions.tsx";
 
 // The over-limit ink is `-interactive` (audit F-03); past the limit the
 // field's own inline error says so in words as well.
@@ -192,6 +198,8 @@ export function ArticleEditor({
     translate?: { labels: AiTranslateLabels };
     /** B4's Generate. The FIELD is always drawn; only this half is optional. */
     summarize?: boolean;
+    /** ADR-126's brief bar and per-field menus. */
+    fill?: AiFillConfig;
   };
   takeawaysLabels: TakeawaysLabels;
 }) {
@@ -241,12 +249,84 @@ export function ArticleEditor({
   const [source, setSource] = useState(article.source ?? "");
   const [sourceUrl, setSourceUrl] = useState(article.sourceUrl ?? "");
 
+  // ADR-126: the fillable fields as plain text — the review's "current" column,
+  // the empty test behind each default tick, and the prompt's context.
+  const aiFill = ai?.fill;
+  const aiCurrent = {
+    title: tr.title,
+    excerpt: tr.excerpt,
+    body: htmlToBlockText(tr.body),
+    seoTitle: tr.seoTitle,
+    seoDescription: tr.seoDescription,
+    focusKeywords: tr.focusKeywords,
+    ogTitle: tr.ogTitle,
+    ogDescription: tr.ogDescription,
+    faq: tr.faqItems.map((item) => `${item.question}\n${item.answer}`).join("\n\n"),
+    keyTakeaways: tr.keyTakeaways.join("\n"),
+  };
+  // ONE `setTr`: several calls in a tick would each merge from the same draft.
+  const applyFill = (patch: AiFillPatch) => {
+    const next: Partial<TranslationDraft> = {};
+    for (const key of [
+      "title",
+      "excerpt",
+      "body",
+      "seoTitle",
+      "seoDescription",
+      "ogTitle",
+      "ogDescription",
+    ] as const) {
+      const value = patch[key];
+      if (typeof value === "string") next[key] = value;
+    }
+    // The column is one comma-separated string; the model answers a list.
+    if (Array.isArray(patch.focusKeywords)) {
+      next.focusKeywords = (patch.focusKeywords as string[]).join(", ");
+    }
+    // Generated rows carry no `id`, so the service inserts them — the same
+    // shape `FaqPanel` gives a row an editor adds by hand.
+    if (Array.isArray(patch.faq)) {
+      next.faqItems = (patch.faq as AiFaqValue[]).map(({ question, answer }) => ({
+        question,
+        answer,
+      }));
+    }
+    if (Array.isArray(patch.keyTakeaways)) next.keyTakeaways = patch.keyTakeaways as string[];
+    setTr(next);
+  };
+  const fieldMenu = (field: keyof typeof aiCurrent) =>
+    aiFill ? (
+      <AiFieldMenu
+        config={aiFill}
+        field={field}
+        locale={locale}
+        current={aiCurrent}
+        onApply={(value) => setTr({ [field]: value })}
+      />
+    ) : undefined;
+  // A field that already shows a character count keeps it beside the menu.
+  const withMenu = (field: keyof typeof aiCurrent, count: ReactNode) =>
+    aiFill ? (
+      <span className="flex items-center gap-2">
+        {count}
+        {fieldMenu(field)}
+      </span>
+    ) : (
+      count
+    );
+
   const parsedVideo = videoUrl.trim() === "" ? null : parseVideoUrl(videoUrl);
   const videoInvalid = videoUrl.trim() !== "" && parsedVideo === null;
 
   const derivedSlug = tr.slug || tr.title.toLowerCase().replaceAll(/[^a-z0-9]+/g, "-");
   const publicPath = `${locale === defaultLocale ? "" : `/${locale}`}/news/${derivedSlug}`;
   const postUrl = `${siteUrl}${publicPath}`;
+  // The address a reader can open today, whichever locale is on screen.
+  const viewLiveHref = liveHref(
+    `/news/${storedSlug(article.translations, defaultLocale)}`,
+    locale,
+    defaultLocale,
+  );
 
   const buildPayload = () =>
     ({
@@ -367,23 +447,20 @@ export function ArticleEditor({
     // page into horizontal scroll (changes-10 item 9). Each level has to
     // opt out of that separately — fixing only the editor is not enough.
     <div className="flex w-full min-w-0 flex-col gap-4">
-      {/* Sticky header — Cancel / Preview / View Live / Publish-or-Update. */}
-      {/* Sticks BELOW the admin shell’s own sticky header, not under it:
-          that header is `sticky top-0 z-30 h-(--height-header)`, so a
-          plain `top-0 z-10` here slid the save button behind it and made it
-          unclickable once the page scrolled. Caught in live verification. */}
-      <div className="sticky top-(--height-header) z-20 -mx-1 flex flex-wrap items-center justify-end gap-2 border-b bg-background/95 px-1 py-3 backdrop-blur">
+      {/* Cancel / Preview / View Live / Publish-or-Update, on the page
+          heading's row (ADR-140 §3) — `EditorPage` pins that row under the
+          shell's header, which is what this bar used to do on its own. */}
+      <HeaderActions>
         {/* Colour is assigned by consequence, not by prominence (ADR-046):
             Cancel discards nothing and stays neutral; Preview is
             informational; the save is the one primary action on the screen.
             The lifecycle buttons that DO destroy live at the publish panel,
             where their own colours are. */}
-        <Button variant="ghost" size="sm" render={<Link href="/admin/articles" />}>
+        <Button variant="ghost" render={<Link href="/admin/articles" />}>
           {labels.cancel}
         </Button>
         <Button
           variant="info"
-          size="sm"
           render={<a href={`/news/preview/${article.id}`} target="_blank" rel="noreferrer" />}
         >
           <Eye data-icon="inline-start" aria-hidden />
@@ -392,8 +469,7 @@ export function ArticleEditor({
         {article.status === "PUBLISHED" && (
           <Button
             variant="outline"
-            size="sm"
-            render={<a href={publicPath} target="_blank" rel="noreferrer" />}
+            render={<a href={viewLiveHref} target="_blank" rel="noreferrer" />}
           >
             <ExternalLink data-icon="inline-start" aria-hidden />
             {labels.viewLive}
@@ -401,13 +477,13 @@ export function ArticleEditor({
         )}
         {/* Enabled while fields are wrong: a disabled Save is silent about
             WHICH field (audit F-07). Pressing it names them instead. */}
-        <Button size="sm" loading={pending} onClick={save}>
+        <Button loading={pending} onClick={save}>
           {headerPublishes ? labels.publishPost : labels.updatePost}
         </Button>
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
-              <Button variant="ghost" size="icon-sm" aria-label={labels.openActions}>
+              <Button variant="ghost" size="icon" aria-label={labels.openActions}>
                 <MoreHorizontal aria-hidden />
               </Button>
             }
@@ -440,7 +516,7 @@ export function ArticleEditor({
               ))}
           </DropdownMenuContent>
         </DropdownMenu>
-      </div>
+      </HeaderActions>
 
       {/* `minmax(0, 1fr)` rather than `1fr` — see the min-w-0 note above.
           `1fr` is shorthand for `minmax(auto, 1fr)`, which is exactly the
@@ -455,6 +531,27 @@ export function ArticleEditor({
             accent="primary"
             actions={
               <div className="flex items-center gap-2">
+                {aiFill && (
+                  <AiFillButton
+                    config={aiFill}
+                    locale={locale}
+                    current={aiCurrent}
+                    withOptions
+                    fieldLabels={{
+                      title: labels.titleLabel,
+                      excerpt: labels.excerpt,
+                      body: labels.body,
+                      seoTitle: labels.seoTitle,
+                      seoDescription: labels.seoDescription,
+                      focusKeywords: labels.focusKeywords,
+                      ogTitle: labels.ogTitle,
+                      ogDescription: labels.ogDescription,
+                      faq: labels.faq.section,
+                      keyTakeaways: takeawaysLabels.label,
+                    }}
+                    onApply={applyFill}
+                  />
+                )}
                 <UiField orientation="horizontal" className="w-auto">
                   <FieldLabel className="text-xs">{labels.localeLabel}</FieldLabel>
                   <AdminCombobox
@@ -500,7 +597,12 @@ export function ArticleEditor({
               <ContentStats body={tr.body} focusKeywords={tr.focusKeywords} labels={labels.stats} />
             }
           >
-            <Field label={labels.titleLabel} required error={form.error("translation.title")}>
+            <Field
+              label={labels.titleLabel}
+              required
+              adornment={fieldMenu("title")}
+              error={form.error("translation.title")}
+            >
               <Input value={tr.title} onChange={(e) => setTr({ title: e.target.value })} />
             </Field>
             <Field label={labels.slugLabel} error={form.error("translation.slug")}>
@@ -530,12 +632,12 @@ export function ArticleEditor({
                 shows, which is an argument for reading it near the title. */}
             <Field
               label={labels.excerpt}
-              adornment={<CharCount value={tr.excerpt} max={500} />}
+              adornment={withMenu("excerpt", <CharCount value={tr.excerpt} max={500} />)}
               error={form.error("translation.excerpt")}
             >
               <Textarea
                 value={tr.excerpt}
-                rows={3}
+                rows={4}
                 onChange={(e) => setTr({ excerpt: e.target.value })}
               />
             </Field>
@@ -570,7 +672,16 @@ export function ArticleEditor({
                 // changes-29 B1. The body is the only field the assistant is
                 // wired into: it is the one long enough for drafting, expanding
                 // or a tone change to mean anything.
-                {...(ai?.assistant ? { ai: ai.assistant } : {})}
+                // The locale is the Content section's switcher, so a draft is
+                // written in the language being edited.
+                {...(ai?.assistant
+                  ? {
+                      ai: {
+                        ...ai.assistant,
+                        config: { ...ai.assistant.config, locale, panel: true, languages: locales },
+                      },
+                    }
+                  : {})}
               />
             </Field>
           </EditorSection>
@@ -619,7 +730,7 @@ export function ArticleEditor({
                 <Field
                   label={labels.seoTitle}
                   hint={labels.seoTitleHint}
-                  adornment={<CharCount value={tr.seoTitle} max={70} />}
+                  adornment={withMenu("seoTitle", <CharCount value={tr.seoTitle} max={70} />)}
                   error={form.error("translation.seoTitle")}
                 >
                   <Input
@@ -631,12 +742,15 @@ export function ArticleEditor({
                 <Field
                   label={labels.seoDescription}
                   hint={labels.seoDescriptionHint}
-                  adornment={<CharCount value={tr.seoDescription} max={180} />}
+                  adornment={withMenu(
+                    "seoDescription",
+                    <CharCount value={tr.seoDescription} max={180} />,
+                  )}
                   error={form.error("translation.seoDescription")}
                 >
                   <Textarea
                     value={tr.seoDescription}
-                    rows={2}
+                    rows={3}
                     placeholder={tr.excerpt}
                     onChange={(e) => setTr({ seoDescription: e.target.value })}
                   />
@@ -680,17 +794,25 @@ export function ArticleEditor({
               </TabsContent>
 
               <TabsContent value="social" className="flex flex-col gap-3 pt-3">
-                <Field label={labels.ogTitle} error={form.error("translation.ogTitle")}>
+                <Field
+                  label={labels.ogTitle}
+                  adornment={fieldMenu("ogTitle")}
+                  error={form.error("translation.ogTitle")}
+                >
                   <Input
                     value={tr.ogTitle}
                     placeholder={tr.seoTitle || tr.title}
                     onChange={(e) => setTr({ ogTitle: e.target.value })}
                   />
                 </Field>
-                <Field label={labels.ogDescription} error={form.error("translation.ogDescription")}>
+                <Field
+                  label={labels.ogDescription}
+                  adornment={fieldMenu("ogDescription")}
+                  error={form.error("translation.ogDescription")}
+                >
                   <Textarea
                     value={tr.ogDescription}
-                    rows={2}
+                    rows={3}
                     placeholder={tr.seoDescription || tr.excerpt}
                     onChange={(e) => setTr({ ogDescription: e.target.value })}
                   />
@@ -756,7 +878,6 @@ export function ArticleEditor({
                   description={tr.seoDescription || tr.excerpt}
                   body={tr.body}
                   focusKeywords={tr.focusKeywords}
-                  labels={labels.analysis}
                 />
               </TabsContent>
             </Tabs>

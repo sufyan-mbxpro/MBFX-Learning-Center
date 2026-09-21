@@ -37,6 +37,16 @@ const CARD_VARIANT_CLASS = {
   // would fail contrast (the same bug Lighthouse caught on Badge's eyebrow
   // — see that file). An alpha tint shifts with the surface in both modes.
   featured: "border-2 border-primary-interactive bg-primary/10",
+  // changes-31 / ADR-101 §4 — the PUBLIC card: separated by air, not by a box.
+  // The white surface against the ivory ground (ADR-101 §2) is what makes it
+  // read as a card; the gap between cards does the rest.
+  //
+  // `border-transparent`, not `border-0`: the 1px box stays, so a plain card
+  // and a bordered one occupy exactly the same geometry and a page mixing the
+  // two does not jump by a pixel per card. Hover is untouched — `.card-hover`
+  // still lifts the ring and the shadow, which is the one moment elevation
+  // earns its keep.
+  plain: "border-transparent shadow-none",
 } as const;
 
 function Card({

@@ -16,9 +16,12 @@ import {
   correlationConfigSchema,
   currencyConverterConfigSchema,
   isToolKey,
+  marginConfigSchema,
   marketHoursConfigSchema,
   parseToolConfig,
   pivotPointsConfigSchema,
+  profitLossConfigSchema,
+  riskRewardConfigSchema,
   riskSentimentConfigSchema,
   saveToolSchema,
   toolConfigSchema,
@@ -27,9 +30,10 @@ import {
 import { ROUTE_PATHS } from "./navigation.ts";
 
 describe("TOOL_KEYS registry", () => {
-  it("registers the eight tools the reference has", () => {
-    expect(TOOL_KEYS).toHaveLength(8);
-    expect(new Set(TOOL_KEYS).size).toBe(8);
+  it("registers eleven tools: the reference's eight and changes-41's three", () => {
+    expect(TOOL_KEYS).toHaveLength(11);
+    expect(new Set(TOOL_KEYS).size).toBe(11);
+    expect(TOOL_KEYS).toEqual(expect.arrayContaining(["margin", "profit-loss", "risk-reward"]));
   });
 
   it("gives every key a spec whose own key matches its entry", () => {
@@ -76,7 +80,8 @@ describe("TOOL_KEYS registry", () => {
 
   it("narrows a known key and rejects an unknown one", () => {
     expect(isToolKey("pip-value")).toBe(true);
-    expect(isToolKey("margin")).toBe(false);
+    expect(isToolKey("margin")).toBe(true);
+    expect(isToolKey("live-rates")).toBe(false);
   });
 
   it("declares what each tool needs, and five need nothing", () => {
@@ -233,7 +238,7 @@ describe("saveToolSchema", () => {
   });
 
   it("refuses a key that is not a registered tool", () => {
-    expect(saveToolSchema.safeParse({ ...valid, key: "margin" }).success).toBe(false);
+    expect(saveToolSchema.safeParse({ ...valid, key: "live-rates" }).success).toBe(false);
   });
 
   it("refuses a related item of an unknown type", () => {
@@ -243,5 +248,60 @@ describe("saveToolSchema", () => {
         related: [{ targetType: "podcast", targetId: "abc" }],
       }).success,
     ).toBe(false);
+  });
+});
+
+describe("changes-41 calculator configs (ADR-135)", () => {
+  const margin = {
+    defaultAccountCurrency: "USD",
+    defaultPairId: null,
+    defaultUnits: 100000,
+    defaultBalance: 10000,
+    leverageOptions: [50, 100, 200, 400, 500],
+    defaultLeverage: 100,
+    pairIds: [],
+    accountCurrencyIds: [],
+  };
+
+  it("accepts the seeded margin config and refuses a default leverage it does not offer", () => {
+    expect(marginConfigSchema.safeParse(margin).success).toBe(true);
+    const off = marginConfigSchema.safeParse({ ...margin, defaultLeverage: 30 });
+    expect(off.success).toBe(false);
+    expect(off.error?.issues[0]?.path).toEqual(["defaultLeverage"]);
+    expect(marginConfigSchema.safeParse({ ...margin, leverageOptions: [] }).success).toBe(false);
+    expect(marginConfigSchema.safeParse({ ...margin, leverageOptions: [0] }).success).toBe(false);
+  });
+
+  it("refuses a profit/loss default below a micro lot", () => {
+    const valid = {
+      defaultAccountCurrency: "USD",
+      defaultLots: 1,
+      pairIds: [],
+      accountCurrencyIds: [],
+    };
+    expect(profitLossConfigSchema.safeParse(valid).success).toBe(true);
+    expect(profitLossConfigSchema.safeParse({ ...valid, defaultLots: 0.001 }).success).toBe(false);
+  });
+
+  it("refuses risk-level thresholds that are out of order", () => {
+    const valid = {
+      defaultAccountCurrency: "USD",
+      defaultBalance: 10000,
+      defaultRiskPercent: 2,
+      minRiskPercent: 0.1,
+      maxRiskPercent: 10,
+      conservativeMaxPercent: 1,
+      moderateMaxPercent: 2,
+      minRecommendedRatio: 2,
+      pairIds: [],
+      accountCurrencyIds: [],
+    };
+    expect(riskRewardConfigSchema.safeParse(valid).success).toBe(true);
+    const swapped = riskRewardConfigSchema.safeParse({
+      ...valid,
+      conservativeMaxPercent: 3,
+    });
+    expect(swapped.success).toBe(false);
+    expect(swapped.error?.issues[0]?.path).toEqual(["conservativeMaxPercent"]);
   });
 });

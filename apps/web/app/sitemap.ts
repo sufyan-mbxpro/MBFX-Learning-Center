@@ -1,18 +1,27 @@
 import type { MetadataRoute } from "next";
-import { articlePath, glossaryTermPath, getSitemapEntries, getEnabledTools } from "@repo/core";
 import {
-  ABOUT_PATHS,
+  articleCategoryPath,
+  articlePath,
+  articleTagPath,
+  glossaryTermPath,
+  getSitemapEntries,
+  getEnabledTools,
+} from "@repo/core";
+import {
   learnTrackGlossaryPath,
   learnTrackPath,
   learnTrackQuizzesPath,
   learnTrackVideosPath,
   LEARN_TRACK_KEYS,
+  LEGAL_DOCUMENT_KEYS,
+  LEGAL_DOCUMENT_SETTING,
   ROUTE_PATHS,
   toolPath,
   publicPagePath,
 } from "@repo/contracts";
 import { getServableLocales } from "@repo/i18n";
 import { routing } from "@repo/i18n/routing";
+import { getSetting, isFeatureVisible } from "@repo/settings";
 import { siteUrl } from "./_lib/site-url.ts";
 
 // Per-locale sitemap from PUBLISHED content only (the loaders are
@@ -26,7 +35,32 @@ import { siteUrl } from "./_lib/site-url.ts";
 // crawler hit, alone among the public surfaces.
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base = siteUrl();
-  const [entries, enabledTools] = await Promise.all([getSitemapEntries(), getEnabledTools()]);
+  const [entries, enabledTools, flags, legalStored] = await Promise.all([
+    getSitemapEntries(),
+    getEnabledTools(),
+    // The same anonymous-subject flag reads the pages themselves 404 on. A
+    // section switched off is a 404, and a sitemap entry for a 404 is a crawl
+    // hint pointing at an error page — the rule this file already applied to
+    // a disabled tool and to unpublished content, now applied to sections.
+    Promise.all(
+      (
+        [
+          "news",
+          "analysis",
+          "glossary",
+          "courses",
+          "quizzes",
+          "videos",
+          "calculators",
+          "economic_calendar",
+          "market_data",
+        ] as const
+      ).map(async (flag) => [flag, await isFeatureVisible(flag, null)] as const),
+    ).then((pairs) => Object.fromEntries(pairs) as Record<(typeof pairs)[number][0], boolean>),
+    // A legal document with no stored file 404s (ADR-110); only a published
+    // one is listed.
+    Promise.all(LEGAL_DOCUMENT_KEYS.map((key) => getSetting(LEGAL_DOCUMENT_SETTING[key]))),
+  ]);
   // ADR-091: active locales, not the static superset. Listing /es and /ar
   // when neither is served is a crawl hint pointing at a 404 — the reasoning
   // ADR-086 #5 already applied to a disabled tool, and that this file already
@@ -46,43 +80,67 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const {
     glossary: glossaryEntries,
     articles: articleEntries,
+    articleCategories: categoryEntries,
+    articleTags: tagEntries,
     pages: pageEntries,
     learn: learnEntries,
-    quizzes: quizEntries,
     glossaryTopics: topicEntries,
     videos: videoEntries,
   } = entries;
 
-  // Coded routes — the home page, the About section (ADR-047) and the
-  // economic calendar (ADR-050). These are files, not content rows, so they
-  // are listed statically rather than loaded: nothing in the database knows
-  // they exist.
+  // Coded routes — the home page, `/support` (ADR-109), the reader's sitemap
+  // (ADR-110) and the economic calendar (ADR-050). These are files, not
+  // content rows, so they are listed statically rather than loaded: nothing in
+  // the database knows they exist.
   // `/learn` joins the static list, not the loaded one: the index is a route
   // file, and `loadLearnSitemapEntries` returns COURSE and LESSON URLs only.
   // Each TRACK's four indexes join it for the same reason (ADR-065 §1) — they
   // are route files over a code registry, so they are enumerated from the
   // registry rather than loaded, and registering a third track puts its four
   // URLs in the sitemap with no edit here.
-  // The quiz RUNNER pages are listed; each one is `noindex, follow` in its own
-  // metadata, which is not a contradiction — a sitemap entry is a crawl hint
-  // and the robots directive is what decides indexing.
+  // Quiz RUNNER pages are NOT listed: each is `noindex, follow`, and a
+  // sitemap that submits a URL its own page refuses to be indexed under is
+  // reported as an error by every search console. The track's quiz INDEX is
+  // the indexable surface, and it links to every runner.
   const staticPaths = [
     "/",
-    ...ABOUT_PATHS,
-    ROUTE_PATHS["economic-calendar"],
-    ROUTE_PATHS.learn,
-    ...LEARN_TRACK_KEYS.flatMap((track) => [
-      learnTrackPath(track),
-      learnTrackQuizzesPath(track),
-      learnTrackVideosPath(track),
-      learnTrackGlossaryPath(track),
-    ]),
-    `${ROUTE_PATHS.glossary}/topics`,
+    ROUTE_PATHS.support,
+    ROUTE_PATHS.sitemap,
+    ...(flags.economic_calendar ? [ROUTE_PATHS["economic-calendar"]] : []),
+    ...(flags.news ? ["/news"] : []),
+    ...(flags.analysis ? ["/analysis"] : []),
+    ...(flags.glossary ? [ROUTE_PATHS.glossary, `${ROUTE_PATHS.glossary}/topics`] : []),
+    ...(flags.courses
+      ? [
+          ROUTE_PATHS.learn,
+          ...LEARN_TRACK_KEYS.flatMap((track) => [
+            learnTrackPath(track),
+            ...(flags.quizzes ? [learnTrackQuizzesPath(track)] : []),
+            ...(flags.videos ? [learnTrackVideosPath(track)] : []),
+            ...(flags.glossary ? [learnTrackGlossaryPath(track)] : []),
+          ]),
+        ]
+      : []),
     // The tools index plus every ENABLED tool (ADR-086 #5): a disabled tool
     // 404s, and listing a 404 in a sitemap is a crawl hint pointing at an
     // error page.
-    ROUTE_PATHS.tools,
-    ...enabledTools.map((tool) => toolPath(tool.key)),
+    ...(flags.calculators
+      ? [
+          ROUTE_PATHS.tools,
+          ...enabledTools.map((tool) => toolPath(tool.key)),
+          // The market boards (ADR-136 §5): route files, not `Tool` rows.
+          ROUTE_PATHS.volatility,
+        ]
+      : []),
+    // Both pages behind `market_data` (changes-40): the live board and the
+    // headline feed share the flag because both are the vendor's market feed
+    // under our chrome.
+    ...(flags.market_data
+      ? [ROUTE_PATHS["live-rates"], ROUTE_PATHS["market-news"]]
+      : []),
+    ...LEGAL_DOCUMENT_KEYS.filter((_, index) => Boolean(legalStored[index])).map(
+      (key) => `/legal/${key}`,
+    ),
   ];
   const staticPages: MetadataRoute.Sitemap = servableLocales.flatMap((locale) => {
     const prefix = locale === routing.defaultLocale ? "" : `/${locale}`;
@@ -92,15 +150,31 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }));
   });
 
-  const glossaryPages: MetadataRoute.Sitemap = served(glossaryEntries).map((entry) => ({
-    url: `${base}${glossaryTermPath(entry.locale, routing.defaultLocale, entry.slug)}`,
-    lastModified: entry.updatedAt,
-  }));
+  const glossaryPages: MetadataRoute.Sitemap = (flags.glossary ? served(glossaryEntries) : []).map(
+    (entry) => ({
+      url: `${base}${glossaryTermPath(entry.locale, routing.defaultLocale, entry.slug)}`,
+      lastModified: entry.updatedAt,
+    }),
+  );
 
   const articlePages: MetadataRoute.Sitemap = served(articleEntries).map((entry) => ({
     url: `${base}${articlePath(entry.locale, routing.defaultLocale, entry.slug)}`,
     lastModified: entry.updatedAt,
   }));
+
+  // Category and tag archives live under `/news` and 404 with it.
+  const taxonomyPages: MetadataRoute.Sitemap = flags.news
+    ? [
+        ...served(categoryEntries).map((entry) => ({
+          url: `${base}${articleCategoryPath(entry.locale, routing.defaultLocale, entry.slug)}`,
+          lastModified: entry.updatedAt,
+        })),
+        ...served(tagEntries).map((entry) => ({
+          url: `${base}${articleTagPath(entry.locale, routing.defaultLocale, entry.slug)}`,
+          lastModified: entry.updatedAt,
+        })),
+      ]
+    : [];
 
   // Module 16: CMS STATIC/COLLECTION pages (Phase 1 has only STATIC — the
   // home page is excluded by construction until it is published, PR 2.7).
@@ -128,22 +202,22 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Already filtered to published + PUBLIC visibility — a draft or gated course
   // is ABSENT rather than `noindex`, because an unpublished learn route 404s
   // and a sitemap entry for a 404 is worse than no entry (plan §11).
-  const learnPages: MetadataRoute.Sitemap = localised(learnEntries);
-  const quizPages: MetadataRoute.Sitemap = localised(quizEntries);
+  const learnPages: MetadataRoute.Sitemap = flags.courses ? localised(learnEntries) : [];
   // D27. A topic with no published terms is omitted by the loader, so this
   // never lists a page that renders an empty list.
-  const topicPages: MetadataRoute.Sitemap = localised(topicEntries);
+  const topicPages: MetadataRoute.Sitemap = flags.glossary ? localised(topicEntries) : [];
   // ADR-068. Category VIEWS are not listed: they are filtered views over the
   // same topics, so every URL they contain is already here on its own page.
-  const videoPages: MetadataRoute.Sitemap = localised(videoEntries);
+  const videoPages: MetadataRoute.Sitemap =
+    flags.courses && flags.videos ? localised(videoEntries) : [];
 
   return [
     ...staticPages,
     ...glossaryPages,
     ...articlePages,
+    ...taxonomyPages,
     ...cmsPages,
     ...learnPages,
-    ...quizPages,
     ...topicPages,
     ...videoPages,
   ];

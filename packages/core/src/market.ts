@@ -48,6 +48,25 @@ function resolveBaseUrl(baseUrl: string | undefined): string {
   return baseUrl?.replace(/[/]+$/, "") || ALPHAVANTAGE_BASE_URL;
 }
 
+/**
+ * How long one provider request may take. `fetch` has no timeout of its own,
+ * so a provider that accepts the connection and never answers held the admin's
+ * "Sync now" spinner — and the sweep behind it — open indefinitely. A timeout
+ * turns that into an ordinary per-instrument failure the sweep already records.
+ */
+const PROVIDER_TIMEOUT_MS = 30_000;
+
+async function fetchWithTimeout(doFetch: typeof fetch, url: string): Promise<Response> {
+  try {
+    return await doFetch(url, { signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS) });
+  } catch (error) {
+    if (error instanceof Error && error.name === "TimeoutError") {
+      throw new MarketDataError(`Provider did not respond within ${PROVIDER_TIMEOUT_MS / 1000}s`);
+    }
+    throw error;
+  }
+}
+
 interface AlphaVantageOptions {
   apiKey: string;
   baseUrl?: string;
@@ -65,7 +84,7 @@ export function alphaVantageProvider(options: AlphaVantageOptions): MarketDataPr
       if (!from || !to) throw new MarketDataError(`Invalid pair: ${pair}`);
 
       const url = `${baseUrl}/query?function=CURRENCY_EXCHANGE_RATE&from_currency=${from}&to_currency=${to}&apikey=${options.apiKey}`;
-      const response = await doFetch(url);
+      const response = await fetchWithTimeout(doFetch, url);
       if (!response.ok) throw new MarketDataError(`Provider HTTP ${response.status}`);
 
       const body = (await response.json()) as Record<string, unknown>;
@@ -200,19 +219,85 @@ export interface DailyBar {
 export interface MarketHistoryProvider {
   name: string;
   /**
+   * Whether this driver can serve DAILY BARS for an instrument of this kind.
+   * Asked by the sweep BEFORE a request is spent: on a 25-a-day free tier a
+   * request that can only ever come back "rejected" is a request some other
+   * instrument did not get. Absent means every kind.
+   */
+  supportsKind?(kind: MarketInstrumentKind): boolean;
+  /**
    * `full` asks for the provider's whole history, `compact` for the recent
    * tail. ADR-087 #10: an instrument with no stored bars gets `full` once,
    * everything else gets `compact` — correlation at 250d and the meter's
    * percentile ranks need roughly 250 bars, and an incremental-only sweep
    * would leave both rendering "—" for the better part of a year.
+   *
+   * `kind` picks the endpoint where a provider has more than one; a caller
+   * that omits it is asking for a currency series.
    */
-  fetchDailySeries(symbol: string, size: "compact" | "full"): Promise<DailyBar[]>;
+  fetchDailySeries(
+    symbol: string,
+    size: "compact" | "full",
+    kind?: MarketInstrumentKind,
+  ): Promise<DailyBar[]>;
 }
+
+/**
+ * The kinds AlphaVantage serves as daily OHLC bars.
+ *
+ * Checked against the provider, not assumed. `FX_DAILY` covers currencies and
+ * pairs; `DIGITAL_CURRENCY_DAILY` covers crypto on the free tier with the same
+ * four prices. Nothing else qualifies: XAU and XAG are not on AlphaVantage's
+ * physical-currency list, so `FX_DAILY` rejects them; its gold/silver and WTI
+ * series carry one price a day, and a bar invented from one price would claim
+ * a high and a low nobody measured (ADR-087 #2); `INDEX_DATA` is premium-only.
+ */
+const ALPHAVANTAGE_BAR_KINDS: ReadonlySet<MarketInstrumentKind> = new Set([
+  "CURRENCY",
+  "PAIR",
+  "CRYPTO",
+]);
 
 interface AlphaVantageHistoryOptions {
   apiKey: string;
   baseUrl?: string;
   fetchImpl?: typeof fetch;
+  /** Minimum gap between requests; tests pass 0. */
+  minIntervalMs?: number;
+}
+
+/**
+ * The provider's quota for the day is spent. Distinct from a per-second
+ * throttle because the right response is the opposite one: a throttle is
+ * waited out and retried, an exhausted quota ends the sweep, since every
+ * request after it comes back the same way and costs the admin a wait.
+ */
+export class ProviderQuotaExhaustedError extends MarketDataError {
+  constructor() {
+    super("Provider rate-limited: daily request limit reached");
+    this.name = "ProviderQuotaExhaustedError";
+  }
+}
+
+/**
+ * AlphaVantage's free tier throttles at about one request a second AS WELL AS
+ * capping the day at 25, and answers both with HTTP 200 and an `Information`
+ * sentence. A sweep that fires back to back trips the first: the run reported
+ * six scattered "rate-limited" failures while the daily quota had room.
+ * 1.2 s leaves margin, and at 22 requests costs a manual sync ~26 s.
+ */
+const ALPHAVANTAGE_MIN_INTERVAL_MS = 1200;
+/** How long to back off before the one retry a per-second throttle gets. */
+const ALPHAVANTAGE_THROTTLE_RETRY_MS = 2000;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Which limit an AlphaVantage notice is about, read from its wording. */
+function classifyAlphaVantageNotice(body: Record<string, unknown>): "daily" | "burst" | "other" {
+  const text = String(body.Information ?? body.Note ?? "");
+  if (/per day|daily/i.test(text)) return "daily";
+  if (/per second|per minute|sparingly|burst/i.test(text)) return "burst";
+  return "other";
 }
 
 /** Parse one AlphaVantage daily series object into bars, newest last. */
@@ -251,30 +336,64 @@ export function alphaVantageHistoryProvider(
 ): MarketHistoryProvider {
   const baseUrl = resolveBaseUrl(options.baseUrl);
   const doFetch = options.fetchImpl ?? fetch;
+  const minIntervalMs = options.minIntervalMs ?? ALPHAVANTAGE_MIN_INTERVAL_MS;
+  // Per driver instance, and `loadProviderDriver()` builds one per sweep, so
+  // the pacing spans exactly the run it protects.
+  let nextRequestAt = 0;
+
+  async function pacedJson(url: string): Promise<Record<string, unknown>> {
+    const wait = nextRequestAt - Date.now();
+    if (wait > 0) await sleep(wait);
+    nextRequestAt = Date.now() + minIntervalMs;
+    const response = await fetchWithTimeout(doFetch, url);
+    if (!response.ok) throw new MarketDataError(`Provider HTTP ${response.status}`);
+    return (await response.json()) as Record<string, unknown>;
+  }
 
   return {
     name: "alphavantage",
-    async fetchDailySeries(symbol, size) {
+    supportsKind: (kind) => ALPHAVANTAGE_BAR_KINDS.has(kind),
+    async fetchDailySeries(symbol, size, kind) {
       const [from, to] = symbol.split("/");
       if (!from) throw new MarketDataError(`Invalid symbol: ${symbol}`);
 
       // A pair asks FX_DAILY; a bare code is treated as <code>/USD, which is
       // what makes one instrument table serve both the converter's CURRENCY
-      // rows and the correlation set's pairs.
+      // rows and the correlation set's pairs. Crypto has its own endpoint,
+      // which always answers with full history and takes no outputsize.
       const url =
-        `${baseUrl}/query?function=FX_DAILY` +
-        `&from_symbol=${encodeURIComponent(from)}` +
-        `&to_symbol=${encodeURIComponent(to ?? "USD")}` +
-        `&outputsize=${size}&apikey=${options.apiKey}`;
+        kind === "CRYPTO"
+          ? `${baseUrl}/query?function=DIGITAL_CURRENCY_DAILY` +
+            `&symbol=${encodeURIComponent(from)}` +
+            `&market=${encodeURIComponent(to ?? "USD")}` +
+            `&apikey=${options.apiKey}`
+          : `${baseUrl}/query?function=FX_DAILY` +
+            `&from_symbol=${encodeURIComponent(from)}` +
+            `&to_symbol=${encodeURIComponent(to ?? "USD")}` +
+            `&outputsize=${size}&apikey=${options.apiKey}`;
 
-      const response = await doFetch(url);
-      if (!response.ok) throw new MarketDataError(`Provider HTTP ${response.status}`);
-      const body = (await response.json()) as Record<string, unknown>;
+      let body = await pacedJson(url);
 
       // The same 200-plus-Note rate-limit trap the live rate path already
       // handles. AlphaVantage does not use a status code for this.
       if ("Note" in body || "Information" in body) {
-        throw new MarketDataError("Provider rate-limited");
+        let notice = classifyAlphaVantageNotice(body);
+        if (notice === "burst") {
+          // Waited out once. A second throttle in a row is reported, not
+          // chased: the sweep has other instruments to spend its time on.
+          await sleep(minIntervalMs === 0 ? 0 : ALPHAVANTAGE_THROTTLE_RETRY_MS);
+          body = await pacedJson(url);
+          notice =
+            "Note" in body || "Information" in body ? classifyAlphaVantageNotice(body) : notice;
+        }
+        if ("Note" in body || "Information" in body) {
+          if (notice === "daily") throw new ProviderQuotaExhaustedError();
+          throw new MarketDataError(
+            notice === "burst"
+              ? "Provider rate-limited: too many requests per second"
+              : "Provider rate-limited",
+          );
+        }
       }
       if ("Error Message" in body) {
         throw new MarketDataError(`Provider rejected symbol: ${symbol}`);
@@ -625,7 +744,25 @@ export interface SyncResult {
   failures: { symbol: string; error: string }[];
   /** Instruments the budget did not reach; the next run starts with them. */
   skipped: number;
+  /**
+   * Active instruments whose KIND the configured provider cannot serve. No
+   * request is spent on them and they are not failures: nothing went wrong,
+   * and nothing a retry does will change it. The admin's move is to switch
+   * the row off or change provider, which is why they are named.
+   */
+  unsupported: string[];
 }
+
+/** Rows per `createMany` — keeps one INSERT well under `max_allowed_packet`. */
+const BAR_INSERT_CHUNK = 1000;
+
+/**
+ * How far back a `compact` request can be trusted to reach. AlphaVantage's
+ * compact series is the latest 100 data points — ~140 calendar days of FX,
+ * exactly 100 of crypto, which trades every day. Past this, a tail request
+ * cannot meet the newest stored bar and the sweep asks for `full` instead.
+ */
+const COMPACT_REACH_DAYS = 90;
 
 export interface SyncOptions {
   /** How many provider requests this run may spend. */
@@ -647,7 +784,11 @@ export interface SyncOptions {
  *
  * **Full history on an instrument's first sync, the tail thereafter**
  * (#10). Backfill is still one request per instrument, so a first run fits the
- * same budget as any other.
+ * same budget as any other. "Thereafter" ends where the tail stops reaching:
+ * an instrument whose newest bar is older than `COMPACT_REACH_DAYS` asks for
+ * `full` again, because a compact tail would start AFTER that bar and leave
+ * the months between as a permanent hole — the state an interrupted backfill,
+ * or a sweep that did not run for a season, leaves behind.
  *
  * **Nothing depends on this running** (#11). A failure writes `lastSyncError`
  * and leaves yesterday's bars; the pages degrade to their last good value and
@@ -664,6 +805,7 @@ export async function syncDailyBars(options: SyncOptions = {}): Promise<SyncResu
     barsWritten: 0,
     failures: [],
     skipped: 0,
+    unsupported: [],
   };
 
   if (!provider) {
@@ -678,17 +820,37 @@ export async function syncDailyBars(options: SyncOptions = {}): Promise<SyncResu
     where: { isActive: true },
     select: {
       id: true,
+      kind: true,
       symbol: true,
+      base: true,
+      quote: true,
       providerSymbol: true,
       bars: { orderBy: { date: "desc" }, take: 1, select: { date: true } },
     },
   });
 
+  const fetchable = instruments.filter((instrument) => {
+    // A currency quoted against itself (the seeded USD row) is 1 by
+    // definition. Asking a provider for USD/USD spends a request on a
+    // guaranteed rejection, every run, and reports a failure that is not one.
+    // Same resolution `getRateSnapshot` uses, so both agree on what a row is.
+    const base = (instrument.base ?? instrument.symbol.split("/")[0] ?? "").toUpperCase();
+    const quote = (instrument.quote ?? instrument.symbol.split("/")[1] ?? "USD").toUpperCase();
+    if (base === quote) return false;
+
+    if (provider.supportsKind && !provider.supportsKind(instrument.kind)) {
+      result.unsupported.push(instrument.symbol);
+      return false;
+    }
+    return true;
+  });
+  result.unsupported.sort((a, b) => a.localeCompare(b));
+
   // Staleness order: no bars at all first (Infinity old), then oldest newest-
   // bar first. Sorting in memory rather than in SQL because "the age of an
   // instrument's newest bar" is a per-row aggregate, and a correlated
   // subquery to order ~30 rows is the wrong trade.
-  const ordered = instruments
+  const ordered = fetchable
     .map((i) => ({ ...i, newest: i.bars[0]?.date ?? null }))
     .sort((a, b) => {
       if (a.newest === null && b.newest === null) return a.symbol.localeCompare(b.symbol);
@@ -698,38 +860,55 @@ export async function syncDailyBars(options: SyncOptions = {}): Promise<SyncResu
     });
 
   let lastError: string | null = null;
+  let quotaExhausted = false;
 
   for (const instrument of ordered) {
-    if (result.attempted >= budget) {
+    // An exhausted quota is the budget running out early, so what is left is
+    // SKIPPED — reached first next run by the staleness order — rather than
+    // failed one paced request at a time.
+    if (quotaExhausted || result.attempted >= budget) {
       result.skipped += 1;
       continue;
     }
     result.attempted += 1;
     const symbol = instrument.providerSymbol ?? instrument.symbol;
-    const size = instrument.newest === null ? "full" : "compact";
+    const size =
+      instrument.newest === null ||
+      now.getTime() - instrument.newest.getTime() > COMPACT_REACH_DAYS * 86_400_000
+        ? "full"
+        : "compact";
 
     try {
-      const bars = await provider.fetchDailySeries(symbol, size);
+      const bars = await provider.fetchDailySeries(symbol, size, instrument.kind);
       // Only the TAIL is written for an instrument that already has history:
       // re-upserting 250 unchanged rows every night is write amplification
       // for no information.
       const cutoff = instrument.newest;
       const fresh = cutoff === null ? bars : bars.filter((b) => b.date >= cutoff);
 
-      for (const bar of fresh) {
+      // Only the bar ON the cutoff day can already exist and carry revised
+      // values, so it is the only one upserted. Everything newer is inserted
+      // in bulk: a first sync's `full` history is ~5,000 bars, and one upsert
+      // round trip per bar made "Sync now" run for the better part of an hour
+      // across the seeded instruments. `skipDuplicates` keeps an overlapping
+      // run (a second click, the cron tick) idempotent instead of failing.
+      const revisable =
+        cutoff === null ? [] : fresh.filter((b) => b.date.getTime() === cutoff.getTime());
+      const inserts = cutoff === null ? fresh : fresh.filter((b) => b.date > cutoff);
+
+      for (const bar of revisable) {
         await db.marketDailyBar.upsert({
           where: { instrumentId_date: { instrumentId: instrument.id, date: bar.date } },
-          create: {
-            instrumentId: instrument.id,
-            date: bar.date,
-            open: bar.open,
-            high: bar.high,
-            low: bar.low,
-            close: bar.close,
-          },
-          // Idempotent within a day: a second run on the same date rewrites
-          // the same values rather than adding a row.
+          create: { instrumentId: instrument.id, ...bar },
           update: { open: bar.open, high: bar.high, low: bar.low, close: bar.close },
+        });
+      }
+      for (let i = 0; i < inserts.length; i += BAR_INSERT_CHUNK) {
+        await db.marketDailyBar.createMany({
+          data: inserts
+            .slice(i, i + BAR_INSERT_CHUNK)
+            .map((bar) => ({ instrumentId: instrument.id, ...bar })),
+          skipDuplicates: true,
         });
       }
       result.synced += 1;
@@ -738,6 +917,7 @@ export async function syncDailyBars(options: SyncOptions = {}): Promise<SyncResu
       const message = error instanceof Error ? error.message : String(error);
       result.failures.push({ symbol: instrument.symbol, error: message });
       lastError = message;
+      if (error instanceof ProviderQuotaExhaustedError) quotaExhausted = true;
     }
   }
 

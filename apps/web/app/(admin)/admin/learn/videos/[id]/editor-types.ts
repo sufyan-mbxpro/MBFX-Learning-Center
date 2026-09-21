@@ -1,9 +1,10 @@
 // Shared shapes for the video topic editor (changes-16 PR 6, ADR-068).
 import type { ContentStatusLabels } from "../../../_components/editor/content-status-panel.tsx";
-import type { SeoAnalysisLabels } from "../../../_components/editor/seo-analysis.tsx";
 import type { RichTextLabels } from "../../../_components/rich-text-editor.tsx";
 import type { LinkDraft, LinksPanelLabels } from "./_panels/links-panel.tsx";
 import type { VideoDraft, VideosPanelLabels } from "./_panels/videos-panel.tsx";
+
+import type { ContentFlags } from "../../../_components/editor/content-flags-fields.tsx";
 
 export interface VideoTranslationDraft {
   locale: string;
@@ -16,6 +17,11 @@ export interface VideoTranslationDraft {
   seoDescription: string;
   seoFocusKeyword: string;
   translationStatus: string;
+  /**
+   * Untouched AI output (changes-29 B3). Set by "Translate", cleared by any
+   * edit to a translatable field; the save turns it into `MACHINE_TRANSLATED`.
+   */
+  machineTranslated?: boolean;
 }
 
 export interface VideoTopicData {
@@ -27,6 +33,10 @@ export interface VideoTopicData {
   categoryId: string | null;
   coverAssetId: string | null;
   coverUrl: string | null;
+  /** ADR-139 â€” Featured / Active / Premium, edited in the Display card. */
+  flags: ContentFlags;
+  /** ADR-144 §2 — also listed on every other school's video pages. */
+  showOnAllTracks: boolean;
   visibility: string;
   publishedAt: string | null;
   scheduledFor: string | null;
@@ -73,11 +83,16 @@ export interface VideoEditorLabels {
   // Filing
   filingSection: string;
   filingSectionDescription: string;
+  displaySection: string;
+  displaySectionDescription: string;
   trackLabel: string;
   trackHint: string;
   categoryLabel: string;
   categoryHint: string;
   categoryNone: string;
+  newCategory: string;
+  showOnAllTracksLabel: string;
+  showOnAllTracksHint: string;
   visibilityLabel: string;
   coverLabel: string;
 
@@ -105,7 +120,6 @@ export interface VideoEditorLabels {
 
   // Nested panels
   status: ContentStatusLabels;
-  analysis: SeoAnalysisLabels;
   videos: VideosPanelLabels;
   links: LinksPanelLabels;
   editor: RichTextLabels;

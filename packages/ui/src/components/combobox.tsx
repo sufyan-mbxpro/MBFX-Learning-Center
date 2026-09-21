@@ -241,12 +241,22 @@ function SearchableCombobox({
             // truncated to whatever width the trigger happened to have.
             className="max-h-(--available-height) min-w-(--anchor-width) max-w-(--available-width) origin-(--transform-origin) overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md duration-100 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95"
           >
-            <div data-slot="combobox-input-wrapper" className="flex items-center border-b px-3">
-              <SearchIcon aria-hidden className="me-2 size-4 shrink-0 opacity-50" />
+            {/* changes-46 (image-112): the global `:focus-visible` ring
+                (globals.css) landed on this input too — a second bordered box
+                inside the popup header, its top edge clipped by the popup's
+                `overflow-hidden`. The input is the popup's own header row, so
+                it opts out of the ring the way `CommandInput` does; focus is
+                shown by the caret and the highlighted option. `min-w-0` lets it
+                shrink beside the icon instead of pushing past the popup edge. */}
+            <div
+              data-slot="combobox-input-wrapper"
+              className="flex h-11 items-center gap-2 border-b px-3"
+            >
+              <SearchIcon aria-hidden className="size-4 shrink-0 opacity-50" />
               <ComboboxPrimitive.Input
                 data-slot="combobox-input"
                 placeholder={searchPlaceholder}
-                className="h-11 w-full bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground"
+                className="h-full min-w-0 flex-1 border-0 bg-transparent p-0 text-sm shadow-none outline-none placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0"
               />
             </div>
             <ComboboxPrimitive.Empty

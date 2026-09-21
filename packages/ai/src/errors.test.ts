@@ -19,6 +19,13 @@ describe("the reason taxonomy", () => {
     expect(isRefusalReason("provider_error")).toBe(false);
     expect(isRefusalReason("aborted")).toBe(false);
   });
+
+  it("names a model that cannot read images, rather than calling the image too large", () => {
+    // Regression: `runAiTask` refused an image for a model without vision as
+    // `content_too_large`, so alt text on a small photo said "too large".
+    expect(AI_REASONS).toContain("model_no_vision");
+    expect(isRefusalReason("model_no_vision")).toBe(true);
+  });
 });
 
 describe("AiError", () => {

@@ -21,6 +21,7 @@ import type { LucideIcon } from "lucide-react";
 import type { ArticleListEntry } from "@repo/core";
 import { ImageReveal } from "@repo/ui/components/image-reveal";
 import { cn } from "@repo/ui/lib/utils";
+import { canOptimizeImage } from "../../_lib/image-optimizer.ts";
 
 // Kind → glyph and wash. Alpha tints over the current surface, never fixed
 // shades: that is what makes them correct in both modes (the bug badge.tsx
@@ -94,9 +95,16 @@ export function ArticleMedia({
 
   return (
     <ImageReveal ratio={ratio} className={cn("rounded-none", className)}>
-      {/* Cover URLs are admin-entered and arbitrary-host — skip the
-          optimizer rather than allowlist the world. */}
-      <Image src={entry.coverImageUrl} alt="" fill unoptimized priority={priority} sizes={sizes} />
+      {/* An uploaded cover is resized and served as WebP (ADR-130); an
+          absolute URL still skips the optimizer rather than allowlist the world. */}
+      <Image
+        src={entry.coverImageUrl}
+        alt=""
+        fill
+        unoptimized={!canOptimizeImage(entry.coverImageUrl)}
+        priority={priority}
+        sizes={sizes}
+      />
     </ImageReveal>
   );
 }

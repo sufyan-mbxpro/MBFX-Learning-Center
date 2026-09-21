@@ -13,7 +13,8 @@
 // the distinction stays clear:
 //
 //   CONTENT (titles, categories, pass marks) is props, from a cached page.
-//   ARTWORK is derived in code from the slug — `quizCoverUrl`, deterministic,
+//   ARTWORK is the editor's uploaded cover when there is one (ADR-132), and
+//     otherwise derived in code from the slug — `quizCoverUrl`, deterministic,
 //     so the server render and the hydration agree.
 //   THE LEARNER'S RECORD is fetched after paint by `useQuizResults`, and every
 //     card is complete without it. Nothing here waits for it and nothing
@@ -27,19 +28,31 @@ import type { QuizCardView } from "@repo/contracts";
 import { humanizeKey } from "@repo/utils";
 import { Container } from "@repo/ui/components/container";
 import { Button } from "@repo/ui/components/button";
+import { ClientPagination, usePagedList } from "@repo/ui/components/client-pagination";
 import { Empty, EmptyDescription, EmptyTitle } from "@repo/ui/components/empty";
 import { ProgressBar } from "@repo/ui/components/progress-bar";
 import { QuizCard } from "@repo/ui/components/quiz-card";
 import { Reveal } from "@repo/ui/components/reveal";
 import { Section } from "@repo/ui/components/section";
 import { cn } from "@repo/ui/lib/utils";
-import { quizCoverUrl } from "../_content/learn-media.ts";
+import { isGeneratedCover, quizCoverUrl } from "../_content/learn-media.ts";
 import { categoryTone, quizCardLabels } from "../_lib/quiz-labels.ts";
+import { usePaginationLabels } from "../_lib/use-pagination-labels.ts";
+import { applyShelfView, availableShelfViews, type ShelfView } from "../_lib/shelf-view.ts";
+import { ShelfViewChips } from "./shelf-view-chips.tsx";
 import { useQuizResults } from "../_lib/use-quiz-results.ts";
 
 export function QuizShelf({ quizzes, basePath }: { quizzes: QuizCardView[]; basePath: string }) {
   const t = useTranslations("learn");
   const [category, setCategory] = useState<string | null>(null);
+  // ADR-139 #5 — Popular is by finished attempts, an aggregate the shelf's
+  // cached payload already carries.
+  const [view, setView] = useState<ShelfView>("all");
+  const viewItems = useMemo(
+    () => quizzes.map((quiz) => ({ ...quiz, popularity: quiz.attemptCount })),
+    [quizzes],
+  );
+  const views = useMemo(() => availableShelfViews(viewItems), [viewItems]);
   const { status, byQuizId } = useQuizResults();
 
   const labels = useMemo(() => quizCardLabels(t), [t]);
@@ -59,8 +72,15 @@ export function QuizShelf({ quizzes, basePath }: { quizzes: QuizCardView[]; base
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [quizzes]);
 
-  const visible =
-    category === null ? quizzes : quizzes.filter((quiz) => quiz.category === category);
+  const viewed = applyShelfView(viewItems, view);
+  const visible = category === null ? viewed : viewed.filter((quiz) => quiz.category === category);
+
+  // Six a page (changes-37, ADR-121 §2), in state like the category above and
+  // for the same reason. A new category starts again at page one.
+  const paginationLabels = usePaginationLabels();
+  const { page, pageCount, pageItems, setPage } = usePagedList(visible, {
+    resetKey: `${view}|${category ?? ""}`,
+  });
 
   // The learner's record across the quizzes ON THIS PAGE, not across every
   // quiz they have ever taken: a "3 of 8 passed" band that counts quizzes the
@@ -80,7 +100,7 @@ export function QuizShelf({ quizzes, basePath }: { quizzes: QuizCardView[]; base
       <Container className="flex flex-col gap-6">
         {record && (
           <Reveal variant="up">
-            <div className="flex flex-col gap-3 rounded-2xl border bg-card/60 p-4 shadow-sm backdrop-blur-sm sm:flex-row sm:items-center sm:gap-6">
+            <div className="flex flex-col gap-3 rounded-lg border bg-card/60 p-4 shadow-sm backdrop-blur-sm sm:flex-row sm:items-center sm:gap-6">
               <span className="flex items-center gap-2 font-semibold">
                 <Award aria-hidden className="size-5 text-success-interactive" />
                 {t("quizzes.recordTitle")}
@@ -102,6 +122,9 @@ export function QuizShelf({ quizzes, basePath }: { quizzes: QuizCardView[]; base
             </div>
           </Reveal>
         )}
+
+        {/* ADR-139 #5: the top-level view, above the category chips. */}
+        <ShelfViewChips views={views} value={view} onChange={setView} />
 
         {/* One category is not a filter, it is a label — a chip row that can
             only ever produce the set already on screen is a dead control. */}
@@ -154,7 +177,7 @@ export function QuizShelf({ quizzes, basePath }: { quizzes: QuizCardView[]; base
           </Empty>
         ) : (
           <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {visible.map((quiz, index) => {
+            {pageItems.map((quiz, index) => {
               const result = byQuizId.get(quiz.id);
               return (
                 // A <ul> takes <li> children and nothing else, so the
@@ -175,7 +198,13 @@ export function QuizShelf({ quizzes, basePath }: { quizzes: QuizCardView[]; base
                       passingScoreLabel={t("course.progressPercent", {
                         percent: quiz.passingScore,
                       })}
-                      coverUrl={quizCoverUrl(quiz.slug)}
+                      coverUrl={quizCoverUrl(quiz.slug, quiz.coverUrl)}
+                      markers={[
+                        ...(quiz.isFeatured ? [{ label: t("markers.featured") }] : []),
+                        ...(quiz.isPremium
+                          ? [{ label: t("markers.premium"), tone: "marker-dark" as const }]
+                          : []),
+                      ]}
                       highlighted={category !== null && quiz.category === category}
                       progress={
                         result && {
@@ -196,6 +225,14 @@ export function QuizShelf({ quizzes, basePath }: { quizzes: QuizCardView[]; base
             })}
           </ul>
         )}
+
+        <ClientPagination
+          page={page}
+          pageCount={pageCount}
+          onPageChange={setPage}
+          labels={paginationLabels}
+          scrollTargetId="quizzes"
+        />
       </Container>
     </Section>
   );
@@ -210,10 +247,11 @@ export function QuizShelf({ quizzes, basePath }: { quizzes: QuizCardView[]; base
  * settled. Until then the card's own `bg-muted` shows through, at the exact
  * size the image will occupy, so nothing moves either way.
  *
- * `unoptimized`, not `dangerouslyAllowSVG` in next.config: a generated vector
- * has nothing for the optimizer to win, and the config flag would relax SVG
- * handling for EVERY image the app serves — the trade `LearnBackdrop` and
- * `NewsBackdrop` both already refused.
+ * `unoptimized` for a generated panel or an SVG, not `dangerouslyAllowSVG` in
+ * next.config: a vector has nothing for the optimizer to win, and the config
+ * flag would relax SVG handling for EVERY image the app serves — the trade
+ * `LearnBackdrop` and `NewsBackdrop` both already refused. An uploaded raster
+ * cover (ADR-132) IS optimised, as a course cover is.
  */
 function QuizCover({ src, alt }: { src: string; alt: string }) {
   const [loaded, setLoaded] = useState(false);
@@ -222,7 +260,7 @@ function QuizCover({ src, alt }: { src: string; alt: string }) {
       src={src}
       alt={alt}
       fill
-      unoptimized
+      unoptimized={src.endsWith(".svg") || isGeneratedCover(src)}
       sizes="(min-width: 1024px) 24rem, (min-width: 640px) 50vw, 100vw"
       onLoad={() => setLoaded(true)}
       className={cn(
@@ -262,7 +300,7 @@ function Chip({
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-sm font-medium ring-1 transition duration-(--duration-base) ease-(--ease-out-quint) focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
+        "inline-flex items-center gap-2 rounded-md px-3.5 py-1.5 text-sm font-medium ring-1 transition duration-(--duration-base) ease-(--ease-out-quint) focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
         active
           ? // A tone the chip shares with its cards' badges, so pressing one is
             // visibly what produced the other. "All topics" has no tone and
@@ -270,7 +308,9 @@ function Chip({
             // of the set.
             cn(
               "shadow-sm",
-              tone ? CHIP_ACTIVE_TONE[tone] : "bg-primary text-primary-foreground ring-primary",
+              tone
+                ? CHIP_ACTIVE_TONE[tone]
+                : "bg-primary-solid text-primary-solid-foreground ring-primary",
             )
           : "bg-background text-muted-foreground ring-border hover:-translate-y-px hover:text-foreground hover:shadow-sm hover:ring-primary/25",
       )}
@@ -282,7 +322,7 @@ function Chip({
         // "Charting", and the live region already announces how many matched.
         aria-hidden
         className={cn(
-          "rounded-full px-1.5 text-xs tabular-nums",
+          "rounded-sm px-1.5 text-xs tabular-nums",
           active ? "bg-foreground/10" : "bg-muted",
         )}
       >

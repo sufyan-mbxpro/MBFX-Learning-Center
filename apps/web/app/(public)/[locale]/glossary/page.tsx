@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { localizedPath } from "../../../_lib/seo.ts";
 import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { BookOpen } from "lucide-react";
@@ -14,6 +15,7 @@ import { Empty, EmptyDescription, EmptyMedia, EmptyTitle } from "@repo/ui/compon
 import { Section } from "@repo/ui/components/section";
 import { GlossaryBrowser } from "./_components/glossary-browser.tsx";
 import { GlossaryMasthead } from "./_components/glossary-masthead.tsx";
+import { GlossarySidebar } from "./_components/glossary-sidebar.tsx";
 import { GLOSSARY_PATH, GLOSSARY_TOPICS_PATH, GlossaryTabs } from "./_components/glossary-tabs.tsx";
 import { TermOfTheDay } from "./_components/term-of-the-day.tsx";
 import { TopicOfTheDay } from "./_components/topic-of-the-day.tsx";
@@ -43,7 +45,7 @@ export async function generateMetadata({
   return {
     title: (template ?? "%s").replace("%s", t("title")),
     description: t("intro"),
-    alternates: { canonical: GLOSSARY_PATH },
+    alternates: { canonical: localizedPath(locale, GLOSSARY_PATH) },
   };
 }
 
@@ -112,26 +114,36 @@ export default async function GlossaryPage({ params }: PageProps<"/[locale]/glos
         {/* The masthead's action anchors here. On the section rather than on
             the browser, so the jump lands above the search field rather than
             scrolling it under the sticky chip bar. */}
-        <Container id="glossary-browse" className="scroll-mt-(--height-header)">
-          {entries.length === 0 ? (
-            <Empty>
-              <EmptyMedia>
-                <BookOpen aria-hidden />
-              </EmptyMedia>
-              <EmptyTitle>{t("empty")}</EmptyTitle>
-              <EmptyDescription>{t("intro")}</EmptyDescription>
-            </Empty>
-          ) : (
-            <GlossaryBrowser
-              entries={entries.map((entry) => ({
-                termId: entry.termId,
-                term: entry.term,
-                slug: entry.slug,
-                simpleExplanation: entry.simpleExplanation,
-              }))}
-              locale={locale}
-            />
-          )}
+        <Container
+          id="glossary-browse"
+          // The reading rail (changes-40). `grid-cols-1` until `lg`, so on a
+          // phone the A–Z keeps the full width and the rail follows it —
+          // which is the right order: someone who came to look a word up
+          // should reach the word before the reading suggestions.
+          className="grid grid-cols-1 gap-10 scroll-mt-(--height-header) lg:grid-cols-(--grid-main-aside) lg:items-start"
+        >
+          <div className="min-w-0">
+            {entries.length === 0 ? (
+              <Empty>
+                <EmptyMedia>
+                  <BookOpen aria-hidden />
+                </EmptyMedia>
+                <EmptyTitle>{t("empty")}</EmptyTitle>
+                <EmptyDescription>{t("intro")}</EmptyDescription>
+              </Empty>
+            ) : (
+              <GlossaryBrowser
+                entries={entries.map((entry) => ({
+                  termId: entry.termId,
+                  term: entry.term,
+                  slug: entry.slug,
+                  simpleExplanation: entry.simpleExplanation,
+                }))}
+                locale={locale}
+              />
+            )}
+          </div>
+          <GlossarySidebar locale={locale} />
         </Container>
       </Section>
     </>

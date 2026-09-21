@@ -7,9 +7,21 @@
 // ADR-043: `admin.*` is English-only by design, so only `en.json` carries
 // values. The keys still go through the catalog (code-style.md #2).
 import { AI_REASONS } from "@repo/ai";
-import type { AiAssistantAction, AiTone } from "@repo/contracts";
+import {
+  AI_FILL_AUDIENCES,
+  AI_FILL_LENGTHS,
+  AI_STUDIO_FORMATS,
+  AI_STUDIO_TONES,
+  type AiAssistantAction,
+  type AiStudioFormat,
+  type AiFillAudience,
+  type AiFillLength,
+  type AiStudioTone,
+  type AiTone,
+} from "@repo/contracts";
 
 import type { AiAssistantLabels } from "./ai-assistant.tsx";
+import type { AiFillLabels } from "./ai-fill.tsx";
 import type { AiSeoLabels } from "./ai-seo-dialog.tsx";
 import type { AiTranslateLabels } from "./ai-translate-button.tsx";
 import type { TakeawaysLabels } from "./takeaways-field.tsx";
@@ -63,7 +75,45 @@ export function aiAssistantLabels(t: Translate): AiAssistantLabels {
     discard: t("assistantDiscard"),
     reasons: aiReasonLabels(t),
     failed: t("assistantFailed"),
+    panel: {
+      languageLabel: t("fillLanguageLabel"),
+      toneLabel: t("fillToneLabel"),
+      toneDefault: t("fillToneDefault"),
+      tones: studioToneLabels(t),
+      audienceLabel: t("fillAudienceLabel"),
+      audienceDefault: t("fillAudienceDefault"),
+      audiences: fillAudienceLabels(t),
+      lengthLabel: t("fillLengthLabel"),
+      lengths: fillLengthLabels(t),
+      formatLabel: t("writer.formatLabel"),
+      formats: Object.fromEntries(
+        AI_STUDIO_FORMATS.map((key) => [key, t(`writer.formats.${key}`)]),
+      ) as Record<AiStudioFormat, string>,
+      wordCountLabel: t("assistantWordCountLabel"),
+      actionsHeading: t("assistantActionsHeading"),
+      actionsHint: t("assistantActionsHint"),
+    },
   };
+}
+
+// The writer's names for the studio's closed list, so one tone reads one way.
+function studioToneLabels(t: Translate): Record<AiStudioTone, string> {
+  return Object.fromEntries(
+    AI_STUDIO_TONES.map((tone) => [tone, t(`writer.tones.${tone}`)]),
+  ) as Record<AiStudioTone, string>;
+}
+
+function fillAudienceLabels(t: Translate): Record<AiFillAudience, string> {
+  return Object.fromEntries(
+    AI_FILL_AUDIENCES.map((key) => [key, t(`fillAudiences.${key}`)]),
+  ) as Record<AiFillAudience, string>;
+}
+
+function fillLengthLabels(t: Translate): Record<AiFillLength, string> {
+  return Object.fromEntries(AI_FILL_LENGTHS.map((key) => [key, t(`fillLengths.${key}`)])) as Record<
+    AiFillLength,
+    string
+  >;
 }
 
 /**
@@ -205,6 +255,55 @@ export function aiQuizLabels(
     correct: t("quizCorrect"),
     failed: t("assistantFailed"),
     empty: t("quizEmpty"),
+    reasons: aiReasonLabels(t),
+  };
+}
+
+/**
+ * ADR-126's labels, for both the bar and every field's menu. `current`,
+ * `suggested` and `empty` are B2's words: the review is the same review.
+ */
+export function aiFillLabels(t: Translate, common: Translate): AiFillLabels {
+  return {
+    title: t("fillTitle"),
+    description: t("fillDescription"),
+    back: t("fillBack"),
+    briefLabel: t("fillBriefLabel"),
+    briefPlaceholder: t("fillBriefPlaceholder"),
+    questionCount: t("fillQuestionCount"),
+    languageLabel: t("fillLanguageLabel"),
+    languageHint: t("fillLanguageHint"),
+    toneLabel: t("fillToneLabel"),
+    toneDefault: t("fillToneDefault"),
+    tones: studioToneLabels(t),
+    audienceLabel: t("fillAudienceLabel"),
+    audienceDefault: t("fillAudienceDefault"),
+    audiences: fillAudienceLabels(t),
+    lengthLabel: t("fillLengthLabel"),
+    lengths: fillLengthLabels(t),
+    generate: t("fillGenerate"),
+    generating: t("assistantGenerating"),
+    reviewTitle: t("fillReviewTitle"),
+    reviewDescription: t("fillReviewDescription"),
+    current: t("seoCurrent"),
+    suggested: t("seoSuggested"),
+    empty: t("seoEmpty"),
+    apply: t("fillApply"),
+    applied: t("fillApplied"),
+    cancel: common("cancel"),
+    failed: t("assistantFailed"),
+    tokenHint: t("fillTokenHint"),
+    fieldMenu: t("fieldMenu"),
+    fieldActions: {
+      regenerate: t("fieldActions.regenerate"),
+      improve: t("fieldActions.improve"),
+      shorten: t("fieldActions.shorten"),
+      expand: t("fieldActions.expand"),
+    },
+    fieldReviewTitle: t("fieldReviewTitle"),
+    fieldReviewDescription: t("fieldReviewDescription"),
+    fieldReplace: t("fieldReplace"),
+    fieldDiscard: t("fieldDiscard"),
     reasons: aiReasonLabels(t),
   };
 }

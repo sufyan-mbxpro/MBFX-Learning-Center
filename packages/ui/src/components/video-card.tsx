@@ -26,6 +26,7 @@
 import { Film, Play } from "lucide-react";
 
 import { Badge } from "@repo/ui/components/badge";
+import { CardMarkers, type CardMarker } from "@repo/ui/components/card-markers";
 import { Skeleton, SkeletonText } from "@repo/ui/components/skeleton";
 import { cn } from "@repo/ui/lib/utils";
 
@@ -58,11 +59,11 @@ export function VideoCardSkeleton({ className }: { className?: string }) {
     <div
       aria-hidden
       className={cn(
-        "flex h-full min-w-0 flex-col rounded-2xl bg-card ring-1 ring-foreground/10",
+        "flex h-full min-w-0 flex-col rounded-lg bg-card ring-1 ring-foreground/10",
         className,
       )}
     >
-      <Skeleton className="aspect-video w-full rounded-none rounded-t-2xl" />
+      <Skeleton className="aspect-video w-full rounded-none rounded-t-lg" />
       <div className="flex flex-col gap-2 p-5">
         <Skeleton className="h-5 w-44 max-w-full" />
         <SkeletonText lines={2} />
@@ -89,6 +90,7 @@ export function VideoCard({
   highlighted = false,
   labels,
   renderCover,
+  markers,
   className,
 }: {
   href: string;
@@ -110,6 +112,8 @@ export function VideoCard({
    * fallback, for the reason `CourseCard` documents: it would opt every cover
    * on the shelf out of `next/image` silently.
    */
+  /** ADR-139 — "Featured" / "Premium" over the cover's bottom-end corner. */
+  markers?: readonly CardMarker[];
   renderCover?: (args: { src: string; alt: string }) => React.ReactNode;
   className?: string;
 }) {
@@ -124,14 +128,14 @@ export function VideoCard({
         // `.sheen` is here for its overflow and isolation, NOT to anchor a
         // stretched overlay — there is none. It still supplies the positioning
         // context the thumbnail's absolute children resolve against.
-        "group group/video card-hover hover-lift sheen flex h-full min-w-0 flex-col rounded-2xl bg-card ring-1 ring-foreground/10 hover:ring-primary/30",
+        "group group/video card-hover hover-lift sheen flex h-full min-w-0 flex-col rounded-lg bg-card ring-1 ring-foreground/10",
         highlighted && "ring-2 ring-primary/40 hover:ring-primary/50",
         className,
       )}
     >
       {/* 16:9, fixed — the shape of the player this thumbnail stands in for,
           so pressing play never reflows the grid. */}
-      <div className="relative aspect-video w-full shrink-0 overflow-hidden rounded-t-2xl bg-muted">
+      <div className="relative aspect-video w-full shrink-0 overflow-hidden rounded-t-lg bg-muted">
         {coverUrl && renderCover ? (
           renderCover({ src: coverUrl, alt: "" })
         ) : (
@@ -178,6 +182,8 @@ export function VideoCard({
             </Badge>
           )}
         </div>
+
+        <CardMarkers markers={markers} />
 
         {/* The second target. Centred over the thumbnail the way a player's
             own control is, so it reads as "play this" rather than as another

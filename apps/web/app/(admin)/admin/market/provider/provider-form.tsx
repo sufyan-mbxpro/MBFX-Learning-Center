@@ -86,6 +86,7 @@ export interface ProviderFormLabels {
   syncBars: string;
   syncSkipped: string;
   syncFailuresLabel: string;
+  syncUnsupportedLabel: string;
   nextDue: string;
 }
 
@@ -121,6 +122,15 @@ function intervalOptions(choices: readonly number[], current: string) {
     value: String(value),
     label: formatDurationSeconds(value),
   }));
+}
+
+/** Failed symbols keyed by their error, in the order each reason first appeared. */
+function groupFailures(failures: SyncResult["failures"]): [string, string[]][] {
+  const groups = new Map<string, string[]>();
+  for (const { symbol, error } of failures) {
+    groups.set(error, [...(groups.get(error) ?? []), symbol]);
+  }
+  return [...groups];
 }
 
 export function ProviderForm({
@@ -365,17 +375,27 @@ export function ProviderForm({
             <AlertTitle>
               {syncResult.failures.length > 0 ? labels.syncPartial : labels.syncDone}
             </AlertTitle>
+            {/* One fact per paragraph: the description is a plain block, so
+                sibling spans ran together as "Skipped: 0Failed: …". */}
             <AlertDescription>
-              <span>
+              <p>
                 {labels.syncAttempted}: {syncResult.attempted} · {labels.syncSynced}:{" "}
                 {syncResult.synced} · {labels.syncBars}: {syncResult.barsWritten} ·{" "}
                 {labels.syncSkipped}: {syncResult.skipped}
-              </span>
-              {syncResult.failures.length > 0 && (
-                <span>
-                  {labels.syncFailuresLabel}:{" "}
-                  {syncResult.failures.map((failure) => failure.symbol).join(", ")}
-                </span>
+              </p>
+              {/* Grouped by reason, because "rate-limited" and "rejected" call
+                  for different things and a bare symbol list said neither. */}
+              {groupFailures(syncResult.failures).map(([reason, symbols]) => (
+                <p key={reason}>
+                  {labels.syncFailuresLabel} ({reason}): {symbols.join(", ")}
+                </p>
+              ))}
+              {/* Not a failure, so it does not turn the alert amber: a retry
+                  changes nothing. Named so the admin can switch the rows off. */}
+              {syncResult.unsupported.length > 0 && (
+                <p>
+                  {labels.syncUnsupportedLabel}: {syncResult.unsupported.join(", ")}
+                </p>
               )}
             </AlertDescription>
           </Alert>

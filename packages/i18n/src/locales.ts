@@ -48,6 +48,40 @@ export async function getActiveLocales(): Promise<ActiveLocale[]> {
   return loadActiveLocales();
 }
 
+/**
+ * The locales an admin may WRITE content in — every seeded row next-intl can
+ * route, active or not (ADR-043 #3, ADR-127).
+ *
+ * Not the active list. Only `en` is active, and an editor that offered only
+ * active locales hid its language switcher entirely, so a translation could
+ * be written for an article or a course but not for a video topic or a
+ * glossary term. A translation in an inactive locale is not wasted: ADR-127's
+ * `?lang=` reading view serves it today, and activation serves it at its own
+ * URL later.
+ */
+export async function loadAuthoringLocales(): Promise<ActiveLocale[]> {
+  const rows = await db.locale.findMany({ orderBy: { sortOrder: "asc" } });
+  return rows
+    .filter((r) => hasLocale(routing.locales, r.code))
+    .map((r) => ({
+      code: r.code,
+      name: r.name,
+      nativeName: r.nativeName,
+      direction: r.direction,
+      flagEmoji: r.flagEmoji,
+      isDefault: r.isDefault,
+      fallbackCode: r.fallbackCode,
+      sortOrder: r.sortOrder,
+    }));
+}
+
+export async function getAuthoringLocales(): Promise<ActiveLocale[]> {
+  "use cache";
+  cacheTag(LOCALES_TAG);
+  cacheLife({ revalidate: 300 });
+  return loadAuthoringLocales();
+}
+
 /** Call after an admin activates/deactivates a locale. */
 export async function invalidateActiveLocales(): Promise<void> {
   revalidateTag(LOCALES_TAG, { expire: 0 });

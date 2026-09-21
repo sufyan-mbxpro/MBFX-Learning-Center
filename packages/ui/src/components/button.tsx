@@ -20,10 +20,22 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        // Hover is the engine-derived --primary-hover (ADR-003), which is
-        // what the reference's `hover:bg-primary/90` becomes here.
-        default: "bg-primary text-primary-foreground hover:bg-primary-hover",
+        // ADR-143: --primary-solid is the saved primary, exactly; the engine
+        // picks the label ink (white or near-black) that reads on it.
+        default: "bg-primary-solid text-primary-solid-foreground hover:bg-primary-solid-hover",
         secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+        // The button for a band that IS `--secondary` — the homepage hero,
+        // a photographic masthead (ADR-117), the footer, the connect band.
+        //
+        // `outline` is wrong there: `border-input bg-background` is a pale
+        // chip on a dark scrim. `secondary` is worse — a `bg-secondary`
+        // control on a `bg-secondary` band is an invisible button. Opacities
+        // of `--secondary-foreground` are readable ON `--secondary` by
+        // construction (ADR-003), which is the only claim any of these
+        // surfaces can make. A variant rather than the 200-character class
+        // string four call sites had each written out.
+        inverted:
+          "bg-secondary-foreground/10 text-secondary-foreground ring-1 ring-secondary-foreground/25 ring-inset hover:bg-secondary-foreground/20 hover:text-secondary-foreground",
         // The reference's signature hover: the warm beige --accent (dark mode
         // resolves --accent to the muted surface, ADR-072 §4).
         outline:
@@ -59,7 +71,10 @@ const buttonVariants = cva(
         lg: "h-11 px-8 has-data-[icon=inline-end]:pe-6 has-data-[icon=inline-start]:ps-6",
         // Public design system (ADR-018) — hero/CTA-band buttons, one step
         // above `lg` so the hierarchy survives the reference's larger scale.
-        xl: "h-12 px-6 text-base has-data-[icon=inline-end]:pe-5 has-data-[icon=inline-start]:ps-5 [&_svg:not([class*='size-'])]:size-5",
+        // ADR-140 §6: one minimum width, so two CTAs side by side ("Read the
+        // latest" / "Browse topics") are the same size on every page rather
+        // than each hugging its own label. Phones keep the natural width.
+        xl: "h-12 px-6 text-base sm:min-w-60 has-data-[icon=inline-end]:pe-5 has-data-[icon=inline-start]:ps-5 [&_svg:not([class*='size-'])]:size-5",
         icon: "size-10",
         "icon-sm": "size-9",
         // A row action in a default-density table: 32px box, 16px glyph.
@@ -68,12 +83,12 @@ const buttonVariants = cva(
         "icon-2xs": "size-6 [&_svg:not([class*='size-'])]:size-3.5",
         "icon-lg": "size-11",
       },
+      // ADR-107 removed `pill`. The axis stays with one member on purpose: a
+      // future shape should be an entry here, not a rebuilt variant axis — and
+      // ADR-018's pill CTA is the documented case of a "deliberate choice"
+      // variant becoming the default on thirty-four screens nobody chose it on.
       shape: {
         default: "",
-        // Public design system (ADR-018) — pill-shaped CTAs. A separate axis
-        // rather than folded into `size`, so any size can opt in. Comes after
-        // `size` in this object so tailwind-merge lets `rounded-full` win.
-        pill: "rounded-full",
       },
       // The reference's sign-in submit: a soft shadow and a primary ring, so
       // the one action on a page reads as THE action. A prop, not a class

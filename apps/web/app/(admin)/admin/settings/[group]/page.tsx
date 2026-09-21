@@ -24,7 +24,15 @@ export default async function SettingsGroupPage({ params }: PageProps<"/admin/se
   ]);
 
   if (!groups.includes(group)) notFound();
-  const groupSettings = settings.filter((s) => s.groupName === group);
+  // A setting's label is its stored row's, unless the catalog names it
+  // (ADR-044 #5's order of preference: a catalog string first). changes-46:
+  // the media caps are seeded "Max image upload size (bytes)", which the MB
+  // dropdown made untrue — the words move here, the seeded row is untouched.
+  const groupSettings = settings
+    .filter((s) => s.groupName === group)
+    .map((s) =>
+      t.has(`settingLabels.${s.key}`) ? { ...s, label: t(`settingLabels.${s.key}`) } : s,
+    );
   const description = groupDescription(t, group);
 
   return (

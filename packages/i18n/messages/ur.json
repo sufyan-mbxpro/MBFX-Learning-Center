@@ -1,7 +1,12 @@
 {
   "common": {
     "siteName": "ایم بی ایف ایکس لرننگ سینٹر",
-    "siteDescription": "مفت فاریکس تعلیم، ٹولز اور تجزیے۔"
+    "siteDescription": "مفت فاریکس تعلیم، ٹولز اور تجزیے۔",
+    "pagination": {
+      "label": "صفحہ بندی",
+      "previous": "پچھلا",
+      "next": "اگلا"
+    }
   },
   "home": {
     "placeholder": "عوامی سائٹ — تعمیر کے دوران عارضی مواد۔",
@@ -43,9 +48,6 @@
     "exploreToolsTag": "کیلکولیٹر",
     "exploreToolsTitle": "ٹریڈنگ کیلکولیٹر",
     "exploreToolsBody": "پوزیشن سائز، پپ ویلیو، مارجن اور منافع — ٹریڈ کے بعد نہیں، پہلے شمار کیے گئے۔",
-    "exploreCalendarTag": "کیلنڈر",
-    "exploreCalendarTitle": "معاشی کیلنڈر",
-    "exploreCalendarBody": "ہر وہ اعلان جو کرنسی جوڑے کو ہلاتا ہے، اس کی اثر درجہ بندی اور فوری اعداد کے ساتھ۔",
     "exploreNewsTag": "خبریں",
     "exploreNewsTitle": "مارکیٹ کی خبریں",
     "exploreNewsBody": "کیا ہوا، کیوں اہم تھا اور کیا بدلتا ہے — ٹریڈ کرنے والوں کے لیے، سرخی پڑھنے والوں کے لیے نہیں۔",
@@ -150,7 +152,6 @@
     "newsletterLabel": "ای میل ایڈریس",
     "newsletterSubmit": "سبسکرائب کریں",
     "followUs": "ہمیں فالو کریں",
-    "riskDisclaimerLabel": "خطرے سے متعلق انتباہ",
     "newsletterConsent": "ہم پہلے تصدیقی لنک بھیجتے ہیں۔ آپ جب چاہیں سبسکرپشن ختم کر سکتے ہیں — اسپام کبھی نہیں۔",
     "newsletterSent": "تقریباً ہو گیا — اپنا ان باکس دیکھیں اور تصدیقی لنک کھولیں۔",
     "newsletterInvalid": "یہ ای میل ایڈریس درست نہیں لگتا۔",
@@ -173,9 +174,6 @@
     "kindAnalysis": "تجزیہ",
     "kindTradeIdea": "ٹریڈ آئیڈیا",
     "empty": "یہاں ابھی کچھ شائع نہیں ہوا۔",
-    "previousPage": "پچھلا",
-    "nextPage": "اگلا",
-    "paginationLabel": "صفحہ بندی",
     "minRead": "{minutes} منٹ کا مطالعہ",
     "playVideo": "ویڈیو چلائیں",
     "relatedTitle": "متعلقہ مضامین",
@@ -546,7 +544,6 @@
       "search": "Search…",
       "noMatches": "Nothing matches",
       "asOf": "Rates as of {date}.",
-      "staleAsOf": "Rates as of {date} — out of date, and shown for reference only.",
       "noRates": "No exchange rates are stored yet, so currency conversions are unavailable.",
       "noRateForPair": "No rate is stored for this currency pair.",
       "comingWithData": "This tool needs stored market data, which is not available on this site yet.",

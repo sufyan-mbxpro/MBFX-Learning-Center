@@ -30,6 +30,7 @@ import {
   saveEmailTransportAction,
   testEmailConnectionAction,
 } from "../../_actions/email-actions.ts";
+import { formatDateTime } from "@repo/utils";
 
 export interface EmailTransportLabels {
   section: string;
@@ -248,11 +249,7 @@ export function EmailTransportForm({
         <div className="flex gap-1.5">
           <dt>{labels.lastVerified}</dt>
           <dd className="text-foreground">
-            {transport.lastVerifiedAt
-              ? new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(
-                  transport.lastVerifiedAt,
-                )
-              : labels.never}
+            {transport.lastVerifiedAt ? formatDateTime(transport.lastVerifiedAt) : labels.never}
           </dd>
         </div>
         {transport.lastError && (

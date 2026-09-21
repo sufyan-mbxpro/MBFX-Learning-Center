@@ -1,45 +1,30 @@
-import { getTranslations, setRequestLocale } from "next-intl/server";
-import { getEnabledTools } from "@repo/core";
-import { toolPath } from "@repo/contracts";
-import { SectionNav, type SectionNavItem } from "../_components/section-nav.tsx";
+import { setRequestLocale } from "next-intl/server";
 
-// The tools area's shell (changes-25 T6, ADR-086 #9).
+// The tools area's shell (changes-25 T6, ADR-086 #9 — reduced to a landmark
+// by changes-33, ADR-112).
 //
-// **The one section bar** (ADR-076 §1, extended to the glossary by ADR-081 #4
-// and to tools here): `SectionNav`, not a second strip of the reference's own
-// shape. It pins at `top-(--header-offset)`, a live measurement
-// `StickyHeaderShell` publishes — `top-16` is wrong the moment the
-// announcement bar is on.
+// **There is no section bar here any more.** It pinned under the header and
+// listed all eight tools, which on a 1440px screen was a horizontally
+// SCROLLING strip: opening one calculator put a second, wider navigation bar
+// across the page, and the tool the reader had just chosen was the only thing
+// it could tell them. The eight are already listed twice — in the Tools mega
+// panel, grouped by what a reader is trying to do, and on `/tools` itself —
+// and `RelatedStrip` at the foot of each tool page offers the neighbours in
+// context. A third list, permanently on screen, was the one that had to go.
 //
-// **A disabled tool is ABSENT from the bar, not disabled in it** (ADR-086 #5).
-// Its route already 404s, and a tab that leads to a 404 is worse than no tab —
-// the learn area's rule (changes-11 D25) verbatim.
+// ADR-076 §1's "one section bar" rule is not repealed: the learn area and the
+// glossary still have theirs, and for the reason that rule gives — their
+// surfaces are DIFFERENT KINDS of thing (courses, videos, quizzes, a
+// glossary) and a reader moves between them while studying. Eight
+// calculators are the same kind of thing, used one at a time.
+//
+// The layout itself stays, because the `<main>` landmark is why it exists:
+// the eight tool pages and the index open no landmark of their own, which
+// axe reports as a moderate `region` violation — under the serious/critical
+// gate the suite runs, so it would slip past silently.
 export default async function ToolsLayout({ children, params }: LayoutProps<"/[locale]/tools">) {
   const { locale } = await params;
   setRequestLocale(locale);
 
-  const [t, tools] = await Promise.all([
-    getTranslations({ locale, namespace: "tools" }),
-    getEnabledTools(locale),
-  ]);
-
-  const items: SectionNavItem[] = tools.map((tool) => ({
-    href: toolPath(tool.key),
-    label: tool.title,
-  }));
-
-  return (
-    // The area’s single `<main>`, and the bar renders INSIDE it — the pattern
-    // `about/layout.tsx` and `learn/layout.tsx` already follow, and for the
-    // reason the latter states: no page under /tools has to remember to open
-    // a landmark. The eight tool pages and the index had none at all, which
-    // axe reports as a moderate `region` violation and so slipped past the
-    // serious/critical gate the suite runs.
-    <main className="flex flex-col">
-      {/* A row of one tab is chrome that tells the reader nothing — the same
-          rule the learn bar and GlossaryTabs already follow. */}
-      {items.length > 1 && <SectionNav items={items} ariaLabel={t("nav.sectionLabel")} />}
-      {children}
-    </main>
-  );
+  return <main className="flex flex-col">{children}</main>;
 }

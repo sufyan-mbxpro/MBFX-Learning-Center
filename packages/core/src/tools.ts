@@ -10,11 +10,14 @@ import {
   TOOL_KEYS,
   isToolKey,
   parseToolConfig,
+  toolHighlightSchema,
   type SaveToolInput,
   type ToolFaqEntry,
+  type ToolHighlight,
   type ToolKey,
 } from "@repo/contracts";
 import { db, TranslationStatus, type Prisma } from "@repo/db";
+import { htmlLead } from "@repo/utils";
 import { computeSourceHash, isTranslationOutdated } from "@repo/i18n";
 import type { Subject } from "@repo/rbac";
 import { cacheLife, cacheTag } from "next/cache";
@@ -28,6 +31,10 @@ import {
   type MixedRelation,
 } from "./content-relations.ts";
 import { recordAudit } from "./index.ts";
+import { publicArticleWhere } from "./public-articles.ts";
+import { publicGlossaryTermWhere } from "./public-content.ts";
+import { publicCourseWhere, publicLessonWhere } from "./public-courses.ts";
+import { publicVideoWhere } from "./videos.ts";
 
 export class UnknownToolError extends Error {
   constructor(key: string) {
@@ -68,6 +75,8 @@ export interface ToolEditorView {
   isEnabled: boolean;
   sortOrder: number;
   coverAssetId: string | null;
+  /** The cover's URL for the upload field; `null` when unset or its asset was deleted. */
+  coverUrl: string | null;
   config: unknown;
   relatedCount: number;
   showRelated: boolean;
@@ -78,6 +87,7 @@ export interface ToolEditorView {
     intro: string | null;
     body: string | null;
     faq: ToolFaqEntry[];
+    highlights: ToolHighlight[];
     seoTitle: string | null;
     seoDescription: string | null;
     seoFocusKeyword: string | null;
@@ -94,9 +104,16 @@ export interface ToolPageView {
   intro: string | null;
   body: string | null;
   faq: ToolFaqEntry[];
+  highlights: ToolHighlight[];
   seoTitle: string | null;
   seoDescription: string | null;
   coverAssetId: string | null;
+  /**
+   * The cover's URL, or `null` when there is none or its asset was deleted.
+   * The masthead shows it (ADR-117's photo tone); an unresolved id must not
+   * reach the page as a picture that 404s.
+   */
+  coverUrl: string | null;
   config: unknown;
   showRelated: boolean;
   relatedCount: number;
@@ -111,6 +128,34 @@ function parseFaq(value: unknown): ToolFaqEntry[] {
       typeof (entry as ToolFaqEntry).question === "string" &&
       typeof (entry as ToolFaqEntry).answer === "string",
   );
+}
+
+/**
+ * The stored highlights, or none.
+ *
+ * Parsed through the CONTRACT schema rather than duck-typed the way `parseFaq`
+ * above it is, and the difference is `icon`: a highlight carries a value from
+ * a closed list, and a row written before a name was retired would otherwise
+ * reach a renderer that has no component for it. `safeParse` per entry drops
+ * exactly the bad one and keeps the rest, which is the behaviour a band of
+ * four cards wants — three cards beat an empty band.
+ */
+function parseHighlights(value: unknown): ToolHighlight[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    const parsed = toolHighlightSchema.safeParse(entry);
+    return parsed.success ? [parsed.data] : [];
+  });
+}
+
+/** A cover asset's URL, skipping a soft-deleted asset so no page draws a 404. */
+async function resolveCoverUrl(assetId: string | null): Promise<string | null> {
+  if (!assetId) return null;
+  const asset = await db.mediaAsset.findFirst({
+    where: { id: assetId, deletedAt: null },
+    select: { url: true },
+  });
+  return asset?.url ?? null;
 }
 
 // ─── Admin reads ─────────────────────────────────────────────
@@ -164,6 +209,7 @@ export async function loadTool(key: string, locale = "en"): Promise<ToolEditorVi
     isEnabled: row.isEnabled,
     sortOrder: row.sortOrder,
     coverAssetId: row.coverAssetId,
+    coverUrl: await resolveCoverUrl(row.coverAssetId),
     config: row.config,
     relatedCount: row.relatedCount,
     showRelated: row.showRelated,
@@ -175,6 +221,7 @@ export async function loadTool(key: string, locale = "en"): Promise<ToolEditorVi
           intro: translation.intro,
           body: translation.body,
           faq: parseFaq(translation.faq),
+          highlights: parseHighlights(translation.highlights),
           seoTitle: translation.seoTitle,
           seoDescription: translation.seoDescription,
           seoFocusKeyword: translation.seoFocusKeyword,
@@ -194,7 +241,8 @@ export async function loadTool(key: string, locale = "en"): Promise<ToolEditorVi
 /**
  * Everything a tool's prose says, in one string, for the source hash.
  *
- * **`faq` is in it — question AND answer of every entry.** ADR-069's rule:
+ * **`faq` and `highlights` are in it — every entry, both fields.** ADR-069's
+ * rule:
  * an FAQ-only edit must flip sibling translations OUTDATED exactly as a body
  * edit does. The glossary term found this the hard way (its hash covered two
  * of four prose fields, so an example-only edit left translations claiming to
@@ -206,6 +254,7 @@ function toolSourceMaterial(input: {
   intro?: string | null;
   body?: string | null;
   faq?: readonly ToolFaqEntry[] | null;
+  highlights?: readonly ToolHighlight[] | null;
 }): string {
   return [
     input.title,
@@ -213,6 +262,11 @@ function toolSourceMaterial(input: {
     input.intro ?? "",
     input.body ?? "",
     ...(input.faq ?? []).flatMap((entry) => [entry.question, entry.answer]),
+    // The highlights band, title AND text (ADR-114). Same rule, third
+    // application: a translator who has not seen the new benefit copy is
+    // OUTDATED, and the `icon` is deliberately absent — swapping a glyph
+    // changes nothing a translator would have to re-read.
+    ...(input.highlights ?? []).flatMap((entry) => [entry.title, entry.text]),
     // A separator that cannot occur in prose, written as an ESCAPE rather
     // than as a raw byte: a NUL in a source file survives git but not every
     // editor. A space would be wrong — ["a b", "c"] and ["a", "b c"] hash
@@ -254,6 +308,16 @@ export async function saveTool(subject: Subject, input: SaveToolInput): Promise<
     faq: (input.translation.faq ?? []).map((entry) => ({
       question: entry.question,
       answer: sanitizeRichText(entry.answer),
+    })),
+    // NOT sanitised, because it is not rich text (ADR-114 #3): the schema
+    // accepts a plain string and the renderer prints one, so there is no
+    // markup for a sanitiser to have an opinion about. Running it through
+    // `sanitizeRichText` anyway would silently delete an ampersand-heavy
+    // sentence's meaning while looking like diligence.
+    highlights: (input.translation.highlights ?? []).map((entry) => ({
+      icon: entry.icon,
+      title: entry.title,
+      text: entry.text,
     })),
   };
 
@@ -303,6 +367,7 @@ export async function saveTool(subject: Subject, input: SaveToolInput): Promise<
       // "the author removed every question", and Prisma reads `undefined` as
       // "leave this column alone".
       faq: clean.faq as Prisma.InputJsonValue,
+      highlights: clean.highlights as Prisma.InputJsonValue,
       seoTitle: input.translation.seoTitle ?? null,
       seoDescription: input.translation.seoDescription ?? null,
       seoFocusKeyword: input.translation.seoFocusKeyword ?? null,
@@ -449,9 +514,11 @@ export async function getToolPage(locale: string, key: string): Promise<ToolPage
     intro: translation?.intro ?? null,
     body: translation?.body ?? null,
     faq: parseFaq(translation?.faq),
+    highlights: parseHighlights(translation?.highlights),
     seoTitle: translation?.seoTitle ?? null,
     seoDescription: translation?.seoDescription ?? null,
     coverAssetId: row.coverAssetId,
+    coverUrl: await resolveCoverUrl(row.coverAssetId),
     config: row.config,
     showRelated: row.showRelated,
     relatedCount: row.relatedCount,
@@ -555,6 +622,19 @@ export interface ToolRelatedItem {
   title: string;
   href: string;
   summary: string | null;
+  /**
+   * The feature flag the destination's route is gated on. A cached read cannot
+   * evaluate flags against a viewer, so the page drops an item whose flag is
+   * off rather than linking to a route that answers 404 (changes-46).
+   */
+  feature: ToolRelatedFeature;
+}
+
+export type ToolRelatedFeature = "news" | "analysis" | "courses" | "videos" | "glossary";
+
+/** The flag `/news/[slug]` gates an article on — NEWS on `news`, every other kind on `analysis`. */
+function articleFeature(kind: string): ToolRelatedFeature {
+  return kind === "NEWS" ? "news" : "analysis";
 }
 
 /**
@@ -594,10 +674,11 @@ export async function getToolRelated(
   // already curated — enough to reach the count, never more.
   const taken = new Set(resolved.map((item) => `${item.targetType}:${item.href}`));
   const needed = count - resolved.length;
+  const now = new Date();
 
   const [lessons, articles] = await Promise.all([
     db.lesson.findMany({
-      where: { deletedAt: null, status: "PUBLISHED" },
+      where: relatedTargetWhere(now).lesson,
       orderBy: { publishedAt: "desc" },
       take: needed * 2,
       select: {
@@ -613,7 +694,7 @@ export async function getToolRelated(
       },
     }),
     db.article.findMany({
-      where: { deletedAt: null, status: "PUBLISHED" },
+      where: relatedTargetWhere(now).article,
       orderBy: { publishedAt: "desc" },
       take: needed * 2,
       select: {
@@ -628,9 +709,15 @@ export async function getToolRelated(
   for (const article of articles) {
     const tr = article.translations[0];
     if (!tr?.slug) continue;
-    const href = `/${article.kind === "ANALYSIS" ? "analysis" : "news"}/${tr.slug}`;
+    const href = relatedArticleHref(tr.slug);
     if (taken.has(`article:${href}`)) continue;
-    topUp.push({ targetType: "article", title: tr.title, href, summary: tr.excerpt });
+    topUp.push({
+      targetType: "article",
+      title: tr.title,
+      href,
+      summary: tr.excerpt,
+      feature: articleFeature(article.kind),
+    });
   }
   for (const lesson of lessons) {
     const tr = lesson.translations[0];
@@ -639,10 +726,54 @@ export async function getToolRelated(
     if (!tr?.slug || !courseSlug || !course?.track) continue;
     const href = `/learn/${course.track}/${courseSlug}/${tr.slug}`;
     if (taken.has(`lesson:${href}`)) continue;
-    topUp.push({ targetType: "lesson", title: tr.title, href, summary: tr.summary });
+    topUp.push({
+      targetType: "lesson",
+      title: tr.title,
+      href,
+      summary: tr.summary,
+      feature: "courses",
+    });
   }
 
   return [...resolved, ...topUp].slice(0, count);
+}
+
+/**
+ * Where an article lives on the public site. EVERY kind is served at
+ * `/news/[slug]` — `/analysis` is a listing with no detail route under it.
+ * changes-46: this module built `/analysis/<slug>` for an ANALYSIS article,
+ * so "More about this" on /tools/pivot-points linked a published article to
+ * the 404 page.
+ */
+export function relatedArticleHref(slug: string): string {
+  return `/news/${slug}`;
+}
+
+/**
+ * The public visibility rule for each kind of thing a tool can link to.
+ *
+ * Composed from each module's OWN published rule, never a fresh
+ * `status: PUBLISHED` — the site-wide search (ADR-108) takes the same stance,
+ * for the same reason: a list with its own idea of "public" is a list that
+ * links to drafts, to deactivated rows (ADR-139 #2's `isActive`), to a
+ * premium course, or to a lesson inside a hidden section. changes-46: the
+ * curated list used to check `deletedAt` alone, so a target an editor
+ * unpublished or switched off stayed on every tool page that named it.
+ *
+ * A lesson is reachable only in a published section of a public course, the
+ * rule `Course.lessonCount` counts by (ADR-081 #2).
+ */
+export function relatedTargetWhere(now: Date) {
+  return {
+    lesson: {
+      ...publicLessonWhere(now),
+      section: { isPublished: true, course: publicCourseWhere(now) },
+    },
+    article: publicArticleWhere(now),
+    glossary: publicGlossaryTermWhere(now),
+    video: publicVideoWhere(now),
+    course: publicCourseWhere(now),
+  };
 }
 
 /** Resolve curated (type, id) pairs to titles and hrefs, keeping their order. */
@@ -653,10 +784,11 @@ async function resolveMixedTargets(
   if (targets.length === 0) return [];
   const byType = (type: string) =>
     targets.filter((t) => t.targetType === type).map((t) => t.targetId);
+  const visible = relatedTargetWhere(new Date());
 
   const [lessons, articles, glossary, videos, courses] = await Promise.all([
     db.lesson.findMany({
-      where: { id: { in: byType("lesson") }, deletedAt: null },
+      where: { AND: [{ id: { in: byType("lesson") } }, visible.lesson] },
       select: {
         id: true,
         section: {
@@ -670,7 +802,7 @@ async function resolveMixedTargets(
       },
     }),
     db.article.findMany({
-      where: { id: { in: byType("article") }, deletedAt: null },
+      where: { AND: [{ id: { in: byType("article") } }, visible.article] },
       select: {
         id: true,
         kind: true,
@@ -678,14 +810,17 @@ async function resolveMixedTargets(
       },
     }),
     db.glossaryTerm.findMany({
-      where: { id: { in: byType("glossary") }, deletedAt: null },
+      where: { AND: [{ id: { in: byType("glossary") } }, visible.glossary] },
       select: {
         id: true,
-        translations: { where: { locale }, select: { term: true, slug: true, definition: true } },
+        translations: {
+          where: { locale },
+          select: { term: true, slug: true, simpleExplanation: true },
+        },
       },
     }),
     db.videoTopic.findMany({
-      where: { id: { in: byType("video") }, deletedAt: null },
+      where: { AND: [{ id: { in: byType("video") } }, visible.video] },
       select: {
         id: true,
         track: true,
@@ -693,7 +828,7 @@ async function resolveMixedTargets(
       },
     }),
     db.course.findMany({
-      where: { id: { in: byType("course") }, deletedAt: null },
+      where: { AND: [{ id: { in: byType("course") } }, visible.course] },
       select: {
         id: true,
         track: true,
@@ -713,6 +848,7 @@ async function resolveMixedTargets(
       title: tr.title,
       href: `/learn/${course.track}/${courseSlug}/${tr.slug}`,
       summary: tr.summary,
+      feature: "courses",
     });
   }
   for (const row of articles) {
@@ -721,8 +857,9 @@ async function resolveMixedTargets(
     map.set(`article:${row.id}`, {
       targetType: "article",
       title: tr.title,
-      href: `/${row.kind === "ANALYSIS" ? "analysis" : "news"}/${tr.slug}`,
+      href: relatedArticleHref(tr.slug),
       summary: tr.excerpt,
+      feature: articleFeature(row.kind),
     });
   }
   for (const row of glossary) {
@@ -732,7 +869,9 @@ async function resolveMixedTargets(
       targetType: "glossary",
       title: tr.term,
       href: `/glossary/${tr.slug}`,
-      summary: tr.definition,
+      // Rich text (ADR-069) — a card summary is plain, or it prints the tags.
+      summary: htmlLead(tr.simpleExplanation),
+      feature: "glossary",
     });
   }
   for (const row of videos) {
@@ -743,6 +882,7 @@ async function resolveMixedTargets(
       title: tr.title,
       href: `/learn/${row.track}/videos/${tr.slug}`,
       summary: tr.summary,
+      feature: "videos",
     });
   }
   for (const row of courses) {
@@ -753,6 +893,7 @@ async function resolveMixedTargets(
       title: tr.title,
       href: `/learn/${row.track}/${tr.slug}`,
       summary: tr.summary,
+      feature: "courses",
     });
   }
 

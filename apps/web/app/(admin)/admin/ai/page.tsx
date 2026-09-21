@@ -18,6 +18,7 @@ import { AdminPage, AdminSection } from "../_components/admin-page.tsx";
 import { AiBreakdownChart, AiSpendChart } from "./usage-charts.tsx";
 import { AiUsageTable, type AiUsageTableLabels, type AiUsageTableRow } from "./usage-table.tsx";
 import { formatCount, formatDuration, isAiRange, rangeStart, type AiRange } from "./_lib/ai-ui.ts";
+import { formatDate, formatDateTime } from "@repo/utils";
 
 /**
  * The spend tile's glyph ink.
@@ -67,14 +68,8 @@ export default async function AiUsagePage({ searchParams }: PageProps<"/admin/ai
     listAiProviders(),
   ]);
 
-  const dateFormat = new Intl.DateTimeFormat("en", { dateStyle: "medium" });
-  const dateTimeFormat = new Intl.DateTimeFormat("en", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
-
   const pricesNote = pricedAt
-    ? tAi("estimatedNote", { date: dateFormat.format(pricedAt) })
+    ? tAi("estimatedNote", { date: formatDate(pricedAt) })
     : tAi("estimatedNoteUnknown");
 
   // One line per day, summed across features — the rollup already holds
@@ -88,7 +83,7 @@ export default async function AiUsagePage({ searchParams }: PageProps<"/admin/ai
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([date, costUsd]) => ({
       date,
-      label: dateFormat.format(new Date(`${date}T00:00:00.000Z`)),
+      label: formatDate(new Date(`${date}T00:00:00.000Z`)),
       costUsd,
     }));
 
@@ -159,7 +154,7 @@ export default async function AiUsagePage({ searchParams }: PageProps<"/admin/ai
     tokensLabel: `${formatCount(row.inputTokens)} / ${formatCount(row.outputTokens)}`,
     costLabel: formatUsd(row.costUsd),
     durationLabel: formatDuration(row.durationMs),
-    timeLabel: dateTimeFormat.format(row.createdAt),
+    timeLabel: formatDateTime(row.createdAt),
     actorName: row.actorName,
     entityLabel: row.entityType ? row.entityType : null,
   }));
@@ -207,7 +202,7 @@ export default async function AiUsagePage({ searchParams }: PageProps<"/admin/ai
               ? tAi("tileSpendUnlimited")
               : tAi("tileSpendOf", { budget: formatUsd(budget.budgetUsd) })
           }
-          footer={!budget.unlimited && <Progress value={percent} />}
+          footer={!budget.unlimited && <Progress value={percent} aria-label={tAi("tileSpend")} />}
         />
         {/* "Available to spend", not only "spent" — the pre-flight check uses
             worst-case output tokens, so the last few dollars of a period go
@@ -255,7 +250,10 @@ export default async function AiUsagePage({ searchParams }: PageProps<"/admin/ai
         </AdminSection>
         <AdminSection title={tAi("chartByModel")}>
           <AiBreakdownChart
-            data={breakdown((p) => `${p.provider} · ${p.modelId}`, (k) => k)}
+            data={breakdown(
+              (p) => `${p.provider} · ${p.modelId}`,
+              (k) => k,
+            )}
             seriesLabel={tAi("chartByModel")}
             emptyTitle={tAi("chartEmpty")}
             emptyDescription={tAi("recentDescription")}

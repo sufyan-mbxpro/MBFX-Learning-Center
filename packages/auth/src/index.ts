@@ -11,16 +11,24 @@ import { admin } from "better-auth/plugins/admin";
 import { twoFactor } from "better-auth/plugins/two-factor";
 import { bearer } from "better-auth/plugins/bearer";
 import { after } from "next/server";
-import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from "@repo/contracts";
+import { adminSessionTimeoutMs, MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from "@repo/contracts";
 import { db } from "@repo/db";
 import { sendTemplatedEmail } from "@repo/email";
+import { getSetting } from "@repo/settings";
+import { passwordChangedBy, twoFactorAuditAction, writeAccountAudit } from "./account-audit.ts";
 import { rateLimit } from "./rate-limit.ts";
 import { resetPasswordPath } from "./reset-url.ts";
 import { redisSecondaryStorage } from "./redis-secondary-storage.ts";
+import { notifyEmailVerified } from "./email-verified.ts";
+import { staffImpersonation, startImpersonation } from "./impersonation.ts";
 
 // Public-write throttling (changes-11 PR 5.2/5.5). Re-exported here so a
 // route handler imports one package for "who is this" and "how often".
 export { rateLimit, type RateLimitResult } from "./rate-limit.ts";
+// ADR-124: the app subscribes core services to verification without auth
+// importing core.
+export { onEmailVerified, type EmailVerifiedListener } from "./email-verified.ts";
+export { canBeImpersonated, IMPERSONATION_SESSION_SECONDS } from "./impersonation.ts";
 
 // @node-rs/argon2 exports Algorithm as an ambient const enum, which
 // verbatimModuleSyntax forbids referencing directly (can't verify the
@@ -115,10 +123,10 @@ const authOptions: BetterAuthOptions = {
     // Without this, configuring secondaryStorage moves sessions to Redis
     // ONLY — ADR-001 finding #1.
     storeSessionInDatabase: true,
-    // Shorter lifetime for staff, per ADR-006 consequence #4's mandatory
-    // compensating controls (same-origin learner/staff sessions).
-    // Module 09/10 owns actually differentiating staff vs learner lifetime;
-    // this is the site-wide default.
+    // The site-wide default, and a LEARNER's whole story. A staff session is
+    // shortened from here by `slideStaffExpiry` below — ADR-105 delivered
+    // ADR-006 consequence #4's "shorter lifetime for staff" as an admin-owned
+    // idle timeout rather than a second constant.
     expiresIn: 60 * 60 * 24 * 7, // 7 days
     cookieCache: {
       // Lets proxy.ts (ADR-006: gate, not boundary) read userType via
@@ -207,6 +215,8 @@ const authOptions: BetterAuthOptions = {
     },
     afterEmailVerification: async (user) => {
       await db.user.update({ where: { id: user.id }, data: { status: "ACTIVE" } });
+      // ADR-124: a newsletter opt-in ticked at sign-up waits on this proof.
+      await notifyEmailVerified({ id: user.id, email: user.email });
     },
   },
 
@@ -271,6 +281,20 @@ const authOptions: BetterAuthOptions = {
   },
 
   databaseHooks: {
+    // ADR-123 #5: the two-factor flag is written in exactly one place per
+    // direction, so the write IS the event worth auditing. The endpoint path
+    // tells an enable from a disable; see `twoFactorAuditAction`.
+    user: {
+      update: {
+        after: async (user, context) => {
+          const action = twoFactorAuditAction(
+            context?.path,
+            (user as { twoFactorEnabled?: boolean | null }).twoFactorEnabled,
+          );
+          if (action) await writeAccountAudit(user.id, action);
+        },
+      },
+    },
     session: {
       create: {
         before: async (session) => {
@@ -282,11 +306,47 @@ const authOptions: BetterAuthOptions = {
           return;
         },
       },
+      update: {
+        // changes-38: the ADR-105 idle timeout was being UNDONE here. Better
+        // Auth's own get-session refresh fires whenever
+        // `expiresAt - expiresIn + updateAge <= now`, which a shortened staff
+        // session satisfies on every call, and writes `now + 7 days` to
+        // Redis and the row. The public site calls get-session on every page
+        // (ADR-094), so one visit to the site re-armed a week-long session.
+        // Clamp the refresh for STAFF to the configured timeout instead.
+        before: async (data, context) => {
+          if (!(data.expiresAt instanceof Date)) return;
+          const current = (context?.context as { session?: { user?: { userType?: unknown } } })
+            ?.session;
+          if (current?.user?.userType !== "STAFF") return;
+          const setting = await getSetting("security.adminSessionTimeout");
+          const expiresAt = clampStaffRefresh(
+            data.expiresAt,
+            setting === null ? null : adminSessionTimeoutMs(setting),
+            Date.now(),
+          );
+          return expiresAt ? { data: { ...data, expiresAt } } : undefined;
+        },
+      },
     },
   },
 
   hooks: {
     after: createAuthMiddleware(async (ctx) => {
+      // ADR-123 #5: a learner's password change from the profile page. The
+      // same audit row and owner notice the staff action writes for itself
+      // (ADR-079 #6) — HTTP calls only, so the staff path is not doubled.
+      const changedBy = passwordChangedBy({
+        path: ctx.path,
+        request: ctx.request,
+        returned: ctx.context.returned,
+      });
+      if (changedBy) {
+        await writeAccountAudit(changedBy, "users.passwordChange");
+        const user = (ctx.context.returned as { user?: MailUser }).user;
+        if (user) await sendPasswordChangedNotice(user);
+      }
+
       if (ctx.path === "/sign-in/email") {
         const email = (ctx.body as { email?: string } | undefined)?.email;
         if (!email) return;
@@ -315,7 +375,13 @@ const authOptions: BetterAuthOptions = {
     }),
   },
 
-  plugins: [admin(), twoFactor(), bearer()],
+  plugins: [admin(), twoFactor(), bearer(), staffImpersonation()],
+
+  // ADR-142 §3: impersonation goes through `staffImpersonation` alone. The
+  // admin plugin's own pair authorises against a `user.role` string this
+  // project never writes, and its stop endpoint writes no audit row — so both
+  // are switched off rather than left as a second, unaudited door.
+  disabledPaths: ["/admin/impersonate-user", "/admin/stop-impersonating"],
 };
 
 /**
@@ -332,6 +398,16 @@ const authOptions: BetterAuthOptions = {
  */
 export const authInstance: Auth = betterAuth(authOptions);
 
+/**
+ * Enter a learner's session as staff (ADR-142 §3). The caller — the admin
+ * server action — has already run `requirePermission("users.impersonate")`
+ * and written the start audit row; this swaps the cookies. `Auth`'s portable
+ * type does not carry plugin endpoints, hence the `api` hand-off.
+ */
+export function impersonateLearner(userId: string): Promise<{ ok: boolean }> {
+  return startImpersonation(authInstance.api, userId);
+}
+
 // ─────────────────────────────────────────────────────────────
 // Session helper — the exact call shape @repo/rbac already depends on:
 // `const { auth } = await import("@repo/auth"); const session = await auth();`
@@ -345,6 +421,124 @@ export interface Session {
   // reads `.user.id` — a strictly additive extension of @repo/rbac's
   // original call shape, not a breaking one.
   user: { id: string; userType: "LEARNER" | "STAFF" };
+  // ADR-105: the idle timeout is this row's own expiry, so `auth()` needs to
+  // see it. Better Auth has always returned both fields; typing them is
+  // additive and no consumer's call shape changes.
+  // `token` since changes-38: the expiry is written through Better Auth's
+  // internal adapter, which keys the Redis copy by token.
+  session: { id: string; token: string; expiresAt: Date };
+}
+
+/**
+ * How stale the stored expiry may get before `auth()` writes a new one
+ * (ADR-105 #4). Continuous admin use therefore costs at most one indexed
+ * single-row UPDATE a minute instead of one per request; the price is a
+ * minute of accuracy on a control whose shortest setting is two.
+ */
+const EXPIRY_SLIDE_THRESHOLD_MS = 60_000;
+
+/**
+ * The slide threshold for a given timeout: a minute, or a quarter of the
+ * timeout when that is shorter (ADR-128 #4). A flat minute on the two-minute
+ * setting let a continuously active staff member's stored expiry fall to
+ * sixty seconds ahead, which is inside the admin's warning window — the
+ * dialog would ask "still there?" of someone who was typing.
+ */
+export function staffSlideThresholdMs(timeoutMs: number): number {
+  return Math.min(EXPIRY_SLIDE_THRESHOLD_MS, Math.floor(timeoutMs / 4));
+}
+
+/**
+ * The whole decision, with no clock and no database in it: given a session's
+ * stored expiry, the configured timeout and the current time, the expiry to
+ * WRITE — or `null` for "leave it alone".
+ *
+ * Pure and exported so it is unit-tested where it lives (testing.md's
+ * judgement calls) rather than through a session round trip.
+ *
+ * Three cases, in the order they matter:
+ *  - no timeout configured → nothing to do, including for a session that was
+ *    shortened while the setting was on. Turning the timeout off must not
+ *    retro-extend a session, only stop shortening new ones.
+ *  - stored expiry is FURTHER out than the target → shorten it now. This is
+ *    the 7-day default on a staff member's first authenticated call, and it is
+ *    also what a lowered setting does to an existing session.
+ *  - stored expiry has decayed → slide it forward, but only once the gap is
+ *    worth a write (ADR-105 #4).
+ */
+export function nextStaffExpiry(
+  expiresAt: Date,
+  timeoutMs: number | null,
+  now: number,
+): Date | null {
+  if (timeoutMs === null) return null;
+  const target = now + timeoutMs;
+  const current = expiresAt.getTime();
+  if (current <= target && target - current < staffSlideThresholdMs(timeoutMs)) return null;
+  return new Date(target);
+}
+
+/**
+ * Better Auth's own session refresh, for a STAFF session: the expiry it may
+ * write, or `null` to let the refresh through untouched (changes-38).
+ *
+ * With no timeout the refresh is the site-wide slide and is left alone. With
+ * one, a refresh is still activity — the reader just loaded a page — so the
+ * session slides to `now + timeout`, never further. Pure, like
+ * `nextStaffExpiry`, so the rule is tested without a session round trip.
+ */
+export function clampStaffRefresh(
+  requested: Date,
+  timeoutMs: number | null,
+  now: number,
+): Date | null {
+  if (timeoutMs === null) return null;
+  const ceiling = now + timeoutMs;
+  return requested.getTime() > ceiling ? new Date(ceiling) : null;
+}
+
+/**
+ * Slide a STAFF session's expiry to `now + timeout`, so an idle one simply
+ * EXPIRES rather than being flagged as idle somewhere a call site has to
+ * remember to look (ADR-105 #1).
+ *
+ * A learner returns untouched: `userType` is what decides, not a role or a
+ * permission, so the timeout cannot be turned off by a grant (security.md #3,
+ * two locks).
+ *
+ * Failures are swallowed on purpose. This runs on the session path of every
+ * authenticated request, and the worst case of a missed write is that the
+ * session keeps the expiry it already had — refusing to authenticate because
+ * a bookkeeping UPDATE lost a race would turn a hardening feature into an
+ * outage.
+ */
+async function slideStaffExpiry(session: Session): Promise<Date | null> {
+  if (session.user.userType !== "STAFF") return null;
+
+  const setting = await getSetting("security.adminSessionTimeout");
+  // A missing row is a database seeded before ADR-105: no timeout, which is
+  // also what the row seeds to.
+  const next = nextStaffExpiry(
+    session.session.expiresAt,
+    setting === null ? null : adminSessionTimeoutMs(setting),
+    Date.now(),
+  );
+  if (!next) return null;
+
+  try {
+    // Through Better Auth's adapter, never `db.session.update` (changes-38).
+    // With `secondaryStorage` configured, `findSession` reads REDIS first and
+    // only falls back to the row, so a row-only write shortened a copy nobody
+    // consulted: verified live, the row said +2 minutes while Redis and
+    // get-session still said +7 days. `updateSession` writes both and resets
+    // the Redis TTL to match.
+    const ctx = await authInstance.$context;
+    await ctx.internalAdapter.updateSession(session.session.token, { expiresAt: next });
+    return next;
+  } catch {
+    // See the note above: a lost bookkeeping write is not a reason to refuse.
+    return null;
+  }
 }
 
 /**
@@ -360,6 +554,27 @@ export async function setUserPassword(userId: string, newPassword: string): Prom
   const ctx = await authInstance.$context;
   const hashed = await ctx.password.hash(newPassword);
   await ctx.internalAdapter.updatePassword(userId, hashed);
+}
+
+/**
+ * Push a user row that was written OUTSIDE Better Auth into its session copies
+ * (ADR-125 §3).
+ *
+ * `updateOwnProfile` and `setOwnAvatar` write through `@repo/db`, and Better
+ * Auth serves `session.user` from its Redis copy for the session's whole
+ * lifetime — so without this a new name or picture is invisible to every
+ * `get-session` for up to a week. `internalAdapter.updateUser` re-reads the row
+ * and rewrites every live copy through the library's own
+ * `refreshUserSessions`, so no Redis key format is spelled out here. The
+ * user-update hook stays silent: `twoFactorAuditAction` keys on an endpoint
+ * path and this call has none.
+ *
+ * The signed cookie cache is the browser's to refresh — the public session
+ * provider re-reads with `disableCookieCache` after a change.
+ */
+export async function refreshSessionUser(userId: string): Promise<void> {
+  const ctx = await authInstance.$context;
+  await ctx.internalAdapter.updateUser(userId, { updatedAt: new Date() });
 }
 
 /**
@@ -405,6 +620,35 @@ export async function auth(): Promise<Session | null> {
   const result = await authInstance.api.getSession({
     headers: await headers(),
     query: { disableCookieCache: true },
+  });
+  const session = result as Session | null;
+  // ADR-105. AFTER the read, so an already-expired session has been refused
+  // by Better Auth's own validation before anything here can extend it — the
+  // timeout must not be able to resurrect a session it was meant to end.
+  if (session) {
+    // Report the expiry that is now TRUE, not the one read before the slide:
+    // the admin's idle watcher schedules its warning from this (ADR-128).
+    const slid = await slideStaffExpiry(session);
+    if (slid) session.session.expiresAt = slid;
+  }
+  return session;
+}
+
+/**
+ * The current session WITHOUT counting the call as activity (ADR-128 #2):
+ * no ADR-105 slide, and `disableRefresh` so Better Auth's own refresh does not
+ * slide it either. Database-backed like `auth()` — the cookie cache would
+ * answer for a session that has already expired.
+ *
+ * For the admin's idle watcher only, which must be able to ask "is this
+ * session still alive, and for how long?" of an idle tab without the question
+ * itself keeping it alive. Not an authorization check: a caller that is about
+ * to DO something calls `auth()`.
+ */
+export async function peekSession(): Promise<Session | null> {
+  const result = await authInstance.api.getSession({
+    headers: await headers(),
+    query: { disableCookieCache: true, disableRefresh: true },
   });
   return result as Session | null;
 }

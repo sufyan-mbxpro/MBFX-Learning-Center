@@ -32,7 +32,7 @@ function AwardCard({
     <li
       data-slot="award-card"
       className={cn(
-        "card-hover hover-lift sheen group/award flex flex-col items-center gap-3 rounded-2xl bg-card p-6 text-center ring-1 ring-foreground/10",
+        "card-hover hover-lift sheen group/award flex flex-col items-center gap-3 rounded-lg bg-card p-6 text-center ring-1 ring-foreground/10",
         className,
       )}
       {...props}

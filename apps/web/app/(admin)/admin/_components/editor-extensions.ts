@@ -27,7 +27,25 @@ import { Extension, Mark, Node, mergeAttributes } from "@tiptap/react";
 export const EDITOR_TONES = ["primary", "success", "warning", "info", "danger", "muted"] as const;
 export type EditorTone = (typeof EDITOR_TONES)[number];
 
-export const EDITOR_FONTS = ["sans", "serif", "mono"] as const;
+/**
+ * The families an editor may set on a run of text.
+ *
+ * `body` FIRST and named for what it is: it is `--font-sans`, which the theme
+ * engine resolves to the brand typeface an admin picked in Theme → Layout
+ * (Inter by default, ADR-072). It is also what the surrounding page already
+ * renders in, so it doubles as "put this back".
+ *
+ * `display` is the public site's HEADING face — `--font-display`, the same
+ * `font-display` utility every masthead and section heading uses — and it is
+ * the entry changes-40 added. Without it the editor could set a generic serif
+ * and a monospace but not the one other family the site actually ships, so a
+ * pull-quote written to match a heading had to be approximated.
+ *
+ * `serif` remains a GENERIC stack, not a fourth webfont: a family name is not
+ * a colour literal, and downloading another face for an occasional pull quote
+ * is not a trade worth making.
+ */
+export const EDITOR_FONTS = ["body", "display", "serif", "mono"] as const;
 export type EditorFont = (typeof EDITOR_FONTS)[number];
 
 export const EDITOR_SIZES = ["sm", "base", "lg", "xl", "2xl"] as const;
@@ -115,7 +133,7 @@ export const HighlightTone = classMark({
   values: EDITOR_TONES,
 });
 
-/** Font family, from the three the design system actually ships. */
+/** Font family, from the four the design system actually ships. */
 export const FontFamilyClass = classMark({
   name: "fontFamily",
   tag: "span",

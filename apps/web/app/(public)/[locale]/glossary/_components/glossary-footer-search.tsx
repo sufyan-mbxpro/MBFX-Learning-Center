@@ -17,6 +17,7 @@
 // on this page is a broken control.
 import { ROUTE_PATHS } from "@repo/contracts";
 import { Link } from "@repo/i18n/navigation";
+import { CHIP_LINK } from "@repo/ui/lib/surfaces";
 
 /** `#` first, then A–Z — the same set `GlossaryBrowser` renders. */
 const ALPHABET = ["#", ...Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i))];
@@ -62,10 +63,7 @@ export function GlossaryFooterSearch({
           <ul className="flex flex-wrap gap-2">
             {popular.map((entry) => (
               <li key={entry.termId}>
-                <Link
-                  href={`${ROUTE_PATHS.glossary}/${entry.slug}`}
-                  className="inline-flex items-center rounded-md border px-3 py-2 text-xs font-medium tracking-wide text-muted-foreground uppercase transition-colors duration-(--duration-fast) hover:border-primary/30 hover:bg-primary/10 hover:text-primary-interactive"
-                >
+                <Link href={`${ROUTE_PATHS.glossary}/${entry.slug}`} className={CHIP_LINK}>
                   {entry.term}
                 </Link>
               </li>

@@ -66,6 +66,7 @@ export default async function WebsiteMediaPage() {
           tagsLabel: t("mediaTagsLabel"),
           tagsHint: t("mediaTagsHint"),
           usageCount: t("usageCount"),
+          download: t("mediaDownload"),
           replace: t("mediaReplace"),
           save: t("save"),
           delete: t("delete"),

@@ -170,7 +170,7 @@ describe("MetricCard (tokens.md §6.11)", () => {
         value="42.9K"
         unit="lots"
         meta="+26.3% vs previous period"
-        footer={<Progress size="xs" value={60} />}
+        footer={<Progress size="xs" value={60} aria-label="Volume" />}
       />,
     );
     expect(tokens(screen.getByText("Trading Volume"))).toContain("text-muted-foreground");
@@ -186,9 +186,19 @@ describe("Progress", () => {
     ["sm", "h-1.5"],
     ["default", "h-2"],
   ] as const)("size %s is a %s track on bg-muted", (size, height) => {
-    render(<Progress size={size} value={40} />);
+    render(<Progress size={size} value={40} aria-label="Loading" />);
     const track = document.querySelector("[data-slot=progress-track]");
     expect(tokens(track)).toEqual(expect.arrayContaining([height, "bg-muted"]));
+  });
+
+  it("names itself, because an unnamed progressbar is an axe failure", () => {
+    // The regression test for the fix that made `aria-label` required
+    // (testing.md #2). `/admin/ai`'s axe run found the budget meter unnamed,
+    // and two more screens plus the showcase had the same gap — the type is
+    // what stops a fourth. This asserts the NAME reaches the role, since a
+    // prop the component forgot to forward would type-check and still fail.
+    render(<Progress value={40} aria-label="Budget used" />);
+    expect(screen.getByRole("progressbar").getAttribute("aria-label")).toBe("Budget used");
   });
 });
 

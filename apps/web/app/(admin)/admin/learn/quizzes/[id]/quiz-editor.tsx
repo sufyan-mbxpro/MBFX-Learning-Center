@@ -17,12 +17,20 @@
 //
 // Reordering is keyboard-only, deliberately: plan §8.2 — drag and drop without
 // a keyboard equivalent does not ship, and this repo has no DnD dependency.
+//
+// **Only the default language shapes a quiz.** Another language TRANSLATES the
+// shape it is given: questions cannot be added, removed or reordered there, and
+// type, points, option count and the correct answer are read-only, because
+// `correctAnswer` is an option INDEX shared by every language. `saveQuiz`
+// refuses a translation that differs, so this lock is UX, not the boundary.
 import { useState } from "react";
-import { ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { ChevronDown, ChevronUp, ExternalLink, ImageIcon, Plus, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type {
   AnswerValue,
   AnswerVisibilityInput,
+  GeneratedQuizQuestion,
   QuestionTypeInput,
   QuizInput,
 } from "@repo/contracts";
@@ -47,11 +55,24 @@ import {
   type ContentStatusLabels,
 } from "../../../_components/editor/content-status-panel.tsx";
 import { EditorSection } from "../../../_components/editor/editor-section.tsx";
+import {
+  ContentFlagsSection,
+  type ContentFlags,
+} from "../../../_components/editor/content-flags-fields.tsx";
+import { ImageUploadField } from "../../../_components/image-upload-field.tsx";
 import { saveQuizAction, setQuizStatusAction } from "../../../_actions/quiz-actions.ts";
 import { useFieldErrors } from "../../../_hooks/use-field-errors.ts";
 import { useServerAction } from "../../../_hooks/use-server-action.ts";
 import { trackLabels } from "../../_lib/learn-labels.ts";
 import { AiQuizButton, type AiQuizLabels } from "../../../_components/ai-quiz-dialog.tsx";
+import {
+  AiFieldMenu,
+  AiFillButton,
+  type AiFillConfig,
+  type AiFillPatch,
+} from "../../../_components/ai-fill.tsx";
+import { HeaderActions } from "../../../_components/header-actions.tsx";
+import { liveHref } from "../../../_lib/live-href.ts";
 
 /** Field issues for one question, by path relative to it (`prompt`, `options.0`). */
 interface QuestionIssues {
@@ -88,24 +109,68 @@ export interface QuizEditorState {
   track: string;
   isStandalone: boolean;
   category: string;
+  /** ADR-132 — the uploaded cover; a null id falls back to a generated panel. */
+  cover: { id: string | null; url: string | null };
+  /** ADR-139 — Featured / Active / Premium. */
+  flags: ContentFlags;
   questions: EditorQuestion[];
 }
 
 const TRUE_FALSE_OPTIONS = ["True", "False"];
+
+/** A model's questions in the editor's shape — shared by both AI paths. */
+function toEditorQuestions(generated: GeneratedQuizQuestion[]): EditorQuestion[] {
+  return generated.map((question) => ({
+    type: "SINGLE_CHOICE" as QuestionTypeInput,
+    points: 1,
+    prompt: question.prompt,
+    options: question.options,
+    // The generated explanation belongs to the CORRECT option, and the editor
+    // stores explanations positionally — so it lands there and nowhere else.
+    explanations: question.options.map((_, index) =>
+      index === question.correctIndex ? (question.explanation ?? "") : "",
+    ),
+    correctAnswer: question.correctIndex as AnswerValue,
+  }));
+}
 
 /** Indices of the correct options, whichever shape the value is in. */
 function correctIndices(value: AnswerValue): number[] {
   return Array.isArray(value) ? value : [value];
 }
 
+/** What an editor can change — the server-owned status and timestamps are not edits. */
+function editable(state: QuizEditorState) {
+  const { status, legalTransitions, publishedAt, scheduledFor, updatedAt, ...rest } = state;
+  void [status, legalTransitions, publishedAt, scheduledFor, updatedAt];
+  return rest;
+}
+
+/** The default language's words, shown beside a translation as its reference. */
+export interface QuizTranslationSource {
+  title: string;
+  description: string;
+  questions: { prompt: string; options: string[]; explanations: string[] }[];
+}
+
 export function QuizEditor({
   initial,
+  locales,
+  defaultLocale,
+  source,
   canPublish,
   canUpdate,
   statusLabels,
   ai,
+  fillAi,
+  liveSlug,
+  siteUrl,
 }: {
   initial: QuizEditorState;
+  locales: string[];
+  defaultLocale: string;
+  /** Present exactly when `initial.locale` is not the default locale. */
+  source?: QuizTranslationSource;
   /** Holds `lessons.publish` (ADR-058 #8). The service re-checks it. */
   canPublish: boolean;
   canUpdate: boolean;
@@ -121,10 +186,38 @@ export function QuizEditor({
     labels: AiQuizLabels;
     lesson: { id: string; title: string; content: string; locale?: string };
   };
+  /** ADR-126's brief bar and field menus, or nothing. */
+  fillAi?: AiFillConfig;
+  /**
+   * The DEFAULT locale's stored slug — the one the public route answers to.
+   * Not `state.slug`: on a translation that is another language's word, and
+   * an unsaved edit has no page yet.
+   */
+  liveSlug: string;
+  siteUrl: string;
 }) {
   const t = useTranslations("admin");
+  const router = useRouter();
+  const pathname = usePathname();
   const [state, setState] = useState(initial);
   const [removing, setRemoving] = useState<number | null>(null);
+  const [pendingLocale, setPendingLocale] = useState<string | null>(null);
+  const translating = source !== undefined;
+  const languageName = (code: string) =>
+    new Intl.DisplayNames(["en"], { type: "language" }).of(code) ?? code.toUpperCase();
+
+  // The language lives in the URL (the page reads the other locale's words on
+  // the server), so switching is a navigation — and it asks first when there
+  // are edits it would throw away. `initial` is refreshed after a save, so a
+  // saved screen compares equal.
+  const goToLocale = (next: string) =>
+    router.push(next === defaultLocale ? pathname : `${pathname}?locale=${next}`);
+  const switchLocale = (next: string) => {
+    if (next === state.locale) return;
+    if (JSON.stringify(editable(state)) !== JSON.stringify(editable(initial))) {
+      setPendingLocale(next);
+    } else goToLocale(next);
+  };
   const { run, pending } = useServerAction();
   // `saveQuizAction`'s own schema over the exact payload it is sent (ADR-077),
   // so every question's prompt and option is checked inline before a save.
@@ -264,6 +357,8 @@ export function QuizEditor({
         ...(isLearnTrack(state.track) ? { track: state.track } : {}),
         isStandalone: state.isStandalone,
         category: state.category.trim() === "" ? null : state.category.trim(),
+        coverAssetId: state.cover.id,
+        ...state.flags,
       },
       translation: {
         locale: state.locale,
@@ -302,6 +397,40 @@ export function QuizEditor({
     await saveQuizAction(buildPayload());
   }
 
+  // ADR-126: the fillable fields as plain text.
+  const aiFill = canUpdate ? fillAi : undefined;
+  const aiCurrent = {
+    title: state.title,
+    description: state.description,
+    questions: state.questions.map((question) => question.prompt).join("\n"),
+  };
+  // ONE update. Generated questions are APPENDED: a brief never deletes a
+  // question an admin wrote.
+  const applyFill = (fill: AiFillPatch) =>
+    setState((s) => ({
+      ...s,
+      ...(typeof fill.title === "string" ? { title: fill.title } : {}),
+      ...(typeof fill.description === "string" ? { description: fill.description } : {}),
+      ...(Array.isArray(fill.questions)
+        ? {
+            questions: [
+              ...s.questions,
+              ...toEditorQuestions(fill.questions as GeneratedQuizQuestion[]),
+            ],
+          }
+        : {}),
+    }));
+  const fieldMenu = (field: "title" | "description") =>
+    aiFill ? (
+      <AiFieldMenu
+        config={aiFill}
+        field={field}
+        locale={state.locale}
+        current={aiCurrent}
+        onApply={(value) => patch({ [field]: value })}
+      />
+    ) : null;
+
   // The one publishing rule no schema holds: the contract lets a draft quiz
   // have no questions, but a quiz with none is not publishable content.
   const hasQuestions = state.questions.length > 0;
@@ -311,23 +440,66 @@ export function QuizEditor({
       <div className="flex min-w-0 flex-col gap-6">
         <EditorSection
           title={t("quizzes.detailsSection")}
+          // changes-44 #3: the language travels with the content, not on a row of
+          // its own above it.
+          actions={
+            <>
+              {locales.length > 1 && (
+                <AdminCombobox
+                  aria-label={t("quizzes.languageLabel")}
+                  size="sm"
+                  className="w-24"
+                  value={state.locale}
+                  onValueChange={(next) => next && switchLocale(next)}
+                  options={locales.map((code) => ({ value: code, label: code.toUpperCase() }))}
+                />
+              )}
+              {aiFill && !translating ? (
+                <AiFillButton
+                  withOptions
+                  config={aiFill}
+                  locale={state.locale}
+                  current={aiCurrent}
+                  fieldLabels={{
+                    title: t("quizzes.titleLabel"),
+                    description: t("quizzes.descriptionLabel"),
+                    questions: t("quizzes.questionsSection"),
+                  }}
+                  onApply={applyFill}
+                />
+              ) : null}
+            </>
+          }
           description={t("quizzes.detailsDescription")}
         >
+          {translating && (
+            <p className="text-sm text-muted-foreground">
+              {t("quizzes.translatingHint", { language: languageName(defaultLocale) })}
+            </p>
+          )}
           <FieldGroup>
             <Field invalid={form.invalid("translation.title")} required>
-              <FieldLabel>{t("quizzes.titleLabel")}</FieldLabel>
+              <div className="flex items-center justify-between gap-2">
+                <FieldLabel>{t("quizzes.titleLabel")}</FieldLabel>
+                {fieldMenu("title")}
+              </div>
               <Input
                 value={state.title}
+                placeholder={source?.title}
                 maxLength={255}
                 onChange={(e) => patch({ title: e.target.value })}
               />
               <FieldError>{form.error("translation.title")}</FieldError>
             </Field>
             <Field invalid={form.invalid("translation.description")}>
-              <FieldLabel>{t("quizzes.descriptionLabel")}</FieldLabel>
+              <div className="flex items-center justify-between gap-2">
+                <FieldLabel>{t("quizzes.descriptionLabel")}</FieldLabel>
+                {fieldMenu("description")}
+              </div>
               <Textarea
-                rows={3}
+                rows={5}
                 value={state.description}
+                placeholder={source?.description}
                 onChange={(e) => patch({ description: e.target.value })}
               />
               <FieldError>{form.error("translation.description")}</FieldError>
@@ -455,6 +627,8 @@ export function QuizEditor({
                 question={question}
                 index={index}
                 total={state.questions.length}
+                {...(source?.questions[index] ? { source: source.questions[index] } : {})}
+                translating={translating}
                 onPatch={(next) => patchQuestion(index, next)}
                 onChangeType={(type) => changeType(index, type)}
                 onToggleCorrect={(optionIndex) => toggleCorrect(index, optionIndex)}
@@ -470,37 +644,24 @@ export function QuizEditor({
             ))}
 
             <div className="flex flex-wrap items-center gap-2">
-              <Button variant="outline" size="sm" onClick={addQuestion}>
-                <Plus data-icon="inline-start" aria-hidden />
-                {t("quizzes.addQuestion")}
-              </Button>
+              {!translating && (
+                <Button variant="outline" size="sm" onClick={addQuestion}>
+                  <Plus data-icon="inline-start" aria-hidden />
+                  {t("quizzes.addQuestion")}
+                </Button>
+              )}
               {/* changes-29 B6. Accepted questions join the editor's existing
                   state and NOTHING is persisted until Save — the one feature
                   where §2.2 #7 is a design constraint rather than a
                   description. */}
-              {ai && (
+              {ai && !translating && (
                 <AiQuizButton
                   labels={ai.labels}
                   lesson={ai.lesson}
                   onAdd={(generated) =>
                     setState((s) => ({
                       ...s,
-                      questions: [
-                        ...s.questions,
-                        ...generated.map((question) => ({
-                          type: "SINGLE_CHOICE" as QuestionTypeInput,
-                          points: 1,
-                          prompt: question.prompt,
-                          options: question.options,
-                          // The generated explanation belongs to the CORRECT
-                          // option, and the editor stores explanations
-                          // positionally — so it lands there and nowhere else.
-                          explanations: question.options.map((_, index) =>
-                            index === question.correctIndex ? (question.explanation ?? "") : "",
-                          ),
-                          correctAnswer: question.correctIndex as AnswerValue,
-                        })),
-                      ],
+                      questions: [...s.questions, ...toEditorQuestions(generated)],
                     }))
                   }
                 />
@@ -509,13 +670,36 @@ export function QuizEditor({
           </div>
         </EditorSection>
 
-        {/* ADR-044 #8: Save sits at the inline END of its section. Enabled
-            while fields are wrong: pressing it names them (audit F-07). */}
-        <div className="flex justify-end">
+        {/* ADR-140 §3: Save sits on the page heading's row, like every
+            editor's. Enabled while fields are wrong: pressing it names them
+            (audit F-07). */}
+        <HeaderActions>
+          {/* changes-48 #1: the one content editor that had no way to open
+              its page. Only while published, like the course editor: a
+              draft's link is a 404. The stored track, never the form's. */}
+          {initial.status === "PUBLISHED" && liveSlug && (
+            <Button
+              variant="outline"
+              render={
+                <a
+                  href={`${siteUrl}${liveHref(
+                    `/learn/${initial.track}/quizzes/${liveSlug}`,
+                    initial.locale,
+                    defaultLocale,
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                />
+              }
+            >
+              <ExternalLink data-icon="inline-start" aria-hidden />
+              {t("viewLive")}
+            </Button>
+          )}
           <Button disabled={!canUpdate} loading={pending} onClick={save}>
             {t("quizzes.save")}
           </Button>
-        </div>
+        </HeaderActions>
       </div>
 
       <div className="flex min-w-0 flex-col gap-4">
@@ -545,6 +729,48 @@ export function QuizEditor({
           }
           labels={statusLabels}
         />
+        {/* ADR-139 #6: the cover moved here from the Details section. Its
+            three switches follow in their own card (changes-44 #5). Default
+            locale only, as before. */}
+        {!translating && (
+          <>
+            <EditorSection
+              title={t("contentFlags.title")}
+              description={t("contentFlags.description")}
+              icon={ImageIcon}
+              accent="warning"
+            >
+              <ImageUploadField
+                id="quiz-cover"
+                label={t("quizzes.coverLabel")}
+                value={state.cover.url}
+                purpose="content"
+                category="learn"
+                sourceType="QUIZ"
+                disabled={!canUpdate}
+                error={form.error("meta.coverAssetId")}
+                onChange={(next) =>
+                  patch({ cover: { id: next?.id ?? null, url: next?.url ?? null } })
+                }
+                labels={{
+                  upload: t("uploadImage"),
+                  replace: t("replaceImage"),
+                  remove: t("removeImage"),
+                  uploading: t("uploading"),
+                  hint: t("quizzes.coverHint"),
+                  cancel: t("cancel"),
+                  confirmRemoveTitle: t("confirmRemoveImageTitle"),
+                  confirmRemoveBody: t("confirmRemoveImageBody"),
+                }}
+              />
+            </EditorSection>
+            <ContentFlagsSection
+              value={state.flags}
+              onChange={(flags) => patch({ flags })}
+              disabled={!canUpdate}
+            />
+          </>
+        )}
       </div>
 
       {/* ADR-044 #7: removing something asks first, even when it only stages a
@@ -561,6 +787,18 @@ export function QuizEditor({
           setRemoving(null);
         }}
       />
+      <ConfirmDialog
+        open={pendingLocale !== null}
+        onOpenChange={(open) => setPendingLocale(open ? pendingLocale : null)}
+        title={t("quizzes.switchLanguageTitle")}
+        description={t("quizzes.switchLanguageBody")}
+        confirmLabel={t("quizzes.switchLanguageConfirm")}
+        cancelLabel={t("cancel")}
+        onConfirm={() => {
+          if (pendingLocale !== null) goToLocale(pendingLocale);
+          setPendingLocale(null);
+        }}
+      />
     </div>
   );
 }
@@ -569,6 +807,8 @@ function QuestionCard({
   question,
   index,
   total,
+  source,
+  translating,
   onPatch,
   onChangeType,
   onToggleCorrect,
@@ -581,6 +821,10 @@ function QuestionCard({
   question: EditorQuestion;
   index: number;
   total: number;
+  /** The default language's words for this question, on a translation. */
+  source?: QuizTranslationSource["questions"][number];
+  /** Structure is read-only: only the words can change. */
+  translating: boolean;
   onPatch: (next: Partial<EditorQuestion>) => void;
   onChangeType: (type: QuestionTypeInput) => void;
   onToggleCorrect: (optionIndex: number) => void;
@@ -592,47 +836,52 @@ function QuestionCard({
 }) {
   const t = useTranslations("admin");
   const correct = correctIndices(question.correctAnswer);
-  const fixedOptions = question.type === "TRUE_FALSE";
+  // The option LIST is fixed for true/false, and for every type on a
+  // translation. A true/false option's WORDS still need translating.
+  const fixedOptions = question.type === "TRUE_FALSE" || translating;
 
   return (
     <div className="flex flex-col gap-3 rounded-lg border bg-card p-4">
       <div className="flex items-start justify-between gap-3">
         <span className="text-sm font-semibold tabular-nums">{index + 1}</span>
-        <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label={t("quizzes.moveUp")}
-            disabled={index === 0}
-            onClick={() => onMove(-1)}
-          >
-            <ChevronUp aria-hidden />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label={t("quizzes.moveDown")}
-            disabled={index === total - 1}
-            onClick={() => onMove(1)}
-          >
-            <ChevronDown aria-hidden />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label={t("quizzes.removeQuestion")}
-            onClick={onRemove}
-          >
-            <Trash2 aria-hidden />
-          </Button>
-        </div>
+        {!translating && (
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={t("quizzes.moveUp")}
+              disabled={index === 0}
+              onClick={() => onMove(-1)}
+            >
+              <ChevronUp aria-hidden />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={t("quizzes.moveDown")}
+              disabled={index === total - 1}
+              onClick={() => onMove(1)}
+            >
+              <ChevronDown aria-hidden />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={t("quizzes.removeQuestion")}
+              onClick={onRemove}
+            >
+              <Trash2 aria-hidden />
+            </Button>
+          </div>
+        )}
       </div>
 
       <Field invalid={issues.invalid("prompt")} required>
         <FieldLabel>{t("quizzes.questionPrompt")}</FieldLabel>
         <Textarea
-          rows={2}
+          rows={3}
           value={question.prompt}
+          placeholder={source?.prompt}
           onChange={(e) => onPatch({ prompt: e.target.value })}
         />
         <FieldError>{issues.error("prompt")}</FieldError>
@@ -642,6 +891,7 @@ function QuestionCard({
         <Field invalid={issues.invalid("type")} required>
           <FieldLabel>{t("quizzes.questionType")}</FieldLabel>
           <AdminCombobox
+            disabled={translating}
             value={question.type}
             onValueChange={(value) => onChangeType(value as QuestionTypeInput)}
             options={[
@@ -658,6 +908,7 @@ function QuestionCard({
             type="number"
             min={1}
             max={100}
+            disabled={translating}
             value={question.points}
             onChange={(e) =>
               onPatch({ points: Math.min(100, Math.max(1, Number(e.target.value) || 1)) })
@@ -678,6 +929,7 @@ function QuestionCard({
                 <Field orientation="horizontal" className="w-auto shrink-0">
                   <Checkbox
                     checked={correct.includes(optionIndex)}
+                    disabled={translating}
                     onCheckedChange={() => onToggleCorrect(optionIndex)}
                   />
                   <FieldLabel>{t("quizzes.markCorrect")}</FieldLabel>
@@ -685,8 +937,9 @@ function QuestionCard({
                 <Input
                   aria-label={t("quizzes.optionLabel", { number: optionIndex + 1 })}
                   value={option}
+                  placeholder={source?.options[optionIndex]}
                   maxLength={300}
-                  disabled={fixedOptions}
+                  disabled={question.type === "TRUE_FALSE" && !translating}
                   onChange={(e) =>
                     onPatch({
                       options: question.options.map((value, i) =>
@@ -709,9 +962,10 @@ function QuestionCard({
               <FieldError>{issues.error(`options.${optionIndex}`)}</FieldError>
             </Field>
             <Field invalid={issues.invalid(`explanations.${optionIndex}`)}>
-              <Input
+              <Textarea
+                rows={2}
                 aria-label={t("quizzes.optionExplanation")}
-                placeholder={t("quizzes.optionExplanation")}
+                placeholder={source?.explanations[optionIndex] || t("quizzes.optionExplanation")}
                 value={question.explanations[optionIndex] ?? ""}
                 maxLength={1000}
                 onChange={(e) => {

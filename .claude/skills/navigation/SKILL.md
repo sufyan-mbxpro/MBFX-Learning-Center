@@ -113,3 +113,88 @@ icon in the mega-menu map — and both guards name whichever half you forget.
 The **footer** gets no row for a per-track surface. Its Learn column is
 track-agnostic, which is why Quizzes has never had one either; adding
 `learn-forex-videos` would pick one school arbitrarily.
+
+## The footer's legal band, and Support in place of About (changes-33)
+
+**ADR-109 removed the About root and its five children, and `markets` with
+them.** `support` is a FLAT header row — one page needs no dropdown, and a
+mega panel over a single destination is a popup that says the page's own name.
+`footer_company` now carries Support + Sitemap.
+
+The seed **deletes** the superseded rows by `routeKey`, which is safe in
+exactly the way overwriting a settings VALUE is not: a row whose key is not in
+`ROUTE_PATHS` cannot resolve to a URL at all, so leaving it preserves nothing
+— it puts an unresolvable entry in the header.
+
+**ADR-110 gave the footer a legal band**: the disclaimer split on blank lines
+inside its labelled panel, the registration number and the registered address
+as their own settings (absent, never labelled-and-empty), then a bottom bar
+with the copyright and a Terms · Privacy · Agreement · Sitemap row read from
+`LEGAL_DOCUMENT_KEYS`. A document with no file behind it is absent from the
+row.
+
+**A `viewAll` resolves against the panel's own CHILD ROWS.** The Tools panel
+declared one from ADR-086 §9 and it never rendered, because the seeded tools
+tree has no `tools` child — the About panel worked only because its seed
+listed `about` as its own first child. Nothing failed, since `viewAll` is
+optional and an unresolvable one looks identical to an absent one.
+`mega-menu.test.ts` pins both halves now.
+
+## The economic calendar is a Tools child, not a header row (changes-34, ADR-115)
+
+The flat `Calendar` row is gone; the header carries seven top-level entries.
+The calendar is seeded as the ninth child of `TOOLS_NAV` and listed in the
+Tools panel's **Timing** column beside market hours and pivot points — the
+column heading is what makes it belong, since all three answer "when".
+
+It is **not** a `TOOLS` registry member (ADR-115 #2), so
+`tools-area.test.ts`'s "the panel names every `TOOL_KEYS` member" guard is
+unchanged and still correct.
+
+**The seed's delete is scoped, and the scope is load-bearing.** ADR-109 could
+`deleteMany` by routeKey because those keys no longer resolve in
+`ROUTE_PATHS`. This one does, and two rows share it — the `footer_markets`
+entry and the new Tools child — so the delete matches
+`[mainMenu, "economic-calendar", parentId: null]` and nothing else.
+
+`footer_markets` keeps its row: a footer is a sitemap and repetition is its
+job.
+
+## A source guard whose anchor is deleted does not fail — it widens
+
+Found in changes-34, second instance in two change-sets. `tools-area.test.ts`
+sliced the Tools panel out of `mega-menu.ts` between `"  tools: {"` and
+`'viewAll: "tools"'`, and ADR-112 deleted that `viewAll`. `indexOf` returned
+-1, `slice(start, -1)` ran to the end of the file, and both assertions passed
+by reading every panel in it.
+
+When a source guard slices, end the slice on something structural (the
+object's own closing line) rather than on a property that a later decision can
+delete, and assert the marker was found.
+
+## The footer is a sitemap, and a test says so (changes-36)
+
+**Five columns**, mirroring the header's own top level: `footer_learn_forex`
+and `footer_learn_crypto` (four surfaces each), `footer_tools` (all eight
+tools plus the economic calendar), `footer_markets` ("News & Markets"),
+`footer_company`. 25 rows against the header's 23 destinations.
+
+The claim "every destination the header offers has a footer row too" has been
+in the seed since Module 08 and stopped being true twice in silence — ADR-065
+split Learn into two schools, ADR-086 put eight calculators behind one link —
+because both lists were valid data the whole time.
+
+`packages/db/src/footer-sitemap.test.ts` is now the guard: it extracts every
+`routeKey` from the three header blocks and the two footer ones and fails on a
+header destination with no footer row. **A third school or a ninth tool fails
+here.**
+
+- Extending the footer is still a seed + setting change, not a code change.
+  `LINK_GRID_CLASS` in `footer.tsx` answers for one through six columns; at
+  five or more the brand block drops from `lg:col-span-4` to `3`.
+- **`footer_learn` is no longer seeded and deliberately not deleted.** An
+  install whose `footer.menuColumns` the changes-36 migration could not safely
+  rewrite still needs its Learn column to resolve.
+- The economic calendar is listed in TWO columns on purpose (Tools, and News &
+  Markets). A sitemap is meant to be findable from wherever a reader is
+  looking; the header does the same with `learn`.

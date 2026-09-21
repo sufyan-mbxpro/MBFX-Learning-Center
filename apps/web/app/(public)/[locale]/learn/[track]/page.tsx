@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { localizedPath } from "../../../../_lib/seo.ts";
 import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { getLearnIndex } from "@repo/core";
@@ -48,7 +49,7 @@ export async function generateMetadata({
   return {
     title: (template ?? "%s").replace("%s", t(LEARN_TRACKS[track].titleKey)),
     description: t(LEARN_TRACKS[track].descriptionKey),
-    alternates: { canonical: learnTrackPath(track) },
+    alternates: { canonical: localizedPath(locale, learnTrackPath(track)) },
   };
 }
 
@@ -110,7 +111,6 @@ export default async function LearnTrackPage({ params }: PageProps<"/[locale]/le
         <CtaBand title={t("index.ctaTitle")} description={t("index.ctaDescription")}>
           <Button
             size="lg"
-            shape="pill"
             variant="secondary"
             render={<Link href={learnTrackGlossaryPath(track)} />}
           >

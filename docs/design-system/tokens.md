@@ -13,6 +13,16 @@ Directory, System Announcements, Admin Dashboard), plus `image-28.png`.
 **Governs:** Phases 2–6 of changes-20. Any value that changes after approval
 changes here first.
 
+> **Superseded in part, 2026-09-15 — read this first.** §1.2, §1.3 and the dark
+> `accent` row are **history**: ADR-101 replaced the slate neutral ramp with a
+> warm one in both modes, and `@repo/theme`'s constants (mirrored into
+> `packages/db/prisma/default-theme-tokens.json`) are the live values. ADR-102
+> adds a third font slot, `fontDisplay`, which this document predates entirely.
+> Everything else here — the type scale, control dimensions, radius, elevation,
+> component anatomy, and §9's decisions — still stands, and the reasoning in the
+> superseded sections is still the method ADR-101 followed. The extraction that
+> drove the change is `docs/design-reference/extracted-design.md`.
+
 ---
 
 ## 0. What the reference actually is
@@ -77,16 +87,16 @@ green success that its brand override replaces). We keep it.
 
 The reference uses stock shadcn slate. Mapped onto our eight fields:
 
-| Theme field → CSS var                  | Reference            | Today     | **Proposed**       | Contrast                                                                                                                                                                                                            |
-| -------------------------------------- | -------------------- | --------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `background` → `--background`          | `#FFFFFF`            | `#FFFFFF` | `#FFFFFF`          | —                                                                                                                                                                                                                   |
-| `surface` → `--card`, `--popover`      | `#FFFFFF`            | `#FFFFFF` | `#FFFFFF`          | —                                                                                                                                                                                                                   |
-| `surfaceMuted` → `--muted`             | `#F1F5F9`            | `#F8F8F8` | **`#F1F5F9`**      | —                                                                                                                                                                                                                   |
-| `textPrimary` → `--foreground`         | `#020817`            | `#1A1A1A` | **`#020817`**      | 20.0:1                                                                                                                                                                                                              |
-| `textSecondary` → `--muted-foreground` | `#64748B`            | `#666666` | **`#64748B`**      | 4.76:1 on white, 4.34:1 on muted                                                                                                                                                                                    |
-| `textMuted` → `--text-muted`           | — (not in ref)       | `#999999` | **`#94A3B8`**      | decorative only (placeholder art, disabled glyphs). Never body text                                                                                                                                                 |
-| `borderLight` → `--border`             | `#E2E8F0`            | `#E5E5E5` | **`#E2E8F0`**      | 1.23:1 (dividers; no contrast requirement)                                                                                                                                                                          |
-| `borderMedium` → `--input`             | `#E2E8F0` (= border) | `#8F8F8F` | **`#7F8FA5`** (Q4) | 3.29:1 on background, 3.01:1 on muted. The reference's 1.23:1 is rejected (ADR-072 §1). No named slate step lands near 3:1 (400 = 2.56, 500 = 4.76), so this sits on the slate ramp, 43% of the way from 400 to 500 |
+| Theme field → CSS var                  | Reference            | Today     | **Proposed**            | Contrast                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| -------------------------------------- | -------------------- | --------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `background` → `--background`          | `#FFFFFF`            | `#FFFFFF` | `#FFFFFF`               | —                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `surface` → `--card`, `--popover`      | `#FFFFFF`            | `#FFFFFF` | `#FFFFFF`               | —                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `surfaceMuted` → `--muted`             | `#F1F5F9`            | `#F8F8F8` | **`#F1F5F9`**           | —                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `textPrimary` → `--foreground`         | `#020817`            | `#1A1A1A` | **`#020817`**           | 20.0:1                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `textSecondary` → `--muted-foreground` | `#64748B`            | `#666666` | **`#6F6862`** (ADR-101) | 4.96:1 on the background, 4.62:1 on muted. This row used to read `#64748B` with "4.34:1 on muted" — a FAILING pair recorded as a fact and shipped: `validateMode` checked secondary text on the background and body text on muted, and never secondary-on-muted, which axe found on `/admin/ai` (the sub-nav's inactive tabs and every `<kbd>` sit on a muted tray). The pair is in `validateMode` now and `index.test.ts` asserts the defaults clear their own floors — which is the constraint ADR-101's warm value was picked against |
+| `textMuted` → `--text-muted`           | — (not in ref)       | `#999999` | **`#94A3B8`**           | decorative only (placeholder art, disabled glyphs). Never body text                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `borderLight` → `--border`             | `#E2E8F0`            | `#E5E5E5` | **`#E2E8F0`**           | 1.23:1 (dividers; no contrast requirement)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `borderMedium` → `--input`             | `#E2E8F0` (= border) | `#8F8F8F` | **`#7F8FA5`** (Q4)      | 3.29:1 on background, 3.01:1 on muted. The reference's 1.23:1 is rejected (ADR-072 §1). No named slate step lands near 3:1 (400 = 2.56, 500 = 4.76), so this sits on the slate ramp, 43% of the way from 400 to 500                                                                                                                                                                                                                                                                                                                      |
 
 `--card-foreground`, `--popover-foreground` and `--accent-foreground` all
 resolve to `--foreground` (`#020817`), which is what the reference does.
@@ -293,16 +303,29 @@ sm = r−4). Ours derives from one admin-set base with sm = r−2, md = r,
 lg = r+2. Setting **`DEFAULT_LAYOUT.radiusBase` 4px → 6px** reproduces the
 reference exactly, with one formula change for `xl`:
 
-| Token          | Formula               | Value   | Reference | Used by                                                                                                    |
-| -------------- | --------------------- | ------- | --------- | ---------------------------------------------------------------------------------------------------------- |
-| `rounded-sm`   | r − 2                 | 4px     | 4px       | tab trigger, kbd, menu item, copy button                                                                   |
-| `rounded-md`   | r                     | **6px** | 6px       | **button, input, select, textarea, table wrapper, tooltip, popover/menu content, tabs list, date trigger** |
-| `rounded-lg`   | r + 2                 | 8px     | 8px       | **card, dialog, sheet corners, inset panel, header search trigger**                                        |
-| `rounded-xl`   | r + **6** (was r + 4) | 12px    | 12px      | avatar tile (initials square)                                                                              |
-| `rounded-full` | —                     | pill    | pill      | badge, count pill, view chip, avatar, progress, dock, live dot                                             |
+| Token          | Formula               | Value   | Reference | Used by                                                                                                                                                                     |
+| -------------- | --------------------- | ------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rounded-sm`   | r − 2                 | 4px     | 4px       | tab trigger, kbd, menu item, copy button                                                                                                                                    |
+| `rounded-md`   | r                     | **6px** | 6px       | **button, input, select, textarea, table wrapper, tooltip, popover/menu content, tabs list, date trigger, badge, view chip, filter chip, mega-menu item, section-nav item** |
+| `rounded-lg`   | r + 2                 | 8px     | 8px       | **card, dialog, sheet corners, inset panel, header search trigger**                                                                                                         |
+| `rounded-xl`   | r + **6** (was r + 4) | 12px    | 12px      | avatar tile (initials square)                                                                                                                                               |
+| `rounded-full` | —                     | circle  | pill      | avatar, count bubble, progress/meter track, switch and radio knob, status dot, decorative rule                                                                              |
 
 Today cards and dialogs are `rounded-xl`, buttons `rounded-lg`. Both drop one
 step.
+
+**`rounded-full` means a circle, not a shape preference (ADR-107).** It is
+allowed where the geometry IS circular or a capped track: a square box
+(`size-*` / `aspect-square`), a progress bar, a switch or radio knob, a status
+dot, a decorative rule. Anything laid out as a **row of text with horizontal
+padding** — button, badge, chip, tab, menu item, answer option — takes the
+derived scale above. `CountBadge` is the stated exception and keeps
+`rounded-full`: it is a dot with a number in it.
+
+**There is nothing above `rounded-xl`.** `rounded-2xl` is Tailwind's own 16px
+literal — it does not move when `radiusBase` does, which makes the admin
+control a decoration. `apps/web/app/radius-scale.test.ts` fails on it, and on
+a `shape="pill"` coming back.
 
 ### 4.2 Shadows (Tailwind v3 values, which is what the reference renders)
 
@@ -506,16 +529,16 @@ recipes (§1.5).
 | `icon-xs`     | **size-8**                                                      | row action (default table), sidebar collapse    | size-6     |
 | `icon-2xs`    | **size-6**, icon 14                                             | row action (dense table)                        | —          |
 
-| Variant                        | Spec                                                                                                |
-| ------------------------------ | --------------------------------------------------------------------------------------------------- |
-| `default`                      | `bg-primary text-primary-foreground hover:bg-primary-hover`                                         |
-| `secondary`                    | `bg-secondary text-secondary-foreground hover:bg-secondary/80`                                      |
-| `outline`                      | `border border-input bg-background hover:bg-accent hover:text-accent-foreground`                    |
-| `ghost`                        | `hover:bg-accent hover:text-accent-foreground`                                                      |
-| `destructive` ⚠ Q9             | **solid**: `bg-destructive text-destructive-foreground hover:bg-destructive/90` (today: tinted 10%) |
-| `success` / `warning` / `info` | kept from ADR-046 (tinted intents). There is no reference counterpart; they are an extension        |
-| `link`                         | `text-primary-interactive underline-offset-4 hover:underline`                                       |
-| `shape="pill"`                 | kept (public, ADR-018)                                                                              |
+| Variant                        | Spec                                                                                                                                                                                                                     |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `default`                      | `bg-primary text-primary-foreground hover:bg-primary-hover`                                                                                                                                                              |
+| `secondary`                    | `bg-secondary text-secondary-foreground hover:bg-secondary/80`                                                                                                                                                           |
+| `outline`                      | `border border-input bg-background hover:bg-accent hover:text-accent-foreground`                                                                                                                                         |
+| `ghost`                        | `hover:bg-accent hover:text-accent-foreground`                                                                                                                                                                           |
+| `destructive` ⚠ Q9             | **solid**: `bg-destructive text-destructive-foreground hover:bg-destructive/90` (today: tinted 10%)                                                                                                                      |
+| `success` / `warning` / `info` | kept from ADR-046 (tinted intents). There is no reference counterpart; they are an extension                                                                                                                             |
+| `link`                         | `text-primary-interactive underline-offset-4 hover:underline`                                                                                                                                                            |
+| `shape="pill"`                 | **REMOVED (ADR-107).** ADR-018 added it, ADR-101 §5 took it off the home page, and it stayed on 34 other public call sites; the variant is deleted so it cannot come back. The `shape` axis remains with `default` alone |
 
 Auth submit adds `shadow-md ring-1 ring-primary/40 hover:ring-primary/60`
 (an `emphasis` prop, not a one-off class).

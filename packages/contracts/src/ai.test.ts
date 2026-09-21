@@ -18,10 +18,20 @@ import {
   AI_EFFORTS,
   AI_FEATURES,
   AI_FEATURE_KEYS,
+  AI_FILL_FIELDS,
+  AI_FILL_MODULES,
   AI_MODEL_ROLES,
   AI_PAYLOAD_SCHEMAS,
   AI_STREAM_ERROR_PREFIX,
+  AI_STUDIO_ACTIONS,
+  AI_STUDIO_INPUT_MAX,
+  AI_STUDIO_LENGTH_PRESETS,
+  AI_STUDIO_TONES,
+  AI_TONES,
   aiFeature,
+  aiFieldSuggestionSchema,
+  aiFillField,
+  aiFormSuggestionSchema,
   aiFeatureSchema,
   aiLimitsSchema,
   aiModelSchema,
@@ -36,9 +46,9 @@ import {
 } from "./ai.ts";
 
 describe("AI_FEATURES", () => {
-  it("registers six features, with no duplicate keys", () => {
-    expect(AI_FEATURES).toHaveLength(6);
-    expect(new Set(AI_FEATURE_KEYS).size).toBe(6);
+  it("registers eight features, with no duplicate keys", () => {
+    expect(AI_FEATURES).toHaveLength(8);
+    expect(new Set(AI_FEATURE_KEYS).size).toBe(8);
   });
 
   it("gives every entry a tier, an effort and an output ceiling", () => {
@@ -99,6 +109,83 @@ describe("AI_ASSISTANT_ACTIONS", () => {
   it("marks `draft` as the one action needing no selection", () => {
     for (const action of AI_ASSISTANT_ACTIONS) {
       expect(action.needsSelection, action.key).toBe(action.key !== "draft");
+    }
+  });
+});
+
+describe("writing_studio (ADR-129)", () => {
+  const schema = AI_PAYLOAD_SCHEMAS.writing_studio;
+
+  it("lives on the global surface and streams", () => {
+    const studio = aiFeature("writing_studio");
+    expect(studio.surface).toBe("global");
+    expect(studio.streams).toBe(true);
+  });
+
+  it("puts grammar on the light tier and no action on heavy", () => {
+    const byKey = Object.fromEntries(AI_STUDIO_ACTIONS.map((a) => [a.key, a]));
+    expect(byKey.fix_grammar!.modelRole).toBe("light");
+    for (const action of AI_STUDIO_ACTIONS) {
+      expect(action.modelRole, action.key).not.toBe("heavy");
+      if (action.modelRole === "light") expect(action.effort, action.key).not.toBe("high");
+    }
+  });
+
+  it("offers every assistant tone, so the two tone lists cannot disagree", () => {
+    for (const tone of AI_TONES) expect(AI_STUDIO_TONES).toContain(tone);
+  });
+
+  it("accepts a topic with a tone, a format and a length target", () => {
+    expect(
+      schema.safeParse({
+        action: "draft",
+        text: "Why spreads widen at the rollover",
+        tone: "educational",
+        format: "bullets",
+        length: { unit: "words", target: 120 },
+        locale: "en",
+      }).success,
+    ).toBe(true);
+  });
+
+  it("refuses empty text, whitespace included", () => {
+    expect(schema.safeParse({ action: "rewrite", text: "   " }).success).toBe(false);
+  });
+
+  it("refuses text past the input cap", () => {
+    expect(
+      schema.safeParse({ action: "rewrite", text: "x".repeat(AI_STUDIO_INPUT_MAX + 1) }).success,
+    ).toBe(false);
+  });
+
+  it("refuses a tone that is not on the list", () => {
+    expect(schema.safeParse({ action: "rewrite", text: "hi", tone: "sarcastic" }).success).toBe(
+      false,
+    );
+  });
+
+  it("refuses a zero or fractional length target", () => {
+    for (const target of [0, 12.5]) {
+      expect(
+        schema.safeParse({ action: "shorten", text: "hi", length: { unit: "characters", target } })
+          .success,
+      ).toBe(false);
+    }
+  });
+
+  it("gives every preset a unique key and a target the schema accepts", () => {
+    expect(new Set(AI_STUDIO_LENGTH_PRESETS.map((p) => p.key)).size).toBe(
+      AI_STUDIO_LENGTH_PRESETS.length,
+    );
+    for (const preset of AI_STUDIO_LENGTH_PRESETS) {
+      expect(
+        schema.safeParse({
+          action: "shorten",
+          text: "hi",
+          length: { unit: preset.unit, target: preset.target },
+        }).success,
+        preset.key,
+      ).toBe(true);
     }
   });
 });
@@ -247,5 +334,88 @@ describe("the run endpoint's contract", () => {
     // `fromCharCode` so no source file carries a raw control byte.
     expect(AI_STREAM_ERROR_PREFIX.charCodeAt(0)).toBe(31);
     expect(AI_STREAM_ERROR_PREFIX).toContain("AI_ERROR:");
+  });
+});
+
+describe("form_fill (ADR-126)", () => {
+  it("covers every fill module in the field registry", () => {
+    for (const module of AI_FILL_MODULES) {
+      expect(AI_FILL_FIELDS[module].length, module).toBeGreaterThan(0);
+    }
+  });
+
+  it("offers no field a model must not write — URLs, images, slugs, taxonomy, status", () => {
+    for (const module of AI_FILL_MODULES) {
+      for (const field of AI_FILL_FIELDS[module]) {
+        expect(field.key, `${module}.${field.key}`).not.toMatch(
+          /url|image|slug|category|track|difficulty|status|cover|video/i,
+        );
+      }
+    }
+  });
+
+  it("parses a form suggestion with the column limits and strips unknown keys", () => {
+    const schema = aiFormSuggestionSchema("course");
+    const parsed = schema.parse({
+      title: "Pips",
+      seoTitle: "Pips explained",
+      description: [{ type: "paragraph", text: "A pip is a move." }],
+      slug: "invented",
+    });
+    expect(parsed).not.toHaveProperty("slug");
+    expect(schema.safeParse({ seoTitle: "x".repeat(71) }).success).toBe(false);
+    expect(schema.safeParse({}).success).toBe(false);
+  });
+
+  it("fills a tool's copy and never its configuration or highlights", () => {
+    const keys = AI_FILL_FIELDS.tool.map((field) => field.key);
+    expect(keys).not.toContain("config");
+    expect(keys).not.toContain("highlights");
+    const parsed = aiFormSuggestionSchema("tool").parse({
+      title: "Pip calculator",
+      intro: [{ type: "paragraph", text: "Work out what a pip is worth." }],
+      config: { defaultRisk: 50 },
+    });
+    expect(parsed).not.toHaveProperty("config");
+    expect(aiFormSuggestionSchema("tool").safeParse({ tagline: "x".repeat(221) }).success).toBe(
+      false,
+    );
+  });
+
+  it("refuses HTML where blocks are expected", () => {
+    const schema = aiFormSuggestionSchema("lesson");
+    expect(schema.safeParse({ content: "<p>hello</p>" }).success).toBe(false);
+  });
+
+  it("parses a field suggestion in that field's own shape", () => {
+    const field = aiFillField("glossary_term", "seoDescription")!;
+    expect(aiFieldSuggestionSchema(field).safeParse({ value: "ok" }).success).toBe(true);
+    expect(aiFieldSuggestionSchema(field).safeParse({ value: "x".repeat(181) }).success).toBe(
+      false,
+    );
+  });
+
+  it("accepts a form brief and refuses a field mode on a list field", () => {
+    const schema = AI_PAYLOAD_SCHEMAS.form_fill;
+    expect(schema.safeParse({ mode: "form", module: "quiz", brief: "Pips" }).success).toBe(true);
+    expect(schema.safeParse({ mode: "form", module: "quiz", brief: "   " }).success).toBe(false);
+    expect(
+      schema.safeParse({
+        mode: "field",
+        module: "lesson",
+        field: "learningObjectives",
+        action: "improve",
+        current: "",
+      }).success,
+    ).toBe(false);
+    expect(
+      schema.safeParse({
+        mode: "field",
+        module: "lesson",
+        field: "content",
+        action: "improve",
+        current: "",
+      }).success,
+    ).toBe(true);
   });
 });

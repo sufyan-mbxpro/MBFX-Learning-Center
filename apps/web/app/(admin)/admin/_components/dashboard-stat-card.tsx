@@ -2,6 +2,8 @@ import type { ComponentType } from "react";
 import { Minus, TrendingDown, TrendingUp } from "lucide-react";
 import { cn } from "@repo/ui/lib/utils";
 import { MetricCard } from "@repo/ui/components/metric-card";
+import { Progress } from "@repo/ui/components/progress";
+import { MetaText } from "@repo/ui/components/typography";
 
 // changes-20 Phase 5: the admin's metric tile is `@repo/ui`'s MetricCard
 // (tokens.md §6.11 — label + icon row, bold tabular figure, trend in the
@@ -26,6 +28,16 @@ export interface DashboardStatCardProps {
    */
   note?: string;
   accent?: "primary" | "success" | "info" | "warning";
+  /** A finer second line under the meta row ("12 live of 40 in total"). */
+  detail?: string;
+  /**
+   * A share of a REAL denominator, drawn as a thin bar with its caption
+   * ("98.5% active"). The caller omits it when the denominator is zero or
+   * was not read — a bar is never drawn against a guess (changes-43).
+   */
+  ratio?: { percent: number; caption: string };
+  /** Repeat the icon as a faint corner watermark (the overview tiles). */
+  watermark?: boolean;
 }
 
 // The icon is a thin 16px glyph on the card, so it takes each hue's
@@ -45,6 +57,9 @@ export function DashboardStatCard({
   trendLabel,
   note,
   accent = "primary",
+  detail,
+  ratio,
+  watermark = false,
 }: DashboardStatCardProps) {
   const trend =
     previousValue == null
@@ -65,6 +80,22 @@ export function DashboardStatCard({
       label={label}
       icon={<Icon className={ACCENTS[accent]} aria-hidden />}
       value={value.toLocaleString()}
+      watermark={watermark ? <Icon /> : undefined}
+      detail={detail}
+      footer={
+        ratio ? (
+          <div className="flex flex-col gap-1.5 pt-2">
+            {/* Named by its own caption: the bar and the sentence are one
+                figure, and an unnamed progressbar is an axe failure. */}
+            <Progress
+              size="sm"
+              value={Math.min(Math.max(ratio.percent, 0), 100)}
+              aria-label={ratio.caption}
+            />
+            <MetaText render={<span />}>{ratio.caption}</MetaText>
+          </div>
+        ) : undefined
+      }
       meta={
         trend != null && trendLabel ? (
           <>

@@ -3,9 +3,9 @@ import { notFound } from "next/navigation";
 import { isToolKey, TOOLS } from "@repo/contracts";
 import { listInstruments, listRelatedCandidates, loadTool } from "@repo/core";
 import { can, requirePermission } from "@repo/rbac";
-import { humanizeKey } from "@repo/utils";
 import { richTextLabels } from "../../_components/editor-labels.ts";
-import { AdminPage } from "../../_components/admin-page.tsx";
+import { EditorPage } from "../../_components/admin-page.tsx";
+import { loadEditorAi } from "../../_lib/editor-ai.ts";
 import { ToolEditor, type ToolEditorData, type ToolEditorLabels } from "./tool-editor.tsx";
 import type { RelatedOption } from "./_panels/related-panel.tsx";
 
@@ -22,7 +22,17 @@ export default async function ToolEditorPage({ params }: PageProps<"/admin/tools
 
   if (!isToolKey(key)) notFound();
 
-  const [tool, instruments] = await Promise.all([loadTool(key), listInstruments()]);
+  const [tool, instruments, ai] = await Promise.all([
+    loadTool(key),
+    listInstruments(),
+    // ADR-126: the brief bar, each field's ✨ menu, the writing assistant and
+    // "Generate SEO" — each present only when its own feature is on.
+    loadEditorAi(subject, {
+      module: "tool",
+      entity: { type: "tool", id: key },
+      contentKeys: ["tools.update"],
+    }),
+  ]);
 
   // The candidates the related picker offers. Read through @repo/core, not
   // Prisma: apps/web may not import @repo/db (architecture.md #2), and the
@@ -34,7 +44,7 @@ export default async function ToolEditorPage({ params }: PageProps<"/admin/tools
     isEnabled: tool?.isEnabled ?? true,
     sortOrder: tool?.sortOrder ?? 0,
     coverAssetId: tool?.coverAssetId ?? null,
-    coverUrl: null,
+    coverUrl: tool?.coverUrl ?? null,
     config: (tool?.config as Record<string, unknown>) ?? {},
     relatedCount: tool?.relatedCount ?? TOOLS[key].defaultRelatedCount,
     showRelated: tool?.showRelated ?? true,
@@ -44,6 +54,7 @@ export default async function ToolEditorPage({ params }: PageProps<"/admin/tools
     intro: tool?.translation?.intro ?? "",
     body: tool?.translation?.body ?? "",
     faq: tool?.translation?.faq ?? [],
+    highlights: tool?.translation?.highlights ?? [],
     seoTitle: tool?.translation?.seoTitle ?? "",
     seoDescription: tool?.translation?.seoDescription ?? "",
     seoFocusKeyword: tool?.translation?.seoFocusKeyword ?? "",
@@ -81,6 +92,9 @@ export default async function ToolEditorPage({ params }: PageProps<"/admin/tools
     relatedCountHint: t("toolsAdmin.relatedCountHint"),
     editor: richTextLabels(t),
     save: t("save"),
+    viewLive: t("viewLive"),
+    enabledBadge: t("toolsAdmin.enabled"),
+    disabledBadge: t("toolsAdmin.disabled"),
     saved: t("saved"),
     // Config panel
     defaultAccountCurrency: t("toolsAdmin.config.defaultAccountCurrency"),
@@ -126,8 +140,23 @@ export default async function ToolEditorPage({ params }: PageProps<"/admin/tools
     lookbackDays: t("toolsAdmin.config.lookbackDays"),
     riskOffBelow: t("toolsAdmin.config.riskOffBelow"),
     riskOnAbove: t("toolsAdmin.config.riskOnAbove"),
+    defaultBalance: t("toolsAdmin.config.defaultBalance"),
+    leverageOptions: t("toolsAdmin.config.leverageOptions"),
+    defaultLeverage: t("toolsAdmin.config.defaultLeverage"),
+    // Resolved on the client with the ratio, so it is passed as a raw template.
+    leverageValue: t.raw("toolsAdmin.config.leverageValue") as string,
+    defaultLots: t("toolsAdmin.config.defaultLots"),
+    conservativeMax: t("toolsAdmin.config.conservativeMax"),
+    moderateMax: t("toolsAdmin.config.moderateMax"),
+    riskLevelsHint: t("toolsAdmin.config.riskLevelsHint"),
+    minRecommendedRatio: t("toolsAdmin.config.minRecommendedRatio"),
+    minRecommendedRatioHint: t("toolsAdmin.config.minRecommendedRatioHint"),
     none: t("toolsAdmin.config.none"),
     selectedSuffix: t("toolsAdmin.config.selectedSuffix"),
+    selectAll: t("toolsAdmin.config.selectAll"),
+    clearAll: t("toolsAdmin.config.clearAll"),
+    filterInstruments: t("toolsAdmin.config.filterInstruments"),
+    noInstrumentMatch: t("toolsAdmin.config.noInstrumentMatch"),
     // Related panel
     relatedType: t("toolsAdmin.related.type"),
     relatedItem: t("toolsAdmin.related.item"),
@@ -160,6 +189,29 @@ export default async function ToolEditorPage({ params }: PageProps<"/admin/tools
       moveUp: t("moveUp"),
       moveDown: t("moveDown"),
     },
+    highlights: {
+      section: t("toolsAdmin.highlights.section"),
+      description: t("toolsAdmin.highlights.description"),
+      emptyTitle: t("toolsAdmin.highlights.emptyTitle"),
+      emptyBody: t("toolsAdmin.highlights.emptyBody"),
+      add: t("add"),
+      addFirst: t("add"),
+      edit: t("edit"),
+      dialogDescription: t("toolsAdmin.highlights.dialogDescription"),
+      iconField: t("toolsAdmin.highlights.iconField"),
+      titleField: t("toolsAdmin.highlights.titleField"),
+      textField: t("toolsAdmin.highlights.textField"),
+      textHint: t("toolsAdmin.highlights.textHint"),
+      saveItem: t("toolsAdmin.highlights.saveItem"),
+      remove: t("remove"),
+      cancel: t("cancel"),
+      confirm: t("confirm"),
+      confirmRemoveTitle: t("toolsAdmin.highlights.removeTitle"),
+      confirmRemoveBody: t("toolsAdmin.highlights.removeBody"),
+      moveUp: t("moveUp"),
+      moveDown: t("moveDown"),
+      full: t("toolsAdmin.highlights.full"),
+    },
     upload: {
       upload: t("uploadImage"),
       replace: t("replaceImage"),
@@ -170,8 +222,8 @@ export default async function ToolEditorPage({ params }: PageProps<"/admin/tools
   } satisfies ToolEditorLabels;
 
   return (
-    <AdminPage
-      title={data.title || humanizeKey(key)}
+    <EditorPage
+      title={t("editorHeading.tool")}
       description={t("toolsAdmin.editorDescription")}
       backHref="/admin/tools"
       backLabel={t("toolsAdmin.title")}
@@ -186,8 +238,10 @@ export default async function ToolEditorPage({ params }: PageProps<"/admin/tools
         }))}
         relatedOptions={relatedOptions}
         canPublish={can(subject, "tools.publish")}
+        siteUrl={process.env.NEXT_PUBLIC_SITE_URL ?? ""}
         labels={labels}
+        {...(ai ? { ai } : {})}
       />
-    </AdminPage>
+    </EditorPage>
   );
 }

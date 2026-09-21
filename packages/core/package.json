@@ -9,7 +9,9 @@
   "scripts": {
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "seed:live": "tsx --import ./seed-live/register.mjs seed-live/run.ts",
+    "seed:export-defaults": "tsx --import ./seed-live/register.mjs seed-live/export-defaults.ts"
   },
   "dependencies": {
     "@repo/ai": "workspace:*",
@@ -24,7 +26,8 @@
     "@repo/theme": "workspace:*",
     "@repo/utils": "workspace:*",
     "next": "16.3.3",
-    "sanitize-html": "2.17.7"
+    "sanitize-html": "2.17.7",
+    "sharp": "0.35.4"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
@@ -35,6 +38,7 @@
     "eslint": "^9.39.5",
     "msw": "2.15.0",
     "testcontainers": "^12.1.0",
+    "tsx": "^4.19.2",
     "typescript": "6.0.3",
     "vitest": "^4.1.11"
   }

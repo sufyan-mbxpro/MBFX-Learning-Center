@@ -32,11 +32,25 @@ function filesUnder(dir: string): string[] {
   });
 }
 
-const AI_FILES = [...filesUnder(AI_ROOT), ...filesUnder(AI_ROUTE), AI_ACTIONS];
+// The editor-side affordances too: every `ai-*.tsx` under _components renders a
+// suggestion somewhere, and ADR-126's review dialog previews whole pages of it.
+const AI_COMPONENTS = readdirSync(join(APP_ROOT, "(admin)", "admin", "_components"))
+  .filter((entry) => entry.startsWith("ai-") && entry.endsWith(".tsx"))
+  .map((entry) => join(APP_ROOT, "(admin)", "admin", "_components", entry));
+
+const AI_FILES = [
+  ...filesUnder(AI_ROOT),
+  ...filesUnder(AI_ROUTE),
+  AI_ACTIONS,
+  ...AI_COMPONENTS,
+];
 
 describe("no AI path reaches dangerouslySetInnerHTML", () => {
   it("has files to check", () => {
     expect(AI_FILES.length).toBeGreaterThan(5);
+    expect(AI_COMPONENTS.map((file) => relative(APP_ROOT, file))).toContainEqual(
+      expect.stringContaining("ai-fill.tsx"),
+    );
   });
 
   it("renders every AI-touched surface as text", () => {

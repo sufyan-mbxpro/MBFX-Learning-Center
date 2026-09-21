@@ -88,9 +88,7 @@ describe("logical-properties invariant (RTL-safety) per layout-bearing component
         ))}
         {/* Public design system additions (ADR-018): the pill shape and the
             trailing-icon slide, which is opt-in via data-icon="inline-end". */}
-        <Button shape="pill" size="xl">
-          x
-        </Button>
+        <Button size="xl">x</Button>
         <Button size="xl">
           Open account
           <ArrowRight data-icon="inline-end" aria-hidden className="rtl:rotate-180" />

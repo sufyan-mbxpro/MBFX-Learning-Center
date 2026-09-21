@@ -23,6 +23,7 @@ function MetricCard({
   meta,
   detail,
   footer,
+  watermark,
   className,
   ...props
 }: Omit<React.ComponentProps<"div">, "children"> & {
@@ -36,9 +37,29 @@ function MetricCard({
   detail?: React.ReactNode;
   /** Pinned to the bottom of the card: a progress bar and its caption, or an action. */
   footer?: React.ReactNode;
+  /**
+   * A large, faint glyph in the card's bottom inline-end corner (changes-43).
+   * Decoration only: it is rendered `aria-hidden`, so pass the same icon the
+   * header already names. `isolate` on the card plus `-z-10` here keeps it
+   * above the card's own fill and beneath every word.
+   */
+  watermark?: React.ReactNode;
 }) {
   return (
-    <Card data-slot="metric-card" className={cn("gap-0", className)} {...props}>
+    <Card
+      data-slot="metric-card"
+      className={cn("gap-0", watermark && "relative isolate", className)}
+      {...props}
+    >
+      {watermark && (
+        <span
+          data-slot="metric-card-watermark"
+          aria-hidden
+          className="pointer-events-none absolute -end-3 -bottom-3 -z-10 text-primary opacity-15 [&_svg]:size-24 [&_svg]:stroke-1"
+        >
+          {watermark}
+        </span>
+      )}
       <CardHeader className="flex flex-row items-center justify-between pb-2 [&_svg]:size-4 [&_svg]:shrink-0">
         <StatLabel>{label}</StatLabel>
         {icon}

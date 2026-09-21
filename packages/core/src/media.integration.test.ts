@@ -5,6 +5,10 @@
 // database/service layer, not the filesystem, which `media.test.ts`'s
 // pure `sniffMediaType`/`validateImageUpload` coverage and the local-disk
 // driver's own logic already exercise.
+import { existsSync } from "node:fs";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import type * as MediaModule from "./media.ts";
 import {
@@ -156,6 +160,148 @@ describe("storeMedia", () => {
       where: { key: "media.maxBytes.document" },
       data: { value: 20 * 1024 * 1024 },
     });
+  });
+
+  // ADR-130 — what reaches storage, the row and the audit trail agree.
+
+  it("stores a page image as a resized WebP and records what was uploaded", async () => {
+    const { driver, store } = fakeDriver();
+    media.setStorageDriverForTests(driver);
+    const jpeg = await largeJpeg();
+
+    const asset = await media.storeMedia(actor.id, {
+      bytes: jpeg,
+      fileName: "Market Open.JPG",
+      purpose: "article",
+      // Not "news": the cursor test below counts that shelf exactly.
+      category: "learn",
+    });
+
+    const row = await ctx.db.mediaAsset.findUniqueOrThrow({ where: { id: asset.id } });
+    expect(row.mimeType).toBe("image/webp");
+    expect(row.key.endsWith(".webp")).toBe(true);
+    expect(row.fileName).toBe("Market Open.webp");
+    expect([row.width, row.height]).toEqual([3840, 1920]);
+    expect(row.size).toBe(store.get(row.key)?.length);
+    expect(row.size).toBeLessThan(jpeg.length);
+
+    const audit = await ctx.db.auditLog.findFirstOrThrow({
+      where: { action: "media.upload", entityId: asset.id },
+    });
+    expect(audit.changes).toMatchObject({
+      after: { mimeType: "image/webp", originalMimeType: "image/jpeg", originalSize: jpeg.length },
+    });
+  });
+
+  it("keeps a brand upload's bytes exactly as sent", async () => {
+    const { driver, store } = fakeDriver();
+    media.setStorageDriverForTests(driver);
+    const jpeg = await largeJpeg();
+
+    const asset = await media.storeMedia(actor.id, {
+      bytes: jpeg,
+      fileName: "logo.jpg",
+      purpose: "brand",
+      category: "brand",
+    });
+
+    const row = await ctx.db.mediaAsset.findUniqueOrThrow({ where: { id: asset.id } });
+    expect(row.mimeType).toBe("image/jpeg");
+    expect(store.get(row.key)).toEqual(jpeg);
+  });
+});
+
+/** A 4800×2400 JPEG — past the 3840 edge, so the optimiser must both resize and convert. */
+async function largeJpeg(): Promise<Uint8Array> {
+  const { default: sharp } = await import("sharp");
+  const width = 4800;
+  const height = 2400;
+  const pixels = Buffer.alloc(width * height * 3);
+  for (let i = 0; i < pixels.length; i += 3) {
+    const x = (i / 3) % width;
+    pixels[i] = Math.floor((x / width) * 255);
+    pixels[i + 1] = 90;
+    pixels[i + 2] = 160;
+  }
+  return new Uint8Array(
+    await sharp(pixels, { raw: { width, height, channels: 3 } })
+      .jpeg({ quality: 95 })
+      .toBuffer(),
+  );
+}
+
+describe("a category is a storage prefix (ADR-144 §3)", () => {
+  it("files an upload under its category's folder on disk and serves it back by key", async () => {
+    const root = await mkdtemp(join(tmpdir(), "mbx-media-int-"));
+    try {
+      media.setStorageDriverForTests(media.createLocalDiskStorage(root));
+      const asset = await media.storeMedia(actor.id, {
+        bytes: PDF,
+        fileName: "course-notes.pdf",
+        purpose: "content",
+        category: "learn",
+      });
+      const row = await ctx.db.mediaAsset.findUniqueOrThrow({ where: { id: asset.id } });
+      expect(row.key).toMatch(/^learn\/[a-f0-9]{24}\.pdf$/);
+      expect(row.url).toBe(`/uploads/${row.key}`);
+      expect(row.folder).toBe("/learn");
+      expect(existsSync(join(root, "learn", row.key.slice("learn/".length)))).toBe(true);
+
+      const served = await media.readStoredFile(row.key);
+      expect(served?.mimeType).toBe("application/pdf");
+      expect(served?.bytes).toEqual(PDF);
+      expect((await media.readStoredFileMeta(row.key))?.size).toBe(PDF.length);
+      expect(await media.readStoredFileRange(row.key, 0, 3)).toEqual(PDF.subarray(0, 4));
+      await ctx.db.mediaAsset.delete({ where: { id: asset.id } });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("takes the prefix from an explicit folder's category, not the fallback", async () => {
+    const { driver } = fakeDriver();
+    media.setStorageDriverForTests(driver);
+    const asset = await media.storeMedia(actor.id, {
+      bytes: PDF,
+      fileName: "cover.pdf",
+      purpose: "content",
+      category: "general",
+      folder: "/brand/2026-covers",
+    });
+    const row = await ctx.db.mediaAsset.findUniqueOrThrow({ where: { id: asset.id } });
+    expect(row.key.startsWith("brand/")).toBe(true);
+    // Other suites here count the shelves; leave them as they were.
+    await ctx.db.mediaAsset.delete({ where: { id: asset.id } });
+  });
+
+  it("still serves a flat key stored before ADR-144", async () => {
+    const root = await mkdtemp(join(tmpdir(), "mbx-media-int-"));
+    try {
+      media.setStorageDriverForTests(media.createLocalDiskStorage(root));
+      const key = `${"b".repeat(24)}.pdf`;
+      await writeFile(join(root, key), PDF);
+      const legacy = await ctx.db.mediaAsset.create({
+        data: {
+          key,
+          url: `/uploads/${key}`,
+          fileName: "legacy.pdf",
+          mimeType: "application/pdf",
+          size: PDF.length,
+          purpose: "content",
+          kind: "DOCUMENT",
+          uploadedBy: actor.id,
+        },
+      });
+      expect((await media.readStoredFile(key))?.bytes).toEqual(PDF);
+      await ctx.db.mediaAsset.delete({ where: { id: legacy.id } });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("never reads a traversal key, whatever the table holds", async () => {
+    expect(await media.readStoredFile(`news/../${"c".repeat(24)}.pdf`)).toBeNull();
+    expect(await media.readStoredFileMeta(`evil/${"c".repeat(24)}.pdf`)).toBeNull();
   });
 });
 

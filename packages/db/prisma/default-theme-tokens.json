@@ -1,42 +1,43 @@
 {
   "DEFAULT_BRAND": {
-    "primary": "#C28D5A",
+    "primary": "#C8986B",
     "secondary": "#2A2A29",
-    "success": "#2D72C7",
+    "success": "#936B44",
     "error": "#D93A34",
     "warning": "#FFA310",
-    "info": "#004284",
+    "info": "#5A524B",
     "accent": "#EAE5DE"
   },
   "DEFAULT_LIGHT_SURFACE": {
-    "background": "#FFFFFF",
+    "background": "#F7F3ED",
     "surface": "#FFFFFF",
-    "surfaceMuted": "#F1F5F9",
-    "textPrimary": "#020817",
-    "textSecondary": "#64748B",
-    "textMuted": "#94A3B8",
-    "borderLight": "#E2E8F0",
-    "borderMedium": "#7F8FA5"
+    "surfaceMuted": "#F0EBE3",
+    "textPrimary": "#1E1B18",
+    "textSecondary": "#6F6862",
+    "textMuted": "#8F877E",
+    "borderLight": "#E6DFD4",
+    "borderMedium": "#8C837A"
   },
   "DEFAULT_DARK_SURFACE": {
-    "background": "#020817",
-    "surface": "#020817",
-    "surfaceMuted": "#1E293B",
-    "textPrimary": "#F8FAFC",
-    "textSecondary": "#94A3B8",
-    "textMuted": "#64748B",
-    "borderLight": "#1E293B",
-    "borderMedium": "#4F5E73"
+    "background": "#14110F",
+    "surface": "#1B1714",
+    "surfaceMuted": "#241F1A",
+    "textPrimary": "#F7F3EE",
+    "textSecondary": "#A79E94",
+    "textMuted": "#7E766C",
+    "borderLight": "#2B251F",
+    "borderMedium": "#756B60"
   },
   "DEFAULT_DARK_BRAND_OVERRIDES": {
-    "accent": "#1E293B",
+    "accent": "#241F1A",
     "secondary": "#E8E6E3"
   },
   "DEFAULT_LAYOUT": {
     "radiusBase": "6px",
     "containerWidth": "1400px",
-    "fontSans": "inter",
+    "fontSans": "system",
     "fontMono": "systemmono",
+    "fontDisplay": "system",
     "baseFontSize": "16px"
   }
 }

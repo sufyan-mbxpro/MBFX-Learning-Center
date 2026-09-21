@@ -119,6 +119,24 @@ describe("Combobox — trigger anatomy (ADR-072)", () => {
   });
 });
 
+describe("Combobox — the search header (changes-46, image-112)", () => {
+  it("the search input opts out of the global focus ring, so no box is drawn inside the header", () => {
+    render(
+      <Combobox
+        options={options(SEARCHABLE_ITEM_THRESHOLD)}
+        value=""
+        onValueChange={vi.fn()}
+        searchPlaceholder="Search options"
+      />,
+    );
+    open();
+    const cls = screen.getByPlaceholderText("Search options").className.split(/\s+/);
+    expect(cls).toEqual(
+      expect.arrayContaining(["focus-visible:ring-0", "focus-visible:ring-offset-0", "border-0"]),
+    );
+  });
+});
+
 describe("Combobox — behaviour", () => {
   it("filters the list by the typed query and reports the chosen value", () => {
     const onValueChange = vi.fn();

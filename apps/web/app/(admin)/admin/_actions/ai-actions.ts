@@ -17,13 +17,25 @@
 // ADR, instead of by editing a condition.
 import { revalidateTag } from "next/cache";
 import { z } from "zod";
-import { aiFeatureSchema, aiLimitsSchema, aiModelSchema, aiProviderSchema } from "@repo/contracts";
+import {
+  aiConnectionTestSchema,
+  aiFeatureSchema,
+  aiLimitsSchema,
+  aiModelSchema,
+  aiProviderSchema,
+  aiSetupSchema,
+  aiUsageLimitsSchema,
+} from "@repo/contracts";
 import {
   suggestAltText,
   suggestAltTextForUndescribed,
   type AltTextSuggestion,
   deleteAiModel,
   deleteAiProvider,
+  discoverAiModels,
+  type AiSetupDiscoveryResult,
+  saveAiSetup,
+  saveAiUsageLimits,
   resetAiBudget,
   saveAiFeature,
   saveAiLimits,
@@ -104,6 +116,38 @@ export async function saveAiModelAction(input: unknown): Promise<void> {
 export async function deleteAiModelAction(modelId: unknown): Promise<void> {
   const subject = await requirePermission("ai.providers.manage");
   await deleteAiModel(subject, id.parse(modelId));
+}
+
+// ─── Guided setup, /admin/settings/ai (ADR-120) ──────────────
+
+/**
+ * Test the connection and list the provider's models. The typed key is used
+ * once and never returned; without one, the stored key of the SAME kind is.
+ */
+export async function discoverAiModelsAction(input: unknown): Promise<AiSetupDiscoveryResult> {
+  const subject = await requirePermission("ai.providers.manage");
+  return discoverAiModels(subject, aiConnectionTestSchema.parse(input));
+}
+
+/**
+ * Connect: provider, key, models and tiers in one save. Two keys, because it
+ * is two kinds of write — the provider half is ADR-098's super_admin gate and
+ * the tier half is a setting under `ai.settings.manage`.
+ */
+export async function saveAiSetupAction(input: unknown): Promise<string> {
+  const subject = await requirePermission("ai.providers.manage");
+  requirePermissionOn(subject, "ai.settings.manage");
+  const parsed = aiSetupSchema.parse(input);
+  const provider = await saveAiSetup(subject, parsed);
+  invalidateLimits();
+  return provider.id;
+}
+
+export async function saveAiUsageLimitsAction(input: unknown): Promise<void> {
+  const subject = await requirePermission("ai.settings.manage");
+  const parsed = aiUsageLimitsSchema.parse(input);
+  await saveAiUsageLimits(subject, parsed);
+  invalidateLimits();
 }
 
 // ─── Features, limits, budget: ai.settings.manage ────────────

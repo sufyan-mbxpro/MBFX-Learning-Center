@@ -61,6 +61,18 @@ export function buildSystem(instruction: string, extraInstructions?: string | nu
   return parts.join("\n\n");
 }
 
+/**
+ * Who the model is and the three things it never does. Shared by the writing
+ * assistant and the writing studio (ADR-129 §1), so the two free-text features
+ * cannot drift apart on the rules that matter most on a trading site.
+ */
+export const EDITORIAL_BASE =
+  "You are an editorial assistant for a forex and trading education website. You write clear, accurate, plain prose for adult learners. You never give personalised financial advice, never promise returns, and never invent statistics, quotations, or sources.";
+
+/** Text in, text out (ADR-097): no markup a sanitizer would strip or a textarea would show. */
+export const PLAIN_TEXT_FORMAT =
+  "Return PLAIN TEXT only. No HTML, no Markdown syntax, no headings markup, no code fences. Paragraphs separated by a blank line.";
+
 /** The shape every builder returns. */
 export interface BuiltPrompt {
   system: string;

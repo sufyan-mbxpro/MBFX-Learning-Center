@@ -3,7 +3,8 @@
 //
 // One component stands between the pages and `GLOSSARY_MEDIA` so the pattern's
 // guarantee is enforced in one place: a `null` entry returns `null`, the
-// caller's slot goes undefined, and `PageHero` falls back to its own tone. No
+// caller's slot renders nothing, and the masthead stands as a plain
+// `--secondary` band (ADR-117) rather than a broken image. No
 // page has to remember to check.
 //
 // `alt=""` on every piece, deliberately. These are backdrops — texture behind
@@ -31,11 +32,13 @@ export function GlossaryBackdrop({
       alt=""
       fill
       priority={priority}
-      // `unoptimized`, not `dangerouslyAllowSVG` in next.config: a few KB of
-      // generated vector has nothing for the optimizer to win, and the config
-      // flag would relax SVG handling for EVERY image the app serves,
-      // admin-entered cover URLs included, to buy that nothing.
-      unoptimized
+      // SVG only (changes-33). The flag used to be unconditional, as the
+      // alternative to `dangerouslyAllowSVG` in next.config — which would relax
+      // SVG handling for EVERY image the app serves, admin-entered cover URLs
+      // included, to buy nothing on a few KB of generated vector. Now that the
+      // owner's photography fills this slot, an unconditional flag would also
+      // mean shipping a 1920px WebP to a phone, so it follows the FILE.
+      unoptimized={src.endsWith(".svg")}
       sizes="100vw"
       className="object-cover"
     />

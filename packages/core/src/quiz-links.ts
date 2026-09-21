@@ -28,6 +28,8 @@ import { scheduledVisibilityOr } from "./content.ts";
 export function publicQuizWhere(now: Date = new Date()) {
   return {
     deletedAt: null,
+    // ADR-139 #2.
+    isActive: true,
     OR: scheduledVisibilityOr(now),
     visibility: FeatureVisibility.PUBLIC,
   };

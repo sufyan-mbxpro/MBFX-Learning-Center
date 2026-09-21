@@ -390,3 +390,253 @@ export function quoteWithMarkup({ amount, midRate, markupPercent }: MarkupQuoteI
   const converted = amount * effectiveRate;
   return { effectiveRate, converted, atMid, cost: atMid - converted };
 }
+
+// ─── Margin, profit/loss and risk/reward (changes-41, ADR-135) ──────
+//
+// The three calculators the owner's reference site carries and ours did not.
+// Same conventions as the rest of this file: pure, no rate fetching, and the
+// account-currency leg is `null` when it cannot be assembled — never a zero,
+// which would read as "free" on a margin figure and "break-even" on a P/L.
+
+function baseOf(pair: string): string {
+  return pair.split("/")[0]?.toUpperCase() ?? "";
+}
+
+function quoteOf(pair: string): string {
+  return pair.split("/")[1]?.toUpperCase() ?? "";
+}
+
+/**
+ * A price distance in pips, with binary floating-point noise removed.
+ *
+ * `(1.1 - 1.097) / 0.0001` is 29.999999999999805, not 30, and a ratio built
+ * from two such distances comes out at 1.9999… — which printed "1 : 2.00"
+ * beside a note saying the reward was below 2. Prices are quoted to at most
+ * six decimals, so nothing real is lost at a millionth of a pip.
+ */
+function pipsBetween(a: number, b: number, pair: string): number {
+  return Math.round(((a - b) / pipSize(pair)) * 1e6) / 1e6;
+}
+
+export interface AccountMarginInput {
+  pair: string;
+  /** Position size in UNITS (1 standard lot = 100,000). */
+  units: number;
+  /** Leverage as N in 1:N. */
+  leverage: number;
+  accountCurrency: string;
+  rates: UsdRates;
+  /** The account balance, when free margin and margin level are wanted. */
+  balance?: number | null;
+}
+
+export interface AccountMarginResult {
+  /** Required margin in the pair's BASE currency — needs no rate at all. */
+  inBase: number;
+  baseCurrency: string;
+  /** Required margin in the account currency, or null without a rate. */
+  inAccount: number | null;
+  /** Balance minus required margin; null without a balance or a rate. */
+  freeMargin: number | null;
+  /**
+   * Equity ÷ used margin × 100. With no position open yet, equity IS the
+   * balance — the explainer says so rather than implying a P/L we do not have.
+   */
+  marginLevel: number | null;
+}
+
+/**
+ * What it takes to open a position, in the account's own currency.
+ *
+ * A position's notional is `units` of the BASE currency, so the deposit is
+ * `units / leverage` of the base. That is why a USD account opening USD/JPY
+ * needs no exchange rate at all, and one opening EUR/USD needs exactly one.
+ */
+export function accountMargin({
+  pair,
+  units,
+  leverage,
+  accountCurrency,
+  rates,
+  balance,
+}: AccountMarginInput): AccountMarginResult {
+  if (units <= 0) throw new RangeError("units must be positive");
+  if (leverage <= 0) throw new RangeError("leverage must be positive");
+  if (balance !== undefined && balance !== null && balance < 0) {
+    throw new RangeError("balance must not be negative");
+  }
+
+  const baseCurrency = baseOf(pair);
+  const inBase = units / leverage;
+  const inAccount = convertAmount(inBase, baseCurrency, accountCurrency, rates);
+  const hasBalance = balance !== undefined && balance !== null;
+
+  return {
+    inBase,
+    baseCurrency,
+    inAccount,
+    freeMargin: hasBalance && inAccount !== null ? balance - inAccount : null,
+    marginLevel:
+      hasBalance && inAccount !== null && inAccount > 0 ? (balance / inAccount) * 100 : null,
+  };
+}
+
+export type TradeDirection = "buy" | "sell";
+
+export interface TradeProfitInput {
+  pair: string;
+  direction: TradeDirection;
+  /** Position size in UNITS. */
+  units: number;
+  open: number;
+  close: number;
+  accountCurrency: string;
+  rates: UsdRates;
+}
+
+export interface TradeProfitResult {
+  /** Signed: positive is a profit for the declared direction. */
+  pips: number;
+  /** Signed P/L in the pair's QUOTE currency — needs no rate. */
+  inQuote: number;
+  quoteCurrency: string;
+  /** Signed P/L in the account currency, or null without a rate. */
+  inAccount: number | null;
+}
+
+/**
+ * One trade's profit or loss from its open and close prices.
+ *
+ * The sign follows the DIRECTION: a sell that closes lower is a profit. The
+ * quote-currency figure is converted at the stored rate, which is the honest
+ * reading for a trade being planned rather than one being reconciled.
+ */
+export function tradeProfit({
+  pair,
+  direction,
+  units,
+  open,
+  close,
+  accountCurrency,
+  rates,
+}: TradeProfitInput): TradeProfitResult {
+  if (units <= 0) throw new RangeError("units must be positive");
+  if (open <= 0) throw new RangeError("open must be positive");
+  if (close <= 0) throw new RangeError("close must be positive");
+
+  const sign = direction === "buy" ? 1 : -1;
+  const move = (close - open) * sign;
+  const quoteCurrency = quoteOf(pair);
+  const inQuote = move * units;
+
+  return {
+    pips: pipsBetween(close, open, pair) * sign,
+    inQuote,
+    quoteCurrency,
+    inAccount: convertAmount(inQuote, quoteCurrency, accountCurrency, rates),
+  };
+}
+
+export type RiskLevel = "conservative" | "moderate" | "aggressive";
+
+export interface RiskLevelThresholds {
+  /** At or below this percentage, a trade is conservative. */
+  conservativeMax: number;
+  /** At or below this (and above the first), moderate; above it, aggressive. */
+  moderateMax: number;
+}
+
+/** Name a risk percentage. The thresholds are CONFIG — an admin's call. */
+export function riskLevel(riskPercent: number, thresholds: RiskLevelThresholds): RiskLevel {
+  if (riskPercent <= thresholds.conservativeMax) return "conservative";
+  if (riskPercent <= thresholds.moderateMax) return "moderate";
+  return "aggressive";
+}
+
+export interface RiskRewardInput {
+  balance: number;
+  /** Risk per trade as a PERCENTAGE, 0 < x < 100. */
+  riskPercent: number;
+  pair: string;
+  entry: number;
+  stop: number;
+  /** Take-profit price; null when the reader has not set one. */
+  target: number | null;
+  accountCurrency: string;
+  rates: UsdRates;
+}
+
+export interface RiskRewardResult {
+  /** Inferred from the stop: below the entry is a long, above it a short. */
+  side: "long" | "short";
+  amountAtRisk: number;
+  stopPips: number;
+  /** Null without a target, or with one on the losing side of the entry. */
+  targetPips: number | null;
+  /** Reward ÷ risk, e.g. 2 for "1 : 2". Null wherever `targetPips` is. */
+  ratio: number | null;
+  /** What the target pays at this size. Needs no rate: it is `ratio × risk`. */
+  reward: number | null;
+  /** True when a target was given on the wrong side of the entry. */
+  targetOnWrongSide: boolean;
+  /** Size in units, or null when the pip value needs a rate we lack. */
+  units: number | null;
+  /** One pip per standard lot in the account currency, or null. */
+  pipValuePerLot: number | null;
+}
+
+/**
+ * Risk, reward and size from three prices.
+ *
+ * The position-size tool asks for a stop in PIPS; this one asks for PRICES,
+ * which is how a chart presents a trade, and works the distances out itself.
+ * A take profit on the wrong side of the entry is a state the form can reach,
+ * so it is reported rather than thrown, and never rendered as a negative ratio.
+ */
+export function riskReward({
+  balance,
+  riskPercent,
+  pair,
+  entry,
+  stop,
+  target,
+  accountCurrency,
+  rates,
+}: RiskRewardInput): RiskRewardResult {
+  if (balance <= 0) throw new RangeError("balance must be positive");
+  if (riskPercent <= 0 || riskPercent >= 100) {
+    throw new RangeError("riskPercent must be in (0, 100)");
+  }
+  if (entry <= 0) throw new RangeError("entry must be positive");
+  if (stop <= 0) throw new RangeError("stop must be positive");
+  if (stop === entry) throw new RangeError("stop must differ from entry");
+  if (target !== null && target <= 0) throw new RangeError("target must be positive");
+
+  const side = stop < entry ? "long" : "short";
+  const pip = pipSize(pair);
+  const amountAtRisk = (balance * riskPercent) / 100;
+  const stopPips = Math.abs(pipsBetween(entry, stop, pair));
+
+  const targetOnWrongSide =
+    target !== null && (side === "long" ? target <= entry : target >= entry);
+  const targetPips =
+    target === null || targetOnWrongSide ? null : Math.abs(pipsBetween(target, entry, pair));
+  const ratio = targetPips === null ? null : targetPips / stopPips;
+
+  const leg = crossRate(quoteOf(pair), accountCurrency, rates);
+  const pipValuePerLot = leg === null ? null : pip * 100_000 * leg;
+  const units =
+    pipValuePerLot === null ? null : (amountAtRisk / (stopPips * pipValuePerLot)) * 100_000;
+
+  return {
+    side,
+    amountAtRisk,
+    stopPips,
+    targetPips,
+    ratio,
+    reward: ratio === null ? null : amountAtRisk * ratio,
+    targetOnWrongSide,
+    units,
+    pipValuePerLot,
+  };
+}

@@ -51,6 +51,7 @@ import { parseVideoUrl } from "@repo/utils";
 import { syncReferences } from "./cms/references.ts";
 import {
   CONTENT_TRANSITIONS,
+  contentFlagsData,
   createSlugRedirect,
   sanitizeRichText,
   scheduledVisibilityOr,
@@ -59,6 +60,8 @@ import {
   videoTopicPath,
 } from "./content.ts";
 import { recordAudit } from "./index.ts";
+import { loadLocaleMeta } from "./locale-meta.ts";
+import { applyReadingLocale, type ReadingView } from "./reading-languages.ts";
 
 interface LocaleContext {
   locales: LocaleFallbackInfo[];
@@ -99,9 +102,24 @@ function trackKeyOf(value: string): LearnTrackKey | null {
 export function publicVideoWhere(now: Date = new Date()) {
   return {
     deletedAt: null,
+    // ADR-139 #2 — hides without touching status or schedule.
+    isActive: true,
     OR: scheduledVisibilityOr(now),
     visibility: FeatureVisibility.PUBLIC,
   };
+}
+
+/**
+ * Which topics a school's video LISTINGS show (ADR-144 §2): its own, plus any
+ * topic shared with every school. Listing only — the topic page itself is
+ * still matched on `track` alone, so a shared topic has one address and the
+ * other school's copy of that URL 404s, as a course under the wrong track does.
+ *
+ * An `AND` entry rather than a top-level `OR`, because `publicVideoWhere`
+ * already owns the `OR` key (the schedule rule) and a spread would overwrite it.
+ */
+export function listedUnderTrackWhere(track: string) {
+  return { AND: [{ OR: [{ track }, { showOnAllTracks: true }] }] };
 }
 
 // ─── Source resolution (the rule specific to videos) ─────────
@@ -268,6 +286,12 @@ export interface VideoTopicAdminDetail {
   track: string;
   categoryId: string | null;
   coverAssetId: string | null;
+  /** ADR-139 — the article's three flags. */
+  isFeatured: boolean;
+  isActive: boolean;
+  isPremium: boolean;
+  /** ADR-144 §2 — also listed on every other school's video pages. */
+  showOnAllTracks: boolean;
   coverUrl: string | null;
   status: ContentStatus;
   visibility: FeatureVisibility;
@@ -314,6 +338,10 @@ export async function getVideoTopicAdmin(id: string): Promise<VideoTopicAdminDet
       track: true,
       categoryId: true,
       coverAssetId: true,
+      isFeatured: true,
+      isActive: true,
+      isPremium: true,
+      showOnAllTracks: true,
       status: true,
       visibility: true,
       sortOrder: true,
@@ -366,6 +394,10 @@ export async function getVideoTopicAdmin(id: string): Promise<VideoTopicAdminDet
     track: row.track,
     categoryId: row.categoryId,
     coverAssetId: row.coverAssetId,
+    isFeatured: row.isFeatured,
+    isActive: row.isActive,
+    isPremium: row.isPremium,
+    showOnAllTracks: row.showOnAllTracks,
     coverUrl: row.coverAssetId ? (urls.get(row.coverAssetId) ?? null) : null,
     status: row.status,
     visibility: row.visibility,
@@ -493,12 +525,14 @@ export async function saveVideoTopic(actor: Subject, input: VideoTopicInput): Pr
   if (input.meta.track !== undefined) meta.track = input.meta.track;
   if (input.meta.visibility !== undefined) meta.visibility = input.meta.visibility;
   if (input.meta.sortOrder !== undefined) meta.sortOrder = input.meta.sortOrder;
+  if (input.meta.showOnAllTracks !== undefined) meta.showOnAllTracks = input.meta.showOnAllTracks;
   if (input.meta.categoryId !== undefined) {
     meta.category = input.meta.categoryId
       ? { connect: { id: input.meta.categoryId } }
       : { disconnect: true };
   }
   if (input.meta.coverAssetId !== undefined) meta.coverAssetId = input.meta.coverAssetId ?? null;
+  Object.assign(meta, contentFlagsData(input.meta));
 
   // Sanitized server-side on save, always — regardless of what the editor
   // emitted (security.md #8). The body is the only rich-text field here.
@@ -522,7 +556,11 @@ export async function saveVideoTopic(actor: Subject, input: VideoTopicInput): Pr
     seoDescription: input.translation.seoDescription ?? null,
     seoFocusKeyword: input.translation.seoFocusKeyword ?? null,
     ...(sourceHash === undefined ? {} : { sourceHash }),
-    translationStatus: TranslationStatus.TRANSLATED,
+    // changes-29 B3: MACHINE_TRANSLATED only while the AI text is untouched;
+    // any other save, a human's review included, writes TRANSLATED.
+    translationStatus: input.translation.machineTranslated
+      ? TranslationStatus.MACHINE_TRANSLATED
+      : TranslationStatus.TRANSLATED,
   };
 
   await db.$transaction(async (tx) => {
@@ -825,7 +863,9 @@ export async function loadVideoTopics(
   const rows = await db.videoTopic.findMany({
     where: {
       ...publicVideoWhere(),
-      track,
+      // ADR-144 §2 — this school's topics and every shared one. The card links
+      // by `row.track`, so a shared topic still leads to its one address.
+      ...listedUnderTrackWhere(track),
       ...(categorySlug
         ? { category: { isActive: true, translations: { some: { slug: categorySlug } } } }
         : {}),
@@ -834,6 +874,9 @@ export async function loadVideoTopics(
       id: true,
       track: true,
       coverAssetId: true,
+      isFeatured: true,
+      isPremium: true,
+      publishedAt: true,
       translations: { select: { locale: true, title: true, slug: true, summary: true } },
       category: {
         select: { translations: { select: { locale: true, name: true, slug: true } } },
@@ -846,6 +889,9 @@ export async function loadVideoTopics(
   const coverUrls = await resolveAssetUrls(rows.map((r) => r.coverAssetId));
 
   return rows.flatMap((row) => {
+    // A shared topic is listed here but linked by its OWN track (ADR-144 §2),
+    // so one filed under a de-registered track has no address to link to.
+    if (!trackKeyOf(row.track)) return [];
     const t = pickTranslation(row.translations, locale, defaultLocale, locales);
     if (!t) return [];
     const c = row.category
@@ -861,6 +907,9 @@ export async function loadVideoTopics(
         category: c ? { slug: c.slug, name: c.name } : null,
         coverUrl: row.coverAssetId ? (coverUrls.get(row.coverAssetId) ?? null) : null,
         videoCount: row._count.videos,
+        isFeatured: row.isFeatured,
+        isPremium: row.isPremium,
+        publishedAt: row.publishedAt?.toISOString() ?? null,
       },
     ];
   });
@@ -888,9 +937,13 @@ export async function loadVideoTopicBySlug(
   locale: string,
   track: string,
   slug: string,
-): Promise<VideoTopicView | null> {
+  readingLocale?: string,
+): Promise<PublicVideoTopicView | null> {
   if (!trackKeyOf(track)) return null;
-  const { locales, defaultLocale } = await localeContext();
+  const [{ locales, defaultLocale }, known] = await Promise.all([
+    localeContext(),
+    loadLocaleMeta(),
+  ]);
 
   const match = await db.videoTopicTranslation.findFirst({
     where: { slug, topic: { ...publicVideoWhere(), track } },
@@ -914,6 +967,7 @@ export async function loadVideoTopicBySlug(
           content: true,
           seoTitle: true,
           seoDescription: true,
+          translationStatus: true,
         },
       },
       category: {
@@ -938,6 +992,15 @@ export async function loadVideoTopicBySlug(
 
   const t = pickTranslation(row.translations, locale, defaultLocale, locales);
   if (!t) return null;
+  // ADR-127: `?lang=` swaps the topic's own words; `t` still owns the address.
+  const { picked, ...reading } = applyReadingLocale(
+    row.translations,
+    t,
+    readingLocale,
+    known,
+    locale,
+  );
+  const words = picked ?? t;
   const c = row.category
     ? pickTranslation(row.category.translations, locale, defaultLocale, locales)
     : null;
@@ -950,9 +1013,9 @@ export async function loadVideoTopicBySlug(
   return {
     id: row.id,
     slug: t.slug,
-    title: t.title,
-    summary: t.summary,
-    content: t.content,
+    title: words.title,
+    summary: words.summary,
+    content: words.content,
     track: row.track,
     category: c ? { slug: c.slug, name: c.name } : null,
     coverUrl: row.coverAssetId ? (urls.get(row.coverAssetId) ?? null) : null,
@@ -964,21 +1027,26 @@ export async function loadVideoTopicBySlug(
       const resolved = resolveLink(l);
       return resolved ? [resolved] : [];
     }),
-    seoTitle: t.seoTitle,
-    seoDescription: t.seoDescription,
+    seoTitle: words.seoTitle,
+    seoDescription: words.seoDescription,
     updatedAt: row.updatedAt,
+    ...reading,
   };
 }
+
+/** A topic as its public page reads it: the contract view plus ADR-127's reading fields. */
+export type PublicVideoTopicView = VideoTopicView & ReadingView;
 
 export async function getVideoTopicBySlug(
   locale: string,
   track: string,
   slug: string,
-): Promise<VideoTopicView | null> {
+  readingLocale?: string,
+): Promise<PublicVideoTopicView | null> {
   "use cache";
   cacheTag("content");
   cacheLife({ revalidate: 300 });
-  return loadVideoTopicBySlug(locale, track, slug);
+  return loadVideoTopicBySlug(locale, track, slug, readingLocale);
 }
 
 /**
@@ -998,11 +1066,18 @@ export async function loadVideoCategories(
   const { locales, defaultLocale } = await localeContext();
 
   const rows = await db.videoCategory.findMany({
-    where: { isActive: true, topics: { some: { ...publicVideoWhere(), track } } },
+    where: {
+      isActive: true,
+      topics: { some: { ...publicVideoWhere(), ...listedUnderTrackWhere(track) } },
+    },
     select: {
       id: true,
       translations: { select: { locale: true, name: true, slug: true, description: true } },
-      _count: { select: { topics: { where: { ...publicVideoWhere(), track } } } },
+      // Counts what the category page under this track LISTS (ADR-144 §2), so
+      // a chip and the page it opens cannot disagree.
+      _count: {
+        select: { topics: { where: { ...publicVideoWhere(), ...listedUnderTrackWhere(track) } } },
+      },
     },
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
   });

@@ -84,3 +84,37 @@ describe("Button — intent variants (ADR-046, ADR-073)", () => {
     expect(seen.size).toBe(INTENTS.length + 1);
   });
 });
+
+// changes-36 / ADR-117 — the button for a band that IS `--secondary`.
+//
+// Four call sites had each written the same 200-character class string by
+// hand (the homepage hero, the footer's social buttons, the connect band, and
+// then every photographic masthead). The variant is that string, once.
+describe("Button — the inverted variant", () => {
+  it("rides on --secondary-foreground, never on --primary-foreground", () => {
+    const { getByRole } = render(<Button variant="inverted">Watch the videos</Button>);
+    const className = getByRole("button").className;
+    // The whole point: `--secondary-foreground` is derived readable ON
+    // `--secondary` (ADR-003), which is the only contrast claim a band filled
+    // with `--secondary` can make. `--primary-foreground` is derived against
+    // `--primary` and carries no guarantee here at all.
+    expect(className).toContain("text-secondary-foreground");
+    expect(className).not.toContain("text-primary-foreground");
+  });
+
+  it("is not `secondary`, which on this band would be an invisible button", () => {
+    const { getByRole } = render(<Button variant="inverted">Watch the videos</Button>);
+    const className = getByRole("button").className;
+    // `variant="secondary"` is `bg-secondary`. On a `bg-secondary` band that
+    // is a control the same colour as the surface under it — which is what
+    // every masthead was rendering before ADR-117 moved those bands off the
+    // brand gradient. The tint here is an OPACITY of the band's own ink.
+    expect(className).not.toMatch(/(^|\s)bg-secondary(\s|$)/);
+    expect(className).toContain("bg-secondary-foreground/10");
+  });
+
+  it("carries its own edge, because it has no fill to be read by", () => {
+    const { getByRole } = render(<Button variant="inverted">Watch the videos</Button>);
+    expect(getByRole("button").className).toContain("ring-secondary-foreground/25");
+  });
+});

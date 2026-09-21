@@ -60,24 +60,21 @@ export async function LearnMasthead({
       eyebrow={heading?.eyebrow ?? t("index.eyebrow")}
       title={heading?.title ?? t("index.title")}
       lead={heading?.lead ?? t("index.intro")}
-      // Both buttons ride on --primary-foreground, the one ink ADR-003
-      // derives to be legible on the `brand` tone this hero defaults to.
+      // The band is `--secondary` now that it shows its photograph
+      // (ADR-117). The primary action keeps the brand FILL — a small element
+      // with its own paired ink, ADR-018 rule 5's allowed case — and the
+      // second takes `inverted`, opacities of `--secondary-foreground`, the
+      // one ink ADR-003 derives readable on this fill.
       actions={
         <>
-          <Button size="xl" shape="pill" variant="secondary" render={<a href="#courses" />}>
+          <Button size="xl" render={<a href="#courses" />}>
             {t("index.heroBrowse")}
             {/* Down, not inline-end: this scrolls the page rather than
                 navigating, so it needs no RTL flip either. */}
             <ArrowDown aria-hidden />
           </Button>
           {hasVideos && (
-            <Button
-              size="xl"
-              shape="pill"
-              variant="outline"
-              className="border-primary-foreground/40 bg-transparent text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground"
-              render={<a href="#videos" />}
-            >
+            <Button size="xl" variant="inverted" render={<a href="#videos" />}>
               {t("index.heroVideos")}
             </Button>
           )}

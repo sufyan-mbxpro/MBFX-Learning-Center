@@ -20,10 +20,10 @@ import { cn } from "@repo/ui/lib/utils";
 // ADR-018 rule 5: these are small text and thin rules, which is exactly what
 // raw --primary is not for.
 const ACCENT = [
-  { bar: "bg-primary", ink: "text-primary-interactive", wash: "bg-primary/10" },
-  { bar: "bg-info", ink: "text-info-interactive", wash: "bg-info/10" },
-  { bar: "bg-success", ink: "text-success-interactive", wash: "bg-success/10" },
-  { bar: "bg-warning", ink: "text-warning-interactive", wash: "bg-warning/10" },
+  { ink: "text-primary-interactive", wash: "bg-primary/10" },
+  { ink: "text-info-interactive", wash: "bg-info/10" },
+  { ink: "text-success-interactive", wash: "bg-success/10" },
+  { ink: "text-warning-interactive", wash: "bg-warning/10" },
 ] as const;
 
 export async function CategoryCards({
@@ -49,7 +49,11 @@ export async function CategoryCards({
         const inner = (
           <article
             className={cn(
-              "card-hover relative isolate flex h-full flex-col gap-3 overflow-hidden rounded-2xl bg-card p-5 ring-1 ring-foreground/10",
+              // `text-card-foreground` states the ink the tile is painted for.
+              // It used to inherit it from the page, which was right until the
+              // topics band turned `inverted` (changes-37) and the titles came
+              // out white on a white card.
+              "card-hover relative isolate flex h-full flex-col gap-3 overflow-hidden rounded-lg bg-card p-5 text-card-foreground ring-1 ring-foreground/10",
               current
                 ? // The current tile is a statement, not a destination: it
                   // keeps the ring and the accent but drops every hover
@@ -59,17 +63,11 @@ export async function CategoryCards({
                 : "hover-lift sheen group-hover:ring-primary/25 group-focus-visible:ring-3 group-focus-visible:ring-ring/50",
             )}
           >
-            <span
-              aria-hidden
-              className={cn(
-                "pointer-events-none absolute top-0 start-0 z-20 h-1",
-                accent.bar,
-                current
-                  ? "w-full"
-                  : "w-10 transition-(--transition-size) duration-(--duration-slow) ease-(--ease-out-quint) group-hover:w-full",
-              )}
-            />
-
+            {/* No accent rule along the top edge (changes-37, ADR-121 §5): the
+                owner asked for it gone. What it carried survives elsewhere —
+                the tile's colour is the count chip's wash below, and the
+                current tile is marked by its 2px ring and the "You are here"
+                line, neither of which needed the rule. */}
             <div className="flex items-center gap-2">
               <span
                 className={cn(

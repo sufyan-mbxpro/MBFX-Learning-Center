@@ -6,31 +6,50 @@ import { Card, CardAction, CardDescription, CardHeader, CardTitle } from "@repo/
 import { AdminPage } from "../_components/admin-page.tsx";
 import { groupDescription, loadSettingsIndex } from "./_components/settings-shared.ts";
 
+/**
+ * The `settingsGroupDesc.*` key for a destination that is not a registry
+ * group: its path under `/admin/settings/` (or `/admin/`), camel-cased.
+ * `email/templates` → `emailTemplates`. The last segment alone used to be the
+ * key, which made the email screens look up `templates` and `log` — names too
+ * generic to hold a description, so neither card had one (changes-37).
+ */
+function descriptionKey(href: string): string {
+  return href
+    .replace(/^\/admin\/(settings\/)?/, "")
+    .split("/")
+    .map((segment, index) =>
+      index === 0 ? segment : segment.charAt(0).toUpperCase() + segment.slice(1),
+    )
+    .join("");
+}
+
 // Settings hub (changes-01, image-3/4): one card per category; clicking a
 // card opens that category on its own page with the settings sub-sidebar.
-// Cards for social/features/navigation/theme front their own screens —
+// Cards for social/navigation/theme front their own screens —
 // each destination re-checks its own permission key.
 export default async function SettingsHubPage() {
   const subject = await requireAnyPermission([
     "settings.view",
     "social.manage",
-    "features.manage",
     "navigation.manage",
     "theme.update",
     // `support` holds only this one key under settings (ADR-078 #4).
     "email.log.view",
+    // changes-37: the market provider card (ADR-121 §6).
+    "market.providers.manage",
   ]);
   const t = await getTranslations("admin");
   const { navEntries, groups } = await loadSettingsIndex(subject, t);
 
   const cards = navEntries.map((entry) => {
     const group = groups.find((g) => `/admin/settings/${g}` === entry.href);
+    const key = descriptionKey(entry.href);
     return {
       ...entry,
       description: group
         ? groupDescription(t, group)
-        : t.has(`settingsGroupDesc.${entry.href.split("/").pop() ?? ""}`)
-          ? t(`settingsGroupDesc.${entry.href.split("/").pop() ?? ""}`)
+        : t.has(`settingsGroupDesc.${key}`)
+          ? t(`settingsGroupDesc.${key}`)
           : null,
     };
   });

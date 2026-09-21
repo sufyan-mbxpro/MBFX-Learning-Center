@@ -80,7 +80,11 @@ describe("ADR-094 — one session read for the whole public surface", () => {
   it("a failed session read resolves to anonymous, never to an error state", () => {
     // A stuck spinner in the header of every cached page is worse, and lasts
     // longer, than a signed-in learner briefly seeing a sign-up prompt.
-    expect(read("_components/public-session.tsx")).toContain('setSession({ status: "anonymous" })');
+    // ADR-125 moved the read into `readSession` (shared by the mount read and
+    // `refresh()`), so the catch RETURNS the anonymous state its caller sets.
+    expect(read("_components/public-session.tsx")).toMatch(
+      /catch \{[\s\S]*?return \{ status: "anonymous" \};\s*\}/,
+    );
   });
 });
 

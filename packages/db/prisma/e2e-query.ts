@@ -30,6 +30,47 @@ const queries = {
     });
   },
 
+  /**
+   * The E2E fixture staff user, or null. `globalSetup` reads this to prove the
+   * database was provisioned before the suite starts asserting against it.
+   */
+  async fixtureUser() {
+    return db.user.findUnique({
+      where: { email: process.env.E2E_VIEWER_EMAIL ?? "e2e-viewer@mbxpro.com" },
+      select: { id: true, email: true },
+    });
+  },
+
+  /** One settings row, for asserting a settings screen's save landed. */
+  async setting(args: { key: string }) {
+    return db.setting.findUnique({
+      where: { key: args.key },
+      select: { key: true, value: true, groupName: true, isPublic: true },
+    });
+  },
+
+  /** One AI feature row (`AiFeature`), keyed by its registry key. */
+  async aiFeature(args: { key: string }) {
+    return db.aiFeature.findUnique({ where: { key: args.key } });
+  },
+
+  /**
+   * The ACTIVE locales, in order. ADR-091: only an active locale is
+   * prerendered, served or listed in the sitemap, so a spec that wants to
+   * exercise one has to ask which ones exist rather than assume.
+   */
+  async activeLocales() {
+    // `direction` is a `TextDirection` enum, not a boolean — the caller wants
+    // "is this one RTL", so the mapping happens here rather than leaking the
+    // enum into a spec.
+    const rows = await db.locale.findMany({
+      where: { isActive: true },
+      orderBy: { sortOrder: "asc" },
+      select: { code: true, direction: true },
+    });
+    return rows.map((row) => ({ code: row.code, isRtl: row.direction === "RTL" }));
+  },
+
   /** How many audit rows an action wrote for one entity. */
   async auditCount(args: { entityId: string; action: string }) {
     return db.auditLog.count({ where: { entityId: args.entityId, action: args.action } });

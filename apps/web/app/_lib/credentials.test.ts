@@ -13,6 +13,7 @@ import {
   signOut,
   signOutSilently,
   signUpWithPassword,
+  verifyTwoFactorSignIn,
 } from "./credentials.ts";
 
 /** Stands in for a `fetch` Response — only the two fields these helpers read. */
@@ -330,5 +331,35 @@ describe("resendVerification", () => {
       vi.fn(async () => Promise.reject(new Error("offline"))),
     );
     await expect(resendVerification("a@b.c", "/x")).resolves.toBe(false);
+  });
+});
+
+describe("two-factor sign-in (ADR-123)", () => {
+  it("reports a two-factor challenge instead of a signed-in session", async () => {
+    mockFetch(jsonResponse(true, { twoFactorRedirect: true, twoFactorMethods: ["totp"] }));
+    await expect(signInWithPassword("a@b.c", "pw")).resolves.toEqual({ status: "twoFactor" });
+  });
+
+  it("verifies the code on Better Auth's endpoint and surfaces the userType", async () => {
+    const fetchMock = mockFetch(jsonResponse(true, { token: "t", user: { userType: "LEARNER" } }));
+    await expect(verifyTwoFactorSignIn("123456")).resolves.toEqual({
+      status: "ok",
+      userType: "LEARNER",
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/auth/two-factor/verify-totp",
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ code: "123456" }) }),
+    );
+  });
+
+  it("tells a wrong code from a challenge that has expired", async () => {
+    mockFetch(jsonResponse(false, { code: "INVALID_CODE" }));
+    await expect(verifyTwoFactorSignIn("000000")).resolves.toEqual({ status: "invalidCode" });
+    mockFetch(jsonResponse(false, { code: "INVALID_TWO_FACTOR_COOKIE" }));
+    await expect(verifyTwoFactorSignIn("000000")).resolves.toEqual({ status: "expired" });
+    mockFetch(jsonResponse(false, { code: "TOO_MANY_ATTEMPTS_REQUEST_NEW_CODE" }));
+    await expect(verifyTwoFactorSignIn("000000")).resolves.toEqual({ status: "expired" });
+    mockFetch(jsonResponse(false, null));
+    await expect(verifyTwoFactorSignIn("000000")).resolves.toEqual({ status: "failed" });
   });
 });

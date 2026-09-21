@@ -5,7 +5,8 @@ import { can, requirePermission } from "@repo/rbac";
 import { Alert, AlertDescription, AlertTitle } from "@repo/ui/components/alert";
 import { MetricCard } from "@repo/ui/components/metric-card";
 import { Info } from "lucide-react";
-import { humanizeKey } from "@repo/utils";
+import { getActiveLocales } from "@repo/i18n";
+import { formatDate, humanizeKey } from "@repo/utils";
 import { AdminPage } from "../_components/admin-page.tsx";
 import { SubscribersTable, type SubscribersLabels } from "./subscribers-table.tsx";
 
@@ -38,7 +39,11 @@ export default async function NewsletterPage({ searchParams }: PageProps<"/admin
   });
   const filter = parsed.success ? parsed.data : subscriberFilterSchema.parse({});
 
-  const [page, counts] = await Promise.all([listSubscribers(filter), countSubscribers()]);
+  const [page, counts, locales] = await Promise.all([
+    listSubscribers(filter),
+    countSubscribers(),
+    getActiveLocales(),
+  ]);
 
   // The row actions and the export are separate privileges, and the table is
   // told which it has rather than discovering it by a failed action. The
@@ -46,8 +51,6 @@ export default async function NewsletterPage({ searchParams }: PageProps<"/admin
   // button is not security.
   const canManage = can(subject, "newsletter.manage");
   const canExport = can(subject, "newsletter.export");
-
-  const dateFormat = new Intl.DateTimeFormat("en", { dateStyle: "medium" });
 
   const labels: SubscribersLabels = {
     search: t("newsletterSearch"),
@@ -92,6 +95,16 @@ export default async function NewsletterPage({ searchParams }: PageProps<"/admin
     deleteBody: t("newsletterDeleteBody"),
     deleteConfirm: t("newsletterDeleteConfirm"),
     deletedToast: t("newsletterDeletedToast"),
+    resubscribeAction: t("newsletterResubscribeAction"),
+    restoredToast: t("newsletterRestoredToast"),
+    invitedToast: t("newsletterInvitedToast"),
+    addAction: t("newsletterAddAction"),
+    addTitle: t("newsletterAddTitle"),
+    addDescription: t("newsletterAddDescription"),
+    addEmail: t("newsletterAddEmail"),
+    addLocale: t("newsletterAddLocale"),
+    addSubmit: t("newsletterAddSubmit"),
+    alreadyActiveToast: t("newsletterAlreadyActiveToast"),
     cancel: t("cancel"),
     saveFailed: t("saveFailed"),
   };
@@ -122,14 +135,22 @@ export default async function NewsletterPage({ searchParams }: PageProps<"/admin
           source: row.source,
           locale: row.locale,
           hasAccount: row.userId !== null,
-          createdAtLabel: dateFormat.format(row.createdAt),
+          createdAtLabel: formatDate(row.createdAt),
         }))}
         nextCursor={page.nextCursor}
         sources={NEWSLETTER_SOURCES.map((value) => ({
-          // ADR-044 #5 — a registry key never renders raw.
+          // ADR-044 #5 — a registry key never renders raw. The two sources
+          // that are not a placement (ADR-124) say what they mean; a placement
+          // name already does.
           value,
-          label: humanizeKey(value),
+          label:
+            value === "signup"
+              ? t("newsletterSourceSignup")
+              : value === "admin"
+                ? t("newsletterSourceAdmin")
+                : humanizeKey(value),
         }))}
+        locales={locales.map((l) => ({ value: l.code, label: `${l.name} (${l.nativeName})` }))}
         canManage={canManage}
         canExport={canExport}
         labels={labels}

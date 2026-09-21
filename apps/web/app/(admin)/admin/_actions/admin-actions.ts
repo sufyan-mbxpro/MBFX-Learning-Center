@@ -10,9 +10,11 @@ import {
   activateTheme,
   createSocialLink,
   deleteSocialLink,
+  deleteThemePreset,
   moveMenuItem,
   recordAudit,
   saveTheme,
+  saveThemePreset,
   setMenuItemActive,
   setSocialLinkActive,
   updateSocialLink,
@@ -22,12 +24,14 @@ import { requirePermission } from "@repo/rbac";
 import {
   createSocialLinkSchema,
   isKnownSettingKey,
+  saveThemePresetSchema,
   saveThemeSchema,
+  themePresetKeySchema,
   updateSettingsBatchSchema,
   updateSocialLinkSchema,
   type SettingKey,
 } from "@repo/contracts";
-import { setFeatureFlagEnabled, updateSettings } from "@repo/settings";
+import { updateSettings } from "@repo/settings";
 import { DEFAULT_LAYOUT, isCuratedFontKey } from "@repo/theme";
 
 /**
@@ -55,22 +59,6 @@ export async function updateSettingsAction(input: unknown): Promise<void> {
       changes: { before: result.before, after: result.after },
     });
   }
-}
-
-export async function toggleFeatureFlagAction(key: string, isEnabled: boolean): Promise<void> {
-  const subject = await requirePermission("features.manage");
-  const parsed = z
-    .object({ key: z.string().min(1), isEnabled: z.boolean() })
-    .parse({ key, isEnabled });
-
-  const result = await setFeatureFlagEnabled(parsed.key, parsed.isEnabled);
-  await recordAudit({
-    userId: subject.id,
-    action: "features.toggle",
-    entityType: "featureFlag",
-    entityId: parsed.key,
-    changes: { before: { isEnabled: result.before }, after: { isEnabled: result.after } },
-  });
 }
 
 export async function moveMenuItemAction(itemId: string, direction: "up" | "down"): Promise<void> {
@@ -127,19 +115,35 @@ export async function saveThemeAction(input: unknown): Promise<SaveThemeResult> 
   // predate baseFontSize) — resolve them into the strict SaveThemeInput
   // shape here, same defensive fallback loadActiveTheme already uses for an
   // invalid/removed curated font key.
-  return saveTheme(subject.id, {
+  return saveTheme(subject.id, { ...parsed, layoutTokens: strictLayout(parsed.layoutTokens) });
+}
+
+function strictLayout(layout: z.infer<typeof saveThemeSchema>["layoutTokens"]) {
+  return {
+    ...layout,
+    fontSans: isCuratedFontKey(layout.fontSans) ? layout.fontSans : "system",
+    fontMono: isCuratedFontKey(layout.fontMono) ? layout.fontMono : "systemmono",
+    // ADR-102 §2: an unknown or absent display key means the SANS, not the
+    // default serif — a row that never set one must not be silently
+    // promoted into a redesign on its next unrelated save.
+    fontDisplay: isCuratedFontKey(layout.fontDisplay ?? "") ? layout.fontDisplay : undefined,
+    baseFontSize: layout.baseFontSize ?? DEFAULT_LAYOUT.baseFontSize,
+  };
+}
+
+/** changes-46: the editor's current tokens saved under a name, inactive. */
+export async function saveThemePresetAction(input: unknown): Promise<{ key: string }> {
+  const subject = await requirePermission("theme.update");
+  const parsed = saveThemePresetSchema.parse(input);
+  return saveThemePreset(subject.id, {
     ...parsed,
-    layoutTokens: {
-      ...parsed.layoutTokens,
-      fontSans: isCuratedFontKey(parsed.layoutTokens.fontSans)
-        ? parsed.layoutTokens.fontSans
-        : "system",
-      fontMono: isCuratedFontKey(parsed.layoutTokens.fontMono)
-        ? parsed.layoutTokens.fontMono
-        : "systemmono",
-      baseFontSize: parsed.layoutTokens.baseFontSize ?? DEFAULT_LAYOUT.baseFontSize,
-    },
+    layoutTokens: strictLayout(parsed.layoutTokens),
   });
+}
+
+export async function deleteThemePresetAction(themeKey: string): Promise<void> {
+  const subject = await requirePermission("theme.update");
+  await deleteThemePreset(subject.id, themePresetKeySchema.parse(themeKey));
 }
 
 export async function activateThemeAction(themeKey: string): Promise<void> {

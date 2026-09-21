@@ -1,7 +1,9 @@
 import { Activity } from "lucide-react";
-import { humanizeKey } from "@repo/utils";
+import { formatDateTime, humanizeKey } from "@repo/utils";
 import { Empty, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
+import { cn } from "@repo/ui/lib/utils";
 import type { RecentActivityItem } from "@repo/core";
+import { activityKind } from "../_lib/dashboard-activity.ts";
 
 const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
   ["year", 31_536_000_000],
@@ -27,12 +29,15 @@ export function DashboardActivityFeed({
   emptyLabel,
   systemLabel,
   byLabel,
+  entityLabel,
 }: {
   items: RecentActivityItem[];
   locale: string;
   emptyLabel: string;
   systemLabel: string;
   byLabel: string;
+  /** "on {entity}", already formatted by the caller. */
+  entityLabel: (entity: string) => string;
 }) {
   if (items.length === 0) {
     return (
@@ -48,19 +53,45 @@ export function DashboardActivityFeed({
   const now = new Date();
 
   return (
-    <ul className="flex flex-col gap-3">
-      {items.map((item) => (
-        <li key={item.id} className="flex items-start gap-3">
-          <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-primary" aria-hidden />
-          <div className="flex min-w-0 flex-1 flex-col">
-            <span className="truncate text-sm text-foreground">{humanizeKey(item.action)}</span>
-            <span className="text-xs text-muted-foreground">
-              {byLabel} {item.actorName ?? item.actorEmail ?? systemLabel} ·{" "}
-              {relativeTime(item.createdAt, locale, now)}
+    // A timeline: a rule threads the markers, so eight entries read as one
+    // sequence rather than eight unrelated lines.
+    <ol className="flex flex-col">
+      {items.map((item, index) => {
+        const { icon: Icon, tone } = activityKind(item.action);
+        const actor = item.actorName ?? item.actorEmail ?? systemLabel;
+        const isLast = index === items.length - 1;
+        return (
+          <li key={item.id} className={cn("relative flex gap-3", !isLast && "pb-4")}>
+            {!isLast && (
+              <span className="absolute start-4 top-9 bottom-1 w-px bg-border" aria-hidden />
+            )}
+            <span
+              className={cn("flex size-8 shrink-0 items-center justify-center rounded-full", tone)}
+              aria-hidden
+            >
+              <Icon className="size-4" />
             </span>
-          </div>
-        </li>
-      ))}
-    </ul>
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5 pt-1">
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="truncate text-sm font-medium text-foreground">
+                  {humanizeKey(item.action)}
+                </span>
+                <time
+                  dateTime={item.createdAt.toISOString()}
+                  title={formatDateTime(item.createdAt, locale)}
+                  className="shrink-0 text-xs text-muted-foreground tabular-nums"
+                >
+                  {relativeTime(item.createdAt, locale, now)}
+                </time>
+              </div>
+              <span className="truncate text-xs text-muted-foreground">
+                {byLabel} <span className="font-medium text-foreground">{actor}</span>
+                {item.entityType && <> · {entityLabel(humanizeKey(item.entityType))}</>}
+              </span>
+            </div>
+          </li>
+        );
+      })}
+    </ol>
   );
 }

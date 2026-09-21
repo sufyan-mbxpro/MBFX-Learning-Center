@@ -6,6 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@repo/ui/components/avatar"
 import { Badge } from "@repo/ui/components/badge";
 import { AdminPage, AdminSection } from "../_components/admin-page.tsx";
 import { ChangePasswordForm, ProfileForm } from "./profile-forms.tsx";
+import { formatDate } from "@repo/utils";
 
 // The signed-in admin's own profile (changes-01, image-6): identity card,
 // editable personal info, password change, account details. No permission
@@ -87,9 +88,9 @@ export default async function ProfilePage() {
           <AdminSection title={t("accountInformation")}>
             <dl className="grid grid-cols-(--grid-label-value) gap-x-6 gap-y-2 text-sm">
               <dt className="text-muted-foreground">{t("created")}</dt>
-              <dd>{profile.createdAt.toISOString().slice(0, 10)}</dd>
+              <dd>{formatDate(profile.createdAt)}</dd>
               <dt className="text-muted-foreground">{t("lastLogin")}</dt>
-              <dd>{profile.lastLoginAt?.toISOString().slice(0, 10) ?? "—"}</dd>
+              <dd>{profile.lastLoginAt ? formatDate(profile.lastLoginAt) : "—"}</dd>
             </dl>
           </AdminSection>
         </div>

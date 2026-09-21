@@ -12,10 +12,12 @@ import {
   deriveInteractive,
   deriveTonalInk,
   isCuratedFontKey,
+  suggestButtonFill,
   TONAL_TINT_CONTRACT,
   tokensToCss,
   validateMode,
   validateTheme,
+  withAdminTypeface,
 } from "./index.ts";
 
 describe("contrastRatio — known WCAG reference pairs", () => {
@@ -87,6 +89,42 @@ describe("deriveInteractive", () => {
   });
 });
 
+describe("the shipped defaults clear every floor they are checked against", () => {
+  // The regression test for a contrast bug axe found on `/admin/ai`
+  // (testing.md #2), and the reason it went unnoticed for so long: the design
+  // reference said textSecondary "must clear 4.5:1 on background AND on
+  // muted", `validateMode` only checked the background, and
+  // `docs/design-system/tokens.md` recorded "4.34:1 on muted" as a fact about
+  // the shipped token rather than as a defect.
+  //
+  // Asserted over the DEFAULTS, not over random palettes: an admin's own
+  // colours are advisory (changes-05 — save is never refused), so what has to
+  // hold unconditionally is what a fresh install renders.
+  it.each([
+    ["light", DEFAULT_LIGHT_SURFACE],
+    ["dark", DEFAULT_DARK_SURFACE],
+  ] as const)("%s: no blocking contrast issue on the default surface", (_mode, surface) => {
+    const issues = validateMode(DEFAULT_BRAND, surface, _mode).filter((issue) =>
+      FLOOR_CHECK_FIELDS.has(issue.field),
+    );
+    expect(
+      issues.map((issue) => `${issue.label}: ${issue.ratio?.toFixed(2) ?? "?"}`),
+      "the default palette must not fail its own floors",
+    ).toEqual([]);
+  });
+
+  it.each([
+    ["light", DEFAULT_LIGHT_SURFACE],
+    ["dark", DEFAULT_DARK_SURFACE],
+  ] as const)("%s: secondary text clears 4.5:1 on BOTH background and muted", (_mode, surface) => {
+    // Stated separately from the loop above because this is the specific pair
+    // that failed, and a future refactor of `validateMode`'s list must not be
+    // able to drop it silently.
+    expect(contrastRatio(surface.textSecondary, surface.background)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(surface.textSecondary, surface.surfaceMuted)).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
 // Fields covered by the four background/border checks and the button-label
 // check — kept in one place so tests can select "the checks that used to
 // block" without depending on severity, which no longer discriminates them
@@ -148,7 +186,7 @@ describe("validateTheme / validateMode — contrast checks are advisory only (ch
   });
 
   it("a raw swatch failing as link text is advisory, since a derived variant exists", () => {
-    // DEFAULT_BRAND.primary (#C28D5A) is the documented ~2.9:1 case.
+    // DEFAULT_BRAND.primary (#C8986B) is the documented ~2.9:1 case.
     const issues = validateMode(DEFAULT_BRAND, DEFAULT_LIGHT_SURFACE, "light");
     const advisory = issues.find((i) => i.field === "primary" && i.label.includes("link text"));
     expect(advisory?.severity).toBe("warning");
@@ -177,11 +215,12 @@ describe("validateTheme / validateMode — contrast checks are advisory only (ch
   });
 
   it("an input-border failure carries a concrete remedy value — editing the light background alone (not the border) is the reported way admins trip this floor, and unlike button-label/link-text the renderer has no derived stand-in to fall back on, so the admin needs a value to type in", () => {
-    // The shipped borderMedium (#7F8FA5 since ADR-072) clears 3:1 on white
-    // but not on this slightly darker, still-plausible light background
-    // (~2.7:1 — the shape of the reported case) — the border swatch itself
-    // is untouched.
-    const editedSurface = { ...DEFAULT_LIGHT_SURFACE, background: "#E8E8E8" };
+    // The shipped borderMedium (#8C837A since ADR-101) clears 3:1 on the
+    // ivory ground but not on this slightly darker, still-plausible light
+    // background (~2.7:1 — the shape of the reported case) — the border
+    // swatch itself is untouched. Was #E8E8E8 against the slate border; the
+    // warm border is darker, so the tripping background moved down with it.
+    const editedSurface = { ...DEFAULT_LIGHT_SURFACE, background: "#DEDEDE" };
     const issues = validateMode(DEFAULT_BRAND, editedSurface, "light");
     const issue = issues.find((i) => i.field === "borderMedium");
     expect(issue).toBeDefined();
@@ -274,6 +313,30 @@ describe("property-based contract (fast-check): every deriveInteractive-backed v
       { numRuns: 200 },
     );
   });
+
+  // ADR-143 (superseding ADR-140 §6): the solid button fill IS the saved
+  // primary on every palette, in both modes, and every ink on a primary fill
+  // is white — changing the theme colour never changes the text or icons.
+  it("random palettes give the solid button fill the saved primary and a white label", () => {
+    fc.assert(
+      fc.property(brandArb, (brand) => {
+        for (const surface of [DEFAULT_LIGHT_SURFACE, DEFAULT_DARK_SURFACE]) {
+          const css = tokensToCss({ brand, surface, layout: DEFAULT_LAYOUT });
+          const vars = Object.fromEntries(
+            [...css.matchAll(/(--[a-z-]+):([^;]+);/g)].map((m) => [m[1], m[2]]),
+          );
+          expect(vars["--primary-solid"]).toBe(brand.primary);
+          expect(vars["--primary-solid-foreground"]).toBe("#FFFFFF");
+          expect(vars["--primary-foreground"]).toBe("#FFFFFF");
+          // ...and on the brand status fills, which can be set to a bronze too.
+          expect(vars["--success-foreground"]).toBe("#FFFFFF");
+          expect(vars["--destructive-foreground"]).toBe("#FFFFFF");
+          expect(vars["--info-foreground"]).toBe("#FFFFFF");
+        }
+      }),
+      { numRuns: 200 },
+    );
+  });
 });
 
 describe("buildThemeStyleSheet — CSS snapshot", () => {
@@ -294,7 +357,10 @@ describe("buildThemeStyleSheet — CSS snapshot", () => {
       layout: DEFAULT_LAYOUT,
     });
 
-    expect(css).toContain("--background:#FFFFFF;");
+    // Read from the constant, not pinned to a literal: this assertion is
+    // about the FORM of the emitted value (a full hex, per A5.3), and pinning
+    // white here made a palette change look like an emission bug (ADR-101).
+    expect(css).toContain(`--background:${DEFAULT_LIGHT_SURFACE.background};`);
     expect(css).not.toMatch(/--background:\d+ \d+ \d+;/); // no rgbChannels triple
     expect(css).toContain("--brand-font-sans:");
     expect(css).toContain("--brand-font-mono:");
@@ -314,7 +380,7 @@ describe("buildThemeStyleSheet — CSS snapshot", () => {
       darkCss: "",
       layout: { ...DEFAULT_LAYOUT, fontSans: "no-longer-curated" as never },
     });
-    expect(css).toContain(`--brand-font-sans:-apple-system`);
+    expect(css).toContain(`--brand-font-sans:ui-sans-serif, system-ui`);
   });
 });
 
@@ -324,21 +390,25 @@ describe("curated fonts (ADR-005)", () => {
     expect(isCuratedFontKey("systemmono")).toBe(true);
   });
 
-  // ADR-072 (superseding ADR-039). The default is a real curated key, so
-  // @repo/ui owes it a --font-{key} family; asserting the emitted var()
-  // (rather than just the key) is what would catch a default silently
-  // reverting to a literal stack — the failure mode that would make "Inter
-  // everywhere" a no-op.
-  it("Inter is the default sans and emits a var(--font-inter) reference", () => {
-    expect(DEFAULT_LAYOUT.fontSans).toBe("inter");
-    expect(isCuratedFontKey("inter")).toBe(true);
+  // ADR-140 §1 (superseding ADR-072's Inter default). "system" has no file,
+  // so the engine emits the literal stack — asserting `system-ui` in the
+  // emitted CSS is what catches the stack losing the keyword the owner's
+  // reference site renders in.
+  it("the system face is the default sans AND display, emitted as a literal stack", () => {
+    expect(DEFAULT_LAYOUT.fontSans).toBe("system");
+    expect(DEFAULT_LAYOUT.fontDisplay).toBe("system");
     const css = buildThemeStyleSheet({
       key: "default",
       lightCss: "",
       darkCss: "",
       layout: DEFAULT_LAYOUT,
     });
-    expect(css).toContain("--brand-font-sans:var(--font-inter);");
+    expect(css).toMatch(/--brand-font-sans:ui-sans-serif, system-ui,/);
+    expect(css).toMatch(/--brand-font-display:ui-sans-serif, system-ui,/);
+  });
+
+  it("Inter stays selectable after ADR-140 — superseding a default deletes no admin choice", () => {
+    expect(isCuratedFontKey("inter")).toBe(true);
   });
 
   it("Outfit stays selectable after ADR-072 — superseding a default deletes no admin choice", () => {
@@ -381,24 +451,28 @@ const darkVars = cssVars(
 // rule that accessibility overrides visual copying. These pin the values the
 // engine actually emits and the reasons behind them — and, via ADR-018 rule
 // 5, why raw --primary is still never used for thin or small elements.
-describe("ADR-072 — brand primary #C28D5A and its derived states", () => {
-  it("derives #936B44 as link text on white, and uses the raw swatch on dark", () => {
-    expect(DEFAULT_BRAND.primary).toBe("#C28D5A");
+describe("ADR-072 / ADR-143 — brand primary #C8986B and its derived states", () => {
+  it("derives #886749 as link text on the ivory ground, and uses the raw swatch on dark", () => {
+    expect(DEFAULT_BRAND.primary).toBe("#C8986B");
+    // Was #936B44 while the light ground was pure white (ADR-072); the ivory
+    // ground (ADR-101) is darker, so clearing 4.5:1 on it takes one more step
+    // of shade. The brand swatch is unchanged — this is the DERIVED ink.
     expect(deriveInteractive(DEFAULT_BRAND.primary, DEFAULT_LIGHT_SURFACE.background)).toBe(
-      "#936b44",
+      "#886749",
     );
     // On the dark surface the raw swatch already clears 4.5:1, so the
     // engine returns it untouched — the brand colour IS the link colour there.
     expect(deriveInteractive(DEFAULT_BRAND.primary, DEFAULT_DARK_SURFACE.background)).toBe(
-      "#C28D5A",
+      "#C8986B",
     );
   });
 
-  it("labels bronze fills with DARK ink at ~6.0:1 — never the reference's white at 2.77:1", () => {
-    expect(lightVars["--primary-foreground"]).toBe("#1A1A1A");
-    expect(darkVars["--primary-foreground"]).toBe("#1A1A1A");
-    expect(contrastRatio(DEFAULT_BRAND.primary, "#1A1A1A")).toBeCloseTo(6.01, 1);
-    expect(contrastRatio(DEFAULT_BRAND.primary, "#FFFFFF")).toBeLessThan(4.5);
+  // ADR-143: white ink on primary fills is the owner's rule, not a contrast
+  // pick — it holds on every palette, in both modes (2.57:1 on the default).
+  it("labels primary fills WHITE on every palette, in both modes", () => {
+    expect(lightVars["--primary-foreground"]).toBe("#FFFFFF");
+    expect(darkVars["--primary-foreground"]).toBe("#FFFFFF");
+    expect(contrastRatio(DEFAULT_BRAND.primary, "#FFFFFF")).toBeCloseTo(2.57, 1);
   });
 
   it("labels the warning fill with dark ink too — the reference's white is 1.91:1", () => {
@@ -414,13 +488,15 @@ describe("ADR-072 — brand primary #C28D5A and its derived states", () => {
   });
 
   it("raw --primary clears NEITHER text nor non-text floors on a light surface — ADR-018 rule 5's reason", () => {
-    // 2.9:1 is below 4.5:1 (text) AND below 3:1 (non-text UI). A 1px bronze
-    // border or small icon glyph in raw --primary on white fails, and
-    // validateMode only flags the TEXT case — so the rule ("fills and large
-    // shapes only") is structural, not linted.
+    // 2.33:1 is below 4.5:1 (text) AND below 3:1 (non-text UI). A 1px bronze
+    // border or small icon glyph in raw --primary on the page ground fails,
+    // and validateMode only flags the TEXT case — so the rule ("fills and
+    // large shapes only") is structural, not linted. The figure moved from
+    // 2.9 when the ground went from white to ivory (ADR-101); the rule it
+    // documents is unchanged, which is what `toBeLessThan(3.0)` holds.
     const ratio = contrastRatio(DEFAULT_BRAND.primary, DEFAULT_LIGHT_SURFACE.background);
     expect(ratio).toBeLessThan(3.0);
-    expect(ratio).toBeCloseTo(2.9, 1);
+    expect(ratio).toBeCloseTo(2.33, 1);
   });
 
   it("the palette introduces no BLOCKING validation issue — only the link-text advisory", () => {
@@ -530,7 +606,11 @@ describe("ADR-073 — *-interactive holds 4.5:1 on its own tint", () => {
 
 describe("ADR-072 — focus ring and input border", () => {
   it("derives --ring from the PRIMARY (bronze), at the 3:1 non-text floor, in both modes", () => {
-    expect(lightVars["--ring"]).toBe(deriveInteractive(DEFAULT_BRAND.primary, "#FFFFFF", 3.0));
+    // The light ground, read from the constant — it is no longer white
+    // (ADR-101), and the ring is derived against whatever the ground is.
+    expect(lightVars["--ring"]).toBe(
+      deriveInteractive(DEFAULT_BRAND.primary, DEFAULT_LIGHT_SURFACE.background, 3.0),
+    );
     expect(darkVars["--ring"]).toBe(
       deriveInteractive(DEFAULT_BRAND.primary, DEFAULT_DARK_SURFACE.background, 3.0),
     );
@@ -562,5 +642,136 @@ describe("ADR-072 — focus ring and input border", () => {
   it("the dark input border clears 3:1 on the dark background", () => {
     const { borderMedium, background } = DEFAULT_DARK_SURFACE;
     expect(contrastRatio(borderMedium, background)).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe("withAdminTypeface (ADR-141)", () => {
+  const publicTheme = {
+    key: "default",
+    lightCss: "",
+    darkCss: "",
+    layout: { ...DEFAULT_LAYOUT, fontSans: "system", fontDisplay: "system" },
+  };
+
+  it("pins both text slots to Inter whatever the public theme picked", () => {
+    const css = buildThemeStyleSheet(withAdminTypeface(publicTheme));
+    expect(css).toContain("--brand-font-sans:var(--font-inter);");
+    expect(css).toContain("--brand-font-display:var(--font-inter);");
+  });
+
+  it("leaves the public theme and the mono slot alone", () => {
+    const admin = withAdminTypeface(publicTheme);
+    expect(publicTheme.layout.fontSans).toBe("system");
+    expect(admin.layout.fontMono).toBe(DEFAULT_LAYOUT.fontMono);
+  });
+});
+
+// changes-46: "a clear human-readable message & suggest the colour that should
+// be added in which input". The editor builds the sentence from these fields,
+// so the fields are the contract: which input, what is wrong, and a value that
+// actually fixes it without breaking the other mode.
+describe("validateTheme — every issue names its input and offers a passing value", () => {
+  const all = () =>
+    validateTheme(
+      DEFAULT_BRAND,
+      DEFAULT_LIGHT_SURFACE,
+      DEFAULT_DARK_SURFACE,
+      DEFAULT_DARK_BRAND_OVERRIDES,
+    ).issues;
+
+  it("a link-text advisory names the brand input, the rendered ink and a passing suggestion", () => {
+    const primary = all().find((i) => i.kind === "linkText" && i.field === "primary");
+    expect(primary).toMatchObject({
+      palette: "brand",
+      mode: "light",
+      against: "background",
+      direction: "tooLight",
+      current: DEFAULT_BRAND.primary.toUpperCase(),
+    });
+    expect(primary?.rendered).toMatch(/^#[0-9A-F]{6}$/);
+    expect(
+      contrastRatio(primary!.suggestion!, DEFAULT_LIGHT_SURFACE.background),
+    ).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("flags a brand link suggestion that would move the advisory to the other mode", () => {
+    // The light-page and dark-page windows for 4.5:1 link text do not
+    // overlap, so the default primary's light-mode fix fails on dark.
+    const primary = all().find((i) => i.kind === "linkText" && i.field === "primary");
+    expect(primary?.conflictsAcrossModes).toBe(true);
+    for (const issue of all()) {
+      if (issue.kind !== "linkText" || !issue.suggestion) continue;
+      const other = issue.mode === "light" ? DEFAULT_DARK_SURFACE : DEFAULT_LIGHT_SURFACE;
+      const current = DEFAULT_BRAND[issue.field as keyof typeof DEFAULT_BRAND];
+      const breaks =
+        contrastRatio(current, other.background) >= 4.5 &&
+        contrastRatio(issue.suggestion, other.background) < 4.5;
+      expect(Boolean(issue.conflictsAcrossModes)).toBe(breaks);
+    }
+  });
+
+  it("a dark-mode link failure on a dark swatch says so in the fix's words", () => {
+    const brand = { ...DEFAULT_BRAND, info: "#3A3530" };
+    const { issues } = validateTheme(brand, DEFAULT_LIGHT_SURFACE, DEFAULT_DARK_SURFACE, {});
+    const dark = issues.find(
+      (i) => i.kind === "linkText" && i.field === "info" && i.mode === "dark",
+    );
+    expect(dark?.direction).toBe("tooDark");
+    expect(
+      contrastRatio(dark!.suggestion!, DEFAULT_DARK_SURFACE.background),
+    ).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("a dark-mode override is named but not offered a value (the editor has no input for it)", () => {
+    const issues = validateMode(DEFAULT_BRAND, DEFAULT_DARK_SURFACE, "dark", { error: "#5A1010" });
+    const error = issues.find((i) => i.field === "error" && i.kind === "linkText");
+    expect(error?.palette).toBe("darkOverride");
+    expect(error?.suggestion).toBeUndefined();
+  });
+
+  it("a surface issue targets that mode's palette and its suggestion clears the floor", () => {
+    const edited = { ...DEFAULT_LIGHT_SURFACE, background: "#E0CCCC" };
+    const issues = validateMode(DEFAULT_BRAND, edited, "light").filter(
+      (i) => i.kind === "surfaceText" || i.kind === "border",
+    );
+    expect(issues.length).toBeGreaterThan(0);
+    for (const issue of issues) {
+      expect(issue.palette).toBe("light");
+      const against = issue.against === "surfaceMuted" ? edited.surfaceMuted : edited.background;
+      expect(contrastRatio(issue.suggestion!, against)).toBeGreaterThanOrEqual(issue.required);
+    }
+    expect(issues.find((i) => i.field === "borderMedium")?.kind).toBe("border");
+  });
+
+  it("a button-label issue suggests the nearest fill a label ink can be read on", () => {
+    const issues = validateMode(
+      { ...DEFAULT_BRAND, warning: "#808080" },
+      DEFAULT_LIGHT_SURFACE,
+      "light",
+    );
+    const label = issues.find((i) => i.kind === "buttonLabel" && i.field === "warning");
+    expect(label?.suggestion).toBeDefined();
+    const best = Math.max(
+      contrastRatio(label!.suggestion!, "#FFFFFF"),
+      contrastRatio(label!.suggestion!, "#1A1A1A"),
+    );
+    expect(best).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+describe("suggestButtonFill", () => {
+  it("returns a fill some label ink reads on, for any colour", () => {
+    fc.assert(
+      fc.property(fc.integer({ min: 0, max: 0xffffff }), (n) => {
+        const hex = `#${n.toString(16).padStart(6, "0")}`;
+        const fill = suggestButtonFill(hex);
+        const best = Math.max(contrastRatio(fill, "#FFFFFF"), contrastRatio(fill, "#1A1A1A"));
+        return best >= 4.5;
+      }),
+    );
+  });
+
+  it("leaves a fill that already works alone", () => {
+    expect(suggestButtonFill("#1A1A1A")).toBe("#1A1A1A");
   });
 });

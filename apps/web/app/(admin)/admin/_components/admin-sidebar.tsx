@@ -12,7 +12,7 @@
 // already fully dynamic (`instant = false`, ADR-006), so reading a cookie
 // there costs nothing and the first paint is correct.
 import * as React from "react";
-import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@repo/ui/lib/utils";
 import { BrandLogo } from "@repo/ui/components/brand-logo";
 import { Button } from "@repo/ui/components/button";
@@ -69,18 +69,40 @@ export function AdminSidebar({
       // tokens.md §3.1: a 64px logo band, a px-3 scroll area and a p-4
       // footer, each band ruled off — the reference's sidebar.
       className={cn(
-        "sticky top-0 hidden h-dvh shrink-0 flex-col border-e bg-background transition-(--transition-size) duration-200 ease-in-out md:flex",
+        "sticky top-0 z-40 hidden h-dvh shrink-0 flex-col border-e bg-background transition-(--transition-size) duration-200 ease-in-out md:flex",
         collapsed ? "w-16" : "w-(--width-sidebar)",
       )}
     >
-      <div
-        className={cn(
-          "flex min-h-16 items-center gap-2 border-b",
-          collapsed ? "justify-center px-2" : "px-4",
-        )}
+      {/* The collapse toggle sits OUTSIDE the menu (changes-43): a round
+          button straddling the sidebar's inline-end edge, level with the
+          brand band. Inside the band it pushed the logo off-centre and read
+          as one more menu control. `-end-3` is logical, so in RTL it
+          straddles the left edge; the chevrons mirror with `rtl:rotate-180`.
+          The ASIDE carries `z-40` (sticky makes it a stacking context, so a
+          z-index on the button alone could not escape it): the half of the
+          button that overhangs must paint over the content column's sticky
+          `z-30` header. */}
+      <Button
+        variant="outline"
+        size="icon-2xs"
+        onClick={toggle}
+        aria-label={collapsed ? labels.expand : labels.collapse}
+        aria-expanded={!collapsed}
+        title={collapsed ? labels.expand : labels.collapse}
+        className="absolute top-5 -end-3 rounded-full bg-background shadow-sm"
       >
+        {collapsed ? (
+          <ChevronRight aria-hidden className="rtl:rotate-180" />
+        ) : (
+          <ChevronLeft aria-hidden className="rtl:rotate-180" />
+        )}
+      </Button>
+
+      {/* The brand band: the logo CENTRED (changes-43). Collapsed, the band
+          stays — empty — so its rule still lines up with the header's. */}
+      <div className="flex min-h-16 items-center justify-center border-b px-4">
         {!collapsed && (
-          <div className="flex min-w-0 flex-1 items-center">
+          <div className="flex min-w-0 justify-center">
             <BrandLogo
               light={logoLight}
               dark={logoDark}
@@ -90,22 +112,6 @@ export function AdminSidebar({
             />
           </div>
         )}
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          onClick={toggle}
-          aria-label={collapsed ? labels.expand : labels.collapse}
-          aria-expanded={!collapsed}
-          title={collapsed ? labels.expand : labels.collapse}
-        >
-          {/* Both icons point inline-start by design; RTL flips them so
-              "close" still reads as "toward the edge the panel lives on". */}
-          {collapsed ? (
-            <PanelLeftOpen aria-hidden className="size-4 rtl:rotate-180" />
-          ) : (
-            <PanelLeftClose aria-hidden className="size-4 rtl:rotate-180" />
-          )}
-        </Button>
       </div>
 
       <div className={cn("flex min-h-0 flex-1 flex-col py-2", collapsed ? "px-2" : "px-3")}>

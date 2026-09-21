@@ -33,9 +33,10 @@ Lighthouse rules exist for it.
     `@repo/ui/components/quiz-card`, a sibling of `CourseCard` — the whole card
     is a stretched link resolving against `.sheen`'s `position: relative`, so
     every control in it must stay `relative z-10`. Artwork is
-    `quizCoverUrl(slug)`: four generated panels, picked by hashing the slug, NOT
-    keyed by track (a quiz has no cover column to fall back from, so a
-    track-keyed panel would repeat down the whole grid). Category colour is
+    `quizCoverUrl(slug, coverUrl)`: the editor's uploaded cover when there is
+    one (`Quiz.coverAssetId`, ADR-132), otherwise four generated panels picked
+    by hashing the slug, NOT keyed by track (a track-keyed panel would repeat
+    down the whole grid). Category colour is
     `categoryTone()`, derived from the free-text string, because `Quiz.category`
     has no registry a table could enumerate. **The card's meter shows the pass
     mark as a TICK and never as a fill** — filling to the pass mark would tell
@@ -134,8 +135,8 @@ Routes: `/learn/[track]/videos`, `.../videos/categories/[category]`,
   `@repo/core` already resolved each row and dropped anything unsafe.
 - **`videoCoverUrl(coverUrl, slug)` prefers the editor's cover**, then hashes
   the slug across four panels. Unlike `courseCoverUrl` it never returns null
-  (the fallback supply is code); unlike `quizCoverUrl` it takes a cover first
-  (a topic HAS the column).
+  (the fallback supply is code); `quizCoverUrl` has the same shape since
+  ADR-132 gave a quiz the column.
 - **`LEARN_TRACK_SURFACES` declares the surfaces AND their order** —
   `index, videos, quizzes, glossary`. The section bar, the mega-menu panel, the
   seeded nav rows and both drift guards read it. Do not type a surface name
@@ -174,3 +175,181 @@ Routes: `/learn/[track]/videos`, `.../videos/categories/[category]`,
   `/api/newsletter/unsubscribe` exports no GET — a GET there answers 405.
 - Both are reserved in `RESERVED_PATHS` under the parent `newsletter` segment,
   per the ADR-047 same-PR rule.
+
+## About is gone; Support is one page (changes-33, ADR-109)
+
+`/about` and its four children are **deleted**, and so is `/markets`. Read
+ADR-109 before re-adding anything under either segment.
+
+- **`/support`** is what survived: one coded page at the top level, no
+  layout, no section bar — a strip of one tab is chrome that tells the reader
+  nothing (ADR-076 §1 applied to a section that is now a single page).
+  **Rebuilt 2026-09-16 — read ADR-113 before editing it.**
+- **`about` and `markets` are NOT in `RESERVED_PATHS` any more, and that is
+  load-bearing.** `resolvePublicPage` returns not-found for a reserved first
+  segment BEFORE it consults the redirect table, so the six seeded redirects
+  (`/about/support` → `/support` and five nearest-true-page fallbacks) only
+  work because both segments are un-reserved. Re-reserving either silently
+  breaks them.
+- The explore carousel is SIX cards. `/support` did not take the About card's
+  place: that band is "explore the platform", and a help page is not a
+  destination a reader goes and uses.
+- `public-chrome.test.ts`'s StatCard/StatBand allow-list is down to ONE entry.
+  A second needs its own ADR — the friction is the point (ADR-076).
+
+## `/support` and the second anonymous mutation (ADR-113)
+
+ADR-109 shipped this page with `SUPPORT_CHANNELS` empty and a `TODO(owner)`.
+ADR-047 §2 rule 1 then did what it says — an empty collection renders nothing
+— so the "how to reach us" band never drew and the page a reader arrives at
+with a question offered no way to ask it. **A data gate on a collection nobody
+is going to fill is not a gate; it is an outage with good manners.** The rule
+stands; the data is now filled and `support-page.test.ts` fails if it empties.
+
+- **Five bands, the reference's order:** hero → How Can We Help? (three
+  channels) → FAQ (seven) → Still Need Help? (the form) → Coming Soon.
+  `help`, `selfServe`, `cta` and `hero-actions.tsx` are deleted.
+- **Facts vs catalog is the split to get right here.** `support-facts.ts`
+  holds the addresses, the availability lines and the **seven FAQ answers** —
+  a $10 minimum and 1:100 leverage are claims about a brokerage, and a
+  translator should not be the one deciding what a withdrawal window says
+  (ADR-047 §2 rule 2, the reasoning `SupportChannel.availability` already
+  carried). `en.json` holds everything the band says about ITSELF: headings,
+  card titles, button labels, form labels, placeholders, result messages.
+- **`SUPPORT_CONTACT.email` is both the Email Support card and the form's
+  inbox.** One source of truth, so the page cannot advertise one address and
+  mail another. Empty ⇒ both absent.
+- **The contact form is the repo's SECOND anonymous mutation.** Five parts
+  replace `requirePermission()` — a recorded inbox, a honeypot (`company`,
+  deliberately not signup's `website`), the schema, a per-IP limit, a
+  per-address limit — and `_actions/support.ts` names all five at the top.
+  It stores nothing and `to` never comes from the request, which is the one
+  property to preserve if that file is edited. **A third needs its own ADR**,
+  and the guard is a test, not a sentence: `support-page.test.ts` enumerates
+  `_actions/*.ts` holding a honeypot constant and fails on a third.
+- **"Coming Soon" links what exists** — Help Center → `/glossary`, Video
+  Tutorials → `/learn/forex/videos`, Phone Support → `tel:`, Community Forum
+  static — each flag-checked against an anonymous subject, and a flagged-off
+  section renders static rather than absent (the heading says the word).
+
+## Legal documents and the reader's sitemap (changes-33, ADR-110)
+
+- **`/legal/terms|privacy|agreement`** is the public address, and it is OURS:
+  it survives an admin swapping the file, it is shareable, and it publishes no
+  storage key. The setting holds a site-relative PATH and the route branches
+  on the `/uploads/` prefix — a committed file under `public/legal/` is
+  redirected to, a stored upload is streamed.
+- **It is the ONE route that serves an uploaded file INLINE**, PDF only,
+  decided by the MIME **recorded at upload**. ADR-034 §1's attachment default
+  is unchanged everywhere else and `legal-documents.test.ts` asserts that
+  too — `/uploads/[...key]` still sends every DOCUMENT as an attachment.
+- A document with no file is **ABSENT** from the footer, not a link to a 404.
+- **`/sitemap` is a page for a PERSON**, not a link to `sitemap.xml`. Built
+  from `footer.menuColumns` + `buildMenu`, so a flag-off section prunes and an
+  empty column disappears. Never hand-maintain a second list here.
+- Adding a fourth document: an entry in `LEGAL_DOCUMENT_KEYS`, a setting key,
+  a catalog string. Nothing hardcodes three.
+
+## Masthead artwork is the owner's photography (changes-33)
+
+`scripts/import-owner-art.mjs` converts the supplied files to committed WebP.
+Sources live under `storage/uploads/**`, which is git-ignored — which is
+exactly why the OUTPUT is committed and why the script is not part of any
+build. Placement is still one line in an area's `_content/*-media.ts`
+(ADR-047 §3).
+
+Two rules learned doing it:
+
+- **A masthead and a card cover cannot be the same file.**
+  `LEARN_TRACK_BANNER` is a second registry beside `LEARN_TRACK_MEDIA` for
+  exactly this: 3:1 full-bleed under a scrim versus 4:3 looked at on a shelf.
+- **`unoptimized` follows the FILE** (`src.endsWith(".svg")`), never the
+  component. Unconditional, it ships a 1920px WebP to a phone; removed, an SVG
+  slot needs `dangerouslyAllowSVG` in next.config, which relaxes SVG handling
+  for every image the app serves.
+- The calendar's hero is a media COLUMN, not a backdrop: 4:3, no
+  `object-cover`, so a 3:1 banner there is STRETCHED rather than cropped. It
+  has its own 4:3 output.
+
+## The home page's four presentation bands (changes-35, ADR-116)
+
+Below the platform band the page was seven bands of ONE shape — heading, lead,
+grid of cards. The five bands now each have a different composition, which is
+what gives the page a rhythm a reader can navigate before reading the words.
+
+- **`explore_platform` is density-only.** The composition is the owner's
+  ("perfect"); the height was not. `spacing="sm"`, 4 slides
+  (`--width-slide-4`), "View all" in the heading row → `/sitemap` (the one page
+  that lists every section — `/learn` would promote one card over seven),
+  arrows centred, no dot rail. **Guarded**: `home-presentation.test.ts` fails on
+  `spacing="lg"` or `--width-slide-3` coming back.
+- **`latest_news` variant `desk` reads BOTH kinds.** ADR-116 §2 narrows this
+  file's own old comment: news and analysis must stay DISTINGUISHABLE, not be
+  separate bands. Lead story in one column, hairline-cut 2×2 of analysis
+  beside it, separate CTAs. `latest_analysis` is seeded off on the home page
+  only and keeps every variant.
+- **`glossary_spotlight` variant `feature` is the first home caller of
+  `getTermOfTheDay`.** Built since changes-11 (D29) and never used off
+  `/glossary`. Its two labels come from the `glossary` namespace, not `home` —
+  they already existed there.
+- **`in_practice` is the first band fed by THREE datasets** and therefore the
+  first that degrades per COLUMN, not per band (ADR-116 §3): three columns, two,
+  one, or absent. Never a column heading over an empty column. The video is
+  `lg:self-center` — that is the whole of "centralized video".
+- **`faq` variant `columns`** deals items COLUMN-MAJOR, so reading down one
+  column then the next follows q1..q6. "All questions" → `/support`, which
+  carries the seven-answer `SUPPORT_FAQ`. Claims about a brokerage belong there
+  (ADR-113), never in `home.faq*`.
+- **One video on the page.** `connect` dropped its panel; the `next/dynamic`
+  boundary moved to `in_practice` with the tile.
+- **`connect` carries the subscribe ask too** (owner, 2026-09-16): follow on
+  the inline start, the newsletter panel on the end, because taking the video
+  out left that half empty and the standalone newsletter band sat directly
+  underneath making the same ask in a different colour. **Neither newsletter
+  switch moved** — the FLAG and `newsletter.placements.home` still decide, and
+  the form still submits `source: "home"`. The seeded `newsletter` SECTION row
+  (does the standalone band draw) is the third, separate thing and is now off.
+- **A multi-column band's columns END ON ONE LINE.** `items-start` is right for
+  a LIST beside a lead (`latest_news` `split`) and wrong for columns meant to
+  read as one band — it is what made the glossary button hang 90px low and
+  `in_practice` come out 300/237/420px. Each column stretches and decides what
+  to do with the surplus: text grows, a last element takes `mt-auto`, and the
+  VIDEO centres, because it is aspect-locked and cannot grow. `justify-center`
+  on a full-height column, never `self-center` on the grid item — that shrinks
+  the column back to the tile. `Carousel`'s track carries `grow` (basis auto,
+  so it is inert without a given height) to put controls on the bottom edge.
+  Guarded: `home-presentation.test.ts` fails on `items-start` in either grid.
+- **`risk_disclaimer` is off here.** The footer's legal band already prints the
+  same text from `legal.riskDisclaimer` (ADR-110).
+
+Two things the browser found that no test would have: `items-start` is right
+for a list beside a lead and wrong for a CARD beside one (the panel stretches),
+and a new FAQ question duplicated an existing one almost word for word —
+nothing compares two catalog VALUES for meaning.
+
+## `/support`'s last band names four places that exist (changes-36, ADR-118)
+
+"Coming Soon" → **"More ways to get help"**, and Community Forum →
+**Courses** (`ROUTE_PATHS.learn`, flagged on `courses`).
+
+ADR-113 §5's heading was true of exactly one of four cards; the other three
+linked, and the lead under it already said "Explore more ways to get the
+information and help you need". What a forum stands in for here is somewhere
+to go and learn the thing rather than somewhere to ask about it, which is what
+`/learn` already is.
+
+The catalog subtree and the registry are renamed with it
+(`support.comingSoon` → `support.moreHelp`, `COMING_SOON` → `MORE_HELP`). The
+`public.comingSoon*` keys belong to the `ComingSoon` COMPONENT and are
+untouched — that is still the right thing for a section that genuinely does
+not exist yet.
+
+Every entry has a destination now, so ADR-113's `href: null` branch fires for
+the flag-off case alone. `support-page.test.ts` fails on an entry added
+without one.
+
+**Every public masthead lost its brand fill** (ADR-117) — see the `@repo/ui`
+skill. The nine that carry the owner's photography are `--secondary` bands
+showing the photograph at full strength under a scrim; the artless ones
+(`/sitemap`, `/economic-calendar`, the eight tool pages) still open on
+`brand`.

@@ -46,7 +46,7 @@ function ViewChip({ className, ...props }: TogglePrimitive.Props) {
     <TogglePrimitive
       data-slot="view-chip"
       className={cn(
-        "inline-flex min-w-27.5 flex-1 items-center justify-center gap-1.5 rounded-full border px-3 py-1.5 text-xs text-muted-foreground transition-colors outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 data-pressed:border-primary data-pressed:bg-primary data-pressed:font-medium data-pressed:text-primary-foreground [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0",
+        "inline-flex min-w-27.5 flex-1 items-center justify-center gap-1.5 rounded-md border px-3 py-1.5 text-xs text-muted-foreground transition-colors outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 data-pressed:border-primary data-pressed:bg-primary data-pressed:font-medium data-pressed:text-primary-foreground [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0",
         className,
       )}
       {...props}

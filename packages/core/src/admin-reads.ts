@@ -155,9 +155,9 @@ export interface DashboardTrend {
  * content permission.
  *
  * The keys are the ones the corresponding SCREEN requires, deliberately —
- * `analysis.view` for articles because that is what `/admin/articles` takes,
- * `features.manage` for the flag count because `/admin/features` has no
- * `.view` key of its own. A tile whose number an admin can see is a tile
+ * `analysis.view` for articles because that is what `/admin/articles` takes.
+ * (The feature-flag tile went with `/admin/features`, ADR-144 §5: a count
+ * linking to a deleted screen is the "Active menu items" mistake again.) A tile whose number an admin can see is a tile
  * whose screen they can open.
  */
 const OVERVIEW_TILES = [
@@ -166,11 +166,13 @@ const OVERVIEW_TILES = [
   { tile: "articles", permission: "analysis.view" },
   { tile: "employees", permission: "employees.view" },
   { tile: "settings", permission: "settings.view" },
-  { tile: "flags", permission: "features.manage" },
   // Replaces the "Active menu items" card, which linked to
   // `/admin/navigation` — a screen ADR-038 hid, so the tile was a count of
   // something nobody could act on and a link to a 404-shaped destination.
   { tile: "deliveries", permission: "email.log.view" },
+  // changes-43: the subscriber list is an audience (ADR-080 #7), so the tile
+  // takes the key `/admin/newsletter` itself requires.
+  { tile: "newsletter", permission: "newsletter.view" },
 ] as const satisfies readonly { tile: string; permission: string }[];
 
 export const DASHBOARD_OVERVIEW_TILES = OVERVIEW_TILES.map((entry) => entry.tile);
@@ -200,8 +202,21 @@ export interface AdminDashboardOverview {
   publishedArticles?: DashboardTrend;
   activeEmployees?: DashboardTrend;
   settings?: number;
-  enabledFlags?: number;
   emailDeliveries?: number;
+  // ─── changes-43: the second figure each tile's ratio bar needs ───
+  // Each rides on its tile's own gate and its own query, so a viewer who
+  // cannot see the tile gets neither number. Every one is a real
+  // denominator or companion count — a bar is never drawn against a guess.
+  /** Non-deleted users whose status is ACTIVE (the `users` tile). */
+  activeUsers?: number;
+  /** Every non-deleted article, and those live now (the `articles` tile). */
+  articleTotals?: { live: number; total: number };
+  /** Every non-deleted employee record, any status (the `employees` tile). */
+  totalEmployees?: number;
+  /** Deliveries in the window that FAILED (the `deliveries` tile). */
+  failedDeliveries?: number;
+  /** Confirmed subscribers with a trend, plus unconfirmed sign-ups. */
+  newsletterSubscribers?: DashboardTrend & { pending: number };
 }
 
 export async function loadAdminDashboardOverview(
@@ -225,8 +240,15 @@ export async function loadAdminDashboardOverview(
     activeEmployees,
     activeEmployeesPrev,
     settings,
-    enabledFlags,
     emailDeliveries,
+    activeUsers,
+    liveArticles,
+    totalArticles,
+    totalEmployees,
+    failedDeliveries,
+    subscribers,
+    subscribersPrev,
+    pendingSubscribers,
   ] = await Promise.all([
     shows("users") ? db.user.count({ where: { deletedAt: null, createdAt: { lt: now } } }) : null,
     shows("users")
@@ -267,13 +289,32 @@ export async function loadAdminDashboardOverview(
         })
       : null,
     shows("settings") ? db.setting.count() : null,
-    shows("flags") ? db.featureFlag.count({ where: { isEnabled: true } }) : null,
     // The window, not all time: "how much mail went out lately" is the
     // question the card answers, and the log only keeps 90 days anyway
     // (ADR-078 #10).
     shows("deliveries")
       ? db.emailDelivery.count({ where: { createdAt: { gte: periodStart, lt: now } } })
       : null,
+    shows("users") ? db.user.count({ where: { deletedAt: null, status: "ACTIVE" } }) : null,
+    shows("articles")
+      ? db.article.count({ where: { deletedAt: null, status: ContentStatus.PUBLISHED } })
+      : null,
+    shows("articles") ? db.article.count({ where: { deletedAt: null } }) : null,
+    shows("employees") ? db.employee.count({ where: { deletedAt: null } }) : null,
+    shows("deliveries")
+      ? db.emailDelivery.count({
+          where: { status: "FAILED", createdAt: { gte: periodStart, lt: now } },
+        })
+      : null,
+    shows("newsletter") ? db.newsletterSubscriber.count({ where: { status: "ACTIVE" } }) : null,
+    // Confirmed before the window opened and still subscribed — the same
+    // "still here" approximation the employee trend makes.
+    shows("newsletter")
+      ? db.newsletterSubscriber.count({
+          where: { status: "ACTIVE", confirmedAt: { lt: periodStart } },
+        })
+      : null,
+    shows("newsletter") ? db.newsletterSubscriber.count({ where: { status: "PENDING" } }) : null,
   ]);
 
   return {
@@ -290,8 +331,22 @@ export async function loadAdminDashboardOverview(
       ? { activeEmployees: { value: activeEmployees, previousValue: activeEmployeesPrev } }
       : {}),
     ...(settings !== null ? { settings } : {}),
-    ...(enabledFlags !== null ? { enabledFlags } : {}),
     ...(emailDeliveries !== null ? { emailDeliveries } : {}),
+    ...(activeUsers !== null ? { activeUsers } : {}),
+    ...(liveArticles !== null && totalArticles !== null
+      ? { articleTotals: { live: liveArticles, total: totalArticles } }
+      : {}),
+    ...(totalEmployees !== null ? { totalEmployees } : {}),
+    ...(failedDeliveries !== null ? { failedDeliveries } : {}),
+    ...(subscribers !== null && subscribersPrev !== null && pendingSubscribers !== null
+      ? {
+          newsletterSubscribers: {
+            value: subscribers,
+            previousValue: subscribersPrev,
+            pending: pendingSubscribers,
+          },
+        }
+      : {}),
   };
 }
 

@@ -1,12 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  ABOUT_PATHS,
-  ABOUT_ROUTE_KEYS,
-  isRouteKey,
-  menuItemLinkSchema,
-  ROUTE_PATHS,
-  SETTINGS_SCHEMAS,
-} from "./index.ts";
+import { isRouteKey, menuItemLinkSchema, ROUTE_PATHS, SETTINGS_SCHEMAS } from "./index.ts";
 
 describe("@repo/contracts — barrel", () => {
   it("exports the settings schema registry", () => {
@@ -51,26 +44,28 @@ describe("ROUTE_PATHS registry", () => {
   });
 });
 
-describe("About section routes (ADR-047)", () => {
-  it("registers all five keys, so a menu row can link to them", () => {
-    for (const key of ABOUT_ROUTE_KEYS) {
+describe("withdrawn routes (changes-33, ADR-109)", () => {
+  // The registry is what a seeded menu row links THROUGH, so a key that
+  // outlives its route is a header entry pointing at a 404. These five left
+  // with the pages; the test is here so re-adding one is a deliberate act
+  // rather than an autocomplete.
+  it.each([
+    "about",
+    "about-why-us",
+    "about-transparency",
+    "about-security",
+    "about-support",
+    "markets",
+  ])("%s is no longer a route key", (key) => {
+    expect(isRouteKey(key)).toBe(false);
+    expect(menuItemLinkSchema.safeParse({ routeKey: key, url: null }).success).toBe(false);
+  });
+
+  it("support and sitemap took their place and are linkable", () => {
+    for (const key of ["support", "sitemap"]) {
       expect(menuItemLinkSchema.safeParse({ routeKey: key, url: null }).success).toBe(true);
     }
-  });
-
-  it("ABOUT_PATHS stays in sync with the registry and the menu order", () => {
-    expect(ABOUT_PATHS).toEqual([
-      "/about",
-      "/about/why-us",
-      "/about/transparency",
-      "/about/security",
-      "/about/support",
-    ]);
-  });
-
-  it("every child path nests under the section root", () => {
-    const [root, ...children] = ABOUT_PATHS;
-    expect(root).toBe("/about");
-    for (const path of children) expect(path.startsWith("/about/")).toBe(true);
+    expect(ROUTE_PATHS.support).toBe("/support");
+    expect(ROUTE_PATHS.sitemap).toBe("/sitemap");
   });
 });

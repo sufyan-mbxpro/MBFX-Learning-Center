@@ -3,14 +3,18 @@
 // row past the sidebar card (measured: row 270px, content 332px) and the
 // card's `overflow-hidden` clipped it mid-word.
 //
-// Read as source: ArticleSidebar is an async server component awaiting
-// translations and a facets query, and the property under test is a class.
+// Read as source: these are async server components awaiting translations
+// and a facets query, and the property under test is a class.
+//
+// It reads `facet-panels.tsx` since changes-40, which is where the row moved
+// when the glossary asked for the same two panels. The regression is about the
+// ROW, so the guard follows the row rather than the file it used to be in.
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const src = readFileSync(
-  resolve(process.cwd(), "app/(public)/[locale]/news/_components/article-sidebar.tsx"),
+  resolve(process.cwd(), "app/(public)/[locale]/news/_components/facet-panels.tsx"),
   "utf8",
 );
 

@@ -35,15 +35,25 @@
 // checks the claim against the filesystem — every destination must have a page
 // file, and a `soon` one must be the page that renders `ComingSoon` — so
 // neither half can rot in silence the way the first one did.
+//
+// `markets` was dropped from the carousel in changes-32, at the owner's ask.
+// The ROUTE is untouched — `/markets` still renders `ComingSoon`, and the
+// header, the footer and `RESERVED_PATHS` still name it. What changed is that
+// the homepage no longer spends a card of its most valuable band advertising
+// the one destination that cannot answer yet.
+//
+// That leaves every entry `live` and the `soon` branch of `DestinationCard`
+// currently unreached. It is kept rather than deleted because `status` is a
+// claim the test above checks against the filesystem on every run: the branch
+// costs a badge, and the alternative is that the next section built ahead of
+// its route silently links to a page that apologises in prose instead of
+// saying "Coming soon" on the card.
 import {
-  BadgeCheck,
   BookA,
-  CalendarDays,
   Calculator,
   GraduationCap,
   LineChart,
   Newspaper,
-  TrendingUp,
   type LucideIcon,
 } from "lucide-react";
 import { ROUTE_PATHS, type RouteKey } from "@repo/contracts";
@@ -67,6 +77,10 @@ export interface ExploreDestination {
   status: "live" | "soon";
 }
 
+// changes-38: the owner's list, in the owner's order — "learning path, daily
+// analysis, market news, trading glossary, trading calculator". The calendar
+// card left the band: the calendar lives under Tools (ADR-115), and the Tools
+// card already leads there. `HOME_MEDIA.calendar` stays as a keyed file.
 export const EXPLORE_DESTINATIONS = [
   {
     key: "learn",
@@ -74,6 +88,30 @@ export const EXPLORE_DESTINATIONS = [
     icon: GraduationCap,
     feature: "courses",
     tone: "primary",
+    status: "live",
+  },
+  {
+    key: "analysis",
+    routeKey: "analysis",
+    icon: LineChart,
+    feature: "analysis",
+    tone: "success",
+    status: "live",
+  },
+  {
+    key: "news",
+    routeKey: "news",
+    icon: Newspaper,
+    feature: "news",
+    tone: "destructive",
+    status: "live",
+  },
+  {
+    key: "glossary",
+    routeKey: "glossary",
+    icon: BookA,
+    feature: "glossary",
+    tone: "info",
     status: "live",
   },
   {
@@ -86,54 +124,10 @@ export const EXPLORE_DESTINATIONS = [
     // The guard below reads the route file, so this cannot drift back.
     status: "live",
   },
-  {
-    key: "calendar",
-    routeKey: "economic-calendar",
-    icon: CalendarDays,
-    feature: "economic_calendar",
-    tone: "warning",
-    status: "live",
-  },
-  {
-    key: "news",
-    routeKey: "news",
-    icon: Newspaper,
-    feature: "news",
-    tone: "destructive",
-    status: "live",
-  },
-  {
-    key: "analysis",
-    routeKey: "analysis",
-    icon: LineChart,
-    feature: "analysis",
-    tone: "success",
-    status: "live",
-  },
-  {
-    key: "glossary",
-    routeKey: "glossary",
-    icon: BookA,
-    feature: "glossary",
-    tone: "info",
-    status: "live",
-  },
-  {
-    key: "markets",
-    routeKey: "markets",
-    icon: TrendingUp,
-    feature: "market_data",
-    tone: "success",
-    status: "soon",
-  },
-  {
-    key: "about",
-    routeKey: "about",
-    icon: BadgeCheck,
-    feature: null,
-    tone: "muted",
-    status: "live",
-  },
+  // The `about` card left with the section it pointed at (changes-33,
+  // ADR-109). `/support` did NOT take its place: this band is "explore the
+  // PLATFORM" — things a reader can go and use — and a help page is not one
+  // of them. Support is in the header and in the footer.
 ] as const satisfies readonly ExploreDestination[];
 
 /** The destination's URL. Goes through ROUTE_PATHS so no href is hand-typed. */
@@ -142,36 +136,31 @@ export function destinationHref(destination: ExploreDestination): string {
 }
 
 /**
- * Icon-box classes per tone: the `*-interactive` ink on a 10% wash at rest,
- * flipping to the FILL with its derived foreground on hover — the one pairing
- * ADR-003 contrast-checks, and never a hand-authored hover colour
- * (code-style.md #4). Raw `--primary` is not used for a glyph: ADR-018 rule 5.
+ * Icon-box classes per tone. SOLID at rest (changes-43): the badge sits on the
+ * card's photograph, and a 10% wash let the picture show straight through it,
+ * which is the transparency the owner asked to remove. Each fill carries its
+ * engine-derived foreground, the one pairing ADR-003 contrast-checks, and the
+ * primary tone uses the white-label `--primary-solid` (ADR-140 §6). Never a
+ * hand-authored colour (code-style.md #4).
  */
 export const DESTINATION_ICON_CLASS = {
-  primary: "bg-primary/10 text-primary-interactive",
-  info: "bg-info/10 text-info-interactive",
-  success: "bg-success/10 text-success-interactive",
-  warning: "bg-warning/10 text-warning-interactive",
-  destructive: "bg-destructive/10 text-destructive-interactive",
-  muted: "bg-muted-foreground/10 text-muted-foreground",
+  primary: "bg-primary-solid text-primary-solid-foreground",
+  info: "bg-info text-info-foreground",
+  success: "bg-success text-success-foreground",
+  warning: "bg-warning text-warning-foreground",
+  destructive: "bg-destructive text-destructive-foreground",
+  muted: "bg-muted-foreground text-background",
 } as const satisfies Record<HomeMediaTone, string>;
 
-/** The hover flip, applied only on cards that are actually links. */
+/**
+ * The hover response, applied only on cards that are actually links. The fill
+ * is already solid, so the badge answers with movement rather than colour.
+ */
 export const DESTINATION_ICON_HOVER_CLASS = {
-  primary: "group-hover:bg-primary group-hover:text-primary-foreground",
-  info: "group-hover:bg-info group-hover:text-info-foreground",
-  success: "group-hover:bg-success group-hover:text-success-foreground",
-  warning: "group-hover:bg-warning group-hover:text-warning-foreground",
-  destructive: "group-hover:bg-destructive group-hover:text-destructive-foreground",
-  muted: "group-hover:bg-muted-foreground group-hover:text-background",
-} as const satisfies Record<HomeMediaTone, string>;
-
-/** The rule that sweeps across the card's top edge on hover. */
-export const DESTINATION_BAR_CLASS = {
-  primary: "bg-primary",
-  info: "bg-info",
-  success: "bg-success",
-  warning: "bg-warning",
-  destructive: "bg-destructive",
-  muted: "bg-muted-foreground",
+  primary: "group-hover:-translate-y-0.5",
+  info: "group-hover:-translate-y-0.5",
+  success: "group-hover:-translate-y-0.5",
+  warning: "group-hover:-translate-y-0.5",
+  destructive: "group-hover:-translate-y-0.5",
+  muted: "group-hover:-translate-y-0.5",
 } as const satisfies Record<HomeMediaTone, string>;

@@ -53,13 +53,12 @@ export function VisitorCta() {
         <div className="flex shrink-0 items-center gap-3">
           <Button
             variant="ghost"
-            shape="pill"
             className="bg-transparent text-secondary-foreground ring-1 ring-secondary-foreground/35 ring-inset hover:bg-secondary-foreground/10 hover:text-secondary-foreground"
             render={<Link href="/sign-in" />}
           >
             {t("signIn")}
           </Button>
-          <Button shape="pill" render={<Link href="/sign-up" />}>
+          <Button render={<Link href="/sign-up" />}>
             {t("visitorCtaAction")}
             <ArrowRight data-icon="inline-end" aria-hidden className="rtl:rotate-180" />
           </Button>

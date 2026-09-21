@@ -7,20 +7,42 @@ import { cacheLife, cacheTag } from "next/cache";
 import { ArticleKind, ContentStatus, db } from "@repo/db";
 import { pickTranslation, type LocaleFallbackInfo } from "@repo/i18n";
 import { readingTimeMinutes } from "@repo/utils";
+import { articleSearchScore, articleSearchTerms } from "./article-search.ts";
 import { ARTICLE, RELATED, loadRelationTargets } from "./content-relations.ts";
+import {
+  advertisedAlternates,
+  applyReadingLocale,
+  type LocaleMeta,
+  type ReadingLanguage,
+} from "./reading-languages.ts";
 
 interface LocaleContext {
   locales: LocaleFallbackInfo[];
   defaultLocale: string;
+  /** Every seeded locale, active or not, in display order (ADR-127). */
+  known: LocaleMeta[];
 }
 
 async function localeContext(): Promise<LocaleContext> {
   const locales = await db.locale.findMany({
-    select: { code: true, fallbackCode: true, isDefault: true },
+    select: {
+      code: true,
+      fallbackCode: true,
+      isDefault: true,
+      nativeName: true,
+      direction: true,
+      sortOrder: true,
+    },
   });
   return {
     locales: locales.map((l) => ({ code: l.code, fallbackCode: l.fallbackCode })),
     defaultLocale: locales.find((l) => l.isDefault)?.code ?? "en",
+    known: locales.map((l) => ({
+      code: l.code,
+      nativeName: l.nativeName,
+      direction: l.direction,
+      sortOrder: l.sortOrder,
+    })),
   };
 }
 
@@ -95,6 +117,12 @@ async function authorNamesFor(
   return new Map(users.map((u) => [u.id, u.name]));
 }
 
+/**
+ * The most hits a listing search ranks (changes-45). Ranking is in memory, so
+ * this bounds the read; at the listing's page size it is dozens of pages.
+ */
+const MAX_SEARCH_CANDIDATES = 500;
+
 export interface ArticleListPage {
   entries: ArticleListEntry[];
   total: number;
@@ -116,6 +144,10 @@ export interface ListPublishedArticlesOptions {
    * visibility-scoped set, and a real search backend is out of scope (the
    * plan says so explicitly). Matching on translations means a query only
    * ever hits text in a locale the reader can actually see.
+   *
+   * Since changes-45 the query is split into words (`articleSearchTerms`)
+   * and an article matches when ANY of them appears, ranked by how many do
+   * and where (`articleSearchScore`) rather than newest-first.
    */
   q?: string;
   /**
@@ -143,6 +175,12 @@ export async function loadPublishedArticles(
   options: ListPublishedArticlesOptions,
 ): Promise<ArticleListPage> {
   const now = new Date();
+  const terms = options.q ? articleSearchTerms(options.q) : [];
+  // A query made only of noise ("%", "a") names nothing to look for. Showing
+  // the whole listing under "results for …" would be a lie about the search,
+  // so it finds nothing instead.
+  if (options.q && terms.length === 0) return { entries: [], total: 0, pageCount: 1 };
+
   const where = {
     ...publicArticleWhere(now),
     kind: { in: options.kinds },
@@ -150,35 +188,79 @@ export async function loadPublishedArticles(
     ...(options.tagId ? { tags: { some: { tagId: options.tagId } } } : {}),
     ...(options.excludeIds?.length ? { id: { notIn: options.excludeIds } } : {}),
     ...(options.featuredOnly ? { isFeatured: true } : {}),
-    ...(options.q
+    // ANY word, in the title or the excerpt (changes-45) — never the body,
+    // which is stored HTML (ADR-108: rich text is shown, never matched).
+    ...(terms.length > 0
       ? {
           translations: {
             some: {
-              OR: [{ title: { contains: options.q } }, { excerpt: { contains: options.q } }],
+              OR: terms.flatMap((term) => [
+                { title: { contains: term } },
+                { excerpt: { contains: term } },
+              ]),
             },
           },
         }
       : {}),
   };
-  const [ctx, rows, total] = await Promise.all([
-    localeContext(),
-    db.article.findMany({
+  // Effective publish time isn't a column; publishedAt with scheduledFor
+  // as tiebreaker is close enough for a feed (due-scheduled rows have
+  // publishedAt null and sort last until swept — visible either way).
+  const orderBy = [{ publishedAt: "desc" as const }, { scheduledFor: "desc" as const }];
+  const include = {
+    translations: { select: { locale: true, title: true, slug: true, excerpt: true } },
+    category: {
+      include: { translations: { select: { locale: true, name: true, slug: true } } },
+    },
+  };
+
+  const ctx = await localeContext();
+  let rows;
+  let total: number;
+  if (terms.length > 0) {
+    // A search is RANKED (changes-45): an article matching more of the words,
+    // or matching in its title, comes first; newest-first breaks ties. The
+    // score needs the text, so the matching ids are ranked in memory and only
+    // the requested page is loaded in full. Bounded: a search returns at most
+    // `MAX_SEARCH_CANDIDATES` hits, far past any page a reader pages to.
+    const candidates = await db.article.findMany({
       where,
-      // Effective publish time isn't a column; publishedAt with scheduledFor
-      // as tiebreaker is close enough for a feed (due-scheduled rows have
-      // publishedAt null and sort last until swept — visible either way).
-      orderBy: [{ publishedAt: "desc" }, { scheduledFor: "desc" }],
-      skip: options.page * options.perPage,
-      take: options.perPage,
-      include: {
-        translations: { select: { locale: true, title: true, slug: true, excerpt: true } },
-        category: {
-          include: { translations: { select: { locale: true, name: true, slug: true } } },
-        },
-      },
-    }),
-    db.article.count({ where }),
-  ]);
+      orderBy,
+      take: MAX_SEARCH_CANDIDATES,
+      select: { id: true, translations: { select: { locale: true, title: true, excerpt: true } } },
+    });
+    const ranked = candidates
+      .map((row) => {
+        const picked = pickTranslation(row.translations, locale, ctx.defaultLocale, ctx.locales);
+        const score = picked
+          ? articleSearchScore(options.q ?? "", terms, picked.title, picked.excerpt)
+          : 0;
+        return { id: row.id, score };
+      })
+      .sort((a, b) => b.score - a.score);
+    total = ranked.length;
+    const skip = options.page * options.perPage;
+    const pageIds = ranked.slice(skip, skip + options.perPage).map((entry) => entry.id);
+    const loaded = pageIds.length
+      ? await db.article.findMany({ where: { id: { in: pageIds } }, include })
+      : [];
+    const byId = new Map(loaded.map((row) => [row.id, row]));
+    rows = pageIds.flatMap((id) => {
+      const row = byId.get(id);
+      return row ? [row] : [];
+    });
+  } else {
+    [rows, total] = await Promise.all([
+      db.article.findMany({
+        where,
+        orderBy,
+        skip: options.page * options.perPage,
+        take: options.perPage,
+        include,
+      }),
+      db.article.count({ where }),
+    ]);
+  }
 
   const authorNames = await authorNamesFor(rows);
   const entries: ArticleListEntry[] = [];
@@ -391,9 +473,26 @@ export interface ArticleView {
   relatedCount: number;
   faqItems: { question: string; answer: string }[];
   alternates: { locale: string; slug: string }[];
+  /**
+   * ADR-127. The languages a reader may switch the article's own words into,
+   * including the one on screen. Fewer than two ⇒ no menu.
+   */
+  readingLanguages: ReadingLanguage[];
+  /**
+   * The reading locale actually applied, or null when the page shows its
+   * ordinary translation. Null for an unknown, unreadable or same-as-shown
+   * `lang` — those are ignored, never a 404 (ADR-127 #5).
+   */
+  readingLocale: string | null;
+  /** Direction of the translation on screen, for the content wrapper's `dir`. */
+  contentDirection: "ltr" | "rtl";
 }
 
-export async function loadArticleBySlug(locale: string, slug: string): Promise<ArticleView | null> {
+export async function loadArticleBySlug(
+  locale: string,
+  slug: string,
+  readingLocale?: string,
+): Promise<ArticleView | null> {
   const now = new Date();
   const ctx = await localeContext();
   const translation = await db.articleTranslation.findFirst({
@@ -424,8 +523,23 @@ export async function loadArticleBySlug(locale: string, slug: string): Promise<A
   if (!translation) return null;
 
   const article = translation.article;
-  const picked = pickTranslation(article.translations, locale, ctx.defaultLocale, ctx.locales);
-  const alternates = article.translations.map((t) => ({ locale: t.locale, slug: t.slug }));
+  const fallbackPick = pickTranslation(
+    article.translations,
+    locale,
+    ctx.defaultLocale,
+    ctx.locales,
+  );
+  // ADR-127: a reader-chosen language REPLACES the fallback pick, but only with
+  // a translation a human saved. Anything else leaves the page as it was.
+  const reading = applyReadingLocale(
+    article.translations,
+    fallbackPick,
+    readingLocale,
+    ctx.known,
+    locale,
+  );
+  const { picked, readingLanguages, contentDirection } = reading;
+  const alternates = advertisedAlternates(article.translations, ctx.defaultLocale);
   const categoryTranslation = pickTranslation(
     article.category.translations,
     locale,
@@ -482,6 +596,9 @@ export async function loadArticleBySlug(locale: string, slug: string): Promise<A
       relatedCount: article.relatedCount,
       faqItems: [],
       alternates,
+      readingLanguages,
+      readingLocale: null,
+      contentDirection: "ltr",
     };
   }
 
@@ -526,14 +643,21 @@ export async function loadArticleBySlug(locale: string, slug: string): Promise<A
     relatedCount: article.relatedCount,
     faqItems: picked.faqItems.map((f) => ({ question: f.question, answer: f.answer })),
     alternates,
+    readingLanguages,
+    readingLocale: reading.readingLocale,
+    contentDirection,
   };
 }
 
-export async function getArticleBySlug(locale: string, slug: string): Promise<ArticleView | null> {
+export async function getArticleBySlug(
+  locale: string,
+  slug: string,
+  readingLocale?: string,
+): Promise<ArticleView | null> {
   "use cache";
   cacheTag("content");
   cacheLife({ revalidate: 300 });
-  return loadArticleBySlug(locale, slug);
+  return loadArticleBySlug(locale, slug, readingLocale);
 }
 
 /** Related by shared tags, newest first (articles.relatedCount drives the limit at the page). */
@@ -771,6 +895,30 @@ export async function loadArticleSitemapEntries(): Promise<
     where: { noIndex: false, article: publicArticleWhere(new Date()) },
     select: { locale: true, slug: true, updatedAt: true },
   });
+}
+
+/**
+ * Category and tag archives for the sitemap: every translation of an ACTIVE
+ * term that at least one public article is filed under. An empty archive is
+ * left out for the reason `loadArticleFacets` drops a zero-count category
+ * (ADR-081 #3) — a URL that lists nothing is not a page worth a crawl.
+ */
+export async function loadArticleTaxonomySitemapEntries(): Promise<{
+  categories: { locale: string; slug: string; updatedAt: Date }[];
+  tags: { locale: string; slug: string; updatedAt: Date }[];
+}> {
+  const visible = publicArticleWhere(new Date());
+  const [categories, tags] = await Promise.all([
+    db.articleCategoryTranslation.findMany({
+      where: { category: { isActive: true, articles: { some: visible } } },
+      select: { locale: true, slug: true, updatedAt: true },
+    }),
+    db.articleTagTranslation.findMany({
+      where: { tag: { isActive: true, articles: { some: { article: visible } } } },
+      select: { locale: true, slug: true, updatedAt: true },
+    }),
+  ]);
+  return { categories, tags };
 }
 
 export interface ArticleRssEntry {

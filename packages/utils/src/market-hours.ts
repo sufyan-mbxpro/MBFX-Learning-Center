@@ -290,3 +290,83 @@ export function nowFraction(at: Date, window: TimelineWindow): number | null {
   if (t < window.dayStart || t >= window.dayEnd) return null;
   return (t - window.dayStart) / (window.dayEnd - window.dayStart);
 }
+
+/**
+ * One window in which two sessions are both open (ADR-114 #4).
+ *
+ * `start` and `end` are epoch ms, so the renderer formats them in whatever
+ * zone the reader has chosen — the same zone every other figure on the page
+ * is already in. `overlapCount` is 2 by construction and is carried anyway:
+ * it is what the label is derived from, and deriving a word from a number is
+ * the difference between "two sessions overlap here" and the reference's
+ * claim that volatility is highest.
+ */
+export interface SessionOverlap {
+  names: [string, string];
+  start: number;
+  end: number;
+  durationMinutes: number;
+  /** True when `at` falls inside this window. */
+  isActive: boolean;
+}
+
+/**
+ * Every pairwise overlap between sessions, over the viewer's own day.
+ *
+ * Built on the same three-candidate shift `sessionDaySegments` uses, for the
+ * same reason: a session that crosses the viewer's midnight is two intervals
+ * on one axis, and a window is 24 hours while no session is longer, so the
+ * session shifted a day either way covers every case.
+ *
+ * Pairs only, never triples: three sessions open at once is the Sunday
+ * shoulder and a handful of minutes, and naming it would put a row on the
+ * page that is true for less time than a reader spends reading it.
+ *
+ * Sorted by start, so the list reads as a day. An empty result is the honest
+ * answer for a session set that never overlaps, not a reason to widen the
+ * search.
+ */
+export function sessionOverlaps(
+  sessions: readonly Pick<SessionState, "name" | "opensAt" | "closesAt">[],
+  window: TimelineWindow,
+  at?: number,
+): SessionOverlap[] {
+  const { dayStart, dayEnd } = window;
+  const span = dayEnd - dayStart;
+
+  /** One session's intervals CLIPPED to the viewer's day, in epoch ms. */
+  const intervals = (session: Pick<SessionState, "opensAt" | "closesAt">): [number, number][] => {
+    const out: [number, number][] = [];
+    for (const shift of [-span, 0, span]) {
+      const start = Math.max(session.opensAt + shift, dayStart);
+      const end = Math.min(session.closesAt + shift, dayEnd);
+      if (end > start) out.push([start, end]);
+    }
+    return out;
+  };
+
+  const overlaps: SessionOverlap[] = [];
+  for (let i = 0; i < sessions.length; i += 1) {
+    for (let j = i + 1; j < sessions.length; j += 1) {
+      const a = sessions[i];
+      const b = sessions[j];
+      if (!a || !b) continue;
+      for (const [aStart, aEnd] of intervals(a)) {
+        for (const [bStart, bEnd] of intervals(b)) {
+          const start = Math.max(aStart, bStart);
+          const end = Math.min(aEnd, bEnd);
+          if (end <= start) continue;
+          overlaps.push({
+            names: [a.name, b.name],
+            start,
+            end,
+            durationMinutes: Math.round((end - start) / 60_000),
+            isActive: at !== undefined && at >= start && at < end,
+          });
+        }
+      }
+    }
+  }
+
+  return overlaps.sort((x, y) => x.start - y.start);
+}

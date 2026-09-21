@@ -19,6 +19,8 @@ import { LEARN_TRACK_KEYS, type LearnTrackKey, type QuizLinkView } from "@repo/c
 import { COURSE, RECOMMENDED, loadRelationTargets } from "./content-relations.ts";
 import { scheduledVisibilityOr } from "./content.ts";
 import { loadQuizLinks } from "./quiz-links.ts";
+import { loadLocaleMeta } from "./locale-meta.ts";
+import { advertisedAlternates, applyReadingLocale, type ReadingView } from "./reading-languages.ts";
 
 interface LocaleContext {
   locales: LocaleFallbackInfo[];
@@ -53,6 +55,8 @@ async function localeContext(): Promise<LocaleContext> {
 export function publicCourseWhere(now: Date = new Date()) {
   return {
     deletedAt: null,
+    // ADR-139 #2 — hides without touching status or schedule.
+    isActive: true,
     // ADR-071 — PUBLISHED, or SCHEDULED and due. Not a bare status equality
     // since courses gained a schedule.
     OR: scheduledVisibilityOr(now),
@@ -64,6 +68,7 @@ export function publicCourseWhere(now: Date = new Date()) {
 export function publicLessonWhere(now: Date = new Date()) {
   return {
     deletedAt: null,
+    isActive: true,
     OR: scheduledVisibilityOr(now),
     visibility: FeatureVisibility.PUBLIC,
   };
@@ -111,6 +116,18 @@ export interface CourseCardView {
   externalUrl: string | null;
   /** Titles and slugs only — see `getLearnIndex`. */
   sections: SectionView[];
+  /** ADR-139 #3 — placement: first on the shelf, and the Featured view. */
+  isFeatured: boolean;
+  /** ADR-139 #4 — a marker on the card; nothing is gated. */
+  isPremium: boolean;
+  /** ISO. Drives the shelf's Newest view (ADR-139 #5). */
+  publishedAt: string | null;
+  /**
+   * Learners who have started the course (ADR-139 #5 — the Popular view). An
+   * aggregate: no learner is identifiable from it, and it is cached with the
+   * shelf, so it is as fresh as the `content` tag rather than live.
+   */
+  enrollmentCount: number;
 }
 
 export interface TrackGroup {
@@ -128,7 +145,7 @@ export interface LocaleAlternate {
   slug: string;
 }
 
-export interface CourseView extends CourseCardView {
+export interface CourseView extends CourseCardView, ReadingView {
   description: string | null;
   seoTitle: string | null;
   seoDescription: string | null;
@@ -156,7 +173,7 @@ export interface LessonAttachmentView {
   size: number;
 }
 
-export interface LessonView {
+export interface LessonView extends ReadingView {
   id: string;
   courseId: string;
   /** The course's track: the lesson URL's first segment (ADR-065 §1). */
@@ -205,6 +222,11 @@ export interface LessonView {
   /** Lesson slugs per locale. The COURSE slug also varies by locale, so the
    * page pairs these with the course alternates when it builds hreflang. */
   alternates: LocaleAlternate[];
+  /**
+   * The COURSE's slug in every locale it has one: a reading-language option
+   * for a served locale needs both halves of the lesson URL (ADR-127 #3).
+   */
+  courseAlternates: LocaleAlternate[];
   previous: { slug: string; title: string } | null;
   next: { slug: string; title: string } | null;
 }
@@ -259,6 +281,10 @@ export async function loadLearnIndex(locale: string): Promise<TrackGroup[]> {
       lessonCount: true,
       coverAssetId: true,
       externalUrl: true,
+      isFeatured: true,
+      isPremium: true,
+      publishedAt: true,
+      _count: { select: { enrollments: true } },
       translations: {
         select: { locale: true, title: true, slug: true, summary: true },
       },
@@ -307,6 +333,7 @@ export async function loadLearnIndex(locale: string): Promise<TrackGroup[]> {
       coverUrl: course.coverAssetId ? (coverUrls.get(course.coverAssetId) ?? null) : null,
       externalUrl: course.externalUrl,
       sections: buildSections(course.sections, locale, defaultLocale, locales),
+      ...cardFlags(course),
     });
   }
 
@@ -377,8 +404,15 @@ export async function getLearnIndex(locale: string): Promise<TrackGroup[]> {
 
 // ─── Course detail ───────────────────────────────────────────
 
-export async function loadCourseBySlug(locale: string, slug: string): Promise<CourseView | null> {
-  const { locales, defaultLocale } = await localeContext();
+export async function loadCourseBySlug(
+  locale: string,
+  slug: string,
+  readingLocale?: string,
+): Promise<CourseView | null> {
+  const [{ locales, defaultLocale }, known] = await Promise.all([
+    localeContext(),
+    loadLocaleMeta(),
+  ]);
 
   // Resolve by the slug in ANY locale, then re-pick the translation for the
   // requested one: a reader arriving on the English slug of a course they will
@@ -402,6 +436,10 @@ export async function loadCourseBySlug(locale: string, slug: string): Promise<Co
       externalUrl: true,
       finalQuizId: true,
       updatedAt: true,
+      isFeatured: true,
+      isPremium: true,
+      publishedAt: true,
+      _count: { select: { enrollments: true } },
       translations: {
         select: {
           locale: true,
@@ -411,6 +449,7 @@ export async function loadCourseBySlug(locale: string, slug: string): Promise<Co
           description: true,
           seoTitle: true,
           seoDescription: true,
+          translationStatus: true,
         },
       },
       sections: {
@@ -441,6 +480,15 @@ export async function loadCourseBySlug(locale: string, slug: string): Promise<Co
 
   const t = pickTranslation(course.translations, locale, defaultLocale, locales);
   if (!t) return null;
+  // ADR-127: `?lang=` swaps the course's own WORDS; `t` still owns the address.
+  const { picked, ...reading } = applyReadingLocale(
+    course.translations,
+    t,
+    readingLocale,
+    known,
+    locale,
+  );
+  const words = picked ?? t;
 
   const [coverUrls, quizLinks] = await Promise.all([
     resolveAssetUrls([course.coverAssetId]),
@@ -451,11 +499,12 @@ export async function loadCourseBySlug(locale: string, slug: string): Promise<Co
     id: course.id,
     track: course.track,
     slug: t.slug,
-    title: t.title,
-    summary: t.summary,
-    description: t.description,
-    seoTitle: t.seoTitle,
-    seoDescription: t.seoDescription,
+    title: words.title,
+    summary: words.summary,
+    description: words.description,
+    seoTitle: words.seoTitle,
+    seoDescription: words.seoDescription,
+    ...reading,
     difficulty: course.difficulty,
     estimatedHours: course.estimatedHours,
     lessonCount: course.lessonCount,
@@ -466,17 +515,22 @@ export async function loadCourseBySlug(locale: string, slug: string): Promise<Co
     // Every locale this course actually HAS a translation in — not every
     // active locale. An hreflang pointing at a URL that 404s is worse than a
     // missing pair.
-    alternates: course.translations.map((tr) => ({ locale: tr.locale, slug: tr.slug })),
+    alternates: advertisedAlternates(course.translations, defaultLocale),
     sections: buildSections(course.sections, locale, defaultLocale, locales),
     finalQuiz: course.finalQuizId ? (quizLinks.get(course.finalQuizId) ?? null) : null,
+    ...cardFlags(course),
   };
 }
 
-export async function getCourseBySlug(locale: string, slug: string): Promise<CourseView | null> {
+export async function getCourseBySlug(
+  locale: string,
+  slug: string,
+  readingLocale?: string,
+): Promise<CourseView | null> {
   "use cache";
   cacheTag("content");
   cacheLife({ revalidate: 300 });
-  return loadCourseBySlug(locale, slug);
+  return loadCourseBySlug(locale, slug, readingLocale);
 }
 
 // ─── Lesson detail ───────────────────────────────────────────
@@ -485,8 +539,12 @@ export async function loadLessonBySlug(
   locale: string,
   courseSlug: string,
   lessonSlug: string,
+  readingLocale?: string,
 ): Promise<LessonView | null> {
-  const { locales, defaultLocale } = await localeContext();
+  const [{ locales, defaultLocale }, known] = await Promise.all([
+    localeContext(),
+    loadLocaleMeta(),
+  ]);
 
   const match = await db.lessonTranslation.findFirst({
     where: {
@@ -530,6 +588,7 @@ export async function loadLessonBySlug(
           learningObjectives: true,
           seoTitle: true,
           seoDescription: true,
+          translationStatus: true,
         },
       },
       section: {
@@ -543,7 +602,9 @@ export async function loadLessonBySlug(
               // (ADR-084 #5) — one column, resolved with the lesson's own
               // quiz in a single `loadQuizLinks` call.
               finalQuizId: true,
-              translations: { select: { locale: true, title: true, slug: true } },
+              translations: {
+                select: { locale: true, title: true, slug: true, translationStatus: true },
+              },
             },
           },
         },
@@ -554,6 +615,16 @@ export async function loadLessonBySlug(
 
   const t = pickTranslation(lesson.translations, locale, defaultLocale, locales);
   if (!t) return null;
+  // ADR-127: the lesson's own words only. The course and section titles are
+  // the page's navigation and stay in the interface locale.
+  const { picked, ...reading } = applyReadingLocale(
+    lesson.translations,
+    t,
+    readingLocale,
+    known,
+    locale,
+  );
+  const words = picked ?? t;
 
   const courseT = pickTranslation(
     lesson.section.course.translations,
@@ -600,11 +671,11 @@ export async function loadLessonBySlug(
     sectionId: lesson.sectionId,
     sectionTitle: sectionT?.title ?? "",
     slug: t.slug,
-    title: t.title,
-    summary: t.summary,
-    content: t.content,
-    learningObjectives: Array.isArray(t.learningObjectives)
-      ? (t.learningObjectives as unknown[]).filter((o): o is string => typeof o === "string")
+    title: words.title,
+    summary: words.summary,
+    content: words.content,
+    learningObjectives: Array.isArray(words.learningObjectives)
+      ? (words.learningObjectives as unknown[]).filter((o): o is string => typeof o === "string")
       : [],
     estimatedMinutes: lesson.estimatedMinutes,
     videoUrl: lesson.videoUrl,
@@ -640,10 +711,12 @@ export async function loadLessonBySlug(
         },
       ];
     }),
-    seoTitle: t.seoTitle,
-    seoDescription: t.seoDescription,
+    seoTitle: words.seoTitle,
+    seoDescription: words.seoDescription,
+    ...reading,
     updatedAt: lesson.updatedAt,
-    alternates: lesson.translations.map((tr) => ({ locale: tr.locale, slug: tr.slug })),
+    alternates: advertisedAlternates(lesson.translations, defaultLocale),
+    courseAlternates: advertisedAlternates(lesson.section.course.translations, defaultLocale),
     previous,
     next,
   };
@@ -699,11 +772,12 @@ export async function getLessonBySlug(
   locale: string,
   courseSlug: string,
   lessonSlug: string,
+  readingLocale?: string,
 ): Promise<LessonView | null> {
   "use cache";
   cacheTag("content");
   cacheLife({ revalidate: 300 });
-  return loadLessonBySlug(locale, courseSlug, lessonSlug);
+  return loadLessonBySlug(locale, courseSlug, lessonSlug, readingLocale);
 }
 
 // ─── Recommendations (ADR-055 — ContentRelation reuse) ───────
@@ -776,6 +850,7 @@ async function loadRecommendations(
       coverUrl: course.coverAssetId ? (coverUrls.get(course.coverAssetId) ?? null) : null,
       externalUrl: course.externalUrl,
       sections: [],
+      ...cardFlags(course),
     });
   }
   return cards;
@@ -812,6 +887,21 @@ export async function resolveRecommendations(
   return loadRecommendations(locale, courseId, track, limit);
 }
 
+/** ADR-139 — the four card fields every course reader selects the same way. */
+function cardFlags(course: {
+  isFeatured: boolean;
+  isPremium: boolean;
+  publishedAt: Date | null;
+  _count: { enrollments: number };
+}): Pick<CourseCardView, "isFeatured" | "isPremium" | "publishedAt" | "enrollmentCount"> {
+  return {
+    isFeatured: course.isFeatured,
+    isPremium: course.isPremium,
+    publishedAt: course.publishedAt?.toISOString() ?? null,
+    enrollmentCount: course._count.enrollments,
+  };
+}
+
 const recommendationSelect = {
   id: true,
   track: true,
@@ -820,6 +910,10 @@ const recommendationSelect = {
   lessonCount: true,
   coverAssetId: true,
   externalUrl: true,
+  isFeatured: true,
+  isPremium: true,
+  publishedAt: true,
+  _count: { select: { enrollments: true } },
   translations: { select: { locale: true, title: true, slug: true, summary: true } },
 } as const;
 

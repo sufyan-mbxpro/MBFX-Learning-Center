@@ -4,8 +4,11 @@ import {
   AI_STREAM_ERROR_PREFIX,
   aiRunSchema,
   type AiFeatureKey,
+  type AiFillModule,
   type AiAssistantAction,
+  type AiStudioAction,
   AI_ASSISTANT_ACTIONS,
+  AI_STUDIO_ACTIONS,
 } from "@repo/contracts";
 import { AiError, runAiTask, streamAiTask } from "@repo/ai";
 import { notifyAiBudget } from "@repo/core";
@@ -37,17 +40,76 @@ import { ForbiddenError, canAny, requirePermission, type Subject } from "@repo/r
  * because an article is governed by `news.manage` or `analysis.*` depending on
  * which kind is being edited, and the route does not know which.
  */
-const FEATURE_SURFACE_PERMISSIONS: Record<AiFeatureKey, string[]> = {
-  writing_assistant: ["news.manage", "analysis.update", "lessons.update", "tools.update"],
-  seo_generation: ["seo.update", "news.manage", "analysis.update"],
+const FEATURE_SURFACE_PERMISSIONS: Record<AiFeatureKey, string[] | null> = {
+  writing_assistant: [
+    "news.manage",
+    "analysis.update",
+    "courses.update",
+    "lessons.update",
+    "glossary.update",
+    "tools.update",
+    // changes-46 #4: the email template body. Its save key, per the rule above.
+    "email.templates.update",
+  ],
+  // Every editor with an SEO section: the key that saves THAT editor.
+  seo_generation: [
+    "seo.update",
+    "news.manage",
+    "analysis.update",
+    "courses.update",
+    "lessons.update",
+    "glossary.update",
+    "tools.update",
+  ],
   translation: ["translations.update"],
   summarization: ["news.manage", "analysis.update"],
   alt_text: ["media.update"],
   quiz_generation: ["lessons.update"],
+  // The union of the modules below. This is the FIRST gate only; the payload
+  // names a module, and `requireFillModule` then demands THAT module's key, so
+  // holding `glossary.update` does not buy course generation (ADR-126 §6).
+  form_fill: [
+    "news.manage",
+    "analysis.update",
+    "courses.update",
+    "lessons.update",
+    "glossary.update",
+    "tools.update",
+  ],
+  // ADR-129 §4 — NO surface key, stated rather than implied. The studio writes
+  // into no entity: its result is copied out by hand, so there is no content
+  // key whose save it could bypass, and `ai.use` above is the whole gate. An
+  // empty array would mean the opposite — `canAny` refuses an empty list.
+  writing_studio: null,
 };
+
+/**
+ * The content key each fillable editor saves under. Quizzes and video topics
+ * share the lesson keys, as their own save actions do.
+ */
+const FILL_MODULE_PERMISSIONS: Record<AiFillModule, string[]> = {
+  article: ["news.manage", "analysis.update"],
+  course: ["courses.update"],
+  lesson: ["lessons.update"],
+  video_topic: ["lessons.update"],
+  quiz: ["lessons.update"],
+  glossary_term: ["glossary.update"],
+  glossary_topic: ["glossary.update"],
+  tool: ["tools.update"],
+};
+
+function requireFillModule(subject: Subject, module: AiFillModule): void {
+  const permissions = FILL_MODULE_PERMISSIONS[module];
+  if (!canAny(subject, permissions)) {
+    throw new ForbiddenError(
+      `Missing any of ${permissions.join(", ")} for AI form fill of ${module}`,
+    );
+  }
+}
 
 function requireFeatureSurface(subject: Subject, feature: AiFeatureKey): void {
   const permissions = FEATURE_SURFACE_PERMISSIONS[feature];
+  if (permissions === null) return;
   if (!canAny(subject, permissions)) {
     throw new ForbiddenError(`Missing any of ${permissions.join(", ")} for AI feature ${feature}`);
   }
@@ -61,6 +123,7 @@ function statusFor(reason: string): number {
     case "no_provider":
     case "missing_key":
     case "secret_unreadable":
+    case "model_no_vision":
       // Not 403: nothing about the SUBJECT is wrong. The platform is off, and
       // saying "forbidden" would send an admin looking at their own roles.
       return 409;
@@ -80,11 +143,19 @@ function statusFor(reason: string): number {
   }
 }
 
-/** The action's own tier and effort, when the assistant names one (ADR-099 #4). */
+/**
+ * The action's own tier and effort, when the assistant or the studio names one
+ * (ADR-099 #4, ADR-129 §2). The payload has already been parsed, so `action`
+ * is a registry key; the lookup is still a find, never a cast into a table.
+ */
 function actionOverrides(feature: AiFeatureKey, payload: unknown) {
-  if (feature !== "writing_assistant") return {};
-  const action = (payload as { action?: AiAssistantAction })?.action;
-  const entry = AI_ASSISTANT_ACTIONS.find((a) => a.key === action);
+  const action = (payload as { action?: AiAssistantAction | AiStudioAction })?.action;
+  const entry =
+    feature === "writing_assistant"
+      ? AI_ASSISTANT_ACTIONS.find((a) => a.key === action)
+      : feature === "writing_studio"
+        ? AI_STUDIO_ACTIONS.find((a) => a.key === action)
+        : undefined;
   return entry ? { modelRole: entry.modelRole, effort: entry.effort } : {};
 }
 
@@ -114,6 +185,14 @@ export async function POST(request: Request): Promise<Response> {
       { error: "Invalid payload", issues: parsedPayload.error.issues },
       { status: 400 },
     );
+  }
+
+  if (feature === "form_fill") {
+    // Re-parsed with the feature's own schema rather than cast: the union
+    // above is typed across every feature, and a cast is how a body reaches a
+    // gate unparsed (security.md #6). It already succeeded once, so this does too.
+    const fill = AI_PAYLOAD_SCHEMAS.form_fill.parse(parsedPayload.data);
+    requireFillModule(subject, fill.module);
   }
 
   const input = {

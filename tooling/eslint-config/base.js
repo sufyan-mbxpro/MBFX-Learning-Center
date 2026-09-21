@@ -94,7 +94,20 @@ export const baseConfig = [
     },
   },
   {
-    ignores: ["**/dist/**", "**/.next/**", "**/.turbo/**", "**/coverage/**", "**/src/generated/**"],
+    // `.next-e2e` is the E2E harness's own build output (playwright.config.ts
+    // sets NEXT_DIST_DIR so `pnpm e2e` and `pnpm dev` can run at once). It is
+    // git-ignored but was not eslint-ignored, so any machine that had run the
+    // E2E suite got ten thousand errors out of `pnpm lint` in generated
+    // chunks — and CI's lint → typecheck → test → build order would too, the
+    // first time a build landed before a lint.
+    ignores: [
+      "**/dist/**",
+      "**/.next/**",
+      "**/.next-e2e/**",
+      "**/.turbo/**",
+      "**/coverage/**",
+      "**/src/generated/**",
+    ],
   },
 ];
 

@@ -1,6 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 import { config as loadEnv } from "dotenv";
 import path from "node:path";
+import { e2eDatabaseUrl, SOURCE_URL_VAR } from "./e2e/database.ts";
 
 // E2E harness (testing.md: "Playwright — E2E for both surfaces of the single
 // app"). This is the first Playwright setup in the repo; every module until
@@ -24,15 +25,6 @@ const PORT = Number(process.env.E2E_PORT ?? 3100);
 // and BLOCKS its own /_next/static chunks when the browser uses the IP form,
 // so the page loads without JavaScript and every form silently does nothing.
 export const BASE_URL = `http://localhost:${PORT}`;
-
-/** The isolated E2E database URL, derived from DATABASE_URL. */
-export function e2eDatabaseUrl(): string {
-  const raw = process.env.DATABASE_URL;
-  if (!raw) throw new Error("DATABASE_URL is not set — E2E needs it to derive its own database.");
-  const url = new URL(raw);
-  url.pathname = `/${process.env.E2E_DATABASE_NAME ?? "mbfx_e2e"}`;
-  return url.toString();
-}
 
 export const STORAGE_STATE = path.resolve(__dirname, "e2e/.auth/admin.json");
 
@@ -87,10 +79,23 @@ export default defineConfig({
     //
     // Dev mode reads the environment at runtime, so there is no skew. The
     // cost is first-hit compilation, covered by the timeouts below.
-    command: `pnpm exec next dev --port ${PORT}`,
+    // Provision, THEN serve — one command, because the server's command is the
+    // only hook that runs before the server. Playwright's plugin setup (where
+    // `webServer` lives) precedes `globalSetup`, so a provisioning step there
+    // could never beat the server to the database: `next dev` came up against
+    // a database that did not exist, every request sat in the Prisma pool
+    // until it timed out, and the run died on this very timeout with the
+    // script that creates the database still queued behind it. `globalSetup`
+    // now verifies what this produced. `.mts`, so Node reads it as ESM without
+    // warning that apps/web declares no `"type": "module"`.
+    command: `node --experimental-strip-types e2e/provision.mts && pnpm exec next dev --port ${PORT}`,
     url: BASE_URL,
     reuseExistingServer: !process.env.CI,
-    timeout: 240_000,
+    // Covers BOTH halves of the command above: a full drop/migrate/seed of the
+    // E2E database (~85s here) and then `next dev`'s first-hit compilation of
+    // the route the URL check asks for. 240s covered only the second and this
+    // run died on the timeout with a healthy server seconds away.
+    timeout: 480_000,
     env: {
       // `process.env` must be spread explicitly: Playwright REPLACES the
       // child's environment with this object rather than merging, so omitting
@@ -99,6 +104,14 @@ export default defineConfig({
       // spend an afternoon.
       ...(process.env as Record<string, string>),
       DATABASE_URL: e2eDatabaseUrl(),
+      // The DEV url travels separately because the line above has taken its
+      // usual name: `provision.mts` issues CREATE DATABASE through the
+      // connection that is known to work, and needs the dev database's name
+      // to refuse to drop it.
+      [SOURCE_URL_VAR]: process.env.DATABASE_URL ?? "",
+      // Its own build directory, so this server can run alongside `pnpm dev`
+      // — Next 16's dev lock lives at `<distDir>/lock` (see next.config.ts).
+      NEXT_DIST_DIR: ".next-e2e",
       NEXT_PUBLIC_SITE_URL: BASE_URL,
       BETTER_AUTH_URL: BASE_URL,
     },

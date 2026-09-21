@@ -47,26 +47,51 @@ describe("no counted-figures strip on the public site", () => {
     expect(src).not.toContain("StatStrip");
   });
 
-  // StatCard/StatBand stay in @repo/ui for the About facts band, whose figures
-  // are owner-supplied company facts (ADR-047 §2, empty ⇒ not rendered), not
-  // row counts. Nothing else on the public site may count-up a total.
-  it("only the About facts band renders a StatCard or StatBand", () => {
+  // StatCard/StatBand stay in @repo/ui for the OWNER-SUPPLIED facts band,
+  // whose figures are company facts (ADR-103 §1, empty ⇒ not rendered), not
+  // row counts. Nothing else on the public site may count up a total.
+  //
+  // It was two until ADR-109 withdrew the About section, which took the other
+  // one with it. An allow-list, not a removed guard: ADR-076 exists because
+  // the banned strip had been copied into four mastheads without one, so a
+  // SECOND entry here needs its own ADR — the friction is the point.
+  const FACTS_BANDS = ["_sections/facts.tsx"];
+
+  it("only the owner-supplied facts band renders a StatCard or StatBand", () => {
     const users = PUBLIC_SOURCES.filter(({ src }) =>
       /@repo\/ui\/components\/stat-(card|band)/.test(src),
     ).map(({ path }) => path);
-    expect(users).toEqual(["about/_sections/facts-sections.tsx"]);
+    expect(users.toSorted()).toEqual(FACTS_BANDS.toSorted());
+  });
+
+  // The property that actually distinguishes a FACT from a COUNT (ADR-103 §1):
+  // where the number comes from. A fact is read from the owner's content
+  // module; a count is queried. This is what keeps the allow-list above
+  // meaningful — without it, "renders a StatBand" is a name, not a rule.
+  it.each(FACTS_BANDS)("%s reads owner-supplied content, never a service", (path) => {
+    const src = read(path);
+    expect(src).toMatch(/_content\//);
+    expect(src).not.toMatch(/@repo\/(core|db|settings)/);
+    // No counting, by any of the names a count arrives under.
+    expect(src).not.toMatch(/\b(count|Count|aggregate|groupBy|findMany)\b/);
   });
 });
 
 describe("one section bar (ADR-076 §1)", () => {
-  it("About and the track layout both render the shared SectionNav", () => {
-    expect(read("about/layout.tsx")).toContain('from "../_components/section-nav.tsx"');
+  it("the track layout renders the shared SectionNav", () => {
     expect(read("learn/[track]/layout.tsx")).toContain('from "../../_components/section-nav.tsx"');
   });
 
   it("no second copy of the bar exists", () => {
-    expect(existsSync(join(ROOT, "about/_components/section-nav.tsx"))).toBe(false);
     expect(existsSync(join(ROOT, "learn/_components/learn-section-nav.tsx"))).toBe(false);
+  });
+
+  // ADR-112. The bar is for an area whose surfaces are DIFFERENT KINDS of
+  // thing and which a reader moves between while studying — which /tools is
+  // not: eight calculators are the same kind of thing, used one at a time,
+  // and the strip scrolled sideways on a laptop to say so.
+  it("the tools layout renders NO bar", () => {
+    expect(read("tools/layout.tsx")).not.toContain("section-nav.tsx");
   });
 
   it("is tinted apart from the header, over an opaque ground", () => {
@@ -76,7 +101,7 @@ describe("one section bar (ADR-076 §1)", () => {
     // The tint stays inside TONAL_TINT_CONTRACT (0.15), which is what keeps
     // --primary-interactive legible on it (ADR-073).
     expect(src).toContain("bg-primary/10");
-    expect(src).toContain("bg-primary text-primary-foreground");
+    expect(src).toContain("bg-primary-solid text-primary-solid-foreground");
   });
 });
 

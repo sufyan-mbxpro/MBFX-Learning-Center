@@ -36,26 +36,40 @@ export const ROUTE_PATHS = {
   // `tools.test.ts` fails if the two disagree in either direction.
   "tool-position-size": "/tools/position-size",
   "tool-pip-value": "/tools/pip-value",
+  "tool-margin": "/tools/margin",
+  "tool-profit-loss": "/tools/profit-loss",
+  "tool-risk-reward": "/tools/risk-reward",
   "tool-gain-loss": "/tools/gain-loss",
   "tool-pivot-points": "/tools/pivot-points",
   "tool-market-hours": "/tools/market-hours",
   "tool-currency-converter": "/tools/currency-converter",
   "tool-correlation": "/tools/correlation",
   "tool-risk-sentiment": "/tools/risk-sentiment",
-  markets: "/markets",
+  // The two market boards (ADR-136 §5). They live under /tools but are NOT
+  // `TOOLS` members, like the economic calendar (ADR-115 #2), so their keys
+  // carry no `tool-` prefix: `tools.test.ts` reserves that prefix for
+  // registered tools and fails on one without its tool.
+  "live-rates": "/tools/live-rates",
+  volatility: "/tools/volatility",
+  // The vendor's headline feed as a page of its own (changes-40). Same
+  // standing as the two boards above: a framed widget with our chrome, no
+  // `Tool` row, no config schema, no editor — there is nothing on it for an
+  // admin to configure, which is exactly ADR-115 #2's test.
+  "market-news": "/tools/market-news",
   analysis: "/analysis",
   "economic-calendar": "/economic-calendar",
   news: "/news",
   "sign-in": "/sign-in",
   "sign-up": "/sign-up",
-  // About section (ADR-047). Coded static routes under app/(public)/[locale]/about/**,
-  // not CMS pages — they take Next's normal precedence over the [...slug]
-  // catch-all, exactly as news/ and glossary/ already do.
-  about: "/about",
-  "about-why-us": "/about/why-us",
-  "about-transparency": "/about/transparency",
-  "about-security": "/about/security",
-  "about-support": "/about/support",
+  // Support (changes-33, ADR-109). What survives of the About section: one
+  // coded page, no children, no section bar. The four pages around it said
+  // things a learning centre with no facts recorded could not say, and the
+  // one page that answered a reader's actual question was buried three
+  // clicks in.
+  support: "/support",
+  // The reader's sitemap (ADR-110). A page, not `sitemap.xml` — the footer
+  // row the reference carries is for a person who cannot find something.
+  sitemap: "/sitemap",
 } as const satisfies Record<string, string>;
 
 export type RouteKey = keyof typeof ROUTE_PATHS;
@@ -63,22 +77,6 @@ export type RouteKey = keyof typeof ROUTE_PATHS;
 export function isRouteKey(key: string): key is RouteKey {
   return key in ROUTE_PATHS;
 }
-
-/**
- * The About section's route keys, in menu order (ADR-047). Exported so the
- * sitemap and the mega-menu panel enumerate the same five destinations —
- * a page added here shows up in both without a second edit.
- */
-export const ABOUT_ROUTE_KEYS = [
-  "about",
-  "about-why-us",
-  "about-transparency",
-  "about-security",
-  "about-support",
-] as const satisfies readonly RouteKey[];
-
-/** Those keys resolved to paths, for callers that need the URL not the key. */
-export const ABOUT_PATHS: readonly string[] = ABOUT_ROUTE_KEYS.map((key) => ROUTE_PATHS[key]);
 
 /**
  * The four route keys each learning track owns (ADR-065 §4, extended by

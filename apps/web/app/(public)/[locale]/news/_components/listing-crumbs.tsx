@@ -7,11 +7,12 @@
 // Still not the admin's Breadcrumbs — nothing under app/(public) may import
 // from app/(admin) (architecture.md #5), and the public trail is an
 // explicit "Home · Section" rather than the admin's path-derived one.
-import { getTranslations } from "next-intl/server";
+import { getLocale, getTranslations } from "next-intl/server";
 
 import { Link } from "@repo/i18n/navigation";
 import { getSetting } from "@repo/settings";
 import { cn } from "@repo/ui/lib/utils";
+import { BreadcrumbJsonLd } from "../../_components/breadcrumb-json-ld.tsx";
 
 export interface Crumb {
   label: string;
@@ -42,8 +43,9 @@ export async function ListingCrumbs({
   tone?: keyof typeof TONE_CLASS;
   className?: string;
 }) {
-  const [t, showBreadcrumbs] = await Promise.all([
+  const [t, locale, showBreadcrumbs] = await Promise.all([
     getTranslations("nav"),
+    getLocale(),
     // The setting has existed since Module 08; the public surface honours it
     // here and nowhere else.
     getSetting("layout.showBreadcrumbs"),
@@ -56,6 +58,8 @@ export async function ListingCrumbs({
 
   return (
     <nav aria-label={t("breadcrumb")} className={className}>
+      {/* The same trail, for search engines — only when it is drawn. */}
+      <BreadcrumbJsonLd locale={locale} crumbs={trail} />
       <ol className={cn("flex flex-wrap items-center gap-x-2 text-sm", ink.rest)}>
         {trail.map((crumb, index) => (
           <li key={`${crumb.label}-${index}`} className="flex items-center gap-2">

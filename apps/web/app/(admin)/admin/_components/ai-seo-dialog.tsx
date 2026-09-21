@@ -1,6 +1,13 @@
 "use client";
 
-// Auto-SEO (changes-29 B2).
+// Auto-SEO (changes-29 B2), on every editor with an SEO section.
+//
+// **Only the fields the editor HAS.** `current` names them: the article editor
+// passes all five, a course passes three, a glossary term two. A field the
+// host did not pass is never shown and never applied, so a suggestion cannot
+// land in a column the entity does not carry. `keywords: "single"` is for the
+// modules whose column is ONE focus keyword — the first suggestion only, rather
+// than a comma list saved into a field that scores against a single phrase.
 //
 // **A review dialog, not an apply.** Each field is shown SIDE BY SIDE with
 // what is already there, with a per-field checkbox that is default-checked
@@ -69,7 +76,8 @@ const FIELD_ORDER: FieldKey[] = [
   "focusKeywords",
 ];
 
-function toDraft(suggestion: SeoSuggestion): SeoDraft {
+function toDraft(suggestion: SeoSuggestion, keywords: "list" | "single"): SeoDraft {
+  const list = suggestion.focusKeywords ?? [];
   return {
     seoTitle: suggestion.seoTitle,
     seoDescription: suggestion.seoDescription,
@@ -77,7 +85,7 @@ function toDraft(suggestion: SeoSuggestion): SeoDraft {
     ogDescription: suggestion.ogDescription ?? "",
     // The column stores a comma-separated string; the model returns an array,
     // which is the shape a model gets right far more often.
-    focusKeywords: (suggestion.focusKeywords ?? []).join(", "),
+    focusKeywords: keywords === "single" ? (list[0] ?? "") : list.join(", "),
   };
 }
 
@@ -86,15 +94,20 @@ export function AiSeoButton({
   current,
   source,
   entity,
+  keywords = "list",
   onApply,
 }: {
   labels: AiSeoLabels;
-  current: SeoDraft;
-  /** The article this is about — title, body, excerpt. Named fields only. */
+  /** The editor's own SEO fields, current values. Absent keys are not offered. */
+  current: Partial<SeoDraft>;
+  /** What the page is about — title, body, excerpt. Named fields only. */
   source: { title: string; content: string; excerpt?: string; locale?: string };
   entity?: { type: string; id: string };
+  /** `single` keeps the first keyword; `list` (default) joins them with commas. */
+  keywords?: "list" | "single";
   onApply: (patch: Partial<SeoDraft>) => void;
 }) {
+  const fields = FIELD_ORDER.filter((key) => current[key] !== undefined);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [reason, setReason] = useState<string | null>(null);
@@ -118,7 +131,9 @@ export function AiSeoButton({
           feature: "seo_generation",
           payload: {
             title: source.title,
-            content: source.content,
+            // The payload refuses an empty body; a page with no prose yet is
+            // still describable from its excerpt or, failing that, its title.
+            content: source.content.trim() || source.excerpt?.trim() || source.title,
             ...(source.excerpt ? { excerpt: source.excerpt } : {}),
             ...(source.locale ? { locale: source.locale } : {}),
           },
@@ -127,13 +142,16 @@ export function AiSeoButton({
         // Parsed by the SAME schema the form uses, with the columns' own
         // limits: an over-length meta description is a FAILED generation, not
         // a truncation (ADR-097 #13).
-        (value) => toDraft(seoSuggestionSchema.parse(value)),
+        (value) => toDraft(seoSuggestionSchema.parse(value), keywords),
       );
       setSuggestion(result);
       // Default-checked only where the field is empty.
       setChecked(
         Object.fromEntries(
-          FIELD_ORDER.map((key) => [key, current[key].trim().length === 0 && result[key] !== ""]),
+          FIELD_ORDER.map((key) => [
+            key,
+            fields.includes(key) && (current[key] ?? "").trim().length === 0 && result[key] !== "",
+          ]),
         ) as Record<FieldKey, boolean>,
       );
     } catch (error) {
@@ -146,7 +164,7 @@ export function AiSeoButton({
   function apply() {
     if (!suggestion) return;
     const patch: Partial<SeoDraft> = {};
-    for (const key of FIELD_ORDER) {
+    for (const key of fields) {
       if (checked[key] && suggestion[key] !== "") patch[key] = suggestion[key];
     }
     onApply(patch);
@@ -183,35 +201,37 @@ export function AiSeoButton({
 
           {suggestion && (
             <div className="flex max-h-96 flex-col gap-4 overflow-y-auto">
-              {FIELD_ORDER.filter((key) => suggestion[key] !== "").map((key) => (
-                <Field key={key} orientation="horizontal" className="items-start">
-                  <Checkbox
-                    checked={checked[key]}
-                    onCheckedChange={(value) =>
-                      setChecked((state) => ({ ...state, [key]: value === true }))
-                    }
-                  />
-                  <FieldContent>
-                    <FieldLabel>{labels.fields[key]}</FieldLabel>
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      <div className="flex flex-col gap-1">
-                        <span className="text-2xs text-muted-foreground">{labels.current}</span>
-                        {/* Rendered as TEXT. A `<script>` in a suggestion
+              {fields
+                .filter((key) => suggestion[key] !== "")
+                .map((key) => (
+                  <Field key={key} orientation="horizontal" className="items-start">
+                    <Checkbox
+                      checked={checked[key]}
+                      onCheckedChange={(value) =>
+                        setChecked((state) => ({ ...state, [key]: value === true }))
+                      }
+                    />
+                    <FieldContent>
+                      <FieldLabel>{labels.fields[key]}</FieldLabel>
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <div className="flex flex-col gap-1">
+                          <span className="text-2xs text-muted-foreground">{labels.current}</span>
+                          {/* Rendered as TEXT. A `<script>` in a suggestion
                             arrives as visible characters (§12 #5). */}
-                        <p className="text-sm whitespace-pre-wrap">
-                          {current[key] || (
-                            <span className="text-muted-foreground">{labels.empty}</span>
-                          )}
-                        </p>
+                          <p className="text-sm whitespace-pre-wrap">
+                            {current[key] || (
+                              <span className="text-muted-foreground">{labels.empty}</span>
+                            )}
+                          </p>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <span className="text-2xs text-muted-foreground">{labels.suggested}</span>
+                          <p className="text-sm whitespace-pre-wrap">{suggestion[key]}</p>
+                        </div>
                       </div>
-                      <div className="flex flex-col gap-1">
-                        <span className="text-2xs text-muted-foreground">{labels.suggested}</span>
-                        <p className="text-sm whitespace-pre-wrap">{suggestion[key]}</p>
-                      </div>
-                    </div>
-                  </FieldContent>
-                </Field>
-              ))}
+                    </FieldContent>
+                  </Field>
+                ))}
             </div>
           )}
 
@@ -222,7 +242,7 @@ export function AiSeoButton({
             <Button
               type="button"
               onClick={apply}
-              disabled={!suggestion || !FIELD_ORDER.some((key) => checked[key])}
+              disabled={!suggestion || !fields.some((key) => checked[key])}
             >
               {labels.apply}
             </Button>

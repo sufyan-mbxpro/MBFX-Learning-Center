@@ -3,7 +3,7 @@
 // IntersectionObserver, which makes it exactly the environment to prove that:
 // every assertion below runs with the observer absent, and the component still
 // has to render all of its content and keep its controls sane.
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Carousel } from "./carousel.tsx";
 
@@ -94,6 +94,91 @@ describe("Carousel — controls", () => {
   });
 });
 
+describe("Carousel — which controls render (changes-35, ADR-116 §1)", () => {
+  const arrows = () => screen.queryAllByRole("button", { name: /^(Previous|Next) sections$/ });
+  const dots = () => screen.queryAllByRole("button", { name: /^Slide \d$/ });
+
+  function renderWith(props: Partial<React.ComponentProps<typeof Carousel>>, slideCount = 4) {
+    return render(
+      <Carousel
+        label="Platform sections"
+        previousLabel="Previous sections"
+        nextLabel="Next sections"
+        slideLabels={Array.from({ length: slideCount }, (_, i) => `Slide ${i + 1}`)}
+        {...props}
+      >
+        {Array.from({ length: slideCount }, (_, i) => (
+          <article key={i}>Card {i + 1}</article>
+        ))}
+      </Carousel>,
+    );
+  }
+
+  it("defaults to both, which is what every pre-changes-35 call site got", () => {
+    renderWith({});
+    expect(arrows()).toHaveLength(2);
+    expect(dots()).toHaveLength(4);
+  });
+
+  it("`arrows` renders no dot rail at all — not a hidden one", () => {
+    renderWith({ controls: "arrows" });
+    expect(arrows()).toHaveLength(2);
+    // `display: none` would keep eight dead buttons in the payload of a band
+    // that asked for arrows only. The assertion is absence, not invisibility.
+    expect(dots()).toHaveLength(0);
+  });
+
+  it("`dots` renders no arrows", () => {
+    renderWith({ controls: "dots" });
+    expect(arrows()).toHaveLength(0);
+    expect(dots()).toHaveLength(4);
+  });
+
+  it.each(["arrows", "dots", "both"] as const)(
+    "%s keeps every slide named in the accessibility tree",
+    (controls) => {
+      renderWith({ controls });
+      // Dropping a POINTER affordance must not drop the position readout: a
+      // screen reader announces the named groups inside the labelled region,
+      // and that is true in all three settings.
+      expect(screen.getAllByRole("group")).toHaveLength(4);
+      expect(screen.getByRole("group", { name: "Slide 3" })).toBeTruthy();
+    },
+  );
+
+  it("the arrows keep their catalog labels when the dots are gone", () => {
+    renderWith({ controls: "arrows" });
+    expect(screen.getByRole("button", { name: "Previous sections" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Next sections" })).toBeTruthy();
+  });
+
+  it("a one-slide track renders no controls in any setting", () => {
+    // Both arrows would be permanently disabled and the rail would be one dot
+    // that is already current. A control that cannot do anything is not an
+    // affordance — `MetricRow`'s empty-group rule, applied to a control row.
+    renderWith({}, 1);
+    expect(arrows()).toHaveLength(0);
+    expect(dots()).toHaveLength(0);
+    // The slide itself is untouched: the no-JS surface is still complete.
+    expect(screen.getByText("Card 1")).toBeTruthy();
+  });
+
+  it("centred alignment drops the rail's flex-1 so the arrows stay centred", () => {
+    const { container } = renderWith({ controls: "arrows", controlsAlign: "center" });
+    const row = container.querySelector("[data-slot=carousel] > div:last-of-type");
+    expect(row?.className).toContain("justify-center");
+  });
+
+  it("start alignment is the default and keeps the rail spanning the row", () => {
+    const { container } = renderWith({});
+    const row = container.querySelector("[data-slot=carousel] > div:last-of-type");
+    expect(row?.className).not.toContain("justify-center");
+    // The dot rail, not the track: `ul:last-of-type` matches both, because
+    // each is the only ul among its own siblings.
+    expect(row?.querySelector("ul")?.className).toContain("flex-1");
+  });
+});
+
 describe("Carousel — control tone", () => {
   // The `tone` prop is a CORRECTNESS switch, not a preference: the default
   // palette (--border, --primary-interactive) is derived for legibility
@@ -170,5 +255,67 @@ describe("Carousel — RTL", () => {
     renderCarousel(4);
     screen.getByRole("button", { name: "Slide 2" }).click();
     expect(scrollIntoView).toHaveBeenCalledWith(expect.objectContaining({ behavior: "auto" }));
+  });
+});
+
+describe("Carousel — opt-in autoplay and hover arrows (changes-37, ADR-121 §4)", () => {
+  function renderWith(props: Partial<React.ComponentProps<typeof Carousel>>, slideCount = 3) {
+    return render(
+      <Carousel
+        label="Quotes"
+        previousLabel="Previous quote"
+        nextLabel="Next quote"
+        slideLabels={Array.from({ length: slideCount }, (_, i) => `Slide ${i + 1}`)}
+        {...props}
+      >
+        {Array.from({ length: slideCount }, (_, i) => (
+          <article key={i}>Card {i + 1}</article>
+        ))}
+      </Carousel>,
+    );
+  }
+  const autoplay = { pauseLabel: "Pause quotes", playLabel: "Play quotes" };
+
+  it("renders no pause control and no hover arrows unless asked", () => {
+    renderWith({ controls: "dots" });
+    expect(screen.queryByRole("button", { name: "Pause quotes" })).toBeNull();
+    expect(screen.queryAllByRole("button", { name: /quote$/ })).toHaveLength(0);
+  });
+
+  it("autoplay renders a visible pause button that names the state it changes to", () => {
+    renderWith({ controls: "dots", autoplay });
+    const button = screen.getByRole("button", { name: "Pause quotes" });
+    fireEvent.click(button);
+    expect(screen.getByRole("button", { name: "Play quotes" })).toBeTruthy();
+  });
+
+  it("autoplay loops, so neither arrow is disabled at the first slide", () => {
+    renderWith({ controls: "arrows", autoplay });
+    expect(screen.getByRole("button", { name: "Previous quote" }).hasAttribute("disabled")).toBe(
+      false,
+    );
+  });
+
+  it("hover arrows are absent, not disabled, where they cannot move", () => {
+    renderWith({ controls: "dots", hoverArrows: true });
+    // At rest on slide 0 of a non-looping carousel: next only.
+    expect(screen.queryByRole("button", { name: "Previous quote" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Next quote" })).toBeTruthy();
+  });
+
+  it("looping hover arrows offer both directions", () => {
+    renderWith({ controls: "dots", hoverArrows: true, autoplay });
+    expect(screen.getByRole("button", { name: "Previous quote" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Next quote" })).toBeTruthy();
+  });
+
+  it("does not advance without an IntersectionObserver — motion fails closed", () => {
+    vi.useFakeTimers();
+    const scrollBy = vi.fn();
+    Element.prototype.scrollBy = scrollBy;
+    renderWith({ controls: "dots", autoplay: { ...autoplay, interval: 1000 } });
+    vi.advanceTimersByTime(5000);
+    expect(scrollBy).not.toHaveBeenCalled();
+    vi.useRealTimers();
   });
 });

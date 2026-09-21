@@ -85,3 +85,43 @@ should silently hide a feature, not 500 the page.
 Cache tags: `settings:{group}` (architecture.md #12, frozen) for settings;
 `feature-flags` (not in the original frozen list — minted here, single tag
 for all flags since there's no per-group flag read path yet) for flags.
+
+## `SettingType.DOCUMENT` (changes-33, ADR-110)
+
+A ninth type, and today it holds the three legal documents. Its value is a
+site-relative PATH: `/legal/terms.pdf` on a seeded install,
+`/uploads/<key>` once an admin uploads a replacement. External URLs are
+refused by `legalDocumentValueSchema`, which carries `internalPathSchema`'s
+negative lookahead — `//evil.example` passes every naive `startsWith("/")`.
+
+**Not a widened `IMAGE`.** The two render different controls and accept
+different bytes: an image field's whole affordance is the PREVIEW, and a
+thumbnail of page one of a forty-page agreement tells an admin nothing.
+`DocumentPickerField` shows the filename and a way to open it.
+
+**It has no upload of its own.** The `MediaPickerDialog` it opens already
+uploads; a second path would be a second set of size limits, a second error
+surface and a second place for the category to be wrong.
+
+`legal.companyRegistration` and `legal.registeredAddress` landed beside them
+as their own keys rather than as sentences inside `legal.riskDisclaimer`: the
+footer prints them as separate lines, a translator handles an address
+differently from a paragraph of risk prose, and both may legitimately be
+empty — in which case neither line renders.
+
+## `site.faviconUrl` is gone (changes-36)
+
+Seeded in Module 05, typed in `@repo/contracts`, grouped under General,
+rendered as an IMAGE field — and **read by nothing**. The favicon has been a
+`BrandAsset` since ADR-017: Theme → Logos & Favicons writes it,
+`faviconIcons()` reads it in both root layouts. An admin could upload a file
+there, press Save, see it succeed, and change no page on the site.
+
+code-style.md #28, the same rule ADR-090 wrote for `seo.robotsIndex`. Deleted
+from the seed, the schema, the group map, and from existing databases —
+unconditionally, which is safe in the way overwriting a VALUE is not: the key
+is gone from the registry, so nothing can read it either way.
+
+`20260916150000_settings_cleanup_changes36` also moves `footer.menuColumns` to
+its five-column value, bounded to a row still holding the previous seeded
+three (ADR-108's migration is the template).

@@ -1,7 +1,7 @@
 import { getTranslations } from "next-intl/server";
 import { hasAiSecretKey } from "@repo/ai";
 import { requirePermission } from "@repo/rbac";
-import { AdminPage } from "../../../_components/admin-page.tsx";
+import { EditorPage } from "../../../_components/admin-page.tsx";
 import { providerFormLabels } from "../_labels.ts";
 import { AiProviderForm } from "../provider-form.tsx";
 
@@ -14,7 +14,7 @@ export default async function NewAiProviderPage() {
   const tAi = await getTranslations("admin.ai");
 
   return (
-    <AdminPage
+    <EditorPage
       title={tAi("providerNew")}
       description={tAi("providerEditDescription")}
       backHref="/admin/ai/providers"
@@ -33,6 +33,6 @@ export default async function NewAiProviderPage() {
         }}
         labels={providerFormLabels(t, tAi)}
       />
-    </AdminPage>
+    </EditorPage>
   );
 }

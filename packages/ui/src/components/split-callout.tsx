@@ -50,10 +50,10 @@ function SplitCallout({
             // graphic rather than a slot waiting for a photograph.
             <div
               aria-hidden
-              className="flex aspect-4/3 w-full items-center justify-center rounded-2xl bg-gradient-to-br from-primary-subtle to-muted"
+              className="flex aspect-4/3 w-full items-center justify-center rounded-lg bg-gradient-to-br from-primary-subtle to-muted"
             >
               {step !== undefined && (
-                <span className="text-display-numeral leading-none font-semibold text-primary/20">
+                <span className="font-display text-display-numeral leading-none font-bold text-primary/20">
                   {step}
                 </span>
               )}
@@ -87,7 +87,7 @@ function SplitCallout({
             </div>
           )}
 
-          <h2 className="text-display-sm font-semibold text-balance">{title}</h2>
+          <h2 className="font-display text-display-sm font-bold text-balance">{title}</h2>
           {children && <div className="flex flex-col gap-3 text-pretty opacity-80">{children}</div>}
           {actions && <div className="flex flex-wrap items-center gap-3">{actions}</div>}
         </Reveal>

@@ -2,16 +2,20 @@
 // the sniffer decides by bytes, never by name or declared type; the size
 // cap and key shape are asserted so the serving route's pattern and the
 // driver's expectations stay in lockstep.
-import { readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { ReferenceSourceType } from "@repo/db";
-import { mediaSourceTypeSchema } from "@repo/contracts";
-import { describe, expect, it } from "vitest";
+import { MEDIA_CATEGORIES, mediaSourceTypeSchema } from "@repo/contracts";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   MAX_UPLOAD_BYTES,
   OBJECT_KEY_PATTERN,
   UNSAFE_SVG,
   UploadRejectedError,
   contentDispositionFor,
+  createLocalDiskStorage,
   decodeMediaCursor,
   encodeMediaCursor,
   generateObjectKey,
@@ -20,6 +24,7 @@ import {
   resolveThumbnailUrl,
   sniffImageType,
   sniffMediaType,
+  uploadsRootDir,
   validateImageUpload,
 } from "./media.ts";
 
@@ -205,6 +210,69 @@ describe("generateObjectKey", () => {
       expect(OBJECT_KEY_PATTERN.test(bad)).toBe(false);
     }
   });
+
+  // ADR-144 §3 — a category is a storage prefix now.
+  it("prefixes a key with its category, and the pattern accepts every registered one", () => {
+    for (const category of MEDIA_CATEGORIES) {
+      const key = generateObjectKey("webp", category);
+      expect(key.startsWith(`${category}/`)).toBe(true);
+      expect(key).toMatch(OBJECT_KEY_PATTERN);
+    }
+  });
+
+  it("still accepts a flat key stored before ADR-144, so no existing URL moves", () => {
+    expect(`${"a".repeat(24)}.mp4`).toMatch(OBJECT_KEY_PATTERN);
+  });
+
+  it("refuses every way a prefixed key could escape the uploads root", () => {
+    const hex = "a".repeat(24);
+    for (const bad of [
+      `../${hex}.png`,
+      `news/../${hex}.png`,
+      `news/../../${hex}.png`,
+      `..\\${hex}.png`,
+      `news\\${hex}.png`,
+      `/news/${hex}.png`,
+      `/${hex}.png`,
+      `C:/news/${hex}.png`,
+      `evil/${hex}.png`,
+      `News/${hex}.png`,
+      `news/learn/${hex}.png`,
+      `news//${hex}.png`,
+      `news/${hex}.png/`,
+      `news/${hex}.png\n`,
+      `news/`,
+    ]) {
+      expect(OBJECT_KEY_PATTERN.test(bad), bad).toBe(false);
+    }
+  });
+});
+
+describe("createLocalDiskStorage with prefixed keys (ADR-144 §3)", () => {
+  it("writes a category key into its subfolder and reads it back", async () => {
+    const root = await mkdtemp(join(tmpdir(), "mbx-uploads-"));
+    try {
+      const storage = createLocalDiskStorage(root);
+      const key = generateObjectKey("png", "news");
+      const url = await storage.put(key, new Uint8Array([1, 2, 3]), "image/png");
+      expect(url).toBe(`/uploads/${key}`);
+      expect(existsSync(join(root, "news", key.slice("news/".length)))).toBe(true);
+      expect(await storage.get(key)).toEqual(new Uint8Array([1, 2, 3]));
+      expect(await storage.getRange!(key, 1, 2)).toEqual(new Uint8Array([2, 3]));
+      expect(await storage.size!(key)).toBe(3);
+      await storage.delete(key);
+      expect(await storage.get(key)).toBeNull();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses to write a key the pattern rejects, rather than joining it to the root", async () => {
+    const storage = createLocalDiskStorage(await mkdtemp(join(tmpdir(), "mbx-uploads-")));
+    await expect(
+      storage.put(`../${"a".repeat(24)}.png`, new Uint8Array([1]), "image/png"),
+    ).rejects.toThrow();
+  });
 });
 
 // ─── changes-13 / ADR-066 & ADR-067 ──────────────────────────
@@ -331,6 +399,26 @@ describe("contentDispositionFor (ADR-034 §1, the gap changes-13 §9 #6 named)",
     expect(() => new Headers({ "Content-Disposition": header ?? "" })).not.toThrow();
   });
 
+  it("forces an attachment for any kind when the request asked for one", () => {
+    // changes-32's Download button. The two questions stay separate: "is this
+    // a thing we embed" is about the file, "did someone press Download" is
+    // about the request — so forcing here must not change what an ordinary
+    // request for the same image gets.
+    for (const kind of ["IMAGE", "VIDEO", "AUDIO", "DOCUMENT"] as const) {
+      expect(contentDispositionFor(kind, "cover.png", true)).toContain("attachment");
+    }
+    expect(contentDispositionFor("IMAGE", "cover.png", false)).toBeNull();
+    expect(contentDispositionFor("IMAGE", "cover.png")).toBeNull();
+  });
+
+  it("scrubs a forced filename exactly as it scrubs a document's", () => {
+    // The `force` path must not become a second, unhardened way to write this
+    // header — same function, same scrub.
+    const header = contentDispositionFor("IMAGE", 'a"; x=y\r\nX-Evil: 1.png', true);
+    expect(header).not.toMatch(/[\r\n]/);
+    expect(() => new Headers({ "Content-Disposition": header ?? "" })).not.toThrow();
+  });
+
   it("falls back to a name rather than an empty quoted string for a non-ASCII filename", () => {
     const header = contentDispositionFor("DOCUMENT", "دليل.pdf");
     expect(header).toContain(`filename="____.pdf"`);
@@ -354,6 +442,39 @@ describe("ADR-067 §1 — no unbounded read exists", () => {
     expect(arrayReturners).toEqual(["getRecentlyUsedMedia"]);
     expect(source).toContain("export async function listMediaAssets(");
     expect(source).toMatch(/listMediaAssets\([\s\S]*?\): Promise<ListMediaAssetsPage>/);
+  });
+});
+
+describe("uploadsRootDir treats a blank UPLOADS_DIR as unset", () => {
+  // The regression test for a bug the E2E run surfaced (testing.md #2).
+  //
+  // `.env.example` ships `UPLOADS_DIR=""` as the documented default, and the
+  // old `??` only falls back on null/undefined — so the empty string went
+  // through and `resolve("")` became the process's cwd. Every upload on a
+  // default install landed in `apps/web/` rather than `storage/uploads`: not
+  // covered by the `storage/` .gitignore rule, and one `git add -A` from being
+  // committed. It stayed hidden because the reader resolved the same wrong
+  // root as the writer, so the files served correctly from the wrong place.
+  const expected = join(process.cwd(), "storage", "uploads");
+  const original = process.env.UPLOADS_DIR;
+  afterEach(() => {
+    if (original === undefined) delete process.env.UPLOADS_DIR;
+    else process.env.UPLOADS_DIR = original;
+  });
+
+  it.each(["", "   "])("falls back when UPLOADS_DIR is %o", (value) => {
+    process.env.UPLOADS_DIR = value;
+    expect(uploadsRootDir()).toBe(expected);
+  });
+
+  it("falls back when UPLOADS_DIR is absent", () => {
+    delete process.env.UPLOADS_DIR;
+    expect(uploadsRootDir()).toBe(expected);
+  });
+
+  it("honours a real value, trimmed", () => {
+    process.env.UPLOADS_DIR = ` ${join(process.cwd(), "elsewhere")} `;
+    expect(uploadsRootDir()).toBe(join(process.cwd(), "elsewhere"));
   });
 });
 

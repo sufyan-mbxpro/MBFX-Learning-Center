@@ -22,7 +22,9 @@ const ROOT_FILE_MAP = [
   ["uploads", "uploads"],
   ["robots.ts", "robots.txt"],
   ["sitemap.ts", "sitemap.xml"],
-  ["favicon.ico", "favicon.ico"],
+  // In public/, NOT app/: an app/favicon.ico is file-based metadata, which
+  // Next ranks above generateMetadata and so hides the uploaded BrandAsset.
+  ["../public/favicon.ico", "favicon.ico"],
 ];
 
 /** Reserved names that exist but aren't discoverable as a route directory or one of ROOT_FILE_MAP's files — `admin` is a route GROUP one level up, `_next` is a Next.js internal, neither ever appears here. */

@@ -8,6 +8,8 @@
 // blocking errors mean the save was refused (SKILL.md). Live preview
 // iframe is the remaining deferred polish.
 import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
+import { Bookmark, Trash2, Wand2 } from "lucide-react";
 // Type-only imports — erased at compile time, so no next/cache pulls into
 // the client bundle.
 import type {
@@ -17,14 +19,29 @@ import type {
   LayoutTokens,
   SurfacePalette,
 } from "@repo/theme";
-import { saveThemeSchema } from "@repo/contracts";
+import { saveThemePresetSchema, saveThemeSchema } from "@repo/contracts";
 import { humanizeKey } from "@repo/utils";
 import { Alert, AlertDescription, AlertTitle } from "@repo/ui/components/alert";
 import { Button } from "@repo/ui/components/button";
+import { ConfirmDialog } from "@repo/ui/components/confirm-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@repo/ui/components/dialog";
 import { Field, FieldError, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
+import { Textarea } from "@repo/ui/components/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@repo/ui/components/tabs";
-import { activateThemeAction, saveThemeAction } from "../_actions/admin-actions.ts";
+import {
+  activateThemeAction,
+  deleteThemePresetAction,
+  saveThemeAction,
+  saveThemePresetAction,
+} from "../_actions/admin-actions.ts";
 import { clearBrandAssetAction, setBrandAssetAction } from "../_actions/media-actions.ts";
 import { ImageUploadField, type ImageUploadLabels } from "../_components/image-upload-field.tsx";
 import { StatusBadge } from "../_components/status-badge.tsx";
@@ -140,10 +157,20 @@ function ColorField({
   );
 }
 
+export interface ThemePresetView {
+  key: string;
+  name: string;
+  description: string | null;
+  isActive: boolean;
+  isSystem: boolean;
+  swatches: string[];
+}
+
 export function ThemeEditor({
   themeKey,
   initial,
   derived,
+  initialIssues,
   presets,
   brandAssets,
   brandFields,
@@ -159,7 +186,9 @@ export function ThemeEditor({
     layout: LayoutTokens;
   };
   derived: { interactive: string; interactiveDark: string };
-  presets: { key: string; name: string; isActive: boolean; scope: string }[];
+  /** The saved palette's issues, so the editor opens with them shown. */
+  initialIssues: ContrastIssue[];
+  presets: ThemePresetView[];
   brandAssets: BrandAssetUrls;
   brandFields: string[];
   fonts: { key: string; label: string; category: string }[];
@@ -169,8 +198,20 @@ export function ThemeEditor({
   const [light, setLight] = useState(initial.light);
   const [dark, setDark] = useState(initial.dark);
   const [layout, setLayout] = useState(initial.layout);
-  const [issues, setIssues] = useState<ContrastIssue[]>([]);
+  const [issues, setIssues] = useState<ContrastIssue[]>(initialIssues);
+  // Indices of issues whose suggestion has been applied since the last save:
+  // the swatch changed, but only a save re-runs the (server-side) check.
+  const [applied, setApplied] = useState<ReadonlySet<number>>(new Set());
+  const [presetOpen, setPresetOpen] = useState(false);
+  const [presetToDelete, setPresetToDelete] = useState<ThemePresetView | null>(null);
+  const te = useTranslations("admin.themeEditor");
   const [logos, setLogos] = useState(brandAssets);
+  // Which tab is open decides whether Save is drawn (changes-43): Presets
+  // activate on their own button and every logo saves on upload, so a Save
+  // under either was a permanently disabled control that looked like it
+  // was owed a click.
+  const [tab, setTab] = useState("brand");
+  const tabUsesSave = tab === "brand" || tab === "layout" || tab === "modes";
   const { run, pending } = useServerAction();
   const logoAction = useServerAction();
 
@@ -213,10 +254,79 @@ export function ThemeEditor({
       async () => {
         const result = await saveThemeAction(payload);
         setIssues(result.issues);
+        setApplied(new Set());
         if (!result.saved) throw new Error(labels.saveBlocked);
       },
       { successMessage: labels.saved },
     );
+  };
+
+  // ─── Issue messages (changes-46) ───────────────────────────
+  // "a clear human-readable message & suggest the colour that should be
+  // added in which input". Every sentence is built from the issue's
+  // structured fields and the catalog — never from the engine's English
+  // `label`/`remedy`, which are for tests and logs.
+  const inputName = (issue: ContrastIssue) => te("inputName", { name: fieldLabel(issue.field) });
+  const where = (issue: ContrastIssue) =>
+    issue.palette === "brand"
+      ? te("whereBrand", { tab: labels.brand })
+      : te("whereSurface", {
+          palette: issue.palette === "dark" ? labels.darkSurface : labels.lightSurface,
+          tab: labels.modes,
+        });
+  const issueTitle = (issue: ContrastIssue) => {
+    const values = {
+      input: inputName(issue),
+      direction: issue.direction,
+      mode: issue.mode,
+      surface: issue.against ?? "background",
+    };
+    return te(`issueTitle.${issue.kind}`, values);
+  };
+  const issueBody = (issue: ContrastIssue) => {
+    const measured = te(issue.kind === "border" ? "measuredBorder" : "measured", {
+      ratio: issue.ratio,
+      required: issue.required,
+    });
+    const explain =
+      issue.kind === "linkText"
+        ? te("autoFixed", { rendered: issue.rendered ?? "", input: inputName(issue) })
+        : issue.kind === "buttonLabel"
+          ? te("noLabelInk", { required: issue.required })
+          : te("usedAsIs");
+    return `${measured} ${explain}`;
+  };
+
+  /** The editor input an issue points at, and a way to set it. */
+  const applySuggestion = (issue: ContrastIssue, index: number) => {
+    const value = issue.suggestion;
+    if (!value) return;
+    if (issue.palette === "brand") {
+      setBrand((current) => ({ ...current, [issue.field]: value }));
+      setTab("brand");
+    } else if (issue.palette === "light") {
+      setLight((current) => ({ ...current, [issue.field]: value }));
+      setTab("modes");
+    } else if (issue.palette === "dark") {
+      setDark((current) => ({ ...current, [issue.field]: value }));
+      setTab("modes");
+    }
+    setApplied((current) => new Set(current).add(index));
+    // Put the admin on the input that changed, so "which input" is shown as
+    // well as said. After the tab switch has rendered.
+    const id =
+      issue.palette === "brand"
+        ? `brand-${issue.field}-hex`
+        : `${issue.palette}-${issue.field}-hex`;
+    requestAnimationFrame(() => document.getElementById(id)?.focus());
+  };
+
+  const presetPayload = {
+    brandColors: brand,
+    lightSurface: light,
+    darkSurface: dark,
+    darkBrandOverrides: initial.overrides,
+    layoutTokens: layout,
   };
 
   const surfaceEditor = (
@@ -243,7 +353,7 @@ export function ThemeEditor({
 
   return (
     <div className="flex flex-col gap-6">
-      <Tabs defaultValue="brand">
+      <Tabs value={tab} onValueChange={(next) => setTab(String(next))}>
         <TabsList>
           <TabsTrigger value="brand">{labels.brand}</TabsTrigger>
           {THEME_LAYOUT_TAB_ENABLED && <TabsTrigger value="layout">{labels.layout}</TabsTrigger>}
@@ -309,15 +419,28 @@ export function ThemeEditor({
                 <FieldError>{form.error(`layoutTokens.${field}`)}</FieldError>
               </Field>
             ))}
-            {(["fontSans", "fontMono"] as const).map((field) => {
+            {(["fontSans", "fontDisplay", "fontMono"] as const).map((field) => {
+              // `fontDisplay` (ADR-102) offers the serifs AND the sans faces:
+              // a site that wants no serif headings points it at a sans key
+              // rather than being told it has no choice.
               const options = fonts.filter((f) =>
-                field === "fontSans" ? f.category === "sans" : f.category === "mono",
+                field === "fontSans"
+                  ? f.category === "sans"
+                  : field === "fontDisplay"
+                    ? f.category !== "mono"
+                    : f.category === "mono",
               );
               return (
-                <Field key={field} invalid={form.invalid(`layoutTokens.${field}`)} required>
+                <Field
+                  key={field}
+                  invalid={form.invalid(`layoutTokens.${field}`)}
+                  // The one optional font slot: absent means the sans.
+                  required={field !== "fontDisplay"}
+                >
                   <FieldLabel>{fieldLabel(field)}</FieldLabel>
                   <AdminCombobox
-                    value={layout[field]}
+                    // `fontDisplay` is the one slot that can be absent.
+                    value={layout[field] ?? ""}
                     onValueChange={(v) => setLayout({ ...layout, [field]: v || layout[field] })}
                     options={options.map((f) => ({ value: f.key, label: f.label }))}
                   />
@@ -339,37 +462,71 @@ export function ThemeEditor({
           </section>
         </TabsContent>
 
-        <TabsContent
-          value="presets"
-          className="grid grid-cols-1 gap-3 pt-4 md:grid-cols-2 xl:grid-cols-3"
-        >
-          {presets.map((preset) => (
-            <div
-              key={preset.key}
-              className="card-hover flex items-center gap-3 rounded-md border p-3"
-            >
-              <div className="flex flex-1 flex-col">
-                <span className="text-sm font-medium">{preset.name}</span>
-                <span className="text-xs text-muted-foreground">
-                  {preset.key} · {preset.scope}
-                </span>
+        <TabsContent value="presets" className="flex flex-col gap-4 pt-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">{te("presetsIntro")}</p>
+            <Button variant="outline" onClick={() => setPresetOpen(true)}>
+              <Bookmark data-icon="inline-start" aria-hidden />
+              {te("savePreset")}
+            </Button>
+          </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {presets.map((preset) => (
+              <div
+                key={preset.key}
+                className="card-hover flex flex-col gap-3 rounded-md border p-3"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <span className="text-sm font-medium">{preset.name}</span>
+                    {preset.description && (
+                      <span className="text-xs text-muted-foreground">{preset.description}</span>
+                    )}
+                  </div>
+                  {preset.isActive && (
+                    <StatusBadge tone="success">{labels.activeBadge}</StatusBadge>
+                  )}
+                  {!preset.isActive && preset.isSystem && (
+                    <StatusBadge tone="neutral">{te("presetBuiltIn")}</StatusBadge>
+                  )}
+                </div>
+                {preset.swatches.length > 0 && (
+                  <div aria-hidden className="flex h-5 overflow-hidden rounded border">
+                    {preset.swatches.map((color, i) => (
+                      <span key={i} className="flex-1" style={{ backgroundColor: color }} />
+                    ))}
+                  </div>
+                )}
+                {!preset.isActive && (
+                  <div className="flex items-center justify-end gap-2">
+                    {!preset.isSystem && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={pending}
+                        onClick={() => setPresetToDelete(preset)}
+                      >
+                        <Trash2 data-icon="inline-start" aria-hidden />
+                        {te("presetDelete")}
+                      </Button>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={pending}
+                      onClick={() =>
+                        run(() => activateThemeAction(preset.key), {
+                          successMessage: labels.saved,
+                        })
+                      }
+                    >
+                      {labels.activate}
+                    </Button>
+                  </div>
+                )}
               </div>
-              {preset.isActive ? (
-                <StatusBadge tone="success">{labels.activeBadge}</StatusBadge>
-              ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={pending}
-                  onClick={() =>
-                    run(() => activateThemeAction(preset.key), { successMessage: labels.saved })
-                  }
-                >
-                  {labels.activate}
-                </Button>
-              )}
-            </div>
-          ))}
+            ))}
+          </div>
         </TabsContent>
 
         <TabsContent
@@ -415,11 +572,41 @@ export function ThemeEditor({
           {issues.map((issue, i) => (
             <Alert key={i} variant={issue.severity === "error" ? "destructive" : "warning"}>
               <AlertTitle>
-                [{issue.severity === "error" ? labels.blockingError : labels.advisory}]{" "}
-                {issue.label} ({issue.mode}) — {issue.ratio}:1, {labels.needsRatio} {issue.required}
-                :1
+                {issue.severity === "error" ? labels.blockingError : labels.advisory}:{" "}
+                {issueTitle(issue)}
               </AlertTitle>
-              {issue.remedy && <AlertDescription>{issue.remedy}</AlertDescription>}
+              <AlertDescription className="flex flex-col gap-2">
+                <p>{issueBody(issue)}</p>
+                {issue.palette === "darkOverride" ? (
+                  <p>{te("override", { input: inputName(issue) })}</p>
+                ) : issue.suggestion ? (
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span
+                      aria-hidden
+                      className="size-5 shrink-0 rounded border"
+                      style={{ backgroundColor: issue.suggestion }}
+                    />
+                    <span className="min-w-0 flex-1">
+                      {te(issue.kind === "linkText" ? "suggestionOptional" : "suggestion", {
+                        input: inputName(issue),
+                        where: where(issue),
+                        current: issue.current,
+                        suggestion: issue.suggestion,
+                      })}
+                      {issue.conflictsAcrossModes &&
+                        ` ${te("conflict", { otherMode: issue.mode === "light" ? "dark" : "light" })}`}
+                    </span>
+                    {applied.has(i) ? (
+                      <span className="text-xs font-medium">{te("applied")}</span>
+                    ) : (
+                      <Button variant="outline" size="sm" onClick={() => applySuggestion(issue, i)}>
+                        <Wand2 data-icon="inline-start" aria-hidden />
+                        {te("apply")}
+                      </Button>
+                    )}
+                  </div>
+                ) : null}
+              </AlertDescription>
             </Alert>
           ))}
         </div>
@@ -428,9 +615,118 @@ export function ThemeEditor({
       {/* changes-08 #3: Save sits at the inline-END of its section, where every
       // other confirming action in the admin already sits (dialog footers,
       // "New X" buttons) — not at the start. */}
-      <Button onClick={save} disabled={!dirty} loading={pending} className="self-end">
-        {labels.save}
-      </Button>
+      {tabUsesSave && (
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Button variant="outline" onClick={() => setPresetOpen(true)}>
+            <Bookmark data-icon="inline-start" aria-hidden />
+            {te("savePreset")}
+          </Button>
+          <Button onClick={save} disabled={!dirty} loading={pending}>
+            {labels.save}
+          </Button>
+        </div>
+      )}
+
+      <SavePresetDialog open={presetOpen} onOpenChange={setPresetOpen} tokens={presetPayload} />
+      <ConfirmDialog
+        open={presetToDelete !== null}
+        onOpenChange={(next) => {
+          if (!next) setPresetToDelete(null);
+        }}
+        title={te("presetDeleteTitle")}
+        description={te("presetDeleteBody", { name: presetToDelete?.name ?? "" })}
+        confirmLabel={te("presetDelete")}
+        cancelLabel={te("cancel")}
+        onConfirm={() => {
+          const target = presetToDelete;
+          setPresetToDelete(null);
+          if (target) {
+            run(() => deleteThemePresetAction(target.key), {
+              successMessage: te("presetDeleted"),
+            });
+          }
+        }}
+      />
     </div>
+  );
+}
+
+/**
+ * "Save as preset" (changes-46). Saves what is IN the editor — unsaved edits
+ * included — as a new, inactive preset: a way to keep an experiment without
+ * putting it live. Applying it later is the Presets tab's Activate.
+ */
+function SavePresetDialog({
+  open,
+  onOpenChange,
+  tokens,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  tokens: {
+    brandColors: BrandColors;
+    lightSurface: SurfacePalette;
+    darkSurface: SurfacePalette;
+    darkBrandOverrides: BrandOverrides;
+    layoutTokens: LayoutTokens;
+  };
+}) {
+  const te = useTranslations("admin.themeEditor");
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const payload = { ...tokens, name, description };
+  const form = useFieldErrors(saveThemePresetSchema, payload);
+  const { run, pending } = useServerAction();
+
+  const close = () => {
+    onOpenChange(false);
+    setName("");
+    setDescription("");
+    form.reset();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(next) => (next ? onOpenChange(true) : close())}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{te("savePresetTitle")}</DialogTitle>
+          <DialogDescription>{te("savePresetDescription")}</DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col gap-4">
+          <Field invalid={form.invalid("name")} required>
+            <FieldLabel>{te("presetName")}</FieldLabel>
+            <Input value={name} maxLength={100} onChange={(e) => setName(e.target.value)} />
+            <FieldError>{form.error("name")}</FieldError>
+          </Field>
+          <Field invalid={form.invalid("description")}>
+            <FieldLabel>{te("presetDescription")}</FieldLabel>
+            <Textarea
+              value={description}
+              rows={3}
+              maxLength={500}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+            <FieldError>{form.error("description")}</FieldError>
+          </Field>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={close} disabled={pending}>
+            {te("cancel")}
+          </Button>
+          <Button
+            loading={pending}
+            onClick={() => {
+              if (!form.validate()) return;
+              run(() => saveThemePresetAction(payload), {
+                successMessage: te("presetSaved"),
+                onDone: close,
+              });
+            }}
+          >
+            {te("savePreset")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

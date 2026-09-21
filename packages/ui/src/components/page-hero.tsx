@@ -21,6 +21,8 @@ import { cn } from "@repo/ui/lib/utils";
 // tall brand band that is the first thing on the site and has a job to do.
 // `compact` is the thin top banner — the SAME anatomy at a third of the
 // height, for a page whose real content should start near the top.
+// `medium` sits between them (changes-47): the article listings' banner was
+// asked to be "a little" smaller, which `compact` overshoots by two thirds.
 //
 // A named variant rather than a `spacing` prop the caller passes through
 // (which is what `/glossary/[term]` and `ComingSoon` were each doing on their
@@ -32,6 +34,7 @@ import { cn } from "@repo/ui/lib/utils";
 // private font size.
 const HERO_SIZE = {
   default: { spacing: "lg", copyGap: "gap-5" },
+  medium: { spacing: "md", copyGap: "gap-4" },
   compact: { spacing: "sm", copyGap: "gap-3" },
 } as const;
 
@@ -54,11 +57,43 @@ const ALIGN_CLASS = {
 // `brand` is a large gradient FILL of --primary with its DERIVED
 // --primary-foreground on top (ADR-003) — the one pairing the theme engine
 // guarantees legible, and exactly the large-area case ADR-018 rule 5 allows.
+// It is still the tone for a band with no artwork behind it.
+//
+// `photo` is the band that has a photograph to show (ADR-117). It is
+// `inverted`'s surface — the same `--secondary` / `--secondary-foreground`
+// pair the homepage hero and the footer already run on — because the ink has
+// to be readable over a SCRIM of that fill, and `--primary-foreground` is
+// derived against `--primary`, which is no longer what is behind the words.
 const HERO_TONE_CLASS = {
   brand: "bg-gradient-to-br from-primary to-primary-active text-primary-foreground",
+  photo: "bg-secondary text-secondary-foreground",
   muted: "bg-muted/40 text-foreground",
   default: "bg-background text-foreground",
   inverted: "bg-secondary text-secondary-foreground",
+} as const;
+
+// The veil between the artwork and the copy, and the whole of ADR-117's
+// legibility argument.
+//
+// It is built from `--secondary` at varying alpha, so whatever the
+// photograph is, the ink above it is reading against a known fill in a known
+// direction — `--secondary-foreground` is derived readable ON `--secondary`
+// by construction (ADR-003), which a text-shadow over an arbitrary
+// photograph is not.
+//
+// Two shapes, because the copy sits in two places. A start-aligned masthead
+// puts its words in the inline-start half, so the scrim is opaque there and
+// clears completely on the other side — the homepage hero's exact idiom, and
+// the reason a reader sees the photograph rather than a tint of it. A
+// centred masthead has copy across the full width and gets a vertical one
+// instead, softest through the middle where the picture has the most to say.
+//
+// A gradient direction has no logical form in Tailwind, so the RTL flip is
+// written out — the same place-by-place honesty `.reveal-start` needs.
+const HERO_SCRIM_CLASS = {
+  start:
+    "bg-gradient-to-t from-secondary via-secondary/85 to-secondary/40 md:bg-gradient-to-r md:from-secondary md:via-secondary/85 md:to-transparent rtl:md:bg-gradient-to-l",
+  center: "bg-gradient-to-b from-secondary/90 via-secondary/65 to-secondary/90",
 } as const;
 
 function PageHero({
@@ -71,12 +106,19 @@ function PageHero({
   actions,
   media,
   footnote,
-  tone = "brand",
+  tone,
   align = "start",
   size = "default",
   className,
   ...props
 }: Omit<React.ComponentProps<typeof Section>, "title" | "tone" | "spacing"> & {
+  /**
+   * The band's surface. Defaults to `photo` when a `backdrop` is supplied and
+   * `brand` when one is not (ADR-117) — a masthead that was given artwork is
+   * a masthead whose job is to show it, and making that the DEFAULT is what
+   * stops the next photographic masthead from being added under a fill again.
+   * An explicit value always wins.
+   */
   tone?: keyof typeof HERO_TONE_CLASS;
   /** Vertical density. `compact` is the thin top banner — see HERO_SIZE. */
   size?: keyof typeof HERO_SIZE;
@@ -98,10 +140,13 @@ function PageHero({
   media?: React.ReactNode;
   /**
    * Full-bleed artwork BEHIND the copy, as opposed to `media` beside it.
-   * Rendered under a scrim, at low opacity, `aria-hidden` and non-selectable:
-   * a masthead's background is texture, never information. Compose the two
-   * only when the art is quiet enough to survive being cropped by the
-   * headline (ADR-051 §5's generated pieces are).
+   * `aria-hidden` and non-selectable: a masthead's background carries nothing
+   * the copy beside it does not. Compose the two only when the art survives
+   * being cropped by the headline (ADR-051 §5's generated pieces do).
+   *
+   * Supplying this switches the band to the `photo` tone unless the caller
+   * says otherwise, which renders the artwork at full strength under a
+   * `--secondary` scrim rather than at 25% under a brand fill (ADR-117).
    */
   backdrop?: React.ReactNode;
   /**
@@ -109,41 +154,69 @@ function PageHero({
    * backdrop and the copy.
    *
    * Its own slot rather than something folded into `backdrop`, for two
-   * reasons. The backdrop is clamped to 25% opacity for artwork that would
-   * otherwise eat the tone's contrast; the motif already carries its own
-   * much lower ink and would come out invisible under a second multiplier.
-   * And the two compose — the news masthead runs generated art AND a chart
-   * motif — which a single slot cannot express.
+   * reasons. Under every tone but `photo` the backdrop is clamped to 25%
+   * opacity; the motif already carries its own much lower ink and would come
+   * out invisible under a second multiplier. And the two compose — the news
+   * masthead runs a photograph AND a chart motif — which a single slot
+   * cannot express. The motif sits ABOVE the scrim, which is right: it is
+   * line work meant to read, not texture meant to recede.
    */
   motif?: React.ReactNode;
   /** Small print that belongs to the headline claim, not to the page body. */
   footnote?: React.ReactNode;
   align?: keyof typeof ALIGN_CLASS;
 }) {
+  const resolvedTone = tone ?? (backdrop ? "photo" : "brand");
+  const isPhoto = resolvedTone === "photo";
+
   return (
     <Section
       data-slot="page-hero"
       spacing={HERO_SIZE[size].spacing}
-      data-tone={tone}
-      className={cn("relative isolate overflow-hidden", HERO_TONE_CLASS[tone], className)}
+      data-tone={resolvedTone}
+      className={cn("relative isolate overflow-hidden", HERO_TONE_CLASS[resolvedTone], className)}
       {...props}
     >
       {backdrop && (
         // -z-10 rather than a lower stacking order on the content: Section
         // already sets `isolate`, so this cannot escape the hero and paint
-        // over the sub-nav above it. 25% is the ceiling, not a taste call —
-        // above it the art starts eating the contrast the tone was checked
-        // for, and the generated pieces already carry their own vignette.
+        // over the sub-nav above it.
+        //
+        // Full strength under `photo`, 25% under every other tone. The 25%
+        // was the ceiling for artwork sitting UNDER a fill — above it the art
+        // ate the contrast the tone had been checked for. `photo` moves the
+        // legibility guarantee from a clamp on the picture to a scrim under
+        // the words, which is what lets the picture be a picture (ADR-117).
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-0 -z-10 opacity-25 select-none"
+          className={cn(
+            "pointer-events-none absolute inset-0 -z-10 select-none",
+            !isPhoto && "opacity-25",
+          )}
         >
           {backdrop}
         </div>
       )}
+      {isPhoto && (
+        <div
+          aria-hidden
+          className={cn("pointer-events-none absolute inset-0 -z-10", HERO_SCRIM_CLASS[align])}
+        />
+      )}
       {motif}
       <Container className={cn("grid items-center gap-10", media && "lg:grid-cols-2")}>
-        <div className={cn("flex flex-col", HERO_SIZE[size].copyGap, ALIGN_CLASS[align])}>
+        <div
+          className={cn(
+            "flex flex-col",
+            HERO_SIZE[size].copyGap,
+            ALIGN_CLASS[align],
+            // The copy has to stay inside the opaque half of a start-aligned
+            // scrim. `text-balance` already keeps the headline from running
+            // the full 1400px on most titles; this makes it a guarantee
+            // rather than a property of the words that happen to be there.
+            isPhoto && align === "start" && "md:max-w-3xl",
+          )}
+        >
           {breadcrumb}
           {eyebrow && (
             <Reveal variant="up">
@@ -151,7 +224,9 @@ function PageHero({
             </Reveal>
           )}
           <Reveal variant="up" delay={60}>
-            <h1 className="text-display-md font-semibold tracking-tight text-balance">{title}</h1>
+            <h1 className="font-display text-display-md font-bold tracking-tight text-balance">
+              {title}
+            </h1>
           </Reveal>
           {lead && (
             <Reveal variant="up" delay={120}>

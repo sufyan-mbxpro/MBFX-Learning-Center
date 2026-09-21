@@ -72,8 +72,11 @@ describe("EXPLORE_DESTINATIONS — `status` agrees with the filesystem", () => {
     });
   }
 
-  it("covers a card of each status, so neither branch can rot unnoticed", () => {
-    const statuses = new Set(EXPLORE_DESTINATIONS.map((destination) => destination.status));
-    expect(statuses).toEqual(new Set(["live", "soon"]));
-  });
+  // There was a test here asserting the registry held a card of each status,
+  // on the reasoning that neither branch should rot unnoticed. changes-32
+  // removed `markets`, the only `soon` card, and it is not coming back as an
+  // assertion: it pinned a fact about the CONTENT of the list — which
+  // destinations happen to be built today — dressed up as an invariant. The
+  // per-destination pair above is the real guard, and it checks whatever
+  // statuses the registry actually holds, including none of one kind.
 });

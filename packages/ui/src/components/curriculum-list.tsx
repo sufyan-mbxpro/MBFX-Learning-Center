@@ -36,6 +36,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@repo/ui/components/accordion";
+import { Badge } from "@repo/ui/components/badge";
 import { ExternalBadge } from "@repo/ui/components/external-badge";
 import { LessonStateIcon, type LessonState } from "@repo/ui/components/lesson-state-icon";
 import { cn } from "@repo/ui/lib/utils";
@@ -80,6 +81,34 @@ export interface CurriculumLabels {
 
 export type CurriculumVariant = "full" | "rail" | "compact";
 
+/**
+ * The section's ordinal, as a marker (changes-33).
+ *
+ * The curriculum is a SEQUENCE — that is what ADR-082 #1's timeline says one
+ * level down, and the section headers were not saying it at all: three
+ * identically-weighted white cards, distinguishable only by reading their
+ * titles. A number is the cheapest possible answer and the one that survives
+ * greyscale, which is why it is a number and not a colour per section.
+ *
+ * ONE accent, not a palette. Cycling a hue per section would be decoration
+ * that looks like meaning: this design system spends `success`/`warning`/
+ * `info` on difficulty and on state, and a fourth unrelated use of the same
+ * three tones is how a reader stops trusting any of them.
+ */
+function SectionMarker({ index, size = "default" }: { index: number; size?: "default" | "sm" }) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "flex shrink-0 items-center justify-center rounded-lg bg-primary/10 font-semibold text-primary-interactive tabular-nums",
+        size === "sm" ? "size-6 text-2xs" : "size-8 text-sm",
+      )}
+    >
+      {index + 1}
+    </span>
+  );
+}
+
 /** The reading time and the badges, in the order every variant shows them. */
 function LessonMeta({
   lesson,
@@ -93,14 +122,23 @@ function LessonMeta({
   if (!lesson.isExternal && !lesson.isOptional && !lesson.durationLabel) return null;
   return (
     <span className={cn("flex flex-wrap items-center gap-x-2 gap-y-1", className)}>
+      {/* Badges, not three runs of 10px grey text (changes-33). The reading
+          time is the one fact a reader weighs before clicking, and it was set
+          in the smallest type on the row. `outline` for duration and `warning`
+          for optional, because they are different KINDS of fact: one is a
+          measurement, the other is a permission. */}
       {lesson.durationLabel && (
-        <span className="text-2xs text-muted-foreground tabular-nums">{lesson.durationLabel}</span>
+        <Badge variant="outline" size="sm" className="tabular-nums">
+          {lesson.durationLabel}
+        </Badge>
       )}
       {lesson.isExternal && (
         <ExternalBadge label={labels.externalBadge} newTabLabel={labels.opensInNewTab} />
       )}
       {lesson.isOptional && (
-        <span className="text-2xs text-muted-foreground">{labels.optionalBadge}</span>
+        <Badge variant="warning" size="sm">
+          {labels.optionalBadge}
+        </Badge>
       )}
     </span>
   );
@@ -134,7 +172,18 @@ function TimelineRow({
   const locked = state === "locked";
 
   return (
-    <li className={cn("group relative flex gap-3 sm:gap-4", locked && "opacity-70")}>
+    // `-mx-2 px-2 rounded-lg` plus a hover ground: the row was a click target
+    // with nothing to show for it, so a reader could not tell where one lesson
+    // ended and the next began (changes-33). The negative margin keeps the
+    // timeline column aligned with the section header above it while the
+    // hover ground extends past the text.
+    <li
+      className={cn(
+        "group relative -mx-2 flex gap-3 rounded-lg px-2 transition-colors duration-(--duration-base) sm:gap-4",
+        !locked && "hover:bg-primary/5",
+        locked && "opacity-70",
+      )}
+    >
       <span className="flex flex-col items-center">
         <LessonStateIcon
           state={state}
@@ -155,7 +204,7 @@ function TimelineRow({
         {!isLast && <span aria-hidden className="w-px flex-1 bg-border" />}
       </span>
 
-      <span className="flex min-w-0 flex-1 flex-col gap-1 pb-5">
+      <span className="flex min-w-0 flex-1 flex-col gap-1 py-2 pb-5">
         <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
           {locked ? (
             // A locked lesson is not a link. Rendering one that navigates to a
@@ -168,7 +217,7 @@ function TimelineRow({
             <a
               href={lesson.href}
               aria-current={lesson.isCurrent ? "page" : undefined}
-              className="text-sm font-medium no-underline transition-colors duration-(--duration-base) group-hover:text-primary-interactive after:absolute after:inset-0 after:rounded-lg focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ring/50 sm:text-base"
+              className="text-sm font-semibold no-underline transition-colors duration-(--duration-base) group-hover:text-primary-interactive after:absolute after:inset-0 after:rounded-lg focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ring/50 sm:text-base"
             >
               {lesson.title}
             </a>
@@ -199,9 +248,14 @@ function RailRow({ lesson, labels }: { lesson: CurriculumLesson; labels: Curricu
   );
 
   return (
-    <li>
+    // Each lesson is its OWN card (changes-39). The changes-33 hairline still
+    // read as one continuous block at rail width; a card per row says "these
+    // are separate things to click" without the reader having to find the
+    // rule between them. `overflow-hidden` clips the current row's edge bar
+    // to the card's radius.
+    <li className="card-hover overflow-hidden rounded-lg bg-card ring-1 ring-foreground/10">
       {locked ? (
-        <span aria-disabled className="flex items-start gap-2.5 px-3 py-2 opacity-70">
+        <span aria-disabled className="flex items-start gap-2.5 px-3 py-2.5 opacity-70">
           {body}
         </span>
       ) : (
@@ -209,12 +263,12 @@ function RailRow({ lesson, labels }: { lesson: CurriculumLesson; labels: Curricu
           href={lesson.href}
           aria-current={lesson.isCurrent ? "page" : undefined}
           className={cn(
-            "relative flex items-start gap-2.5 px-3 py-2 no-underline transition-colors duration-(--duration-base) focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
+            "relative flex items-start gap-2.5 px-3 py-2.5 no-underline transition-colors duration-(--duration-base) focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none focus-visible:ring-inset",
             // The reader's own position, marked with a tint AND an edge bar —
             // `aria-current` covers the screen reader, the bar covers the
             // glance, and neither is colour alone.
             lesson.isCurrent
-              ? "bg-primary/10 font-semibold text-primary-interactive before:absolute before:inset-y-0 before:start-0 before:w-0.5 before:bg-primary"
+              ? "bg-primary/10 font-semibold text-primary-interactive before:absolute before:inset-y-0 before:start-0 before:w-1 before:bg-primary"
               : "hover:bg-muted/70",
           )}
         >
@@ -299,20 +353,25 @@ export function CurriculumList({
   if (variant === "rail") {
     return (
       <Accordion defaultValue={defaultOpenSectionIds ?? []} className={className}>
-        {sections.map((section) => (
+        {sections.map((section, index) => (
           <AccordionItem key={section.id} value={section.id} className="border-b last:border-b-0">
             {/* `hover:no-underline`: the Accordion's own hover underline is
                 right for a prose disclosure and wrong for a section title that
                 wraps to four lines in a rail, where it underlines all four at
                 once. The count moves UNDER the title for the same reason —
                 beside it, it was eating a third of the column. */}
-            <AccordionTrigger className="gap-2 px-3 py-2.5 hover:no-underline">
-              <span className="flex min-w-0 flex-1 flex-col gap-0.5 text-start">
+            <AccordionTrigger className="gap-2 px-3 py-3 hover:no-underline">
+              <SectionMarker index={index} size="sm" />
+              <span className="flex min-w-0 flex-1 flex-col items-start gap-1 text-start">
                 <span className="text-sm leading-snug font-semibold">{section.title}</span>
                 {section.countLabel && (
-                  <span className="text-2xs font-medium tracking-caps text-muted-foreground uppercase">
+                  // `pill`, the design system's neutral card-metadata chip —
+                  // NOT a tonal variant. A lesson count is not a status, and
+                  // `info`/`success`/`warning` already mean difficulty and
+                  // lesson state on these very pages.
+                  <Badge variant="pill" className="text-2xs tabular-nums">
                     {section.countLabel}
-                  </span>
+                  </Badge>
                 )}
               </span>
             </AccordionTrigger>
@@ -320,7 +379,10 @@ export function CurriculumList({
                 ground, so the lessons read as the section's CONTENTS rather
                 than as more headings. */}
             <AccordionContent className="border-t bg-muted/30 pb-0 [&_a]:no-underline">
-              <ul className="flex flex-col py-1">
+              {/* Indented from the section header (changes-39) so the lessons
+                  read as the section's children at a glance, and gapped so
+                  each card stands apart. */}
+              <ul className="flex flex-col gap-2 py-3 ps-6 pe-3">
                 {section.lessons.map((lesson) => (
                   <RailRow key={lesson.id} lesson={lesson} labels={labels} />
                 ))}
@@ -337,23 +399,35 @@ export function CurriculumList({
       defaultValue={defaultOpenSectionIds ?? []}
       className={cn("flex flex-col gap-2", className)}
     >
-      {sections.map((section) => (
+      {sections.map((section, index) => (
+        // The card now reacts to the pointer and carries a brand edge when it
+        // is open (changes-33). Three identical white rectangles told a reader
+        // nothing about which one they were about to open, or which one they
+        // already had.
+        //
+        // `has-[[aria-expanded=true]]` rather than a client-side open flag:
+        // Base UI signals open through `aria-expanded` on the trigger (there
+        // is no Radix-style `data-state` here — accordion.tsx says so), the
+        // card reads it in CSS, and the component stays server-renderable.
         <AccordionItem
           key={section.id}
           value={section.id}
-          className="rounded-xl border bg-card px-4"
+          className="rounded-xl border bg-card px-4 transition-colors duration-(--duration-base) hover:border-primary/30 has-[[aria-expanded=true]]:border-primary/40"
         >
-          <AccordionTrigger>
-            <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5 text-start">
-              <span className="font-medium">{section.title}</span>
+          <AccordionTrigger className="gap-3">
+            <SectionMarker index={index} />
+            <span className="flex min-w-0 flex-1 flex-col items-start gap-1 text-start">
+              <span className="text-base font-semibold">{section.title}</span>
               {section.description && (
                 <span className="text-sm text-muted-foreground">{section.description}</span>
               )}
             </span>
             {section.countLabel && (
-              <span className="me-2 shrink-0 text-xs text-muted-foreground tabular-nums">
+              // `pill`, the neutral card-metadata chip — see the rail variant
+              // below for why this is deliberately not a tonal variant.
+              <Badge variant="pill" className="me-2 shrink-0 text-2xs tabular-nums">
                 {section.countLabel}
-              </span>
+              </Badge>
             )}
           </AccordionTrigger>
           {/* AccordionContent underlines every descendant anchor by default —
@@ -361,8 +435,20 @@ export function CurriculumList({
               the target. */}
           <AccordionContent className="[&_a]:no-underline">
             {/* Ordered, and now drawn that way: the timeline is the curriculum
-                saying "in this sequence", which a bare <ul> only implied. */}
-            <ol className="flex flex-col pb-1">
+                saying "in this sequence", which a bare <ul> only implied.
+
+                Indented under the section, with a guide rule dropped from the
+                section marker's centre (changes-46, owner: "the
+                sub-categories should be visible to the right more to see the
+                clear difference between parent and sub-categories"). Flush
+                with the header, the lesson markers sat in the same column as
+                the section number and read as more sections. `ms-4` is half
+                the `size-8` SectionMarker, so the rule hangs from its middle;
+                logical properties, so it moves to the right edge in RTL. */}
+            <ol
+              data-slot="curriculum-lessons"
+              className="ms-4 flex flex-col border-s-2 border-primary/25 ps-5 pb-1 sm:ps-12"
+            >
               {section.lessons.map((lesson, index) => (
                 <TimelineRow
                   key={lesson.id}

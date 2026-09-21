@@ -5,7 +5,7 @@
 // Colours are the ACTIVE theme's values, loaded through
 // `loadActiveThemeTokens` — a re-brand reaches email without anyone editing a
 // template, and there is no hex literal in this package (code-style #1).
-import type { BrandColors, SurfacePalette } from "@repo/theme";
+import { deriveTonalInk, type BrandColors, type SurfacePalette } from "@repo/theme";
 import { sanitizeEmailHtmlWith } from "./sanitize.ts";
 
 export interface EmailPalette {
@@ -56,7 +56,14 @@ export function editorialStyle(className: string, palette: EmailPalette): string
       return `background-color:${brand.error};color:${surface.background};padding:0 4px`;
     case "ed-hl-muted":
       return `background-color:${surface.surfaceMuted};color:${surface.textPrimary};padding:0 4px`;
+    // `ed-ff-sans` is the pre-2026-09-18 name of `ed-ff-body`; stored bodies
+    // still carry it, so both map to the message's family.
     case "ed-ff-sans":
+    case "ed-ff-body":
+      return `font-family:${palette.fontFamily}`;
+    // The site's display face is a web font no mail client can fetch, so it
+    // falls back to the message's own family rather than to Times.
+    case "ed-ff-display":
       return `font-family:${palette.fontFamily}`;
     case "ed-ff-serif":
       return "font-family:Georgia,'Times New Roman',serif";
@@ -88,17 +95,35 @@ export function editorialStyle(className: string, palette: EmailPalette): string
 }
 
 /**
- * Fold every `ed-*` class into the element's `style`. Runs the sanitiser
- * again on the way through (defence in depth — ADR-078 #7).
+ * The colour a link is drawn in: the brand primary, darkened until it clears
+ * 4.5:1 on the message's ground — exactly the site's `--primary-interactive`
+ * (ADR-073). changes-46 #4: with no style of its own an `<a>` fell back to the
+ * mail client's default BLUE, a colour the brand does not contain.
+ */
+export function emailLinkColor(palette: EmailPalette): string {
+  return deriveTonalInk(palette.brand.primary, palette.surface.background);
+}
+
+/**
+ * Fold every `ed-*` class into the element's `style`, and give every link the
+ * brand's link ink. Runs the sanitiser again on the way through (defence in
+ * depth — ADR-078 #7).
  */
 export function inlineEditorialStyles(html: string, palette: EmailPalette): string {
+  const linkStyle = `color:${emailLinkColor(palette)};text-decoration:underline`;
   return sanitizeEmailHtmlWith(html, "RICH", {
     "*": (tagName, attribs) => {
       const classes = attribs.class?.split(/\s+/).filter(Boolean) ?? [];
-      if (classes.length === 0) return { tagName, attribs };
-      const styles = classes
-        .map((className) => editorialStyle(className, palette))
-        .filter((style): style is string => style !== null);
+      // A link's colour comes FIRST, so a tone class or the author's own
+      // style — both more specific intents — still wins.
+      const base = tagName === "a" ? [linkStyle] : [];
+      if (classes.length === 0 && base.length === 0) return { tagName, attribs };
+      const styles = [
+        ...base,
+        ...classes
+          .map((className) => editorialStyle(className, palette))
+          .filter((style): style is string => style !== null),
+      ];
       if (styles.length === 0) return { tagName, attribs };
       // An author's own inline style wins: it is the more specific intent,
       // and the class map is the default the editor applied.
@@ -106,6 +131,24 @@ export function inlineEditorialStyles(html: string, palette: EmailPalette): stri
       return { tagName, attribs: { ...attribs, style: [...styles, ...existing].join(";") } };
     },
   });
+}
+
+/**
+ * A site-relative URL made absolute against the site's origin.
+ *
+ * changes-46 #4: `email.logo` is stored as the upload path (`/uploads/…`),
+ * which is what every picker writes. A relative `src` means nothing in an
+ * inbox — there is no page for it to be relative TO — so the logo silently
+ * vanished from every sent message and from the preview. Absolute URLs pass
+ * through; a protocol-relative one (`//host`) is refused rather than
+ * guessed at, and so is anything that is not a path.
+ */
+export function absoluteUrl(url: string, origin: string): string | undefined {
+  const value = url.trim();
+  if (value === "") return undefined;
+  if (/^https?:\/\//i.test(value)) return value;
+  if (!value.startsWith("/") || value.startsWith("//") || origin === "") return undefined;
+  return `${origin.replace(/\/+$/, "")}${value}`;
 }
 
 function escapeAttribute(value: string): string {

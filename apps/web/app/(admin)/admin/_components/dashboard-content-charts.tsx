@@ -162,55 +162,78 @@ function PipelineLegend({
  * means "archived" is the reserved-status-colour mistake. Six panels in ONE
  * hue says the same thing and needs no legend at all.
  *
+ * **The one hue is `success`, the pipeline's PUBLISHED fill (changes-43).**
+ * It had been `primary`, the brand bronze, which the pipeline spends on
+ * SCHEDULED — so the same colour meant "published" here and "not yet" one
+ * card up. Every bar in these panels counts a publish, so it takes the
+ * colour a publish already has on this page: colour following meaning, and
+ * a token, so an admin's palette change still reaches it (ADR-072).
+ *
  * **Each panel is scaled to its own peak**, which the card's description
- * says out loud. A shared scale is the usual rule for small multiples and it
- * is wrong here: lessons outnumber courses by an order of magnitude, so a
- * shared axis would flatten five panels to answer a question the stat cards
- * above already answer.
+ * says out loud, and each prints that peak so the scale is readable. A
+ * shared scale is the usual rule for small multiples and it is wrong here:
+ * lessons outnumber courses by an order of magnitude, so a shared axis would
+ * flatten five panels to answer a question the stat cards above already
+ * answer.
+ *
+ * **The panels fill the card's height.** The card shares a grid row with
+ * the learning card, which is taller; with fixed 40px plots this one ended
+ * in an empty half. The plot is `flex-1` with a floor, so on its own row it
+ * is as compact as before and beside a taller neighbour it grows instead.
  */
 export function DashboardOutputPanels({
   series,
   entities,
   entityLabels,
   emptyLabel,
+  peakLabel,
 }: {
   series: ContentSeriesPoint[];
   entities: DashboardContentEntity[];
   entityLabels: Record<DashboardContentEntity, string>;
   emptyLabel: string;
+  /** "Busiest: {count}", already formatted by the caller. */
+  peakLabel: (count: number) => string;
 }) {
   return (
-    <div className="grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2 xl:grid-cols-3">
+    <div className="grid flex-1 auto-rows-fr grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2 xl:grid-cols-3">
       {entities.map((entity) => {
         const values = series.map((point) => point[entity]);
         const total = values.reduce((sum, value) => sum + value, 0);
         const peak = Math.max(...values, 0);
 
         return (
-          <div key={entity} className="flex flex-col gap-1.5">
+          <div key={entity} className="flex min-h-24 flex-col gap-1.5">
             <div className="flex items-baseline justify-between gap-2">
               <SubText className="font-medium text-foreground">{entityLabels[entity]}</SubText>
               <span className="text-sm font-semibold tabular-nums">{total.toLocaleString()}</span>
             </div>
             {total === 0 ? (
-              <MetaText render={<p />} className="h-10 pt-2">
-                {emptyLabel}
-              </MetaText>
-            ) : (
-              <div className="flex h-10 items-end gap-px" aria-hidden>
-                {values.map((value, i) => (
-                  <div
-                    key={series[i]!.date}
-                    className={cn(
-                      "min-h-px flex-1 rounded-t-xs",
-                      value > 0 ? "bg-primary" : "bg-border",
-                    )}
-                    // `peak` is > 0 here: total > 0 implies one bucket is.
-                    style={{ height: value > 0 ? `${(value / peak) * 100}%` : undefined }}
-                    title={`${series[i]!.date}: ${value}`}
-                  />
-                ))}
+              <div className="flex flex-1 items-end border-b border-dashed">
+                <MetaText render={<p />} className="pb-2">
+                  {emptyLabel}
+                </MetaText>
               </div>
+            ) : (
+              <>
+                <div className="flex min-h-10 flex-1 items-end gap-px border-b" aria-hidden>
+                  {values.map((value, i) => (
+                    <div
+                      key={series[i]!.date}
+                      className={cn(
+                        "min-h-px flex-1 rounded-t-xs",
+                        value > 0 ? "bg-success" : "bg-border",
+                      )}
+                      // `peak` is > 0 here: total > 0 implies one bucket is.
+                      style={{ height: value > 0 ? `${(value / peak) * 100}%` : undefined }}
+                      title={`${series[i]!.date}: ${value}`}
+                    />
+                  ))}
+                </div>
+                <MetaText render={<p />} className="text-2xs tabular-nums">
+                  {peakLabel(peak)}
+                </MetaText>
+              </>
             )}
           </div>
         );

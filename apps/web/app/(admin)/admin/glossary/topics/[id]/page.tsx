@@ -1,11 +1,12 @@
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { loadGlossaryTopicAdminDetail } from "@repo/core";
-import { getActiveLocales } from "@repo/i18n";
+import { getAuthoringLocales } from "@repo/i18n";
 import { routing } from "@repo/i18n/routing";
 import { can, requirePermission } from "@repo/rbac";
-import { AdminPage } from "../../../_components/admin-page.tsx";
+import { EditorPage } from "../../../_components/admin-page.tsx";
 import { richTextLabels } from "../../../_components/editor-labels.ts";
+import { loadEditorAi } from "../../../_lib/editor-ai.ts";
 import { TopicEditor } from "./topic-editor.tsx";
 import type { TopicEditorLabels, TopicTranslationDraft } from "./editor-types.ts";
 
@@ -17,19 +18,27 @@ export default async function GlossaryTopicEditPage({
   const subject = await requirePermission("glossary.view");
   const { id } = await params;
 
-  const [t, detail, activeLocales] = await Promise.all([
+  const [t, detail, authoringLocales, ai] = await Promise.all([
     getTranslations("admin"),
     loadGlossaryTopicAdminDetail(id),
-    getActiveLocales(),
+    getAuthoringLocales(),
+    // ADR-126: the "Generate with AI" bar, each field's ✨ menu, and the
+    // writing assistant on the description — each present only when available.
+    loadEditorAi(subject, {
+      module: "glossary_topic",
+      entity: { type: "glossary_topic", id },
+      contentKeys: ["glossary.update"],
+    }),
   ]);
   if (!detail) notFound();
 
-  const locales = activeLocales.map((locale) => locale.code);
+  const locales = authoringLocales.map((locale) => locale.code);
 
-  // One draft per ACTIVE locale, seeded from the stored row where there is one
-  // and blank where there is not — so a locale with no translation yet is an
-  // empty form rather than a missing tab. ADR-043: the machinery is here for
-  // all four; only `en` is active today.
+  // One draft per AUTHORING locale (every seeded one, active or not), seeded
+  // from the stored row where there is one and blank where there is not — so a
+  // locale with no translation yet is an empty form rather than a missing tab.
+  // Only `en` is active, which is exactly why this is not the active list: it
+  // hid the switcher.
   const translations: TopicTranslationDraft[] = locales.map((locale) => {
     const stored = detail.translations.find((tr) => tr.locale === locale);
     return {
@@ -42,9 +51,6 @@ export default async function GlossaryTopicEditPage({
       seoKeywords: stored?.seoKeywords ?? "",
     };
   });
-
-  const defaultTranslation =
-    translations.find((tr) => tr.locale === routing.defaultLocale) ?? translations[0];
 
   const labels: TopicEditorLabels = {
     save: t("save"),
@@ -88,17 +94,36 @@ export default async function GlossaryTopicEditPage({
     visibilitySectionDescription: t("topics.visibilitySectionDescription"),
     publishedLabel: t("topics.publishedLabel"),
     publishedHint: t("topics.publishedHint"),
+
+    coverSection: t("topics.coverSection"),
+    coverSectionDescription: t("topics.coverSectionDescription"),
+    coverLabel: t("topics.coverLabel"),
+    upload: {
+      upload: t("uploadImage"),
+      replace: t("replaceImage"),
+      remove: t("removeImage"),
+      uploading: t("uploading"),
+      hint: t("topics.coverHint"),
+      cancel: t("cancel"),
+      confirmRemoveTitle: t("confirmRemoveImageTitle"),
+      confirmRemoveBody: t("confirmRemoveImageBody"),
+    },
   };
 
   return (
-    <AdminPage
-      title={defaultTranslation?.name || t("untitled")}
+    <EditorPage
+      title={t("editorHeading.glossaryTopic")}
       description={t("topics.editorDescription")}
+      backHref="/admin/glossary/topics"
+      backLabel={t("glossaryTopics")}
     >
       <TopicEditor
         topic={{
           id: detail.id,
           isActive: detail.isActive,
+          isFeatured: detail.isFeatured,
+          isPremium: detail.isPremium,
+          cover: { id: detail.coverAssetId, url: detail.coverUrl },
           termCount: detail.termCount,
           defaultLocale: routing.defaultLocale,
           translations,
@@ -109,7 +134,8 @@ export default async function GlossaryTopicEditPage({
         canDelete={can(subject, "glossary.delete")}
         labels={labels}
         richTextLabels={richTextLabels(t)}
+        {...(ai ? { ai } : {})}
       />
-    </AdminPage>
+    </EditorPage>
   );
 }

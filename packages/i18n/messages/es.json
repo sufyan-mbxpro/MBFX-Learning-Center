@@ -1,7 +1,12 @@
 {
   "common": {
     "siteName": "Centro de Aprendizaje MBX",
-    "siteDescription": "Educación forex gratuita, herramientas y análisis."
+    "siteDescription": "Educación forex gratuita, herramientas y análisis.",
+    "pagination": {
+      "label": "Paginación",
+      "previous": "Anterior",
+      "next": "Siguiente"
+    }
   },
   "home": {
     "placeholder": "Superficie pública — marcador de posición. Ver docs/logs/DEVLOG.md para el estado del módulo.",
@@ -43,9 +48,6 @@
     "exploreToolsTag": "Calculadoras",
     "exploreToolsTitle": "Calculadoras de trading",
     "exploreToolsBody": "Tamaño de posición, valor del pip, margen y beneficio: calculados antes de la operación, no después.",
-    "exploreCalendarTag": "Calendario",
-    "exploreCalendarTitle": "Calendario económico",
-    "exploreCalendarBody": "Cada publicación que mueve un par, con su nivel de impacto y las cifras en cuanto salen.",
     "exploreNewsTag": "Noticias",
     "exploreNewsTitle": "Noticias del mercado",
     "exploreNewsBody": "Qué pasó, por qué importó y qué cambia: escrito para quienes operan, no para quienes leen titulares.",
@@ -150,7 +152,6 @@
     "newsletterLabel": "Correo electrónico",
     "newsletterSubmit": "Suscribirse",
     "followUs": "Síguenos",
-    "riskDisclaimerLabel": "Aviso de riesgo",
     "newsletterConsent": "Primero te enviamos un enlace de confirmación. Puedes darte de baja cuando quieras; nunca enviamos spam.",
     "newsletterSent": "Ya casi está: revisa tu correo y abre el enlace de confirmación.",
     "newsletterInvalid": "Eso no parece una dirección de correo válida.",
@@ -173,9 +174,6 @@
     "kindAnalysis": "Análisis",
     "kindTradeIdea": "Idea de trading",
     "empty": "Aún no hay nada publicado aquí.",
-    "previousPage": "Anterior",
-    "nextPage": "Siguiente",
-    "paginationLabel": "Paginación",
     "minRead": "{minutes} min de lectura",
     "playVideo": "Reproducir vídeo",
     "relatedTitle": "Artículos relacionados",
@@ -997,7 +995,6 @@
       "search": "Search…",
       "noMatches": "Nothing matches",
       "asOf": "Rates as of {date}.",
-      "staleAsOf": "Rates as of {date} — out of date, and shown for reference only.",
       "noRates": "No exchange rates are stored yet, so currency conversions are unavailable.",
       "noRateForPair": "No rate is stored for this currency pair.",
       "comingWithData": "This tool needs stored market data, which is not available on this site yet.",

@@ -21,7 +21,7 @@ export default function VideoTopicLoading() {
             {/* Breadcrumb. */}
             <Skeleton className="shimmer h-4 w-56" />
             <div className="flex flex-col gap-3">
-              <Skeleton className="shimmer h-5 w-32 rounded-full" />
+              <Skeleton className="shimmer h-5 w-32 rounded-md" />
               <Skeleton className="shimmer h-10 w-full max-w-xl" />
               <Skeleton className="shimmer h-6 w-full max-w-lg" />
             </div>
