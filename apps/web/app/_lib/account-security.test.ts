@@ -2,6 +2,7 @@
 // means what, and that every call goes to Better Auth's own handler.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  changeEmail,
   changePassword,
   confirmTwoFactor,
   disableTwoFactor,
@@ -110,5 +111,30 @@ describe("secretFromTotpUri", () => {
     expect(secretFromTotpUri("otpauth://totp/x?secret=ABC")).toBe("ABC");
     expect(secretFromTotpUri("otpauth://totp/x")).toBe("");
     expect(secretFromTotpUri("not a uri")).toBe("");
+  });
+});
+
+describe("changeEmail (ADR-155)", () => {
+  it("posts the new address and the callback to Better Auth", async () => {
+    const fetchMock = mockFetch(response(200, { status: true }));
+    await expect(changeEmail("new@example.com", "/en/account?emailChanged=1")).resolves.toEqual({
+      status: "ok",
+    });
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe("/api/auth/change-email");
+    expect(JSON.parse(String(init?.body))).toEqual({
+      newEmail: "new@example.com",
+      callbackURL: "/en/account?emailChanged=1",
+    });
+  });
+
+  it("asks for a fresh sign-in when the session is too old", async () => {
+    mockFetch(response(403, { code: "SESSION_NOT_FRESH" }));
+    await expect(changeEmail("a@b.co", "/")).resolves.toEqual({ status: "signInAgain" });
+  });
+
+  it("names the per-account limit", async () => {
+    mockFetch(response(429, {}));
+    await expect(changeEmail("a@b.co", "/")).resolves.toEqual({ status: "tooMany" });
   });
 });

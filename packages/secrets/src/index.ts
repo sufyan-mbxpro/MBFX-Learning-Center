@@ -2,11 +2,13 @@
 // (ADR-087 #6).
 //
 // security.md #10 says secrets live in environment variables. There are
-// exactly two exceptions, and both are here rather than in either package
-// that has one:
+// exactly four exceptions, and all of them seal here rather than in the
+// package that owns them:
 //
 //   - ADR-078: the SMTP password, under EMAIL_SECRET_KEY;
-//   - ADR-087: the market data provider key, under MARKET_SECRET_KEY.
+//   - ADR-087: the market data provider key, under MARKET_SECRET_KEY;
+//   - ADR-098: the AI provider key, under AI_SECRET_KEY;
+//   - ADR-156: Google's reCAPTCHA secret key, under CAPTCHA_SECRET_KEY.
 //
 // This package has NO dependencies. It sits at the bottom of the graph for the
 // reason `@repo/email` sits below its senders (architecture.md #8): two

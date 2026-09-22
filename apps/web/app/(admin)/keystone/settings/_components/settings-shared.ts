@@ -195,7 +195,9 @@ export async function loadSettingsIndex(subject: Subject, t: TranslateHas): Prom
  * page should be shown in tabs"). A key no tab lists falls onto the group's
  * first tab, so a setting added later is never unreachable. `branding` holds
  * no keys: it is the logos and favicon, which moved here from the theme
- * editor and save through their own actions. A tab's label is
+ * editor and save through their own actions. `captcha` holds none either: it
+ * is Google reCAPTCHA v3 (ADR-156), whose secret is write-only and sealed, so
+ * it is its own form and not a registry setting. A tab's label is
  * `admin.settingsTabs.<id>`.
  */
 export const SETTINGS_GROUP_TABS: Record<string, { id: string; keys: readonly string[] }[]> = {
@@ -208,8 +210,13 @@ export const SETTINGS_GROUP_TABS: Record<string, { id: string; keys: readonly st
     },
     {
       id: "security",
-      keys: ["security.adminSessionTimeout", "security.learnerSessionTimeout"],
+      keys: [
+        "security.adminSessionTimeout",
+        "security.learnerSessionTimeout",
+        "security.requireStaffTwoFactor",
+      ],
     },
+    { id: "captcha", keys: [] },
     { id: "branding", keys: [] },
   ],
 };

@@ -54,6 +54,13 @@ const PROBE_PNG = {
 
 const ADMIN_PAGES = [
   "/keystone/dashboard",
+  // The catch-all (`[...notFound]`): every /keystone address no other route
+  // owns. It renders from the same `(admin)` layout as the rest, so a learner
+  // must be turned away from a mistyped portal address exactly as from a real
+  // screen. Spelled out rather than interpolated because it has no probed
+  // ancestor to inherit from, and `admin-surface.test.ts` reads this list as
+  // TEXT — a template literal here is a path the drift guard cannot see.
+  "/keystone/00000000-0000-0000-0000-000000000000",
   "/keystone/ai",
   "/keystone/settings/ai",
   "/keystone/settings/ai/usage",

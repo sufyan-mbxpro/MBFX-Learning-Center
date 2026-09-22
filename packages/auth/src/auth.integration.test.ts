@@ -286,6 +286,40 @@ describe("session revocation — the plan's headline requirement: next request 4
     const row = await db.session.findUnique({ where: { token: before!.session.token } });
     expect(row).toBeNull();
   });
+
+  // Regression: an admin resetting a super admin's password saw "Failed to get
+  // session". @repo/core revokes by deleting ROWS, which leaves the Redis copy
+  // findSession reads first — so the session outlived its revocation, and the
+  // next refresh of it tried to update a row that was gone.
+  it("a row-only delete leaves the session alive in Redis; revokeAllSessions ends it", async () => {
+    const { revokeAllSessions } = await import("./index.ts");
+    const { db } = await import("@repo/db");
+    const email = freshEmail("revoke-all");
+    const signUp = await authInstance.api.signUpEmail({
+      body: { email, password: PASSWORD, name: "Revoke All Test" },
+      asResponse: true,
+    });
+    const headers = new Headers({ cookie: cookieHeaderFrom(signUp) });
+    const before = await authInstance.api.getSession({
+      headers,
+      query: { disableCookieCache: true, disableRefresh: true },
+    });
+    const userId = before!.user.id;
+
+    await db.session.deleteMany({ where: { userId } });
+    const stale = await authInstance.api.getSession({
+      headers,
+      query: { disableCookieCache: true, disableRefresh: true },
+    });
+    expect(stale?.user.id).toBe(userId);
+
+    await revokeAllSessions(userId);
+    const after = await authInstance.api.getSession({
+      headers,
+      query: { disableCookieCache: true },
+    });
+    expect(after).toBeNull();
+  });
 });
 
 describe("a session's attached user snapshot can outlive a direct database change — @repo/rbac's loadSubject is the mitigation, not getSession", () => {

@@ -34,11 +34,7 @@ import { LearnBreadcrumb } from "../../_components/learn-breadcrumb.tsx";
 import { CurriculumWithProgress } from "../../_components/curriculum-with-progress.tsx";
 import { CourseCompletionBanner } from "../../_components/course-completion.tsx";
 import { CourseAssessment } from "../../_components/course-assessment.tsx";
-import {
-  CourseProgressBar,
-  CourseStartCta,
-  ProgressSignInCard,
-} from "../../_components/course-progress.tsx";
+import { CourseProgressBar, CourseStartCta } from "../../_components/course-progress.tsx";
 import { ProgressProvider } from "../../_components/progress-provider.tsx";
 import { TrackProgressBand } from "../../_components/track-progress-band.tsx";
 import { CourseJsonLd } from "../../_components/course-json-ld.tsx";
@@ -369,8 +365,6 @@ export default async function CoursePage({
                   lessonHrefs={lessonHrefs}
                 />
               )}
-
-              <ProgressSignInCard />
 
               <dl className="flex flex-col gap-1.5 border-t pt-3 text-sm">
                 <div className="flex items-center justify-between gap-3">

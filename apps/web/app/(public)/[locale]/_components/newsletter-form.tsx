@@ -120,7 +120,10 @@ export function NewsletterForm({
           // its action resolves, so the address is gone on success without
           // this component holding it in state. Making it controlled to
           // "clear it properly" would also break the no-JS submit.
-          className={cn("flex-1", tone !== "default" && "bg-background")}
+          // On a filled band the input paints the PAGE surface, so it must take
+          // the page's ink too — otherwise it inherits the band's foreground
+          // and a dark-band footer types white on white.
+          className={cn("flex-1", tone !== "default" && "bg-background text-foreground")}
         />
         <Button
           type="submit"

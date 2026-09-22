@@ -26,7 +26,12 @@ const rateLimit = vi.fn(async (_key: string, _limit: number, _windowSeconds: num
 }));
 
 vi.mock("@repo/core", () => ({ sendSupportRequest }));
-vi.mock("@repo/auth", () => ({ rateLimit }));
+// ADR-156: the reCAPTCHA check. Faked at the module edge like the limiter;
+// what Google answers is `@repo/auth`'s own test (`captcha.test.ts`).
+const verifyCaptchaToken = vi.fn(
+  async (_input: { token: string | null; action: string; remoteIp?: string | null }) => true,
+);
+vi.mock("@repo/auth", () => ({ rateLimit, verifyCaptchaToken }));
 vi.mock("next/headers", () => ({
   headers: async () => new Headers({ "x-forwarded-for": "203.0.113.7" }),
 }));
@@ -62,6 +67,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   contact.email = "support@mbfx.co";
   rateLimit.mockResolvedValue({ ok: true, remaining: 4, retryAfterSeconds: 600 });
+  verifyCaptchaToken.mockResolvedValue(true);
 });
 
 describe("the happy path", () => {
@@ -211,5 +217,36 @@ describe("guard 5 — the schema", () => {
       status: "invalid",
     });
     expect(sendSupportRequest).not.toHaveBeenCalled();
+  });
+});
+
+describe("guard 6 — reCAPTCHA v3 (ADR-156)", () => {
+  it("checks the posted token for the `support` action, with the caller's IP", async () => {
+    await sendSupportRequestAction({ status: "idle" }, form({ ...VALID, captchaToken: "tok" }));
+    expect(verifyCaptchaToken).toHaveBeenCalledWith({
+      token: "tok",
+      action: "support",
+      remoteIp: "203.0.113.7",
+    });
+  });
+
+  it("refuses a failing token, sends nothing, and hands the message back", async () => {
+    verifyCaptchaToken.mockResolvedValue(false);
+    expect(await sendSupportRequestAction({ status: "idle" }, form(VALID))).toEqual({
+      status: "captcha",
+      values: {
+        name: VALID.name,
+        email: VALID.email,
+        subject: VALID.subject,
+        message: VALID.message,
+      },
+    });
+    expect(sendSupportRequest).not.toHaveBeenCalled();
+  });
+
+  it("is not reached once a limit refuses, so a flood makes no request to Google", async () => {
+    rateLimit.mockResolvedValue({ ok: false, remaining: 0, retryAfterSeconds: 600 });
+    await sendSupportRequestAction({ status: "idle" }, form(VALID));
+    expect(verifyCaptchaToken).not.toHaveBeenCalled();
   });
 });

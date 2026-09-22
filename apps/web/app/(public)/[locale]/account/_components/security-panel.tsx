@@ -9,7 +9,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { KeyRound, ShieldCheck, ShieldOff } from "lucide-react";
+import { KeyRound, LockKeyhole, ShieldAlert, ShieldCheck, ShieldOff } from "lucide-react";
 import {
   changePasswordFormSchema,
   twoFactorCodeSchema,
@@ -28,8 +28,9 @@ import {
   type SecurityResult,
   type TwoFactorEnrolment,
 } from "../../../../_lib/account-security.ts";
+import { AccountCard } from "./account-card.tsx";
 import { NoticeLine } from "./profile-panel.tsx";
-import { QrCode } from "./qr-code.tsx";
+import { QrCode } from "../../../../_lib/qr-code.tsx";
 import { useAccountForm } from "./use-account-form.ts";
 
 type Notice = { tone: "success" | "error"; text: string } | null;
@@ -59,11 +60,25 @@ export function SecurityPanel({
   };
 
   return (
-    <div className="flex flex-col gap-6 rounded-lg border bg-card p-6">
-      <div className="flex flex-col gap-1">
-        <h3 className="text-base font-semibold">{t("title")}</h3>
-        <p className="text-sm text-muted-foreground">{t("description")}</p>
-      </div>
+    <AccountCard
+      id="account-security"
+      icon={LockKeyhole}
+      tone="warning"
+      title={t("title")}
+      description={t("description")}
+      status={
+        hasPassword &&
+        (twoFactorEnabled ? (
+          <Badge variant="success">
+            <ShieldCheck aria-hidden /> {t("protected")}
+          </Badge>
+        ) : (
+          <Badge variant="outline-warning">
+            <ShieldAlert aria-hidden /> {t("basic")}
+          </Badge>
+        ))
+      }
+    >
       {hasPassword ? (
         <>
           <PasswordForm failureText={failureText} />
@@ -75,7 +90,7 @@ export function SecurityPanel({
         // Better Auth's 2FA endpoints to re-confirm with.
         <p className="text-sm text-muted-foreground">{t("noPassword")}</p>
       )}
-    </div>
+    </AccountCard>
   );
 }
 
@@ -118,9 +133,9 @@ function PasswordForm({ failureText }: { failureText: FailureText }) {
 
   return (
     <form onSubmit={submit} noValidate className="flex flex-col gap-4">
-      <h4 className="flex items-center gap-2 text-sm font-semibold">
-        <KeyRound aria-hidden className="size-4 text-muted-foreground" /> {t("passwordTitle")}
-      </h4>
+      <h3 className="flex items-center gap-2 text-sm font-semibold">
+        <KeyRound aria-hidden className="size-4 text-warning-interactive" /> {t("passwordTitle")}
+      </h3>
       <Field invalid={form.invalid("currentPassword")} required>
         <FieldLabel>{t("currentPassword")}</FieldLabel>
         <PasswordInput
@@ -247,10 +262,10 @@ function TwoFactor({
     <div className="flex flex-col gap-4" data-slot="two-factor">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
-          <h4 className="flex items-center gap-2 text-sm font-semibold">
-            <ShieldCheck aria-hidden className="size-4 text-muted-foreground" />
+          <h3 className="flex items-center gap-2 text-sm font-semibold">
+            <ShieldCheck aria-hidden className="size-4 text-warning-interactive" />
             {t("twoFactorTitle")}
-          </h4>
+          </h3>
           <p className="text-sm text-muted-foreground">{t("twoFactorDescription")}</p>
         </div>
         <Badge variant={enabled ? "success" : "pill"}>

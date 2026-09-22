@@ -3,7 +3,7 @@
 // "Sign in to save your scores" (ADR-058 #7).
 //
 // The page is cached and reads no session, so the only way to know whether the
-// reader has an account is to ask — the same shape `ProgressSignInCard` uses,
+// reader has an account is to ask — the same shape the progress island uses,
 // and the same reason. It asks the CHEAPEST endpoint that answers the
 // question: the progress dashboard, which returns 401 for a guest and a
 // (usually tiny) list otherwise.

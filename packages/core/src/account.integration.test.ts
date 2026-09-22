@@ -10,11 +10,13 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { ContentStatus, LessonProgressStatus } from "@repo/db";
 import type * as AccountModule from "./account.ts";
 import type * as MediaModule from "./media.ts";
+import type * as UsersModule from "./users.ts";
 import { startCmsTestDb, stopCmsTestDb, type CmsTestContext } from "./test-utils/cms-container.ts";
 
 let ctx: CmsTestContext;
 let account: typeof AccountModule;
 let media: typeof MediaModule;
+let users: typeof UsersModule;
 
 let alice: string;
 let bob: string;
@@ -67,6 +69,7 @@ beforeAll(async () => {
   ctx = await startCmsTestDb();
   account = await import("./account.ts");
   media = await import("./media.ts");
+  users = await import("./users.ts");
   alice = await makeLearner("alice");
   bob = await makeLearner("bob");
   const category = await ctx.db.articleCategory.create({
@@ -294,6 +297,45 @@ describe("loadLearnerProfile / loadLearnerActivity", () => {
     expect(profile?.hasPassword).toBe(true);
     expect(profile?.twoFactorEnabled).toBe(true);
     expect((await account.loadLearnerProfile(bob))?.hasPassword).toBe(false);
+  });
+});
+
+// ADR-155 — birthday and postal address.
+describe("birthday and address", () => {
+  it("round-trips a birthday as the same calendar day, and clears it", async () => {
+    const learner = await makeLearner("birthday");
+    await users.updateOwnProfile(learner, { name: "B", birthDate: "1990-04-12" });
+    expect((await account.loadLearnerProfile(learner))?.birthDate).toBe("1990-04-12");
+
+    // The staff form sends no birthday: it must be left alone, not cleared.
+    await users.updateOwnProfile(learner, { name: "B2" });
+    expect((await account.loadLearnerProfile(learner))?.birthDate).toBe("1990-04-12");
+
+    await users.updateOwnProfile(learner, { name: "B2", birthDate: null });
+    expect((await account.loadLearnerProfile(learner))?.birthDate).toBeNull();
+  });
+
+  it("saves the address, leaves omitted lines alone and audits the change", async () => {
+    const learner = await makeLearner("addressed");
+    await account.updateOwnAddress(learner, {
+      addressLine1: "1 High St",
+      city: "Leeds",
+      postalCode: "LS1 1AA",
+      country: "GB",
+    });
+    await account.updateOwnAddress(learner, { addressLine2: "Flat 2", city: null });
+
+    expect((await account.loadLearnerProfile(learner))?.address).toEqual({
+      addressLine1: "1 High St",
+      addressLine2: "Flat 2",
+      city: null,
+      region: null,
+      postalCode: "LS1 1AA",
+      country: "GB",
+    });
+    expect(
+      await ctx.db.auditLog.count({ where: { userId: learner, action: "users.addressUpdate" } }),
+    ).toBe(2);
   });
 });
 

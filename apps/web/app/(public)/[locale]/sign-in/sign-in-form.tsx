@@ -9,19 +9,22 @@ import { PasswordInput } from "@repo/ui/components/password-input";
 import { AuthInputIcon } from "../../../_lib/auth-input-icon.tsx";
 import { useSearchParam } from "../../../_lib/use-search-param.ts";
 import { rememberSession } from "../../../_lib/session-hint.ts";
+import { useRecaptcha } from "../../../_lib/recaptcha.ts";
 import {
   isAdminPath,
   resolveRedirect,
   signInWithPassword,
   signOutSilently,
+  TWO_FACTOR_CODE_MAX_LENGTH,
   verifyTwoFactorSignIn,
 } from "../../../_lib/credentials.ts";
 
-type Failure = "credentials" | "learnersOnly" | "invalidCode" | "codeExpired";
+type Failure = "credentials" | "learnersOnly" | "invalidCode" | "codeExpired" | "captcha";
 
 export function SignInForm({
   labels,
   homeHref,
+  captchaSiteKey,
 }: {
   labels: {
     email: string;
@@ -31,6 +34,7 @@ export function SignInForm({
     submit: string;
     failed: string;
     learnersOnly: string;
+    captcha: string;
     resetDone: string;
     verifiedDone: string;
     codeTitle: string;
@@ -43,6 +47,8 @@ export function SignInForm({
   };
   /** Localized "/" for this render's locale — where a learner lands by default. */
   homeHref: string;
+  /** Settings → General → reCAPTCHA's site key, or `null` while it is off (ADR-156). */
+  captchaSiteKey: string | null;
 }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -51,6 +57,8 @@ export function SignInForm({
   const [step, setStep] = useState<"credentials" | "code">("credentials");
   const [code, setCode] = useState("");
   const [pending, startTransition] = useTransition();
+  // ADR-156: load reCAPTCHA v3 now, so its token is ready at submit.
+  useRecaptcha(captchaSiteKey);
 
   // `?reset=1` after a completed password reset, `?verified=1` after Better
   // Auth's verification callback. Read from the live URL, not through
@@ -67,8 +75,8 @@ export function SignInForm({
     setFailure(null);
     startTransition(async () => {
       const result = await signInWithPassword(email, password);
-      if (result.status === "failed") {
-        setFailure("credentials");
+      if (result.status === "failed" || result.status === "captcha") {
+        setFailure(result.status === "captcha" ? "captcha" : "credentials");
         return;
       }
       if (result.status === "twoFactor") {
@@ -126,7 +134,9 @@ export function SignInForm({
         ? labels.invalidCode
         : failure === "codeExpired"
           ? labels.codeExpired
-          : labels.failed;
+          : failure === "captcha"
+            ? labels.captcha
+            : labels.failed;
 
   if (step === "code") {
     return (
@@ -141,11 +151,10 @@ export function SignInForm({
             <Input
               className="ps-10"
               id="signin-code"
-              inputMode="numeric"
               autoComplete="one-time-code"
               autoFocus
               required
-              maxLength={7}
+              maxLength={TWO_FACTOR_CODE_MAX_LENGTH}
               value={code}
               aria-invalid={failure !== null || undefined}
               aria-describedby={errorId}

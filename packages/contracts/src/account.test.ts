@@ -5,9 +5,13 @@ import {
   ACCOUNT_PATH,
   AVATAR_MAX_BYTES,
   articleReadSchema,
+  changeEmailFormSchema,
   changePasswordFormSchema,
+  latestBirthDate,
+  learnerAddressSchema,
   learnerProfileSchema,
   pickResumeLesson,
+  profileCompleteness,
   twoFactorCodeSchema,
   twoFactorPasswordSchema,
 } from "./account.ts";
@@ -32,8 +36,35 @@ describe("articleReadSchema", () => {
 });
 
 describe("learnerProfileSchema", () => {
-  it("is the staff profile's schema, so the two cannot disagree", () => {
-    expect(learnerProfileSchema).toBe(updateOwnProfileSchema);
+  // ADR-155 #5: it EXTENDS the staff schema, so every rule about a name is shared.
+  it("shares every staff profile field and adds only the birthday", () => {
+    const staffKeys = Object.keys(updateOwnProfileSchema.shape);
+    expect(Object.keys(learnerProfileSchema.shape)).toEqual([...staffKeys, "birthDate"]);
+    for (const key of staffKeys) {
+      expect(learnerProfileSchema.shape[key as keyof typeof learnerProfileSchema.shape]).toBe(
+        updateOwnProfileSchema.shape[key as keyof typeof updateOwnProfileSchema.shape],
+      );
+    }
+  });
+
+  it("takes a birthday as a calendar date, and blank as none", () => {
+    expect(learnerProfileSchema.parse({ name: "Sam", birthDate: "1990-04-12" }).birthDate).toBe(
+      "1990-04-12",
+    );
+    expect(learnerProfileSchema.parse({ name: "Sam", birthDate: "" }).birthDate).toBeNull();
+    expect(learnerProfileSchema.parse({ name: "Sam", birthDate: null }).birthDate).toBeNull();
+    expect(learnerProfileSchema.parse({ name: "Sam" }).birthDate).toBeUndefined();
+  });
+
+  it("refuses an impossible, ancient or future birthday", () => {
+    for (const birthDate of ["2001-02-30", "1899-12-31", "3000-01-01", "12/04/1990", "1990-4-1"]) {
+      expect(learnerProfileSchema.safeParse({ name: "Sam", birthDate }).success).toBe(false);
+    }
+  });
+
+  it("allows today at the far east of the date line", () => {
+    const now = new Date("2026-09-22T12:00:00Z");
+    expect(latestBirthDate(now)).toBe("2026-09-23");
   });
 
   it("requires a name and trims it", () => {
@@ -121,5 +152,105 @@ describe("pickResumeLesson", () => {
   it("is null when every lesson is complete, or there are none", () => {
     expect(pickResumeLesson(lessons, new Set(["l1", "l2", "l3", "l4"]), "l4")).toBeNull();
     expect(pickResumeLesson([], new Set(), null)).toBeNull();
+  });
+});
+
+describe("learnerAddressSchema", () => {
+  it("trims each line and turns a blank one into null", () => {
+    expect(
+      learnerAddressSchema.parse({
+        addressLine1: "  1 High St ",
+        addressLine2: "",
+        city: "Leeds",
+        region: null,
+        postalCode: " LS1 1AA ",
+        country: "GB",
+      }),
+    ).toEqual({
+      addressLine1: "1 High St",
+      addressLine2: null,
+      city: "Leeds",
+      region: null,
+      postalCode: "LS1 1AA",
+      country: "GB",
+    });
+  });
+
+  it("accepts an empty country and refuses one that is not an ISO code", () => {
+    expect(learnerAddressSchema.parse({ country: "" }).country).toBeNull();
+    expect(learnerAddressSchema.safeParse({ country: "gb" }).success).toBe(false);
+    expect(learnerAddressSchema.safeParse({ country: "XX" }).success).toBe(false);
+  });
+
+  it("refuses an over-long line", () => {
+    expect(learnerAddressSchema.safeParse({ postalCode: "x".repeat(21) }).success).toBe(false);
+  });
+
+  it("has nowhere to put a user id", () => {
+    expect(learnerAddressSchema.parse({ city: "Leeds", userId: "someone-else" })).toEqual({
+      city: "Leeds",
+    });
+  });
+});
+
+describe("changeEmailFormSchema", () => {
+  it("lower-cases and trims the new address", () => {
+    expect(changeEmailFormSchema.parse({ newEmail: "  Sam@Example.COM " })).toEqual({
+      newEmail: "sam@example.com",
+    });
+  });
+
+  it("refuses something that is not an address", () => {
+    expect(changeEmailFormSchema.safeParse({ newEmail: "sam" }).success).toBe(false);
+  });
+});
+
+describe("profileCompleteness", () => {
+  const empty = {
+    image: null,
+    firstName: null,
+    lastName: null,
+    phone: null,
+    birthDate: null,
+    emailVerified: false,
+    address: {
+      addressLine1: null,
+      addressLine2: null,
+      city: null,
+      region: null,
+      postalCode: null,
+      country: null,
+    },
+  };
+
+  it("is zero for a bare account and lists everything missing, in order", () => {
+    expect(profileCompleteness(empty)).toEqual({
+      percent: 0,
+      missing: ["picture", "fullName", "phone", "birthDate", "address", "emailVerified"],
+    });
+  });
+
+  it("needs both halves of a name and a postable address", () => {
+    const partial = profileCompleteness({
+      ...empty,
+      firstName: "Sam",
+      address: { ...empty.address, addressLine1: "1 High St", city: "Leeds" },
+    });
+    expect(partial.missing).toContain("fullName");
+    expect(partial.missing).toContain("address");
+  });
+
+  it("is 100 when everything is filled in", () => {
+    expect(
+      profileCompleteness({
+        image: "/a.png",
+        firstName: "Sam",
+        lastName: "Lee",
+        phone: "+44",
+        birthDate: "1990-04-12",
+        emailVerified: true,
+        address: { ...empty.address, addressLine1: "1 High St", city: "Leeds", country: "GB" },
+      }),
+    ).toEqual({ percent: 100, missing: [] });
   });
 });

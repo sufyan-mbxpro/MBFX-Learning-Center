@@ -482,6 +482,17 @@ const SETTINGS = [
   // changes-49 — the same timeout for LEARNER sessions, seeded "never" for
   // the same reason. Not public either.
   ["general", "security.learnerSessionTimeout", "never", "SELECT", "User session timeout", false],
+  // ADR-157 — seeded OFF here so a fresh clone, CI and the integration suites
+  // can sign in with the seeded admin, who has no authenticator. The live
+  // defaults (`seed-live/defaults.json`) turn it ON for a deployed server.
+  [
+    "general",
+    "security.requireStaffTwoFactor",
+    false,
+    "BOOLEAN",
+    "Require two-factor for staff",
+    false,
+  ],
 
   // SEO
   ["seo", "seo.titleTemplate", "%s | MBX Pro", "STRING", "Title template", true],

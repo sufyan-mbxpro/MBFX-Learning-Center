@@ -315,6 +315,7 @@
     "newsletter.placements.news": true,
     "security.adminSessionTimeout": "30",
     "security.learnerSessionTimeout": "never",
+    "security.requireStaffTwoFactor": true,
     "seo.defaultOgImage": "/og-default.png",
     "seo.googleSiteVerification": "",
     "seo.robotsIndex": true,

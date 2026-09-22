@@ -6,7 +6,7 @@ import { hash, verify } from "@node-rs/argon2";
 import { betterAuth } from "better-auth";
 import type { Auth, BetterAuthOptions } from "better-auth";
 import { prismaAdapter } from "@better-auth/prisma-adapter";
-import { createAuthMiddleware } from "better-auth/api";
+import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
 import { admin } from "better-auth/plugins/admin";
 import { twoFactor } from "better-auth/plugins/two-factor";
 import { bearer } from "better-auth/plugins/bearer";
@@ -15,12 +15,18 @@ import { adminSessionTimeoutMs, MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from 
 import { db } from "@repo/db";
 import { sendTemplatedEmail } from "@repo/email";
 import { getSetting } from "@repo/settings";
-import { passwordChangedBy, twoFactorAuditAction, writeAccountAudit } from "./account-audit.ts";
+import {
+  emailChangeFromToken,
+  passwordChangedBy,
+  twoFactorAuditAction,
+  writeAccountAudit,
+} from "./account-audit.ts";
 import { rateLimit } from "./rate-limit.ts";
 import { resetPasswordPath } from "./reset-url.ts";
 import { redisSecondaryStorage } from "./redis-secondary-storage.ts";
 import { notifyEmailVerified } from "./email-verified.ts";
 import { staffImpersonation, startImpersonation } from "./impersonation.ts";
+import { recaptchaGuard } from "./captcha.ts";
 
 // Public-write throttling (changes-11 PR 5.2/5.5). Re-exported here so a
 // route handler imports one package for "who is this" and "how often".
@@ -29,6 +35,19 @@ export { rateLimit, type RateLimitResult } from "./rate-limit.ts";
 // importing core.
 export { onEmailVerified, type EmailVerifiedListener } from "./email-verified.ts";
 export { canBeImpersonated, IMPERSONATION_SESSION_SECONDS } from "./impersonation.ts";
+// ADR-157: enforced staff two-factor — the admin layout and requirePermission.
+export { isStaffTwoFactorPending, staffTwoFactorPending } from "./two-factor.ts";
+// ADR-156: reCAPTCHA. The guard below covers sign-in and sign-up; the support
+// form checks its own token; the settings tab reads and saves the config here.
+export {
+  getCaptchaSiteKey,
+  loadCaptchaSettings,
+  saveCaptchaSettings,
+  verifyCaptchaToken,
+  type CaptchaSaveRefusal,
+  type CaptchaSaveResult,
+  type CaptchaSettingsView,
+} from "./captcha.ts";
 
 // @node-rs/argon2 exports Algorithm as an ambient const enum, which
 // verbatimModuleSyntax forbids referencing directly (can't verify the
@@ -109,6 +128,28 @@ export async function sendPasswordChangedNotice(user: MailUser): Promise<void> {
     variables: { "changed.at": new Date().toISOString() },
   });
 }
+
+/**
+ * "Your email address was changed" — to the PREVIOUS address, once a change
+ * has landed (ADR-155 #2). It names the new address, so an owner whose account
+ * was taken over learns where it went.
+ */
+async function sendEmailChangedNotice(
+  user: MailUser,
+  change: { from: string; to: string },
+): Promise<void> {
+  await sendTemplatedEmail({
+    key: "auth.email_changed",
+    to: change.from,
+    locale: user.locale ?? undefined,
+    recipientName: user.name ?? undefined,
+    variables: { "changed.at": new Date().toISOString(), "email.new": change.to },
+  });
+}
+
+/** Change-email requests per account per hour (ADR-155 #3). */
+const CHANGE_EMAIL_LIMIT = 5;
+const CHANGE_EMAIL_WINDOW_SECONDS = 3600;
 
 const adapter = prismaAdapter(db, { provider: "mysql" });
 
@@ -248,6 +289,9 @@ const authOptions: BetterAuthOptions = {
       // email-spam half — every sign-up sends a verification mail.
       "/sign-in/email": { window: 300, max: 10 },
       "/sign-up/email": { window: 3600, max: 5 },
+      // ADR-155 #3: every request mails an address the requester chose. The
+      // per-ACCOUNT half is in `hooks.before`.
+      "/change-email": { window: 3600, max: 5 },
     },
   },
 
@@ -283,6 +327,11 @@ const authOptions: BetterAuthOptions = {
   },
 
   user: {
+    // ADR-155 #1: the link goes to the NEW address and nothing changes until
+    // it is opened. Neither `sendChangeEmailConfirmation` nor
+    // `updateEmailWithoutVerification` is set, so that is the only flow, for a
+    // verified address and an unverified one alike.
+    changeEmail: { enabled: true },
     additionalFields: {
       userType: { type: "string", defaultValue: "LEARNER", input: false },
       status: { type: "string", defaultValue: "PENDING_VERIFICATION", input: false },
@@ -312,6 +361,16 @@ const authOptions: BetterAuthOptions = {
             (user as { twoFactorEnabled?: boolean | null }).twoFactorEnabled,
           );
           if (action) await writeAccountAudit(user.id, action);
+
+          // ADR-155 #2: an address change has just landed.
+          const change = emailChangeFromToken(context?.path, context?.query);
+          if (change && user.email === change.to) {
+            await writeAccountAudit(user.id, "users.emailChange", {
+              before: { email: change.from },
+              after: { email: change.to },
+            });
+            await sendEmailChangedNotice(user as unknown as MailUser, change);
+          }
         },
       },
     },
@@ -356,6 +415,23 @@ const authOptions: BetterAuthOptions = {
   },
 
   hooks: {
+    // ADR-155 #3: changing the address is a LEARNER's self-service (staff edit
+    // themselves at /keystone/profile), and it is limited per account as well
+    // as per IP. No session is left to the endpoint's own middleware (401).
+    before: createAuthMiddleware(async (ctx) => {
+      if (ctx.path !== "/change-email") return;
+      const session = await getSessionFromCtx(ctx);
+      if (!session) return;
+      if ((session.user as { userType?: string }).userType !== "LEARNER") {
+        throw new APIError("FORBIDDEN");
+      }
+      const limited = await rateLimit(
+        `account:change-email:${session.user.id}`,
+        CHANGE_EMAIL_LIMIT,
+        CHANGE_EMAIL_WINDOW_SECONDS,
+      );
+      if (!limited.ok) throw new APIError("TOO_MANY_REQUESTS");
+    }),
     after: createAuthMiddleware(async (ctx) => {
       // ADR-123 #5: a learner's password change from the profile page. The
       // same audit row and owner notice the staff action writes for itself
@@ -399,7 +475,7 @@ const authOptions: BetterAuthOptions = {
     }),
   },
 
-  plugins: [admin(), twoFactor(), bearer(), staffImpersonation()],
+  plugins: [admin(), twoFactor(), bearer(), staffImpersonation(), recaptchaGuard()],
 
   // ADR-142 §3: impersonation goes through `staffImpersonation` alone. The
   // admin plugin's own pair authorises against a `user.role` string this
@@ -594,6 +670,23 @@ export async function setUserPassword(userId: string, newPassword: string): Prom
   const ctx = await authInstance.$context;
   const hashed = await ctx.password.hash(newPassword);
   await ctx.internalAdapter.updatePassword(userId, hashed);
+}
+
+/**
+ * End every session a user holds, in BOTH stores. `@repo/core`'s revocations
+ * (password reset, deactivation, offboarding, two-factor reset, "sign out
+ * everywhere") delete the MySQL rows, but with `secondaryStorage` configured
+ * `findSession` reads REDIS first — so the row-only delete left each session
+ * alive for its whole lifetime, and the next `auth()` that tried to refresh or
+ * slide it hit a missing row and threw "Failed to get session" (the error an
+ * admin resetting their OWN password saw on the very next render). Same lesson
+ * as `slideStaffExpiry`'s changes-38 note: session writes go through the
+ * adapter. `deleteUserSessions` purges the Redis copies and the
+ * `active-sessions-*` list even when the rows are already gone.
+ */
+export async function revokeAllSessions(userId: string): Promise<void> {
+  const ctx = await authInstance.$context;
+  await ctx.internalAdapter.deleteUserSessions(userId);
 }
 
 /**

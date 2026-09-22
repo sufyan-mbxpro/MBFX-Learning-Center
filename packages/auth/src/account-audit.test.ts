@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { passwordChangedBy, twoFactorAuditAction } from "./account-audit.ts";
+import { emailChangeFromToken, passwordChangedBy, twoFactorAuditAction } from "./account-audit.ts";
 
 describe("twoFactorAuditAction (ADR-123 #5)", () => {
   it("audits the first confirmed code as an enable", () => {
@@ -35,5 +35,48 @@ describe("passwordChangedBy (ADR-123 #5)", () => {
       passwordChangedBy({ path: "/change-password", request: {}, returned: { status: 400 } }),
     ).toBeNull();
     expect(passwordChangedBy({ path: "/sign-in/email", request: {}, returned: ok })).toBeNull();
+  });
+});
+
+describe("emailChangeFromToken (ADR-155 #2)", () => {
+  const token = (claims: Record<string, unknown>) =>
+    `h.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.sig`;
+
+  it("reads the old and new address from the final step of a change", () => {
+    const query = {
+      token: token({
+        email: "old@example.com",
+        updateTo: "new@example.com",
+        requestType: "change-email-verification",
+      }),
+    };
+    expect(emailChangeFromToken("/verify-email", query)).toEqual({
+      from: "old@example.com",
+      to: "new@example.com",
+    });
+  });
+
+  it("ignores a plain verification, the confirmation step, and other paths", () => {
+    expect(emailChangeFromToken("/verify-email", { token: token({ email: "a@b.co" }) })).toBeNull();
+    expect(
+      emailChangeFromToken("/verify-email", {
+        token: token({
+          email: "a@b.co",
+          updateTo: "c@d.co",
+          requestType: "change-email-confirmation",
+        }),
+      }),
+    ).toBeNull();
+    expect(
+      emailChangeFromToken("/change-email", {
+        token: token({ email: "a", updateTo: "b", requestType: "change-email-verification" }),
+      }),
+    ).toBeNull();
+  });
+
+  it("survives a missing or malformed token", () => {
+    expect(emailChangeFromToken("/verify-email", undefined)).toBeNull();
+    expect(emailChangeFromToken("/verify-email", { token: "not-a-jwt" })).toBeNull();
+    expect(emailChangeFromToken("/verify-email", { token: "a.%%%.c" })).toBeNull();
   });
 });

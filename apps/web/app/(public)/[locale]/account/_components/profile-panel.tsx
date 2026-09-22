@@ -1,13 +1,18 @@
 "use client";
 
-// Picture and basic details (ADR-123 #4). Both write through the server
-// actions in `_actions/account.ts`, which take the user from the session —
-// nothing here names a user.
+// Picture and basic details (ADR-123 #4), plus the birthday since ADR-155.
+// Both write through the server actions in `_actions/account.ts`, which take
+// the user from the session — nothing here names a user.
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { ImageUp, Trash2 } from "lucide-react";
-import { AVATAR_MAX_BYTES, learnerProfileSchema } from "@repo/contracts";
+import { ImageUp, Trash2, UserRound } from "lucide-react";
+import {
+  AVATAR_MAX_BYTES,
+  BIRTH_DATE_MIN,
+  latestBirthDate,
+  learnerProfileSchema,
+} from "@repo/contracts";
 import { Avatar, AvatarFallback, AvatarImage } from "@repo/ui/components/avatar";
 import { Button } from "@repo/ui/components/button";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@repo/ui/components/field";
@@ -18,6 +23,7 @@ import {
   uploadAvatarAction,
   type AccountActionResult,
 } from "../../_actions/account.ts";
+import { AccountCard } from "./account-card.tsx";
 import { useAccountForm } from "./use-account-form.ts";
 
 /** The formats `setOwnAvatar` accepts — the picker's hint, not the check. */
@@ -33,6 +39,8 @@ export function ProfilePanel({
     firstName: string;
     lastName: string;
     phone: string;
+    /** `YYYY-MM-DD`, or "" when none is set. */
+    birthDate: string;
     image: string | null;
   };
 }) {
@@ -72,6 +80,7 @@ export function ProfilePanel({
     firstName: profile.firstName,
     lastName: profile.lastName,
     phone: profile.phone,
+    birthDate: profile.birthDate,
   });
   const [detailsNotice, setDetailsNotice] = useState<Notice>(null);
   const [saving, startSave] = useTransition();
@@ -80,6 +89,7 @@ export function ProfilePanel({
     firstName: draft.firstName || null,
     lastName: draft.lastName || null,
     phone: draft.phone || null,
+    birthDate: draft.birthDate || null,
   };
   const form = useAccountForm(learnerProfileSchema, values);
   const set = (key: keyof typeof draft, value: string) =>
@@ -101,14 +111,15 @@ export function ProfilePanel({
   };
 
   return (
-    <div className="flex flex-col gap-6 rounded-lg border bg-card p-6">
-      <div className="flex flex-col gap-1">
-        <h3 className="text-base font-semibold">{t("title")}</h3>
-        <p className="text-sm text-muted-foreground">{t("description")}</p>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-4">
-        <Avatar size="lg" className="size-20">
+    <AccountCard
+      id="account-profile"
+      icon={UserRound}
+      tone="primary"
+      title={t("title")}
+      description={t("description")}
+    >
+      <div className="flex flex-wrap items-center gap-4 rounded-lg bg-muted/50 p-4">
+        <Avatar size="lg" className="size-20 ring-4 ring-background">
           {profile.image && <AvatarImage src={profile.image} alt="" />}
           <AvatarFallback className="text-xl">{initialsOf(profile.name)}</AvatarFallback>
         </Avatar>
@@ -192,16 +203,33 @@ export function ProfilePanel({
             <FieldError>{form.error("lastName")}</FieldError>
           </Field>
         </div>
-        <Field invalid={form.invalid("phone")}>
-          <FieldLabel>{t("phone")}</FieldLabel>
-          <Input
-            type="tel"
-            autoComplete="tel"
-            value={draft.phone}
-            onChange={(e) => set("phone", e.target.value)}
-          />
-          <FieldError>{form.error("phone")}</FieldError>
-        </Field>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field invalid={form.invalid("phone")}>
+            <FieldLabel>{t("phone")}</FieldLabel>
+            <Input
+              type="tel"
+              autoComplete="tel"
+              value={draft.phone}
+              onChange={(e) => set("phone", e.target.value)}
+            />
+            <FieldError>{form.error("phone")}</FieldError>
+          </Field>
+          <Field invalid={form.invalid("birthDate")}>
+            <FieldLabel>{t("birthDate")}</FieldLabel>
+            {/* A native date control: typing a birthday is faster than paging a
+                calendar back forty years, and the browser localizes the format. */}
+            <Input
+              type="date"
+              autoComplete="bday"
+              min={BIRTH_DATE_MIN}
+              max={latestBirthDate()}
+              value={draft.birthDate}
+              onChange={(e) => set("birthDate", e.target.value)}
+            />
+            <FieldDescription>{t("birthDateHint")}</FieldDescription>
+            <FieldError>{form.error("birthDate")}</FieldError>
+          </Field>
+        </div>
         <div className="flex flex-wrap items-center justify-end gap-3">
           <NoticeLine notice={detailsNotice} />
           <Button type="submit" loading={saving}>
@@ -209,7 +237,7 @@ export function ProfilePanel({
           </Button>
         </div>
       </form>
-    </div>
+    </AccountCard>
   );
 }
 

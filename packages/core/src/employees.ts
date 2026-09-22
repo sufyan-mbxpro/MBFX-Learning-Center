@@ -53,7 +53,7 @@ export async function offboardEmployee(
   actorId: string,
   employeeId: string,
   _afterStatusWrite?: () => Promise<void> | void,
-): Promise<void> {
+): Promise<string | null> {
   const employee = await db.employee.findUniqueOrThrow({ where: { id: employeeId } });
 
   await db.$transaction(async (tx) => {
@@ -84,6 +84,9 @@ export async function offboardEmployee(
   });
 
   if (employee.userId) revalidateTag(`rbac:${employee.userId}`, { expire: 0 });
+  // The caller ends the sessions' Redis copies through @repo/auth, which core
+  // cannot import; the row delete above is only half of a revocation.
+  return employee.userId;
 }
 
 export interface OrgChartNode extends EmployeeRow {

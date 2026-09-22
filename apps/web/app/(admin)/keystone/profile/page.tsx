@@ -2,9 +2,11 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { auth } from "@repo/auth";
 import { loadOwnProfile } from "@repo/core";
+import { getSetting } from "@repo/settings";
 import { Avatar, AvatarFallback, AvatarImage } from "@repo/ui/components/avatar";
 import { Badge } from "@repo/ui/components/badge";
 import { AdminPage, AdminSection } from "../_components/admin-page.tsx";
+import { TwoFactorSection } from "../_components/two-factor-section.tsx";
 import { ChangePasswordForm, ProfileForm } from "./profile-forms.tsx";
 import { formatDate } from "@repo/utils";
 
@@ -15,9 +17,11 @@ import { formatDate } from "@repo/utils";
 export default async function ProfilePage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/keystone");
-  const [t, profile] = await Promise.all([
+  const [t, profile, siteName, twoFactorRequired] = await Promise.all([
     getTranslations("admin"),
     loadOwnProfile(session.user.id),
+    getSetting("site.name"),
+    getSetting("security.requireStaffTwoFactor"),
   ]);
   if (!profile) redirect("/keystone");
 
@@ -82,6 +86,16 @@ export default async function ProfilePage() {
                 changed: t("passwordChanged"),
                 mismatch: t("passwordMismatch"),
               }}
+            />
+          </AdminSection>
+
+          {/* ADR-157 §1: staff enrol here, as learners do on /account. */}
+          <AdminSection title={t("twoFactor.title")}>
+            <TwoFactorSection
+              enabled={profile.twoFactorEnabled}
+              required={twoFactorRequired === true}
+              hasPassword={profile.hasPassword}
+              issuer={siteName ?? ""}
             />
           </AdminSection>
 

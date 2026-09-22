@@ -17,6 +17,7 @@
     "@repo/contracts": "workspace:*",
     "@repo/db": "workspace:*",
     "@repo/email": "workspace:*",
+    "@repo/secrets": "workspace:*",
     "@repo/settings": "workspace:*",
     "better-auth": "1.7.2",
     "ioredis": "^5.4.1",

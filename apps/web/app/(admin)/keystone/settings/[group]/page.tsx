@@ -3,6 +3,7 @@ import { getTranslations } from "next-intl/server";
 import { can, requirePermission } from "@repo/rbac";
 import { loadAdminMenus, loadBrandAssets } from "@repo/core";
 import { getActiveLocales } from "@repo/i18n";
+import { loadCaptchaSettings } from "@repo/auth";
 import { AdminSection } from "../../_components/admin-page.tsx";
 import { SettingsScreen } from "../_components/settings-screen.tsx";
 import {
@@ -13,11 +14,14 @@ import {
 } from "../_components/settings-shared.ts";
 import { BrandAssetsForm } from "../../_components/brand-assets-form.tsx";
 import { SettingsGroupForm, type SettingsTab } from "../settings-group-form.tsx";
+import { CaptchaSettingsForm } from "../captcha-settings-form.tsx";
 
 // One settings category on its own page (changes-01, image-4): sub-sidebar
 // for switching categories, type-driven fields for this group, ONE Save for
 // the whole section (changes-02). Unknown group → 404, not an empty page.
-export default async function SettingsGroupPage({ params }: PageProps<"/keystone/settings/[group]">) {
+export default async function SettingsGroupPage({
+  params,
+}: PageProps<"/keystone/settings/[group]">) {
   const subject = await requirePermission("settings.view");
   const { group } = await params;
   const t = await getTranslations("admin");
@@ -64,10 +68,17 @@ export default async function SettingsGroupPage({ params }: PageProps<"/keystone
   // favicon that were the theme editor's. Their actions gate on
   // `theme.update`, so a subject without it gets no Branding tab rather than
   // uploads that would be refused.
+  // ADR-156: the reCAPTCHA tab saves under `settings.update`, so a subject
+  // who can only view settings gets no tab rather than a form that is refused.
   const tabDefs = (SETTINGS_GROUP_TABS[group] ?? []).filter(
-    (tab) => tab.id !== "branding" || can(subject, "theme.update"),
+    (tab) =>
+      (tab.id !== "branding" || can(subject, "theme.update")) &&
+      (tab.id !== "captcha" || can(subject, "settings.update")),
   );
-  const brandAssets = tabDefs.some((tab) => tab.id === "branding") ? await loadBrandAssets() : null;
+  const [brandAssets, captchaSettings] = await Promise.all([
+    tabDefs.some((tab) => tab.id === "branding") ? loadBrandAssets() : null,
+    tabDefs.some((tab) => tab.id === "captcha") ? loadCaptchaSettings() : null,
+  ]);
   const tabs: SettingsTab[] | undefined =
     tabDefs.length > 0
       ? tabDefs.map((tab) => ({
@@ -92,7 +103,44 @@ export default async function SettingsGroupPage({ params }: PageProps<"/keystone
                   />
                 ),
               }
-            : { keys: tab.keys }),
+            : tab.id === "captcha" && captchaSettings
+              ? {
+                  content: (
+                    <CaptchaSettingsForm
+                      settings={captchaSettings}
+                      labels={{
+                        section: t("captcha.section"),
+                        sectionDescription: t("captcha.sectionDescription"),
+                        enabled: t("captcha.enabled"),
+                        enabledHint: t("captcha.enabledHint"),
+                        siteKey: t("captcha.siteKey"),
+                        siteKeyHint: t("captcha.siteKeyHint"),
+                        secretKey: t("captcha.secretKey"),
+                        secretKeyHint: t("captcha.secretKeyHint"),
+                        secretKeySaved: t("captcha.secretKeySaved"),
+                        minScore: t("captcha.minScore"),
+                        minScoreHint: t("captcha.minScoreHint"),
+                        showSecret: t("showPassword"),
+                        hideSecret: t("hidePassword"),
+                        save: t("save"),
+                        saved: t("saved"),
+                        lastVerified: t("captcha.lastVerified"),
+                        never: t("captcha.never"),
+                        sealKeyMissingTitle: t("captcha.sealKeyMissingTitle"),
+                        sealKeyMissingBody: t("captcha.sealKeyMissingBody"),
+                        forcedOffTitle: t("captcha.forcedOffTitle"),
+                        forcedOffBody: t("captcha.forcedOffBody"),
+                        refusals: {
+                          sealKeyMissing: t("captcha.refusals.sealKeyMissing"),
+                          secretRequired: t("captcha.refusals.secretRequired"),
+                          checkFailed: t("captcha.refusals.checkFailed"),
+                          tokenUnavailable: t("captcha.refusals.tokenUnavailable"),
+                        },
+                      }}
+                    />
+                  ),
+                }
+              : { keys: tab.keys }),
         }))
       : undefined;
 

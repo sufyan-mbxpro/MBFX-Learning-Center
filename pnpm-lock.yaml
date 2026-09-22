@@ -393,6 +393,9 @@ importers:
       '@repo/email':
         specifier: workspace:*
         version: link:../email
+      '@repo/secrets':
+        specifier: workspace:*
+        version: link:../secrets
       '@repo/settings':
         specifier: workspace:*
         version: link:../settings

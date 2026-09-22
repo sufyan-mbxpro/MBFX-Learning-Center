@@ -746,7 +746,33 @@
       "contact": "Contact",
       "regional": "Language & region",
       "security": "Security",
+      "captcha": "reCAPTCHA",
       "branding": "Branding"
+    },
+    "captcha": {
+      "section": "Google reCAPTCHA",
+      "sectionDescription": "Checks that sign-in, sign-up and the support form are used by a person, not a script. Uses Google reCAPTCHA v3, which has no checkbox.",
+      "enabled": "Turn on reCAPTCHA",
+      "enabledHint": "Staff sign-in, learner sign-in and sign-up, and the support form. When you save with this on, your browser runs a check with these keys first. Keys that fail are not saved.",
+      "siteKey": "Site key",
+      "siteKeyHint": "From google.com/recaptcha/admin. Create a \"Score based (v3)\" key and add every domain this site uses.",
+      "secretKey": "Secret key",
+      "secretKeyHint": "Shown once, next to the site key, in Google's admin console. It is stored encrypted and never shown again.",
+      "secretKeySaved": "A secret key is saved. Leave this blank to keep it, or enter a new one to replace it.",
+      "minScore": "Minimum score",
+      "minScoreHint": "Google scores each request from 0.0 (likely a bot) to 1.0 (likely a person). Requests below this are refused. 0.5 is Google's suggested value. A higher score refuses more bots and more people.",
+      "lastVerified": "Last check passed:",
+      "never": "never",
+      "sealKeyMissingTitle": "The secret key cannot be stored yet",
+      "sealKeyMissingBody": "The server has no CAPTCHA_SECRET_KEY set. That key encrypts Google's secret key before it is saved. Ask whoever runs the server to set it, then come back.",
+      "forcedOffTitle": "reCAPTCHA is switched off on the server",
+      "forcedOffBody": "CAPTCHA_DISABLED is set in the server's environment. Whatever this tab says, no request is checked until it is removed.",
+      "refusals": {
+        "sealKeyMissing": "The server cannot encrypt the secret key. CAPTCHA_SECRET_KEY is not set.",
+        "secretRequired": "Enter the secret key to turn reCAPTCHA on.",
+        "checkFailed": "Google did not accept a check with these keys. Make sure both keys come from the same v3 key and that this domain is listed on it.",
+        "tokenUnavailable": "Your browser could not run the reCAPTCHA check. Check the site key, and turn off any content blocker for this site."
+      }
     },
     "settingsGroupDesc": {
       "general": "Site identity, contact details, defaults and branding",
@@ -1012,7 +1038,8 @@
     "settingDescriptions": {
       "security": {
         "adminSessionTimeout": "Signs a staff member out of the admin after this long without activity.",
-        "learnerSessionTimeout": "Signs a learner out of the public site after this long without activity."
+        "learnerSessionTimeout": "Signs a learner out of the public site after this long without activity.",
+        "requireStaffTwoFactor": "Staff who have not set up two-factor authentication must do so before they can use the admin. Turning this off lets them skip it."
       },
       "site": {
         "contactEmail": "Messages sent through the contact form on the Support page are delivered to this address.",
@@ -1533,7 +1560,15 @@
       "submit": "Sign In to Admin",
       "failed": "Sign-in failed. Check your email and password.",
       "notStaff": "That account does not have access to the admin portal.",
-      "userSignIn": "Go to User Login"
+      "captcha": "We couldn't confirm this request came from a person. Reload the page and try again. If it keeps happening, turn off any content blocker for this site.",
+      "userSignIn": "Go to User Login",
+      "codeTitle": "Two-factor authentication",
+      "codeHint": "Enter the 6-digit code from your authenticator app, or one of your backup codes.",
+      "codeLabel": "Verification code",
+      "codeSubmit": "Verify and sign in",
+      "invalidCode": "That code isn't right. Check your app and try again.",
+      "codeExpired": "Your sign-in timed out. Enter your email and password again.",
+      "back": "Use a different account"
     },
     "showPassword": "Show password",
     "hidePassword": "Hide password",
@@ -3009,7 +3044,7 @@
       "accountActiveHint": "The user can sign in.",
       "deactivateDescription": "The account will be set to Inactive and every session it has will be signed out.",
       "twoFactor": "Two-factor",
-      "twoFactorHint": "Turned on by the user from their profile.",
+      "twoFactorHint": "Only the user can turn it on, from their profile. Turning it off removes their authenticator and signs them out.",
       "newsletter": "Newsletter",
       "newsletterHint": "Confirmed by the user's own consent.",
       "tabDetails": "Details",
@@ -3063,7 +3098,9 @@
       "byActor": "by {name}",
       "bySelf": "by this user",
       "system": "the system",
-      "fullName": "Full name"
+      "fullName": "Full name",
+      "resetTwoFactorTitle": "Turn off two-factor?",
+      "resetTwoFactorDescription": "This removes the user's authenticator and backup codes and signs them out everywhere. If two-factor is required for staff, they will have to set it up again when they next sign in."
     },
     "subscriberRecord": {
       "subscriberId": "Subscriber ID",
@@ -3091,6 +3128,43 @@
       "employeeCode": "Employee code",
       "employmentDescription": "Where they sit in the organisation, and their current status.",
       "accountDescription": "The sign-in account this employee uses for the admin portal, and its roles."
+    },
+    "twoFactor": {
+      "title": "Two-factor authentication",
+      "description": "Ask for a code from an authenticator app each time you sign in.",
+      "on": "On",
+      "off": "Off",
+      "enable": "Turn on",
+      "disable": "Turn off",
+      "continue": "Continue",
+      "cancel": "Cancel",
+      "confirmWithPassword": "Your password",
+      "enablePasswordHint": "Confirm it's you before we create your setup code.",
+      "disablePasswordHint": "Confirm it's you before turning two-factor authentication off.",
+      "stepScan": "Scan this code with an authenticator app, or type the key below into it.",
+      "stepCode": "Enter the 6-digit code the app shows to finish.",
+      "qrLabel": "QR code for your authenticator app",
+      "manualEntry": "Setup key",
+      "backupTitle": "Backup codes",
+      "backupHint": "Keep these somewhere safe. Each one signs you in once if you lose your phone. They won't be shown again.",
+      "code": "6-digit code",
+      "verifyAndEnable": "Verify and turn on",
+      "enabled": "Two-factor authentication is on.",
+      "disabled": "Two-factor authentication is off.",
+      "wrongPassword": "That password isn't right.",
+      "invalidCode": "That code isn't right. Check your app and try again.",
+      "tooMany": "Too many attempts. Wait a minute and try again.",
+      "signInAgain": "For your security, sign out and sign in again before changing this.",
+      "failed": "Something went wrong. Try again.",
+      "noPassword": "Your account has no password to confirm with, so two-factor cannot be set up here. Ask an administrator to set a password for you.",
+      "requiredNote": "This site requires two-factor authentication for staff, so it cannot be turned off.",
+      "required": {
+        "title": "Set up two-factor authentication",
+        "description": "This site requires staff to use an authenticator app. Set it up to continue to the admin.",
+        "signOut": "Sign out"
+      },
+      "showPassword": "Show password",
+      "hidePassword": "Hide password"
     }
   },
   "glossary": {
@@ -3306,6 +3380,7 @@
     "signUpSubmit": "Create account",
     "signUpFailed": "We couldn't create your account. Check your details and try again.",
     "emailTaken": "An account with this email already exists.",
+    "captchaFailed": "We couldn't confirm this request came from a person. Reload the page and try again. If it keeps happening, turn off any content blocker for this site.",
     "haveAccount": "Already have an account?",
     "newsletterOptIn": "Send me news, market analysis and platform updates by email",
     "newsletterOptInHint": "Optional. You can unsubscribe from any email we send.",
@@ -3332,7 +3407,7 @@
     "resetDone": "Your password has been changed. Sign in with it.",
     "verifiedDone": "Your email is confirmed. You're all set.",
     "twoFactorTitle": "Two-step verification",
-    "twoFactorHint": "Enter the 6-digit code from your authenticator app.",
+    "twoFactorHint": "Enter the 6-digit code from your authenticator app, or one of your backup codes.",
     "twoFactorCode": "Verification code",
     "twoFactorSubmit": "Verify and sign in",
     "twoFactorInvalid": "That code isn't right. Check your app and try again.",
@@ -3399,8 +3474,8 @@
       "title": "Profile and security"
     },
     "verification": {
-      "title": "Email verification",
-      "description": "Confirm your address so we know messages about your account reach you.",
+      "title": "Email address",
+      "description": "Where we reach you about your account.",
       "address": "Address:",
       "verified": "Verified",
       "unverified": "Not verified",
@@ -3412,11 +3487,12 @@
       "retry": "Try again",
       "sentTitle": "Check your inbox",
       "sentDetail": "We sent a confirmation link to {email}. Open it to verify your address. It can take a few minutes, and it may land in spam.",
-      "failed": "We couldn't send the link. You may have asked too often — wait a few minutes and try again."
+      "failed": "We couldn't send the link. You may have asked too often — wait a few minutes and try again.",
+      "justChanged": "Done — your account now uses {email}, and it's verified."
     },
     "profile": {
       "title": "Your profile",
-      "description": "Your picture and the details shown on your account.",
+      "description": "Your picture, name and personal details.",
       "avatarUpload": "Upload a picture",
       "avatarChange": "Change picture",
       "avatarRemove": "Remove",
@@ -3432,7 +3508,9 @@
       "phone": "Phone",
       "save": "Save changes",
       "saved": "Your details have been saved.",
-      "saveFailed": "We couldn't save your details. Try again."
+      "saveFailed": "We couldn't save your details. Try again.",
+      "birthDate": "Birthday",
+      "birthDateHint": "Kept private — never shown on the site."
     },
     "security": {
       "title": "Security",
@@ -3473,13 +3551,16 @@
       "wrongPassword": "That password isn't right.",
       "invalidCode": "That code isn't right. Check your app and try again.",
       "tooMany": "Too many attempts. Wait a minute and try again.",
-      "failed": "Something went wrong. Try again."
+      "failed": "Something went wrong. Try again.",
+      "protected": "Well protected",
+      "basic": "Password only"
     },
     "validation": {
       "required": "This field is required.",
       "tooShort": "Use at least {limit} characters.",
       "tooLong": "Use {limit} characters or fewer.",
-      "invalid": "Check this value."
+      "invalid": "Check this value.",
+      "invalidEmail": "Enter a valid email address."
     },
     "summary": {
       "title": "Your learning at a glance",
@@ -3488,6 +3569,65 @@
       "lessonsCompleted": "Lessons completed",
       "quizzesPassed": "Quizzes passed",
       "articlesRead": "Articles read"
+    },
+    "status": {
+      "label": "Account status",
+      "emailVerified": "Email verified",
+      "twoFactorOn": "Two-step on",
+      "twoFactorOff": "Two-step off",
+      "password": "Password sign-in",
+      "connected": "Connected account"
+    },
+    "completeness": {
+      "title": "Profile strength",
+      "label": "Profile completeness",
+      "complete": "Your profile is complete",
+      "remaining": "{count, plural, one {# thing left to add} other {# things left to add}}",
+      "missing": "Still to add:",
+      "items": {
+        "picture": "Picture",
+        "fullName": "Full name",
+        "phone": "Phone",
+        "birthDate": "Birthday",
+        "address": "Address",
+        "emailVerified": "Verified email"
+      }
+    },
+    "changeEmail": {
+      "title": "Change email address",
+      "description": "Move your account to a different inbox.",
+      "open": "Change email",
+      "newEmail": "New email address",
+      "hint": "We'll send a link to the new address. Your email only changes once you open it.",
+      "submit": "Send confirmation link",
+      "cancel": "Cancel",
+      "same": "That's already your email address.",
+      "tooMany": "You've asked for too many changes. Try again in an hour.",
+      "signInAgain": "For your security, sign out and sign back in before changing your email.",
+      "failed": "We couldn't send the link. Try again.",
+      "sentTitle": "Check the new inbox",
+      "sentDetail": "If {email} can be used, a confirmation link is on its way there. Open it to finish — until then, your current address stays in place.",
+      "useAnother": "Use a different address"
+    },
+    "address": {
+      "title": "Address",
+      "description": "Your postal address, kept private to your account.",
+      "onFile": "On file",
+      "notSet": "Not set",
+      "line1": "Address line 1",
+      "line2": "Address line 2",
+      "city": "City",
+      "region": "State / province / region",
+      "postalCode": "Postal code",
+      "country": "Country",
+      "countryPlaceholder": "Choose a country",
+      "countrySearch": "Search countries",
+      "countryEmpty": "No country matches that.",
+      "countryNone": "Not specified",
+      "privacy": "Every line is optional. We never show your address on the site.",
+      "save": "Save address",
+      "saved": "Your address has been saved.",
+      "saveFailed": "We couldn't save your address. Check the fields and try again."
     }
   },
   "cms": {
@@ -4009,8 +4149,6 @@
       "markIncomplete": "Mark as not complete",
       "completedNote": "Saved. This lesson is marked complete.",
       "error": "We couldn't save that. Try again in a moment.",
-      "signInTitle": "Save your progress",
-      "signInBody": "Every lesson is free to read without an account. To save your progress, sign in or join us, and we will remember where you stopped.",
       "signInAction": "Sign in",
       "yourCoursesTitle": "Pick up where you left off",
       "yourCoursesIntro": "The courses you've started, most recent first.",
@@ -4029,7 +4167,9 @@
       "trackCountLabel": "Lessons completed",
       "trackBadge": "Sign in to unlock",
       "reminderText": "You are reading as a guest. Sign in to save your place in this course.",
-      "reminderAction": "Sign in"
+      "reminderAction": "Sign in",
+      "signInTitle": "Save your progress",
+      "signInBody": "Every lesson is free to read without an account. To save your progress, sign in or join us, and we will remember where you stopped."
     },
     "feedback": {
       "question": "Was this lesson helpful?",
@@ -4670,6 +4810,7 @@
       "signedInHint": "We've filled in your name and email from your account.",
       "invalid": "Please check the form and try again.",
       "limited": "That is several messages in a short time. Wait a little and try again.",
+      "captcha": "We couldn't confirm this request came from a person. Reload the page and try again. If it keeps happening, turn off any content blocker for this site.",
       "failed": "We could not send your message just now. Please try again later."
     },
     "moreHelp": {

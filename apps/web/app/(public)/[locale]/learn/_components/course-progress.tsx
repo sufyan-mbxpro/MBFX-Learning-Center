@@ -91,26 +91,11 @@ export function CourseStartCta({
 }
 
 /**
- * ADR-056 #3's one inline card. Shown only to a reader the API answered 401
- * for — never while the request is in flight (it would flash for everyone) and
- * never when the feature is off (`off`), because inviting someone to sign in
- * for something switched off is a promise we cannot keep.
- */
-export function ProgressSignInCard({ className }: { className?: string }) {
-  const t = useTranslations("learn");
-  const { status } = useProgress();
-  if (status !== "guest") return null;
-
-  return (
-    <div className={className}>
-      <SaveProgressPrompt title={t("progress.signInTitle")} body={t("progress.signInBody")} />
-    </div>
-  );
-}
-
-/**
- * "Sign in or join us to save your progress" (changes-42) — the card's body,
- * shared with the quiz page's guest prompt so both offer the same two doors.
+ * "Sign in or join us to save your progress" (changes-42) — the guest prompt
+ * the quiz listing and the quiz runner share, so both offer the same two
+ * doors. The course sidebar's copy was removed at the owner's request
+ * (2026-09-22); the "Track your progress" band above the curriculum is the
+ * course page's one guest prompt.
  *
  * Sign-in carries `?redirect=` back to THIS page (the sign-in form's own
  * open-redirect guard accepts same-origin paths only), so a reader who signs in

@@ -151,6 +151,21 @@ export class ForbiddenError extends Error {
   }
 }
 
+/**
+ * ADR-157: the subject holds the permission, but the site requires staff
+ * two-factor and this staff member has not enrolled. A `ForbiddenError`, so
+ * every existing 403 mapping answers it without being taught a new class.
+ * The admin layout shows the enrolment screen; this is what refuses the
+ * route handlers and server actions that layout never renders.
+ */
+export class TwoFactorRequiredError extends ForbiddenError {
+  constructor() {
+    super("two-factor");
+    this.message = "Two-factor authentication is required. Set it up to continue.";
+    this.name = "TwoFactorRequiredError";
+  }
+}
+
 export class UnauthenticatedError extends Error {
   constructor() {
     super("Authentication required");
@@ -163,25 +178,29 @@ export class UnauthenticatedError extends Error {
  * (security.md #1). Hidden UI is a courtesy; this is the control.
  */
 export async function requirePermission(permission: string): Promise<Subject> {
-  const { auth } = await import("@repo/auth");
+  const { auth, isStaffTwoFactorPending } = await import("@repo/auth");
   const session = await auth();
 
   if (!session?.user?.id) throw new UnauthenticatedError();
 
   const subject = await getSubject(session.user.id);
   if (!can(subject, permission)) throw new ForbiddenError(permission);
+  // AFTER the permission check, so it only ever adds a refusal — the frozen
+  // evaluation order above is untouched (ADR-157 §4).
+  if (await isStaffTwoFactorPending(session.user.id)) throw new TwoFactorRequiredError();
 
   return subject!;
 }
 
 export async function requireAnyPermission(permissions: string[]): Promise<Subject> {
-  const { auth } = await import("@repo/auth");
+  const { auth, isStaffTwoFactorPending } = await import("@repo/auth");
   const session = await auth();
 
   if (!session?.user?.id) throw new UnauthenticatedError();
 
   const subject = await getSubject(session.user.id);
   if (!canAny(subject, permissions)) throw new ForbiddenError(permissions.join(" | "));
+  if (await isStaffTwoFactorPending(session.user.id)) throw new TwoFactorRequiredError();
 
   return subject!;
 }

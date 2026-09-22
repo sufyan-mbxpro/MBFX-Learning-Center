@@ -39,6 +39,8 @@ export function useAccountForm(schema: Schema, values: unknown) {
           return t("tooShort", { limit: issue.limit ?? 0 });
         case "tooLong":
           return t("tooLong", { limit: issue.limit ?? 0 });
+        case "invalidEmail":
+          return t("invalidEmail");
         default:
           return t("invalid");
       }

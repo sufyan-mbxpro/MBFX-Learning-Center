@@ -163,7 +163,10 @@ describe("requirePermission / requireAnyPermission — the real enforcement boun
 
   it("throws UnauthenticatedError when there is no session", async () => {
     mockNextCache();
-    vi.doMock("@repo/auth", () => ({ auth: async () => null }));
+    vi.doMock("@repo/auth", () => ({
+      auth: async () => null,
+      isStaffTwoFactorPending: async () => false,
+    }));
     const fresh = await import("./index.ts");
     await expect(fresh.requirePermission("anything")).rejects.toBeInstanceOf(
       fresh.UnauthenticatedError,
@@ -181,7 +184,10 @@ describe("requirePermission / requireAnyPermission — the real enforcement boun
       },
     });
     mockNextCache();
-    vi.doMock("@repo/auth", () => ({ auth: async () => ({ user: { id: user.id } }) }));
+    vi.doMock("@repo/auth", () => ({
+      auth: async () => ({ user: { id: user.id } }),
+      isStaffTwoFactorPending: async () => false,
+    }));
     const fresh = await import("./index.ts");
     await expect(fresh.requirePermission("nonexistent.permission")).rejects.toBeInstanceOf(
       fresh.ForbiddenError,
@@ -203,10 +209,41 @@ describe("requirePermission / requireAnyPermission — the real enforcement boun
     await db.userRole.create({ data: { userId: user.id, roleId: role.id } });
 
     mockNextCache();
-    vi.doMock("@repo/auth", () => ({ auth: async () => ({ user: { id: user.id } }) }));
+    vi.doMock("@repo/auth", () => ({
+      auth: async () => ({ user: { id: user.id } }),
+      isStaffTwoFactorPending: async () => false,
+    }));
     const fresh = await import("./index.ts");
     const subject = await fresh.requirePermission(permKey);
     expect(subject.id).toBe(user.id);
+  });
+
+  it("throws TwoFactorRequiredError — a ForbiddenError — for a staff member held for enrolment (ADR-157)", async () => {
+    const permKey = `two-factor-test.${Date.now()}`;
+    const role = await seedRolePermission(`role-2fa-${Date.now()}`, 10, [permKey]);
+    const user = await db.user.create({
+      data: {
+        id: crypto.randomUUID(),
+        email: `two-factor-${Date.now()}@example.com`,
+        name: "Unenrolled",
+        status: "ACTIVE",
+        userType: "STAFF",
+      },
+    });
+    await db.userRole.create({ data: { userId: user.id, roleId: role.id } });
+
+    mockNextCache();
+    vi.doMock("@repo/auth", () => ({
+      auth: async () => ({ user: { id: user.id } }),
+      isStaffTwoFactorPending: async (id: string) => id === user.id,
+    }));
+    const fresh = await import("./index.ts");
+    const single = fresh.requirePermission(permKey);
+    await expect(single).rejects.toBeInstanceOf(fresh.TwoFactorRequiredError);
+    await expect(single).rejects.toBeInstanceOf(fresh.ForbiddenError);
+    await expect(fresh.requireAnyPermission([permKey])).rejects.toBeInstanceOf(
+      fresh.TwoFactorRequiredError,
+    );
   });
 
   it("requireAnyPermission succeeds if the subject has at least one of the listed permissions", async () => {
@@ -224,7 +261,10 @@ describe("requirePermission / requireAnyPermission — the real enforcement boun
     await db.userRole.create({ data: { userId: user.id, roleId: role.id } });
 
     mockNextCache();
-    vi.doMock("@repo/auth", () => ({ auth: async () => ({ user: { id: user.id } }) }));
+    vi.doMock("@repo/auth", () => ({
+      auth: async () => ({ user: { id: user.id } }),
+      isStaffTwoFactorPending: async () => false,
+    }));
     const fresh = await import("./index.ts");
     const subject = await fresh.requireAnyPermission(["nonexistent.permission", permKey]);
     expect(subject.id).toBe(user.id);
@@ -241,7 +281,10 @@ describe("requirePermission / requireAnyPermission — the real enforcement boun
       },
     });
     mockNextCache();
-    vi.doMock("@repo/auth", () => ({ auth: async () => ({ user: { id: user.id } }) }));
+    vi.doMock("@repo/auth", () => ({
+      auth: async () => ({ user: { id: user.id } }),
+      isStaffTwoFactorPending: async () => false,
+    }));
     const fresh = await import("./index.ts");
     await expect(
       fresh.requireAnyPermission(["nonexistent.one", "nonexistent.two"]),
@@ -280,7 +323,10 @@ describe("Can — UI gate (presentation only; requirePermission is the real boun
     await db.userRole.create({ data: { userId: user.id, roleId: role.id } });
 
     mockNextCache();
-    vi.doMock("@repo/auth", () => ({ auth: async () => ({ user: { id: user.id } }) }));
+    vi.doMock("@repo/auth", () => ({
+      auth: async () => ({ user: { id: user.id } }),
+      isStaffTwoFactorPending: async () => false,
+    }));
     const fresh = await import("./index.ts");
 
     expect(await fresh.Can({ permission: permKey, children: "yes", fallback: "no" })).toBe("yes");

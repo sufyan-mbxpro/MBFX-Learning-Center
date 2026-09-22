@@ -251,6 +251,18 @@ export default async function UserDetailPage({ params }: PageProps<"/keystone/us
             label={r("twoFactor")}
             hint={r("twoFactorHint")}
             checked={user.twoFactorEnabled}
+            action={
+              // Your own is turned off from your profile, behind your password.
+              canUpdate && user.twoFactorEnabled && user.id !== subject.id
+                ? { kind: "twoFactor", userId: user.id }
+                : undefined
+            }
+            confirm={{
+              title: r("resetTwoFactorTitle"),
+              description: r("resetTwoFactorDescription"),
+              confirm: t("confirm"),
+              cancel: t("cancel"),
+            }}
           />
           <ControlTile
             label={r("newsletter")}

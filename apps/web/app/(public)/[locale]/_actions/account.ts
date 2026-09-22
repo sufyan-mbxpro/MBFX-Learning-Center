@@ -15,8 +15,14 @@
 // from the browser (`_lib/account-security.ts` explains why a server action
 // would sign the learner out), and are audited by `@repo/auth`'s hooks.
 import { auth, rateLimit, refreshSessionUser } from "@repo/auth";
-import { AVATAR_MAX_BYTES, learnerProfileSchema } from "@repo/contracts";
-import { removeOwnAvatar, setOwnAvatar, updateOwnProfile, UploadRejectedError } from "@repo/core";
+import { AVATAR_MAX_BYTES, learnerAddressSchema, learnerProfileSchema } from "@repo/contracts";
+import {
+  removeOwnAvatar,
+  setOwnAvatar,
+  updateOwnAddress,
+  updateOwnProfile,
+  UploadRejectedError,
+} from "@repo/core";
 
 export type AccountActionResult =
   | { status: "ok" }
@@ -47,6 +53,23 @@ export async function updateAccountProfileAction(input: unknown): Promise<Accoun
   // The header reads `session.user`, which Better Auth serves from its own
   // copies of the row (ADR-125 §3).
   await refreshSessionUser(userId);
+  return { status: "ok" };
+}
+
+/**
+ * The postal address (ADR-155 #5), saved apart from the name so fixing a
+ * postcode never submits a half-edited name. Nothing here is on the session
+ * user, so there is no `refreshSessionUser` — the header shows none of it.
+ */
+export async function updateAccountAddressAction(input: unknown): Promise<AccountActionResult> {
+  const userId = await learnerId();
+  if (!userId) return { status: "unauthorized" };
+
+  const parsed = learnerAddressSchema.safeParse(input);
+  if (!parsed.success) return { status: "invalid" };
+
+  // Audited inside (`users.addressUpdate`).
+  await updateOwnAddress(userId, parsed.data);
   return { status: "ok" };
 }
 

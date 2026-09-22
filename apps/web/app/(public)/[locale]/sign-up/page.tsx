@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { getTranslations, setRequestLocale } from "next-intl/server";
+import { getCaptchaSiteKey } from "@repo/auth";
 import { getSetting, isFeatureVisible } from "@repo/settings";
 import { MIN_PASSWORD_LENGTH } from "@repo/contracts";
 import { getPathname, Link } from "@repo/i18n/navigation";
@@ -25,12 +26,14 @@ export async function generateMetadata({
 export default async function SignUpPage({ params }: PageProps<"/[locale]/sign-up">) {
   const { locale } = await params;
   setRequestLocale(locale);
-  const [t, newsletterEnabled] = await Promise.all([
+  const [t, newsletterEnabled, captchaSiteKey] = await Promise.all([
     getTranslations("auth"),
     // ADR-124: the opt-in checkbox exists only while the newsletter does.
     // Evaluated for an anonymous subject, like every public placement, so the
     // page stays cacheable.
     isFeatureVisible("newsletter", null),
+    // ADR-156: cached and tagged, so this static page carries the key.
+    getCaptchaSiteKey(),
   ]);
 
   return (
@@ -50,6 +53,7 @@ export default async function SignUpPage({ params }: PageProps<"/[locale]/sign-u
       }
     >
       <SignUpForm
+        captchaSiteKey={captchaSiteKey}
         homeHref={getPathname({ href: "/", locale })}
         verifiedHref={`${getPathname({ href: "/sign-in", locale })}?verified=1`}
         minPasswordLength={MIN_PASSWORD_LENGTH}
@@ -65,6 +69,7 @@ export default async function SignUpPage({ params }: PageProps<"/[locale]/sign-u
           submit: t("signUpSubmit"),
           failed: t("signUpFailed"),
           taken: t("emailTaken"),
+          captcha: t("captchaFailed"),
           newsletterOptIn: t("newsletterOptIn"),
           newsletterOptInHint: t("newsletterOptInHint"),
         }}

@@ -58,6 +58,17 @@ export const EMAIL_TEMPLATE_DEFAULTS: readonly EmailTemplateDefault[] = [
       "<p>If that was not you, reset your password immediately and contact us.</p>",
   },
   {
+    key: "auth.email_changed",
+    subject: "Your email address was changed",
+    preheader: "A confirmation, in case it was not you.",
+    bodyHtml:
+      "<p>Hello {{recipient.name}},</p>" +
+      "<p>The email address on your {{site.name}} account was changed on {{changed.at}}. " +
+      "It is now {{email.new}}, and this address will no longer receive messages about " +
+      "the account.</p>" +
+      "<p>If that was not you, contact us immediately so we can secure your account.</p>",
+  },
+  {
     key: "newsletter.confirm",
     subject: "Confirm your newsletter subscription",
     preheader: "One click to start receiving {{site.name}} updates.",

@@ -1,5 +1,6 @@
 // Browser-side helpers for the learner profile page's security panel
-// (ADR-123): change password, and turn two-factor on and off.
+// (ADR-123): change password, turn two-factor on and off, and — ADR-155 —
+// ask to move the account to another email address.
 //
 // Each POSTs to Better Auth's own handler for the reasons `credentials.ts`
 // gives at its top, plus one more that is specific to these three: every one
@@ -18,6 +19,8 @@ export type SecurityResult<T = undefined> =
   | { status: "wrongPassword" }
   | { status: "invalidCode" }
   | { status: "tooMany" }
+  /** The session is older than Better Auth's `freshAge`: sign in again first. */
+  | { status: "signInAgain" }
   | { status: "failed" };
 
 type Failure = Exclude<SecurityResult, { status: "ok" }>;
@@ -42,6 +45,7 @@ async function failureOf(response: Response | null): Promise<Failure> {
   if (body?.code === "INVALID_PASSWORD") return { status: "wrongPassword" };
   if (body?.code === "INVALID_CODE") return { status: "invalidCode" };
   if (body?.code === "ACCOUNT_TEMPORARILY_LOCKED") return { status: "tooMany" };
+  if (body?.code === "SESSION_NOT_FRESH") return { status: "signInAgain" };
   return { status: "failed" };
 }
 
@@ -117,5 +121,16 @@ export async function confirmTwoFactor(code: string): Promise<SecurityResult> {
 
 export async function disableTwoFactor(password: string): Promise<SecurityResult> {
   const response = await post("/api/auth/two-factor/disable", { password });
+  return response?.ok ? { status: "ok" } : failureOf(response);
+}
+
+/**
+ * Ask to move the account to `newEmail` (ADR-155 #1). Nothing changes yet:
+ * Better Auth mails a link to the NEW address, and the row moves when it is
+ * opened, landing on `callbackURL`. An address already in use gets the same
+ * "ok" and no mail — the form is not a way to find out who has an account.
+ */
+export async function changeEmail(newEmail: string, callbackURL: string): Promise<SecurityResult> {
+  const response = await post("/api/auth/change-email", { newEmail, callbackURL });
   return response?.ok ? { status: "ok" } : failureOf(response);
 }

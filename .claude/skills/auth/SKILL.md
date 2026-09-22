@@ -42,6 +42,36 @@ swap contained to this package.
   `MIN/MAX_PASSWORD_LENGTH` live in `@repo/contracts` so a public screen can
   state the rule without importing this package.
 
+## reCAPTCHA v3 (ADR-156)
+
+Configured in Settings → General → reCAPTCHA (one `CaptchaConfig` row; the
+secret sealed under `CAPTCHA_SECRET_KEY`, security.md #10's fourth exception).
+`recaptchaGuard()` (our plugin, not Better Auth's `captcha`, whose keys are
+fixed at startup) refuses `/sign-in/email` and `/sign-up/email` without a
+passing `auth` token and reads the row per request. The support form checks
+its own token through `verifyCaptchaToken()` (action `support`). Switching
+ON requires a browser `check` token that passes with the keys being saved.
+A configuration that cannot be used (sealing key gone) is OFF, never
+"refuse everyone"; `CAPTCHA_DISABLED` is the break-glass. A credential POST
+goes through `credentials.ts`, which adds the header, and each page passes
+`getCaptchaSiteKey()` to its form. A new credential form that skips either
+is refused once the tab is on.
+
+## Staff two-factor (ADR-157 — read it before touching enforcement)
+
+Staff enrol at `/keystone/profile` (`TwoFactorSection`), and the staff
+sign-in form takes the code step the learner form already had. A backup code
+(`xxxxx-xxxxx`) goes to `/two-factor/verify-backup-code` and a 6-digit code to
+`verify-totp` (`verifyTwoFactorSignIn`, both forms). `security.requireStaffTwoFactor`
+enforces it. The dev seed has it off and `seed-live` has it on.
+`isStaffTwoFactorPending` (here, in `two-factor.ts`) is asked in exactly two
+places: the `(admin)` layout, which renders the enrolment screen in place of the
+portal, and `requirePermission`, which throws `TwoFactorRequiredError` (a
+`ForbiddenError`). **Never in `auth()`**: a missing session would hide the
+enrolment screen, which turns "set this up" into a lockout. An admin can turn
+another account's two-factor OFF (`resetUserTwoFactor`, `users.update`, strict
+`<` on the target's highest role), never on.
+
 ## Password recovery has screens (changes-21 F6/F9, ADR-079)
 
 Only **OAuth** is still UI-less. Reset and verification both have screens on

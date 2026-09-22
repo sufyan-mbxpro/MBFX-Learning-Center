@@ -8,6 +8,7 @@
 import { z } from "zod";
 import { MAX_PASSWORD_LENGTH } from "./auth.ts";
 import { changeOwnPasswordSchema, updateOwnProfileSchema } from "./admin.ts";
+import { COUNTRY_CODES } from "./countries.ts";
 
 /** The page's address, locale-less — `@repo/i18n`'s `Link` prefixes it. */
 export const ACCOUNT_PATH = "/account";
@@ -44,13 +45,80 @@ export const articleReadSchema = z.object({
 });
 export type ArticleReadInput = z.infer<typeof articleReadSchema>;
 
+/** The earliest birthday the form accepts (ADR-155 #6). */
+export const BIRTH_DATE_MIN = "1900-01-01";
+
 /**
- * Name and basic details. The SAME shape the staff profile saves through
- * `updateOwnProfile`, re-exported under the learner's name so the two cannot
- * come to disagree about what a name may be.
+ * Today as `YYYY-MM-DD` at the far east of the date line (UTC+14), so a reader
+ * whose local date is already tomorrow's UTC date can still enter today.
  */
-export const learnerProfileSchema = updateOwnProfileSchema;
+export function latestBirthDate(now: Date = new Date()): string {
+  return new Date(now.getTime() + 14 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+/** A real calendar date as `YYYY-MM-DD` — rejects `2026-02-30`, which `Date` would roll over. */
+function isCalendarDate(value: string): boolean {
+  const date = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
+/**
+ * A date of birth (ADR-155 #6): a DATE, never a timestamp, between 1900 and
+ * today. No minimum age — that is policy, not validation.
+ */
+export const birthDateSchema = z
+  .string()
+  .trim()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine(isCalendarDate)
+  .refine((value) => value >= BIRTH_DATE_MIN && value <= latestBirthDate());
+
+/** An optional free-text field: trimmed, and blank means "not given" (null). */
+const optionalText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .nullable()
+    .optional()
+    .transform((value) => (value === "" ? null : value));
+
+/**
+ * Name, phone and birthday. EXTENDS the staff profile's schema (ADR-155 #5),
+ * so the two still agree on every rule about a name; the birthday is the
+ * learner's alone.
+ */
+export const learnerProfileSchema = updateOwnProfileSchema.extend({
+  birthDate: z
+    .union([birthDateSchema, z.literal("").transform(() => null), z.null()])
+    .optional(),
+});
 export type LearnerProfileInput = z.infer<typeof learnerProfileSchema>;
+
+/** The postal address, saved on its own (ADR-155 #5). Every line is optional. */
+export const learnerAddressSchema = z.object({
+  addressLine1: optionalText(200),
+  addressLine2: optionalText(200),
+  city: optionalText(100),
+  region: optionalText(100),
+  postalCode: optionalText(20),
+  country: z
+    .union([
+      z.enum(COUNTRY_CODES),
+      z.literal("").transform(() => null),
+      z.null(),
+    ])
+    .optional(),
+});
+export type LearnerAddressInput = z.infer<typeof learnerAddressSchema>;
+
+/**
+ * The change-email form (ADR-155 #1). The body Better Auth's `/change-email`
+ * takes — the callback is added by the caller, never typed by the reader.
+ */
+export const changeEmailFormSchema = z.object({
+  newEmail: z.string().trim().toLowerCase().pipe(z.email().max(255)),
+});
 
 /**
  * The change-password FORM: Better Auth's own body plus the confirmation,
@@ -89,10 +157,60 @@ export interface AccountProfileView {
   lastName: string | null;
   phone: string | null;
   image: string | null;
+  /** `YYYY-MM-DD`, or null (ADR-155). */
+  birthDate: string | null;
+  address: AccountAddressView;
   twoFactorEnabled: boolean;
   /** False for an OAuth-only account: there is no password to change or to confirm 2FA with. */
   hasPassword: boolean;
   createdAt: string;
+}
+
+export interface AccountAddressView {
+  addressLine1: string | null;
+  addressLine2: string | null;
+  city: string | null;
+  region: string | null;
+  postalCode: string | null;
+  /** ISO 3166-1 alpha-2, or null. */
+  country: string | null;
+}
+
+/** The facts the completeness meter counts, in the order it lists what is missing. */
+export const PROFILE_COMPLETENESS_ITEMS = [
+  "picture",
+  "fullName",
+  "phone",
+  "birthDate",
+  "address",
+  "emailVerified",
+] as const;
+export type ProfileCompletenessItem = (typeof PROFILE_COMPLETENESS_ITEMS)[number];
+
+/**
+ * How much of the profile is filled in (ADR-155). An address counts once it
+ * has a first line, a city and a country — enough to post something to; a
+ * full name needs both halves.
+ */
+export function profileCompleteness(
+  profile: Pick<
+    AccountProfileView,
+    "image" | "firstName" | "lastName" | "phone" | "birthDate" | "address" | "emailVerified"
+  >,
+): { percent: number; missing: ProfileCompletenessItem[] } {
+  const filled: Record<ProfileCompletenessItem, boolean> = {
+    picture: Boolean(profile.image),
+    fullName: Boolean(profile.firstName && profile.lastName),
+    phone: Boolean(profile.phone),
+    birthDate: Boolean(profile.birthDate),
+    address: Boolean(
+      profile.address.addressLine1 && profile.address.city && profile.address.country,
+    ),
+    emailVerified: profile.emailVerified,
+  };
+  const missing = PROFILE_COMPLETENESS_ITEMS.filter((item) => !filled[item]);
+  const total = PROFILE_COMPLETENESS_ITEMS.length;
+  return { percent: Math.round(((total - missing.length) / total) * 100), missing };
 }
 
 export interface AccountCourseView {

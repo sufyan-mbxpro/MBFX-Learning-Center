@@ -284,11 +284,13 @@ export async function updateOwnProfile(
     firstName?: string | null;
     lastName?: string | null;
     phone?: string | null;
+    /** ADR-155 — `YYYY-MM-DD`. Only the learner's form sends it; staff leave it untouched. */
+    birthDate?: string | null;
   },
 ): Promise<void> {
   const before = await db.user.findUniqueOrThrow({
     where: { id: userId },
-    select: { name: true, firstName: true, lastName: true, phone: true },
+    select: { name: true, firstName: true, lastName: true, phone: true, birthDate: true },
   });
   await db.user.update({
     where: { id: userId },
@@ -297,6 +299,10 @@ export async function updateOwnProfile(
       ...(input.firstName !== undefined ? { firstName: input.firstName } : {}),
       ...(input.lastName !== undefined ? { lastName: input.lastName } : {}),
       ...(input.phone !== undefined ? { phone: input.phone } : {}),
+      // A DATE column: midnight UTC is the day itself, in every time zone.
+      ...(input.birthDate !== undefined
+        ? { birthDate: input.birthDate ? new Date(`${input.birthDate}T00:00:00Z`) : null }
+        : {}),
     },
   });
   await recordAudit({
@@ -319,6 +325,10 @@ export interface OwnProfile {
   createdAt: Date;
   lastLoginAt: Date | null;
   roleNames: string[];
+  /** ADR-157: drawn by the profile's two-factor section. */
+  twoFactorEnabled: boolean;
+  /** A credential row exists — Better Auth's 2FA endpoints re-confirm with it. */
+  hasPassword: boolean;
 }
 
 export async function loadOwnProfile(userId: string): Promise<OwnProfile | null> {
@@ -334,7 +344,9 @@ export async function loadOwnProfile(userId: string): Promise<OwnProfile | null>
       image: true,
       createdAt: true,
       lastLoginAt: true,
+      twoFactorEnabled: true,
       roles: { select: { role: { select: { name: true } } } },
+      accounts: { where: { providerId: "credential" }, select: { id: true }, take: 1 },
     },
   });
   if (!user) return null;
@@ -349,6 +361,8 @@ export async function loadOwnProfile(userId: string): Promise<OwnProfile | null>
     createdAt: user.createdAt,
     lastLoginAt: user.lastLoginAt,
     roleNames: user.roles.map((r) => r.role.name),
+    twoFactorEnabled: user.twoFactorEnabled === true,
+    hasPassword: user.accounts.length > 0,
   };
 }
 
@@ -542,6 +556,65 @@ export async function recordImpersonationStart(actor: Subject, userId: string): 
     action: "users.impersonateStart",
     entityType: "user",
     entityId: userId,
+  });
+}
+
+/** ADR-157 §5: turning your OWN two-factor off is the profile's job, behind your password. */
+export class SelfTwoFactorResetError extends Error {
+  constructor() {
+    super("Turn your own two-factor authentication off from your profile.");
+    this.name = "SelfTwoFactorResetError";
+  }
+}
+
+/** ADR-157 §5: removing a factor weakens an account — the `canAssignRole` rule. */
+export class TwoFactorResetForbiddenError extends Error {
+  constructor() {
+    super("You can only reset two-factor for an account below your own role level.");
+    this.name = "TwoFactorResetForbiddenError";
+  }
+}
+
+/**
+ * The record page's two-factor switch, which only ever turns it OFF (ADR-157
+ * §5). This is the way back for a staff member who lost their phone and their
+ * backup codes while two-factor is required. Without it that is a permanent
+ * lockout. Already authorised (`users.update`).
+ *
+ * The factor's row goes, the flag clears, and every session the target holds
+ * is revoked. A session that passed a factor which no longer exists is not one
+ * to keep. There is no "turn on": only the holder may hold the secret.
+ */
+export async function resetUserTwoFactor(actor: Subject, userId: string): Promise<void> {
+  if (actor.id === userId) throw new SelfTwoFactorResetError();
+  const target = await db.user.findFirstOrThrow({
+    where: { id: userId, deletedAt: null },
+    select: {
+      twoFactorEnabled: true,
+      roles: { select: { role: { select: { level: true } } } },
+    },
+  });
+  // Strict `<` against the target's highest role, as for an email change:
+  // an Editor can reset a learner's authenticator, not an Admin's.
+  const targetLevel = Math.max(0, ...target.roles.map((r) => r.role.level));
+  if (!actor.roleKeys.includes("super_admin") && !(targetLevel < actor.maxRoleLevel)) {
+    throw new TwoFactorResetForbiddenError();
+  }
+
+  const [, , sessions] = await db.$transaction([
+    db.twoFactor.deleteMany({ where: { userId } }),
+    db.user.update({ where: { id: userId }, data: { twoFactorEnabled: false } }),
+    db.session.deleteMany({ where: { userId } }),
+  ]);
+  await recordAudit({
+    userId: actor.id,
+    action: "users.twoFactorReset",
+    entityType: "user",
+    entityId: userId,
+    changes: {
+      before: { twoFactorEnabled: target.twoFactorEnabled === true },
+      after: { twoFactorEnabled: false, sessionsRevoked: sessions.count },
+    },
   });
 }
 

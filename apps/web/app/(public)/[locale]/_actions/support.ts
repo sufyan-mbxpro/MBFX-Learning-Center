@@ -19,7 +19,10 @@
 //   4. a per-email limit (security.md #13 wants both, not one — one attacker
 //      and a distributed mail-bomb aimed at one inbox are different attacks);
 //   5. `supportRequestSchema`, which bounds every field and lower-cases the
-//      address so the limit bucket and the send agree on it.
+//      address so the limit bucket and the send agree on it;
+//   6. a Google reCAPTCHA v3 token for the `support` action (ADR-156), when
+//      the keys are set. It is checked AFTER both limits, so a flood is cut off
+//      before this server makes any request to Google.
 //
 // **This is not an open relay and cannot become one.** The destination is
 // the `site.supportEmail` setting, which only STAFF can edit; no submitted
@@ -30,22 +33,29 @@
 // without one is how a repo ends up with an anonymous write nobody audited.
 import { after } from "next/server";
 import { headers } from "next/headers";
-import { rateLimit } from "@repo/auth";
-import { SUPPORT_HONEYPOT_FIELD, supportRequestSchema } from "@repo/contracts";
+import { rateLimit, verifyCaptchaToken } from "@repo/auth";
+import {
+  CAPTCHA_ACTIONS,
+  CAPTCHA_FIELD,
+  SUPPORT_HONEYPOT_FIELD,
+  supportRequestSchema,
+} from "@repo/contracts";
 import { sendSupportRequest } from "@repo/core";
 import { getSetting } from "@repo/settings";
 import { clientIp } from "../../../_lib/client-ip.ts";
 
 /**
- * What the form renders. Four states, the same four the newsletter form has,
- * and for the same reason: they are the ones that say something true about
- * THIS submission without saying anything about anybody else.
+ * What the form renders. The four states the newsletter form has, for the same
+ * reason: they say something true about THIS submission without saying
+ * anything about anybody else. `captcha` (ADR-156) is the fifth, and it is
+ * about this browser too.
  */
 export type SupportRequestState =
   | { status: "idle" }
   | { status: "sent" }
   | { status: "invalid"; values?: SupportFormValues }
   | { status: "limited"; values?: SupportFormValues }
+  | { status: "captcha"; values?: SupportFormValues }
   | { status: "failed"; values?: SupportFormValues };
 
 /**
@@ -129,6 +139,17 @@ export async function sendSupportRequestAction(
     EMAIL_WINDOW_SECONDS,
   );
   if (!byEmail.ok) return { status: "limited", values: echo(formData) };
+
+  // 5. reCAPTCHA v3 (ADR-156). A no-op without keys; with them, no token or a
+  //    low score is refused. The honeypot above catches the bots that fill
+  //    every field; this catches the ones that do not.
+  const token = formData.get(CAPTCHA_FIELD);
+  const human = await verifyCaptchaToken({
+    token: typeof token === "string" ? token : null,
+    action: CAPTCHA_ACTIONS.support,
+    remoteIp: ip === "anonymous" ? null : ip,
+  });
+  if (!human) return { status: "captcha", values: echo(formData) };
 
   const { name, email, subject, message, locale } = parsed.data;
 

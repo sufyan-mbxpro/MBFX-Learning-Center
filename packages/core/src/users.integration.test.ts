@@ -453,4 +453,73 @@ describe("the user record's writes", () => {
       await db.auditLog.count({ where: { action: "users.impersonateStart", entityId: staff.id } }),
     ).toBe(0);
   });
+
+  // ADR-157 §5: the way back for a staff member who lost their authenticator.
+  async function enrolledStaff(email: string, roleKey?: string) {
+    const user = await createUser(email, "STAFF");
+    await db.user.update({ where: { id: user.id }, data: { twoFactorEnabled: true } });
+    await db.twoFactor.create({
+      data: { id: crypto.randomUUID(), secret: "s", backupCodes: "[]", userId: user.id },
+    });
+    await db.session.create({
+      data: {
+        id: crypto.randomUUID(),
+        token: crypto.randomUUID(),
+        userId: user.id,
+        expiresAt: new Date(Date.now() + 60_000),
+      },
+    });
+    if (roleKey) {
+      const role = await db.role.findUniqueOrThrow({ where: { key: roleKey } });
+      await db.userRole.create({ data: { userId: user.id, roleId: role.id } });
+    }
+    return user;
+  }
+
+  it("resetUserTwoFactor removes the factor, clears the flag, revokes sessions and audits", async () => {
+    const actor = await actorSubject(80, ["users.update"], ["admin"]);
+    const target = await enrolledStaff(`rec-2fa-${Date.now()}@x.com`, "editor");
+
+    await users.resetUserTwoFactor(actor, target.id);
+
+    const row = await db.user.findUniqueOrThrow({ where: { id: target.id } });
+    expect(row.twoFactorEnabled).toBe(false);
+    expect(await db.twoFactor.count({ where: { userId: target.id } })).toBe(0);
+    expect(await db.session.count({ where: { userId: target.id } })).toBe(0);
+    const audit = await db.auditLog.findFirstOrThrow({
+      where: { action: "users.twoFactorReset", entityId: target.id, userId: actor.id },
+    });
+    expect(audit.changes).toMatchObject({
+      before: { twoFactorEnabled: true },
+      after: { twoFactorEnabled: false, sessionsRevoked: 1 },
+    });
+  });
+
+  it("resetUserTwoFactor refuses an account at or above the actor's level, and writes nothing", async () => {
+    const actor = await actorSubject(40, ["users.update"], ["editor"]);
+    const peer = await enrolledStaff(`rec-2fa-peer-${Date.now()}@x.com`, "editor");
+
+    await expect(users.resetUserTwoFactor(actor, peer.id)).rejects.toThrow(
+      users.TwoFactorResetForbiddenError,
+    );
+    const row = await db.user.findUniqueOrThrow({ where: { id: peer.id } });
+    expect(row.twoFactorEnabled).toBe(true);
+    expect(await db.twoFactor.count({ where: { userId: peer.id } })).toBe(1);
+    expect(await db.session.count({ where: { userId: peer.id } })).toBe(1);
+    expect(
+      await db.auditLog.count({ where: { action: "users.twoFactorReset", entityId: peer.id } }),
+    ).toBe(0);
+  });
+
+  it("resetUserTwoFactor lets a super_admin reset anyone, and refuses the actor's own account", async () => {
+    const actor = await actorSubject(100, ["users.update"], ["super_admin"]);
+    const top = await enrolledStaff(`rec-2fa-top-${Date.now()}@x.com`, "super_admin");
+    await users.resetUserTwoFactor(actor, top.id);
+    expect((await db.user.findUniqueOrThrow({ where: { id: top.id } })).twoFactorEnabled).toBe(
+      false,
+    );
+    await expect(users.resetUserTwoFactor(actor, actor.id)).rejects.toThrow(
+      users.SelfTwoFactorResetError,
+    );
+  });
 });

@@ -13,7 +13,10 @@
 import { db } from "@repo/db";
 
 export type AccountAuditAction =
-  "users.twoFactorEnable" | "users.twoFactorDisable" | "users.passwordChange";
+  | "users.twoFactorEnable"
+  | "users.twoFactorDisable"
+  | "users.passwordChange"
+  | "users.emailChange";
 
 /**
  * Which audit row, if any, a write to `user.twoFactorEnabled` means.
@@ -58,8 +61,52 @@ export function passwordChangedBy(ctx: {
   return typeof id === "string" ? id : null;
 }
 
-export async function writeAccountAudit(userId: string, action: AccountAuditAction): Promise<void> {
+/**
+ * The address change a `/verify-email` request just completed, or null
+ * (ADR-155 #2).
+ *
+ * Better Auth writes the new address in `/verify-email`, and the user row it
+ * hands the update hook already carries it — the OLD address survives only in
+ * the link's token. The token has been verified by the time the row is
+ * written, so its payload is read here, not re-verified. Only the final step
+ * of a change (`change-email-verification`) counts; a plain verification
+ * carries no `updateTo` and is not a change.
+ */
+export function emailChangeFromToken(
+  path: string | undefined,
+  query: unknown,
+): { from: string; to: string } | null {
+  if (path !== "/verify-email") return null;
+  const token = (query as { token?: unknown } | null | undefined)?.token;
+  if (typeof token !== "string") return null;
+  const payload = token.split(".")[1];
+  if (!payload) return null;
+  try {
+    const claims = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as {
+      email?: unknown;
+      updateTo?: unknown;
+      requestType?: unknown;
+    };
+    if (claims.requestType !== "change-email-verification") return null;
+    if (typeof claims.email !== "string" || typeof claims.updateTo !== "string") return null;
+    return { from: claims.email, to: claims.updateTo };
+  } catch {
+    return null;
+  }
+}
+
+export async function writeAccountAudit(
+  userId: string,
+  action: AccountAuditAction,
+  changes?: { before: Record<string, unknown>; after: Record<string, unknown> },
+): Promise<void> {
   await db.auditLog.create({
-    data: { userId, action, entityType: "user", entityId: userId },
+    data: {
+      userId,
+      action,
+      entityType: "user",
+      entityId: userId,
+      ...(changes ? { changes: changes as object } : {}),
+    },
   });
 }

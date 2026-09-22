@@ -57,6 +57,10 @@ rules named below.
    take two seconds and spend money. It is also the reason AI is not in
    `core`: two provider SDKs in the graph every public server component
    imports is weight and surface on the path #5 exists to protect.
+   ADR-156 adds `auth → secrets`: `@repo/auth` owns the reCAPTCHA
+   configuration, because the guard that applies it runs inside Better Auth's
+   handler, and it seals Google's secret key through the one shared seal
+   rather than a copy.
 9. Every package declares every dependency it imports (no phantom deps —
    `pnpm check:phantom-deps` enforces). Granular exports in `@repo/ui` so one
    component doesn't drag the whole tree.

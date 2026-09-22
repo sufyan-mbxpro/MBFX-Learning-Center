@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { getTranslations, setRequestLocale } from "next-intl/server";
+import { getCaptchaSiteKey } from "@repo/auth";
 import { getSetting } from "@repo/settings";
 import { getPathname, Link } from "@repo/i18n/navigation";
 import { AuthScreen } from "../_components/auth-screen.tsx";
@@ -26,7 +27,8 @@ export async function generateMetadata({
 export default async function SignInPage({ params }: PageProps<"/[locale]/sign-in">) {
   const { locale } = await params;
   setRequestLocale(locale);
-  const t = await getTranslations("auth");
+  // ADR-156: cached and tagged, so this static page carries the key.
+  const [t, captchaSiteKey] = await Promise.all([getTranslations("auth"), getCaptchaSiteKey()]);
 
   return (
     <AuthScreen
@@ -45,6 +47,7 @@ export default async function SignInPage({ params }: PageProps<"/[locale]/sign-i
       }
     >
       <SignInForm
+        captchaSiteKey={captchaSiteKey}
         // The form navigates with window.location.assign, which needs a
         // real path — getPathname is next-intl's server-side way to get
         // the localized one without a client hook.
@@ -56,6 +59,7 @@ export default async function SignInPage({ params }: PageProps<"/[locale]/sign-i
           hidePassword: t("hidePassword"),
           submit: t("submit"),
           failed: t("failed"),
+          captcha: t("captchaFailed"),
           learnersOnly: t("learnersOnly"),
           resetDone: t("resetDone"),
           verifiedDone: t("verifiedDone"),

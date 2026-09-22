@@ -80,6 +80,17 @@ model User {
   firstName        String?    @db.VarChar(100)
   lastName         String?    @db.VarChar(100)
   phone            String?    @db.VarChar(32)
+  // ADR-155 — the learner's own birthday and postal address. Deliberately NOT
+  // Better Auth additionalFields: the library never reads them, so they never
+  // enter the session cookie cache and `/update-user` cannot write them.
+  birthDate        DateTime?  @db.Date
+  addressLine1     String?    @db.VarChar(200)
+  addressLine2     String?    @db.VarChar(200)
+  city             String?    @db.VarChar(100)
+  region           String?    @db.VarChar(100)
+  postalCode       String?    @db.VarChar(20)
+  /// ISO 3166-1 alpha-2. The name is `Intl.DisplayNames`' job, in the reader's locale.
+  country          String?    @db.VarChar(2)
   userType         UserType   @default(LEARNER)
   status           UserStatus @default(PENDING_VERIFICATION)
   locale           String     @default("en") @db.VarChar(10)
@@ -2167,6 +2178,28 @@ model EmailTransport {
   updatedAt      DateTime     @updatedAt
 
   @@map("email_transport")
+}
+
+/// Google reCAPTCHA v3 on sign-in, sign-up and the support form (ADR-156). A
+/// singleton like EmailTransport: Settings → General → reCAPTCHA edits it.
+/// `secretKeyCipher` is AES-256-GCM under CAPTCHA_SECRET_KEY, write-only in
+/// the UI, and `loadCaptchaRuntime()` (@repo/auth) is its ONE reader.
+model CaptchaConfig {
+  id              String    @id @default("default")
+  enabled         Boolean   @default(false)
+  /// Google's site key. Public by design: Google puts it in the page.
+  siteKey         String?   @db.VarChar(100)
+  secretKeyCipher String?   @db.Text
+  /// The v3 score a request must reach, 0.1-0.9. Google suggests 0.5.
+  minScore        Float     @default(0.5)
+  /// When a browser token last passed with the saved keys: the check that
+  /// has to succeed before `enabled` may be switched on.
+  lastVerifiedAt  DateTime?
+  updatedBy       String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("captcha_config")
 }
 
 /// The row is the CONTENT of a template whose KEY is declared in code

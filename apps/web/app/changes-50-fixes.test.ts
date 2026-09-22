@@ -75,9 +75,11 @@ describe("a reader the public site shows as signed out gets the guest prompts", 
     expect(src).toContain("response.status !== 404");
   });
 
-  it("the course page still mounts both the card and the band", () => {
+  // 2026-09-22: the owner removed the sidebar "Save your progress" card; the
+  // band above the curriculum is the course page's one guest prompt.
+  it("the course page mounts the band and no longer the sidebar card", () => {
     const src = read(PUBLIC + "learn/[track]/[course]/page.tsx");
-    expect(src).toContain("<ProgressSignInCard />");
+    expect(src).not.toContain("ProgressSignInCard");
     expect(src).toContain("<TrackProgressBand");
   });
 });

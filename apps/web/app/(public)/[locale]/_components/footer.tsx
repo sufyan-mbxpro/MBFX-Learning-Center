@@ -465,7 +465,7 @@ export async function SiteFooter({ locale }: { locale: string }) {
                     {t("newsletterBlurb")}
                   </span>
                 </p>
-                <div className="w-full shrink-0 sm:w-xl">
+                <div className="w-full shrink-0 sm:w-md">
                   <NewsletterForm
                     tone="onSecondary"
                     locale={locale}

@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { NextIntlClientProvider } from "next-intl";
 import { getMessages } from "next-intl/server";
-import { auth } from "@repo/auth";
+import { auth, isStaffTwoFactorPending } from "@repo/auth";
 import { getBrandAssets, loadOwnProfile } from "@repo/core";
 import { loadSubject } from "@repo/rbac";
 import { buildThemeStyleSheet, getActiveTheme, withAdminTypeface } from "@repo/theme";
@@ -12,6 +12,7 @@ import { ThemeProvider } from "@repo/ui/components/theme-provider";
 import { ThemeScript } from "@repo/ui/components/theme-script";
 import { ADMIN_THEME_STORAGE_KEY } from "@repo/ui/lib/theme-mode";
 import { AdminShell } from "./keystone/_components/admin-shell.tsx";
+import { TwoFactorRequiredScreen } from "./keystone/_components/two-factor-required.tsx";
 import { faviconIcons } from "../_lib/favicon.ts";
 import "@repo/ui/globals.css";
 
@@ -74,6 +75,10 @@ export default async function AdminRootLayout({ children }: LayoutProps<"/">) {
   // A 404, not a redirect to the staff sign-in (changes-49, ADR-146): a
   // redirect names the staff entry point to whoever asked. Staff know it.
   if (subject?.userType !== "STAFF") notFound();
+  // ADR-157: a staff member the site requires to enrol sees ONLY the
+  // enrolment screen — every admin page renders under this layout, so this is
+  // complete for pages. Mutations are refused separately, in requirePermission.
+  const twoFactorPending = await isStaffTwoFactorPending(subject.id);
 
   // Cached read (tag "theme", ADR-004) — an admin theme save invalidates
   // it; nothing polls. The style element id is frozen API: Module 14's CSP
@@ -118,14 +123,18 @@ export default async function AdminRootLayout({ children }: LayoutProps<"/">) {
         />
         <NextIntlClientProvider messages={messages}>
           <ThemeProvider storageKey={ADMIN_THEME_STORAGE_KEY}>
-            <AdminShell
-              subject={subject!}
-              userName={userName}
-              email={profile?.email ?? ""}
-              image={profile?.image ?? null}
-            >
-              {children}
-            </AdminShell>
+            {twoFactorPending ? (
+              <TwoFactorRequiredScreen userId={subject.id} />
+            ) : (
+              <AdminShell
+                subject={subject!}
+                userName={userName}
+                email={profile?.email ?? ""}
+                image={profile?.image ?? null}
+              >
+                {children}
+              </AdminShell>
+            )}
           </ThemeProvider>
         </NextIntlClientProvider>
       </body>

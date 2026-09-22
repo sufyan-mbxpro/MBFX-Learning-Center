@@ -20,6 +20,7 @@ import {
 } from "@repo/ui/components/dialog";
 import { Field, FieldError, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
+import { signOutSilently } from "../../../_lib/credentials.ts";
 import { resetUserPasswordAction } from "../_actions/user-actions.ts";
 import { useFieldErrors } from "../_hooks/use-field-errors.ts";
 
@@ -66,8 +67,20 @@ export function ResetPasswordDialog({
     if (!form.validate()) return;
     startTransition(async () => {
       try {
-        await resetUserPasswordAction(values);
+        const result = await resetUserPasswordAction(values);
         toast.success(labels.done);
+        if (result.signedOut) {
+          // The actor reset their own password, so the revocation ended the
+          // session this page is rendered under. Drop the now-dead cookies
+          // (the proxy's 5-minute cookie cache would otherwise keep routing
+          // them into a portal that immediately bounces them) and leave with a
+          // FULL load: the destination is another root layout, and nothing
+          // cached in this tree belongs to whoever signs in next.
+          await signOutSilently();
+          // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- the session is gone; a soft navigation would keep this tree
+          window.location.assign("/keystone");
+          return;
+        }
         close();
       } catch (error) {
         toast.error(error instanceof Error ? error.message : String(error));

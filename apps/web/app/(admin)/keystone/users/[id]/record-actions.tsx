@@ -30,6 +30,7 @@ import { Input } from "@repo/ui/components/input";
 import { Switch } from "@repo/ui/components/switch";
 import {
   impersonateUserAction,
+  resetUserTwoFactorAction,
   revokeUserSessionsAction,
   setEmailVerifiedAction,
   setUserStatusAction,
@@ -358,8 +359,9 @@ export function EditUserButton({
 /**
  * One tile of the "Account controls" grid — the reference's permission
  * toggles, limited to the switches this platform actually has. A tile with no
- * `onChange` is a STATE, drawn as a disabled switch: two-factor is the
- * learner's own to turn on, and consent to the newsletter is the reader's.
+ * `onChange` is a STATE, drawn as a disabled switch: consent to the newsletter
+ * is the reader's. Two-factor is a switch that only turns OFF (ADR-157 §5) —
+ * turning it on is the holder's own, so an unchecked tile is a state.
  */
 export function ControlTile({
   label,
@@ -371,7 +373,7 @@ export function ControlTile({
   label: string;
   hint: string;
   checked: boolean;
-  action?: { kind: "emailVerified" | "active"; userId: string };
+  action?: { kind: "emailVerified" | "active" | "twoFactor"; userId: string };
   /** Turning an account OFF asks first (code-style #7). */
   confirm?: { title: string; description: string; confirm: string; cancel: string };
 }) {
@@ -380,11 +382,11 @@ export function ControlTile({
 
   const apply = (next: boolean) => {
     if (!action) return;
-    run(() =>
-      action.kind === "emailVerified"
-        ? setEmailVerifiedAction(action.userId, next)
-        : setUserStatusAction(action.userId, next ? "ACTIVE" : "INACTIVE"),
-    );
+    run(() => {
+      if (action.kind === "emailVerified") return setEmailVerifiedAction(action.userId, next);
+      if (action.kind === "twoFactor") return resetUserTwoFactorAction(action.userId);
+      return setUserStatusAction(action.userId, next ? "ACTIVE" : "INACTIVE");
+    });
   };
 
   return (
@@ -395,7 +397,8 @@ export function ControlTile({
     >
       <Switch
         checked={checked}
-        disabled={!action || pending}
+        // A two-factor tile can only be turned off; once off it is a state.
+        disabled={!action || pending || (action.kind === "twoFactor" && !checked)}
         onCheckedChange={(next) => {
           if (confirm && !next) setAsking(true);
           else apply(next);

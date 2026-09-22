@@ -25,6 +25,7 @@ import {
   ACCOUNT_RECENT_READS,
   AVATAR_MAX_BYTES,
   pickResumeLesson,
+  type AccountAddressView,
   type AccountCourseView,
   type AccountLessonReadView,
   type AccountQuizAttemptView,
@@ -113,6 +114,42 @@ async function localeContext(): Promise<LocaleContext> {
   };
 }
 
+const ADDRESS_SELECT = {
+  addressLine1: true,
+  addressLine2: true,
+  city: true,
+  region: true,
+  postalCode: true,
+  country: true,
+} as const satisfies Record<keyof AccountAddressView, true>;
+
+/**
+ * The learner's own postal address (ADR-155 #5). Session-scoped like
+ * `updateOwnProfile`: the caller fills `userId` from `auth()`, and the input
+ * — parsed by `learnerAddressSchema` — has no field for another one.
+ */
+export async function updateOwnAddress(
+  userId: string,
+  input: Partial<AccountAddressView>,
+): Promise<void> {
+  const before = await db.user.findUniqueOrThrow({
+    where: { id: userId },
+    select: ADDRESS_SELECT,
+  });
+  // An omitted line is left alone; the schema already turned a blank one into null.
+  const data = Object.fromEntries(
+    Object.entries(input).filter(([, value]) => value !== undefined),
+  ) as Partial<AccountAddressView>;
+  await db.user.update({ where: { id: userId }, data });
+  await recordAudit({
+    userId,
+    action: "users.addressUpdate",
+    entityType: "user",
+    entityId: userId,
+    changes: { before, after: data },
+  });
+}
+
 /**
  * The learner's own profile and security state, for `/account` (ADR-125).
  * Null for a user that does not exist or has been soft-deleted.
@@ -128,6 +165,8 @@ export async function loadLearnerProfile(userId: string): Promise<AccountProfile
       lastName: true,
       phone: true,
       image: true,
+      birthDate: true,
+      ...ADDRESS_SELECT,
       twoFactorEnabled: true,
       createdAt: true,
       accounts: { where: { providerId: "credential" }, select: { id: true }, take: 1 },
@@ -142,6 +181,15 @@ export async function loadLearnerProfile(userId: string): Promise<AccountProfile
     lastName: user.lastName,
     phone: user.phone,
     image: user.image,
+    birthDate: user.birthDate ? user.birthDate.toISOString().slice(0, 10) : null,
+    address: {
+      addressLine1: user.addressLine1,
+      addressLine2: user.addressLine2,
+      city: user.city,
+      region: user.region,
+      postalCode: user.postalCode,
+      country: user.country,
+    },
     twoFactorEnabled: user.twoFactorEnabled === true,
     hasPassword: user.accounts.length > 0,
     createdAt: user.createdAt.toISOString(),

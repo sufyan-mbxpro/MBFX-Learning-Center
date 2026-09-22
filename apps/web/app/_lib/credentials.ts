@@ -8,7 +8,31 @@
 // lockout hooks and the session cookies all live on those endpoints
 // (ADR-001 finding #4), so a server action wrapping the same logic would
 // quietly lose all three.
+import { CAPTCHA_ACTIONS, CAPTCHA_HEADER } from "@repo/contracts";
+import { getCaptchaToken } from "./recaptcha.ts";
 import { rememberSession } from "./session-hint.ts";
+
+/**
+ * The request headers for a reCAPTCHA-guarded auth POST (ADR-156), or `null`
+ * when the feature is on and no token could be minted. Off, it is the plain
+ * JSON header and nothing else.
+ */
+async function guardedHeaders(): Promise<Record<string, string> | null> {
+  const captcha = await getCaptchaToken(CAPTCHA_ACTIONS.auth);
+  if (!captcha.ok) return null;
+  return {
+    "Content-Type": "application/json",
+    ...(captcha.token ? { [CAPTCHA_HEADER]: captcha.token } : {}),
+  };
+}
+
+/**
+ * The two answers Better Auth's `captcha` plugin gives: 400 with no token, 403
+ * for a token that failed (score, action or Google's own verdict).
+ */
+function isCaptchaRefusal(code: string | undefined): boolean {
+  return code === "MISSING_RESPONSE" || code === "VERIFICATION_FAILED";
+}
 
 /**
  * What the credential POST returns — `userType` drives the surface check.
@@ -21,6 +45,7 @@ import { rememberSession } from "./session-hint.ts";
 export type SignInResult =
   | { status: "ok"; userType: "LEARNER" | "STAFF" | null }
   | { status: "twoFactor" }
+  | { status: "captcha" }
   | { status: "failed" };
 
 /**
@@ -33,17 +58,21 @@ export type SignInResult =
  * rather than guessing.
  */
 export async function signInWithPassword(email: string, password: string): Promise<SignInResult> {
+  const headers = await guardedHeaders();
+  if (!headers) return { status: "captcha" };
   const response = await fetch("/api/auth/sign-in/email", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({ email, password }),
   });
-  if (!response.ok) return { status: "failed" };
 
   const body = (await response.json().catch(() => null)) as {
     user?: { userType?: string };
     twoFactorRedirect?: boolean;
+    code?: string;
   } | null;
+  if (!response.ok)
+    return isCaptchaRefusal(body?.code) ? { status: "captcha" } : { status: "failed" };
   if (body?.twoFactorRedirect === true) return { status: "twoFactor" };
   const userType = body?.user?.userType;
   return {
@@ -51,6 +80,17 @@ export async function signInWithPassword(email: string, password: string): Promi
     userType: userType === "STAFF" || userType === "LEARNER" ? userType : null,
   };
 }
+
+/** Six digits, the one shape an authenticator app shows. Whitespace is the caller's to strip. */
+export function isTotpCode(code: string): boolean {
+  return /^\d{6}$/.test(code);
+}
+
+/**
+ * The longest thing the sign-in code field accepts: a backup code
+ * (`xxxxx-xxxxx`, Better Auth's default), with room for a stray space.
+ */
+export const TWO_FACTOR_CODE_MAX_LENGTH = 12;
 
 export type TwoFactorSignInResult =
   | { status: "ok"; userType: "LEARNER" | "STAFF" | null }
@@ -67,9 +107,18 @@ export type TwoFactorSignInResult =
  * `expired` is the challenge itself gone (ten minutes, or too many wrong
  * codes): the reader has to start again from the password, which a wrong-code
  * message would not tell them.
+ *
+ * A BACKUP code goes to its own endpoint (ADR-157). Enrolment has always
+ * shown ten of them "in case you lose your phone", and until this change the
+ * sign-in step sent every entry to `verify-totp`, which refuses one — so the
+ * codes a reader was told to keep could never be used. The two shapes cannot
+ * be confused: a TOTP is six digits, a backup code is `xxxxx-xxxxx`.
  */
 export async function verifyTwoFactorSignIn(code: string): Promise<TwoFactorSignInResult> {
-  const response = await fetch("/api/auth/two-factor/verify-totp", {
+  const endpoint = isTotpCode(code)
+    ? "/api/auth/two-factor/verify-totp"
+    : "/api/auth/two-factor/verify-backup-code";
+  const response = await fetch(endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ code }),
@@ -87,7 +136,9 @@ export async function verifyTwoFactorSignIn(code: string): Promise<TwoFactorSign
       userType: userType === "STAFF" || userType === "LEARNER" ? userType : null,
     };
   }
-  if (body?.code === "INVALID_CODE") return { status: "invalidCode" };
+  if (body?.code === "INVALID_CODE" || body?.code === "INVALID_BACKUP_CODE") {
+    return { status: "invalidCode" };
+  }
   if (
     body?.code === "INVALID_TWO_FACTOR_COOKIE" ||
     body?.code === "TOO_MANY_ATTEMPTS_REQUEST_NEW_CODE"
@@ -97,7 +148,8 @@ export async function verifyTwoFactorSignIn(code: string): Promise<TwoFactorSign
   return { status: "failed" };
 }
 
-export type SignUpResult = { status: "ok" } | { status: "taken" } | { status: "failed" };
+export type SignUpResult =
+  { status: "ok" } | { status: "taken" } | { status: "captcha" } | { status: "failed" };
 
 /**
  * Public self-registration. `userType` and `status` are `input: false` in
@@ -117,9 +169,11 @@ export async function signUpWithPassword(input: {
    */
   callbackURL?: string;
 }): Promise<SignUpResult> {
+  const headers = await guardedHeaders();
+  if (!headers) return { status: "captcha" };
   const response = await fetch("/api/auth/sign-up/email", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify(input),
   });
   if (response.ok) return { status: "ok" };
@@ -131,6 +185,7 @@ export async function signUpWithPassword(input: {
   // silently degrades "that email is taken" into the generic failure, which
   // is the difference between a user fixing the problem and giving up.
   const body = (await response.json().catch(() => null)) as { code?: string } | null;
+  if (isCaptchaRefusal(body?.code)) return { status: "captcha" };
   return body?.code?.startsWith("USER_ALREADY_EXISTS") ? { status: "taken" } : { status: "failed" };
 }
 

@@ -70,11 +70,12 @@ Each seals one provider credential stored in the database. **Losing or
 changing one makes the stored credential unreadable** — back them up with the
 same care as the database.
 
-| Variable            | Seals                                      |
-| ------------------- | ------------------------------------------ |
-| `EMAIL_SECRET_KEY`  | the SMTP password (`EmailTransport`)       |
-| `MARKET_SECRET_KEY` | the market data API key (`MarketProvider`) |
-| `AI_SECRET_KEY`     | the AI provider API key (`AiProvider`)     |
+| Variable             | Seals                                                    |
+| -------------------- | -------------------------------------------------------- |
+| `EMAIL_SECRET_KEY`   | the SMTP password (`EmailTransport`)                     |
+| `MARKET_SECRET_KEY`  | the market data API key (`MarketProvider`)               |
+| `AI_SECRET_KEY`      | the AI provider API key (`AiProvider`)                   |
+| `CAPTCHA_SECRET_KEY` | Google's reCAPTCHA secret key (`CaptchaConfig`, ADR-156) |
 
 **Scheduled jobs**
 
@@ -84,12 +85,13 @@ same care as the database.
 
 **Optional**
 
-| Variable                                                       | Notes                                                                                                                            |
-| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `FFMPEG_PATH`                                                  | e.g. `/usr/bin/ffmpeg`. Set ⇒ uploaded video is re-encoded to H.264/AAC MP4 and kept only if smaller. Unset ⇒ stored as uploaded |
-| `HOME_CONTENT_MODE`                                            | `real` hides the homepage's placeholder figures/quotes/partners (ADR-103). Default `demo`                                        |
-| `GOOGLE_CLIENT_ID` / `_SECRET`, `GITHUB_CLIENT_ID` / `_SECRET` | OAuth; there is no OAuth UI yet, leave empty                                                                                     |
-| `PORT`                                                         | `next start` port, default 3000                                                                                                  |
+| Variable                                                       | Notes                                                                                                                                    |
+| -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `FFMPEG_PATH`                                                  | e.g. `/usr/bin/ffmpeg`. Set ⇒ uploaded video is re-encoded to H.264/AAC MP4 and kept only if smaller. Unset ⇒ stored as uploaded         |
+| `HOME_CONTENT_MODE`                                            | `real` hides the homepage's placeholder figures/quotes/partners (ADR-103). Default `demo`                                                |
+| `GOOGLE_CLIENT_ID` / `_SECRET`, `GITHUB_CLIENT_ID` / `_SECRET` | OAuth; there is no OAuth UI yet, leave empty                                                                                             |
+| `CAPTCHA_DISABLED`                                             | any value but `0`/`false` switches reCAPTCHA off whatever Settings → General → reCAPTCHA says (ADR-156). Break-glass for a Google outage |
+| `PORT`                                                         | `next start` port, default 3000                                                                                                          |
 
 **Seed-time only** — present while seeding, then **removed from the file**:
 `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD`, and the `SEED_*` provider variables

@@ -1,6 +1,7 @@
 "use client";
 
-// An otpauth URI as a scannable QR code (ADR-123 #6).
+// An otpauth URI as a scannable QR code (ADR-123 #6). Shared by the learner
+// account page and the staff profile (ADR-157), so both surfaces use one encoder.
 //
 // Encoded in the browser by `uqr` (zero dependencies, MIT) and drawn as one
 // SVG path, so nothing about the secret leaves the page it was just delivered

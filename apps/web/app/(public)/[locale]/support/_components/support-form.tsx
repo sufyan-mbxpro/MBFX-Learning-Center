@@ -39,15 +39,21 @@
 // fifth. In particular there is no "we already have a message from you" —
 // that would make the form a disclosure oracle for anybody's address, the
 // same trap ADR-080 #1 named for signup.
-import { useActionState, useEffect, useId, useRef } from "react";
+import { startTransition, useActionState, useEffect, useId, useRef } from "react";
 import { CircleAlert, CircleCheckBig, Send, UserCheck } from "lucide-react";
-import { SUPPORT_HONEYPOT_FIELD, SUPPORT_MESSAGE_MAX } from "@repo/contracts";
+import {
+  CAPTCHA_ACTIONS,
+  CAPTCHA_FIELD,
+  SUPPORT_HONEYPOT_FIELD,
+  SUPPORT_MESSAGE_MAX,
+} from "@repo/contracts";
 import { Alert, AlertDescription, AlertTitle } from "@repo/ui/components/alert";
 import { Button } from "@repo/ui/components/button";
 import { Field, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
 import { Textarea } from "@repo/ui/components/textarea";
 import { sendSupportRequestAction, type SupportRequestState } from "../../_actions/support.ts";
+import { getCaptchaToken, useRecaptcha } from "../../../../_lib/recaptcha.ts";
 import { usePublicSession } from "../../_components/public-session.tsx";
 
 export interface SupportFormLabels {
@@ -67,10 +73,20 @@ export interface SupportFormLabels {
   signedInHint: string;
   invalid: string;
   limited: string;
+  captcha: string;
   failed: string;
 }
 
-export function SupportForm({ labels, locale }: { labels: SupportFormLabels; locale: string }) {
+export function SupportForm({
+  labels,
+  locale,
+  captchaSiteKey,
+}: {
+  labels: SupportFormLabels;
+  locale: string;
+  /** Settings → General → reCAPTCHA's site key, or `null` while it is off (ADR-156). */
+  captchaSiteKey: string | null;
+}) {
   const [state, formAction, pending] = useActionState<SupportRequestState, FormData>(
     sendSupportRequestAction,
     { status: "idle" },
@@ -92,17 +108,33 @@ export function SupportForm({ labels, locale }: { labels: SupportFormLabels; loc
       ? labels.invalid
       : state.status === "limited"
         ? labels.limited
-        : state.status === "failed"
-          ? labels.failed
-          : null;
+        : state.status === "captcha"
+          ? labels.captcha
+          : state.status === "failed"
+            ? labels.failed
+            : null;
 
   // A refusal hands back what was typed, because React resets the form once
   // the action settles. Failing that, a signed-in learner's own details.
   const echoed = "values" in state ? state.values : undefined;
 
+  // ADR-156: with reCAPTCHA on, a token is minted at submit and added to the
+  // form data before the server action sees it. Tokens are single-use and
+  // expire in two minutes, so it cannot be fetched earlier. With it off the
+  // form keeps posting the action directly, which is what lets it submit
+  // before hydration. With it on, a submit needs JavaScript, because a
+  // token does. No token (a blocker) still posts, and the action answers
+  // `captcha`, so there is one refusal path and not two.
+  useRecaptcha(captchaSiteKey);
+  const submitWithCaptcha = async (formData: FormData) => {
+    const captcha = await getCaptchaToken(CAPTCHA_ACTIONS.support);
+    if (captcha.ok && captcha.token) formData.set(CAPTCHA_FIELD, captcha.token);
+    startTransition(() => formAction(formData));
+  };
+
   return (
     <form
-      action={formAction}
+      action={captchaSiteKey ? submitWithCaptcha : formAction}
       className="flex flex-col gap-6 rounded-xl bg-card p-6 ring-1 ring-foreground/10 sm:p-8"
     >
       <input type="hidden" name="locale" value={locale} />

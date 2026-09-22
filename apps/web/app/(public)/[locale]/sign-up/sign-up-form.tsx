@@ -9,14 +9,16 @@ import { Label } from "@repo/ui/components/label";
 import { PasswordInput } from "@repo/ui/components/password-input";
 import { AuthInputIcon } from "../../../_lib/auth-input-icon.tsx";
 import { signUpWithPassword } from "../../../_lib/credentials.ts";
+import { useRecaptcha } from "../../../_lib/recaptcha.ts";
 import { rememberSession } from "../../../_lib/session-hint.ts";
 import { optInToNewsletterAction } from "../_actions/newsletter-opt-in.ts";
 
-type Failure = "taken" | "failed";
+type Failure = "taken" | "captcha" | "failed";
 
 export function SignUpForm({
   labels,
   homeHref,
+  captchaSiteKey,
   verifiedHref,
   minPasswordLength,
   locale,
@@ -32,6 +34,7 @@ export function SignUpForm({
     submit: string;
     failed: string;
     taken: string;
+    captcha: string;
     newsletterOptIn: string;
     newsletterOptInHint: string;
   };
@@ -48,6 +51,8 @@ export function SignUpForm({
   verifiedHref: string;
   /** Mirrors @repo/auth's emailAndPassword.minPasswordLength. */
   minPasswordLength: number;
+  /** Settings → General → reCAPTCHA's site key, or `null` while it is off (ADR-156). */
+  captchaSiteKey: string | null;
 }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -56,6 +61,8 @@ export function SignUpForm({
   const [newsletter, setNewsletter] = useState(false);
   const [failure, setFailure] = useState<Failure | null>(null);
   const [pending, startTransition] = useTransition();
+  // ADR-156: load reCAPTCHA v3 now, so its token is ready at submit.
+  useRecaptcha(captchaSiteKey);
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -63,7 +70,9 @@ export function SignUpForm({
     startTransition(async () => {
       const result = await signUpWithPassword({ name, email, password, callbackURL: verifiedHref });
       if (result.status !== "ok") {
-        setFailure(result.status === "taken" ? "taken" : "failed");
+        setFailure(
+          result.status === "taken" || result.status === "captcha" ? result.status : "failed",
+        );
         return;
       }
       // Better Auth signs the new account in as part of sign-up, and
@@ -170,7 +179,11 @@ export function SignUpForm({
       )}
       {failure && (
         <p id="signup-error" role="alert" className="text-sm text-destructive-interactive">
-          {failure === "taken" ? labels.taken : labels.failed}
+          {failure === "taken"
+            ? labels.taken
+            : failure === "captcha"
+              ? labels.captcha
+              : labels.failed}
         </p>
       )}
       <Button type="submit" size="lg" loading={pending} className="w-full">

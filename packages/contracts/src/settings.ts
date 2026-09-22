@@ -298,6 +298,10 @@ export const SETTINGS_SCHEMAS = {
   // because the two audiences want different answers — an unattended admin
   // screen is a risk, an unattended lesson is a reader who went for coffee.
   "security.learnerSessionTimeout": z.enum(ADMIN_SESSION_TIMEOUTS),
+  // ADR-157 — a STAFF user without two-factor is held on the enrolment screen
+  // and refused every mutation until they enrol. Forces enrolment, never a
+  // lockout: the enrolment endpoints themselves stay open.
+  "security.requireStaffTwoFactor": z.boolean(),
 
   "seo.titleTemplate": z.string().max(100),
   "seo.defaultOgImage": z.string().regex(/^(\/|https?:\/\/)/, "must be a path or URL"),
@@ -426,6 +430,7 @@ export const SETTING_GROUPS: Record<SettingKey, string> = {
   "site.reviewsUrl": "general",
   "security.adminSessionTimeout": "general",
   "security.learnerSessionTimeout": "general",
+  "security.requireStaffTwoFactor": "general",
 
   "seo.titleTemplate": "seo",
   "seo.defaultOgImage": "seo",

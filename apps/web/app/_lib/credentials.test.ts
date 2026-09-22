@@ -13,8 +13,11 @@ import {
   signOut,
   signOutSilently,
   signUpWithPassword,
+  isTotpCode,
+  TWO_FACTOR_CODE_MAX_LENGTH,
   verifyTwoFactorSignIn,
 } from "./credentials.ts";
+import { setRecaptchaSiteKey } from "./recaptcha.ts";
 
 /** Stands in for a `fetch` Response — only the two fields these helpers read. */
 function jsonResponse(ok: boolean, body: unknown) {
@@ -373,4 +376,86 @@ describe("two-factor sign-in (ADR-123)", () => {
     mockFetch(jsonResponse(false, null));
     await expect(verifyTwoFactorSignIn("000000")).resolves.toEqual({ status: "failed" });
   });
+
+  // ADR-157: enrolment shows backup codes, and they have to work at sign-in.
+  it("sends a backup code to Better Auth's backup-code endpoint, not verify-totp", async () => {
+    const fetchMock = mockFetch(jsonResponse(true, { token: "t", user: { userType: "STAFF" } }));
+    await expect(verifyTwoFactorSignIn("aB3dE-9fGh1")).resolves.toEqual({
+      status: "ok",
+      userType: "STAFF",
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/auth/two-factor/verify-backup-code",
+      expect.objectContaining({ body: JSON.stringify({ code: "aB3dE-9fGh1" }) }),
+    );
+  });
+
+  it("reads a spent or mistyped backup code as a wrong code", async () => {
+    mockFetch(jsonResponse(false, { code: "INVALID_BACKUP_CODE" }));
+    await expect(verifyTwoFactorSignIn("aaaaa-bbbbb")).resolves.toEqual({ status: "invalidCode" });
+  });
+
+  it("tells the two shapes apart, and leaves room in the field for a backup code", () => {
+    expect(isTotpCode("123456")).toBe(true);
+    expect(isTotpCode("12345")).toBe(false);
+    expect(isTotpCode("1234567")).toBe(false);
+    expect(isTotpCode("aB3dE-9fGh1")).toBe(false);
+    expect("aB3dE-9fGh1".length).toBeLessThanOrEqual(TWO_FACTOR_CODE_MAX_LENGTH);
+  });
+});
+
+// ADR-156: reCAPTCHA v3 on the two credential POSTs. The page registers the
+// site key it read from Settings → General → reCAPTCHA; `null` is off.
+describe("reCAPTCHA on sign-in and sign-up", () => {
+  afterEach(() => {
+    setRecaptchaSiteKey(null);
+  });
+
+  it("with no site key registered, posts no captcha header — the check is off", async () => {
+    setRecaptchaSiteKey(null);
+    const fetchMock = mockFetch(jsonResponse(true, { user: { userType: "LEARNER" } }));
+    await signInWithPassword("a@b.c", "pw");
+    const init = (fetchMock.mock.calls[0] as unknown[] | undefined)?.[1] as RequestInit | undefined;
+    expect(init?.headers).toEqual({ "Content-Type": "application/json" });
+  });
+
+  it("with a site key, sends Google's token in the header the guard reads, for the `auth` action", async () => {
+    setRecaptchaSiteKey("site-key");
+    const execute = vi.fn(async () => "token-123");
+    vi.stubGlobal("window", { grecaptcha: { ready: (cb: () => void) => cb(), execute } });
+    const fetchMock = mockFetch(jsonResponse(true, { user: { userType: "LEARNER" } }));
+    await signInWithPassword("a@b.c", "pw");
+    expect(execute).toHaveBeenCalledWith("site-key", { action: "auth" });
+    const init = (fetchMock.mock.calls[0] as unknown[] | undefined)?.[1] as RequestInit | undefined;
+    expect(init?.headers).toMatchObject({ "x-captcha-response": "token-123" });
+  });
+
+  it("no token (script blocked) is `captcha`, and nothing is posted", async () => {
+    setRecaptchaSiteKey("site-key");
+    vi.stubGlobal("window", {
+      grecaptcha: {
+        ready: (cb: () => void) => cb(),
+        execute: async () => {
+          throw new Error("blocked");
+        },
+      },
+    });
+    const fetchMock = mockFetch(jsonResponse(true, {}));
+    await expect(signInWithPassword("a@b.c", "pw")).resolves.toEqual({ status: "captcha" });
+    await expect(
+      signUpWithPassword({ name: "A", email: "a@b.c", password: "pw" }),
+    ).resolves.toEqual({ status: "captcha" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each(["VERIFICATION_FAILED", "MISSING_RESPONSE"])(
+    "the guard's %s refusal is `captcha`, not a wrong password",
+    async (code) => {
+      mockFetch(jsonResponse(false, { code }));
+      await expect(signInWithPassword("a@b.c", "pw")).resolves.toEqual({ status: "captcha" });
+      await expect(
+        signUpWithPassword({ name: "A", email: "a@b.c", password: "pw" }),
+      ).resolves.toEqual({ status: "captcha" });
+    },
+  );
 });

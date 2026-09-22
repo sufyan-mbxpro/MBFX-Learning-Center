@@ -108,6 +108,19 @@ export const EMAIL_TEMPLATES = {
     required: [],
     sample: { ...SAMPLE_BASE, "changed.at": "12 September 2026, 14:05 UTC" },
   },
+  // ADR-155 #2: sent to the PREVIOUS address once a change has landed, and it
+  // names the new one, so an owner whose account was taken sees where it went.
+  "auth.email_changed": {
+    audience: "any",
+    critical: false,
+    variables: ["changed.at", "email.new"],
+    required: [],
+    sample: {
+      ...SAMPLE_BASE,
+      "changed.at": "22 September 2026, 14:05 UTC",
+      "email.new": "new-address@example.com",
+    },
+  },
   "newsletter.confirm": {
     audience: "public",
     critical: true,

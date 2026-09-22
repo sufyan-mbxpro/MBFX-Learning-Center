@@ -296,3 +296,34 @@ describe("proxy matcher — /admin, /keystone and /api excluded from next-intl's
     }
   });
 });
+
+describe("proxy — Google reCAPTCHA origins in the CSP (ADR-156)", () => {
+  // A session cookie gets a staff path past the gate to its headers.
+  const cspOf = async (path: string) =>
+    (await proxy(requestFor(path, "better-auth.session_token=a-real-session-token"))).headers.get(
+      "Content-Security-Policy",
+    ) ?? "";
+
+  it.each([
+    "/keystone",
+    "/keystone/settings/general",
+    "/sign-in",
+    "/sign-up",
+    "/support",
+    "/ar/sign-in",
+  ])(
+    "%s — a page with a reCAPTCHA form — allows Google's script and scoring frame",
+    async (path) => {
+      const csp = await cspOf(path);
+      expect(csp).toMatch(/script-src [^;]*https:\/\/www\.gstatic\.com\/recaptcha\//);
+      expect(csp).toMatch(/frame-src [^;]*https:\/\/www\.google\.com\/recaptcha\//);
+    },
+  );
+
+  it.each(["/", "/news", "/sign-in/extra", "/keystone/settings/seo", "/keystone/forgot-password"])(
+    "%s allows no Google origin",
+    async (path) => {
+      expect(await cspOf(path)).not.toContain("google.com/recaptcha");
+    },
+  );
+});

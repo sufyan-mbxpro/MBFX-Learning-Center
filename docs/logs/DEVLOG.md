@@ -24130,6 +24130,7 @@ the editing control is gone.
 **Tests:** `@repo/contracts` `media.test` passes 20. `tsc` is clean in
 contracts and web, and ESLint is clean on the six changed files. Not yet
 exercised in a browser.
+
 ## 2026-09-22 — AI alt text withdrawn; smaller media field hints (Modules 18, 11)
 
 **Shipped:** The media detail dialog's "Describe it" AI button and the
@@ -24147,3 +24148,284 @@ field hints drop from 14px to 12px (`text-xs`).
 with the admin form and dialog conventions it passes 876. `tsc` clean in web,
 ESLint clean on the changed files, `governance:check` and
 `check:phantom-deps` OK. Not yet exercised in a browser.
+
+## 2026-09-22 — Google reCAPTCHA v3, configured in Settings → General (Modules 04, 09, 12, 14)
+
+**Shipped:** Google reCAPTCHA v3 (invisible, score-based) on the staff
+sign-in at `/keystone`, the learner sign-in and sign-up, and the `/support`
+contact form. It is switched on and off, and its keys entered, in a new
+**Settings → General → reCAPTCHA** tab (`CaptchaSettingsForm`, saved by
+`saveCaptchaSettingsAction` under `settings.update`).
+
+The configuration is one `CaptchaConfig` row (migration
+`20260922170000_captcha_config_adr156`): on/off, site key, a secret key
+sealed under the new env key `CAPTCHA_SECRET_KEY`, the minimum score
+(0.3/0.5/0.7/0.9) and when a check last passed. The service is `@repo/auth`'s
+`captcha.ts`, which adds a new `auth → secrets` edge:
+
+- **Switching on is proved.** The browser mints a `check` token with the
+  site key being saved, and the row is written only if Google passes it with
+  the secret being saved. Keys that fail are refused rather than locking
+  everyone out.
+- **The auth guard is our own plugin.** `recaptchaGuard()`'s `onRequest`
+  refuses `/sign-in/email` and `/sign-up/email` without a passing `auth`
+  token (400 `MISSING_RESPONSE` / 403 `VERIFICATION_FAILED`), reading the row
+  per request. Better Auth's `captcha` plugin is not used, because its keys
+  are fixed at startup.
+- **The support action** checks a `support` token through
+  `verifyCaptchaToken()`, after both rate limits.
+- **An unusable configuration is OFF, never "refuse all".** A lost sealing
+  key turns the check off and logs it. `CAPTCHA_DISABLED` is the
+  break-glass switch.
+
+Each guarded page reads `getCaptchaSiteKey()` (cached, tag
+`settings:captcha`, revalidated on save) and hands it to its form. The public
+pages stay static. Google's script loads only where such a form mounts. The
+CSP names Google's origins on those five pages only. A refusal shows a catalog
+message (`admin.signIn.captcha`, `auth.captchaFailed`,
+`support.contact.captcha`), never "check your password".
+
+Env: `CAPTCHA_SECRET_KEY` and `CAPTCHA_DISABLED` are in `.env.example` and
+`docs/ops/deploy.md`. The build-time `NEXT_PUBLIC_RECAPTCHA_SITE_KEY` from
+earlier today is gone.
+
+**Decisions:** ADR-156 (closes ADR-146's deferred CAPTCHA item). security.md
+#10 gains its fourth sealed secret, and architecture.md #8 gains
+`auth → secrets`. Password reset and the newsletter form are not guarded.
+
+**Tests:**
+
+- `@repo/auth`: new `captcha.test.ts` (runtime resolution, including
+  "unreadable seal ⇒ off", the break-glass, score/action verdicts, siteverify
+  and fail-closed, endpoint matching). New `captcha.integration.test.ts`
+  (Testcontainers MariaDB, 9 tests): a save needs a secret and a passing
+  `check` token and writes nothing otherwise; the secret is sealed and absent
+  from the view and the audit; a blank secret keeps the saved one; switching
+  off takes effect at once; `CAPTCHA_DISABLED`; and the guard on
+  `/sign-in/email` refuses no token (400) and a low score (403) and lets a
+  passing token through. Unit tests pass 77.
+- `apps/web`: `credentials.test` adds the header, the blocked-script path
+  and both refusal codes. `proxy.test` adds the five pages that allow Google
+  and five that do not. `support.test` adds guard 6, and `support-page.test`
+  covers the key-dependent `action`. The suite passes 2,888 of 2,889; the
+  one failure is `changes-50-fixes` "full-width bg-secondary band", which
+  concerns `footer.tsx`, another session's work in progress, untouched here.
+- `@repo/contracts` passes 499.
+- `tsc` is clean in auth, contracts and web, and ESLint is clean on the
+  changed files. `check:phantom-deps` is OK. The migration ran on a fresh
+  container, not yet on the local dev database.
+
+No real Google key has been exercised, and it has not been tried in a
+browser.
+
+## 2026-09-22 — Account page redesign; change email, birthday and address (ADR-155, Modules 04/10/12/17)
+
+**Shipped:** `/account` is redesigned. The masthead has a tinted band and
+status badges: email verified or not, two-step on or off, password or
+connected account, and member-since. It also has a **Profile strength** meter
+(`profileCompleteness()` in `@repo/contracts`), whose missing items link to the
+card that fills them. The body is four cards built on the new `AccountCard`,
+each with a tone stripe, an icon tile, and a title and description with a
+status slot: Profile, Email address, Address and Security.
+
+- **Change email:** Better Auth's `/change-email` is on. The verification link
+  goes to the NEW address and nothing changes until it is opened. The
+  `?emailChanged=1` landing says so. Changes are learners only, limited to 5
+  an hour per account (in `hooks.before`) and 5 an hour per IP. A completed
+  change writes `users.emailChange` with before and after, and sends the new
+  `auth.email_changed` template to the OLD address. The old address is read
+  from the verify token by `emailChangeFromToken` (pure, tested).
+- **Birthday:** `birthDate` is a `DATE` column, entered through a native date
+  control and validated between 1900 and today.
+- **Address:** lines 1 and 2, city, region, postal code, and an ISO country
+  (`COUNTRY_CODES`, with names from `Intl.DisplayNames`). It saves separately
+  through `updateAccountAddressAction` → `updateOwnAddress`, which writes an
+  audit row. `learnerProfileSchema` now extends the staff schema instead of
+  being it.
+- Migration `20260922160000_learner_birthday_address_adr155` adds seven
+  nullable `user` columns. They are not Better Auth `additionalFields`, so
+  they stay out of the session cookie.
+
+**Decisions:** ADR-155. (ADR-154 is reserved by the in-progress captcha work.)
+
+**Tests:** `@repo/contracts` passes 499 (account.test gains birthday, address,
+change-email and completeness cases). The `@repo/core`
+`account.integration` suite passes 16 on MariaDB, covering the birthday
+round-trip, the address write and its audit. `@repo/auth` passes 66 unit
+tests (`emailChangeFromToken`) and `auth.integration` passes 7. In
+`apps/web`, vitest passes 2,853 with 1 failure, the known stale
+footer-band assertion in `changes-50-fixes.test.ts`. `tsc` is clean in
+contracts, core, auth, db and web, and ESLint is clean on the changed files.
+`governance:check`, `check:phantom-deps`, `check:email-templates` and
+`check:catalog-completeness` all pass. The migration was applied locally.
+**Exercised live** against the dev server: sign-up, sign-in, `/change-email`
+200, then the verify link (minted with the local secret, because the LOG
+transport is not Mailpit), which redirected to `/account?emailChanged=1`.
+The row moved and was verified, the audit row was written, and the notice went
+to the old address as SENT. The page was screenshotted in light, dark and
+at 390px, with no horizontal overflow. Still owed: E2E for the forms, and the
+admin user dialog does not edit the new columns.
+
+## 2026-09-22 — Staff two-factor: enrolment, sign-in, enforcement, admin reset (ADR-157, Modules 04/09/10/14)
+
+**Shipped:** the last open item from the changes-49 review ("2FA not confirmed
+enforced").
+
+- **Enrolment:** `/keystone/profile` has a Two-factor authentication section
+  (`TwoFactorSection`). It follows the learner card's flow (password, then QR
+  or setup key, backup codes, then the first code) and uses the same Better
+  Auth endpoints, so the ADR-123 audit hooks apply. `QrCode` moved to
+  `app/_lib/qr-code.tsx` so both surfaces share it.
+- **Sign-in:** the staff form now shows a code step for a `twoFactor` result
+  instead of refusing it. **Backup codes work at sign-in for the first time on
+  either surface.** `verifyTwoFactorSignIn` sent every entry to `verify-totp`,
+  which refuses a backup code, so the ten codes shown at enrolment "in case
+  you lose your phone" could never be used. An `xxxxx-xxxxx` entry now goes
+  to `/two-factor/verify-backup-code`, and both code fields accept 12
+  characters.
+- **Enforcement:** new setting `security.requireStaffTwoFactor` (General →
+  Security). The dev seed has it off, and `seed-live/defaults.json` has it on,
+  so a deployed server enforces it after the next `db:seed` → `seed:live`.
+  `isStaffTwoFactorPending` (`@repo/auth`, reads a fresh row, and skips the
+  read while the setting is off) is checked in two places: the `(admin)`
+  layout renders `TwoFactorRequiredScreen` (enrolment plus sign-out, no shell)
+  instead of the portal, and `requirePermission`/`requireAnyPermission` throw
+  `TwoFactorRequiredError`, a `ForbiddenError` subclass. It is not checked in
+  `auth()`, because a missing session would hide the enrolment screen.
+- **Recovery:** the user record's two-factor tile is now a switch that only
+  turns off (`resetUserTwoFactor`, `users.update`, with a confirmation). It
+  deletes the factor, clears the flag, revokes sessions and writes
+  `users.twoFactorReset`. It refuses the actor's own account and any account
+  the actor does not outrank (strict `<` on the target's highest role;
+  super_admin excepted).
+
+**Decisions:** ADR-157. No migration and no new dependency.
+
+**Incidents in the shared tree (concurrent sessions):** another session's
+`git checkout -- packages/i18n/messages/en.json` reset the file to HEAD. That
+wiped this change's keys and **58 uncommitted ADR-155/156 keys** (`account.*`
+and the captcha strings), and reverted 3 changed values. They were restored
+from that session's own file-history snapshot (21:26), and the result was
+checked key by key against it. Separately, `packages/auth/src/index.ts` had
+lost ADR-155's `sendEmailChangedNotice` and `CHANGE_EMAIL_LIMIT` /
+`CHANGE_EMAIL_WINDOW_SECONDS`, which is why `@repo/auth` did not compile. They
+were restored verbatim from the ADR-155 session's transcript.
+
+**Tests:** `@repo/auth` unit passes 29 across the three files touched (the new
+`two-factor.test`). `@repo/rbac` passes 29 on MariaDB, including the new
+`TwoFactorRequiredError` case. `@repo/core` `users.integration` passes 18 on
+MariaDB (reset; outranked refusal with no write; super_admin; self-refusal).
+`@repo/contracts` passes 499. `@repo/db` unit passes 28. `apps/web` vitest
+passes 2,872 with 1 failure, the known footer-band assertion in
+`changes-50-fixes.test.ts`. That count includes `credentials.test` backup-code
+routing and the new `staff-two-factor.test` source guard. `tsc` is clean in
+contracts, db, rbac, core and web. In auth, the only errors are in
+`captcha.integration.test.ts`, which belongs to the in-progress captcha work
+and is untouched here. ESLint is clean on every changed file.
+`check:phantom-deps`, `check:permission-keys` and `check:catalog-completeness`
+pass. **Not yet exercised in a browser or against a real authenticator app.**
+Still owed: E2E for staff enrolment, the code step and the enforcement screen.
+
+## 2026-09-22 — Admin session revocation reached only MySQL, not Redis (Modules 04/10)
+
+**Bug:** resetting a super admin's password from the user record page threw
+Better Auth's `Failed to get session` on the next render. `@repo/core`
+revokes by `db.session.deleteMany`, but with `secondaryStorage` configured
+`findSession` reads Redis first. The session outlived its revocation, and the
+next refresh or ADR-105 slide tried to update a row that no longer existed.
+The same half-revocation sat behind deactivation (`setUserStatus`, and through
+it `adminUpdateUser`), offboarding, the two-factor reset and "sign out
+everywhere". Each of these left the target signed in for up to the session's
+7-day lifetime. That is a security defect as well as the visible crash.
+
+**Fix:** `revokeAllSessions(userId)` in `@repo/auth` goes through Better
+Auth's `internalAdapter.deleteUserSessions`, which purges the Redis copies and
+the `active-sessions-*` list even when the rows are already gone. Every admin
+action whose service deletes session rows now calls it afterwards. Core cannot
+import `@repo/auth`, so the row delete stays in core (inside
+`offboardEmployee`'s transaction). `offboardEmployee` now returns the linked
+user id so its action can finish the job. An admin who resets their OWN
+password is signed out, like every other holder of that account's sessions.
+
+**Decisions:** no ADR. This follows `slideStaffExpiry`'s changes-38 rule that
+session writes go through the adapter. No new package edge.
+
+**Tests:** new `auth.integration.test` regression. It first shows that a
+row-only delete leaves `getSession` returning the user, then that
+`revokeAllSessions` makes it `null`. The session-revocation block passes 2/2
+on MariaDB plus the local Redis. `tsc` is clean in auth, core and web, and
+ESLint is clean on the changed files. Not re-exercised in a browser.
+
+**Follow-up (same day):** resetting your OWN password now lands on the staff
+sign-in screen. The revocation ends the actor's session too, and the admin
+layout answers a session-less request with a 404 rather than a redirect
+(ADR-146), so without this the admin saw "Saved" and then a 404. The action
+reports `signedOut` — the server's comparison, not a client one against ids it
+was rendered with — and the dialog drops the dead cookies through
+`signOutSilently` (the proxy's 5-minute cookie cache would otherwise keep
+routing them inward) before a FULL load of `/keystone`.
+
+
+## 2026-09-22 — A mistyped /keystone address showed the PUBLIC 404 (Module 09)
+
+**Bug:** nothing under `(admin)/keystone` matched an address no route owned, so
+Next fell through to `global-not-found.tsx` — the public "coming soon" page,
+which by design bypasses every layout. A signed-in staff member who typed
+`/keystone/usres` was thrown out of the portal and offered Courses, Trading
+tools, News and Support, with no link back to the dashboard. The admin's own
+`(admin)/not-found.tsx` existed and was reachable only from a page that called
+`notFound()` itself (a bad record id), never from a bad address.
+
+**Fix:** `(admin)/keystone/[...notFound]/page.tsx` calls `notFound()`. The
+address now matches inside `(admin)`, so the layout's STAFF re-check still runs
+(security.md #3 is untouched — the catch-all adds no route a learner can read)
+and `(admin)/not-found.tsx` draws the page inside the admin shell.
+
+**The status is the other half, and it moved a boundary.** A response commits
+its status the moment a Suspense fallback renders, so `keystone/loading.tsx` —
+ONE boundary over the whole portal — turned every `notFound()` under it into a
+200 carrying 404 markup. Measured both ways first, against a throwaway route in
+`(admin-auth)` with the same shape: with the boundary 200, without it 404, and
+sync-vs-async in the page made no difference — the fallback is what commits,
+not the await. All 67 admin screens already declared their own pending state,
+so the portal-wide boundary was redundant for every one of them; it is deleted
+and its component moved to `_components/admin-loading.tsx`, re-exported by the
+six sections that had none (`ai`, `design-system`, `homepage`, `navigation`,
+`social`, `website`). The catch-all is deliberately left outside every
+boundary, so an unknown admin address answers a real 404.
+
+**Decisions:** no ADR. This is ADR-146's rule ("an address nothing answers gets
+a real 404 in the site's own design") applied to the surface it had missed, and
+ADR-151's `/keystone` prefix is unaffected — `/admin/*` is still the proxy's
+404 and still names no portal path. No new package edge, no permission key, no
+catalog key: the page is `notFound.title` / `notFound.description` and
+`admin.dashboard`, which `(admin)/not-found.tsx` already read.
+
+**Tests:** new `apps/web/app/admin-not-found.test.ts` (8) — the catch-all
+exists and throws, the 404 UI links back to the dashboard and renders no second
+`<main>`, there is no loading boundary at the portal root, in the catch-all's
+folder or above the not-found boundary, and every routed admin screen still
+declares a pending state of its own (the price of moving the boundary down,
+named by path rather than noticed in a browser). The catch-all is added to
+`e2e/public/learner-admin-probe.spec.ts` as a literal string — it has no probed
+ancestor to inherit from, and `admin-surface.test.ts` reads that list as TEXT,
+so a template literal would be a path the drift guard cannot see. `apps/web`
+vitest passes 2,919 with 1 failure, the known footer-band assertion in
+`changes-50-fixes.test.ts`. `tsc` and ESLint clean on every changed file.
+
+**Not exercised with a staff session.** The seeded credentials in `.env` no
+longer match the database, so the routing was verified anonymously (the three
+`(admin-auth)` screens still win over the catch-all; `/admin/*` and anonymous
+`/keystone/*` still get the proxy's 404) and the status mechanism was measured
+on the throwaway route. A browser pass as a signed-in staff member is still
+owed, as is E2E.
+
+**Found while verifying, NOT fixed:** a request that passes the proxy gate but
+fails the layout's STAFF re-check — a LEARNER holding a real session, or a
+demoted staff member — gets a blank 404. `(admin)/layout.tsx` throws
+`notFound()` before it returns its `<html>`, and Next serves
+`<html id="__next_error__">` with an empty body rather than
+`global-not-found.tsx`, whose own comment claims that case. Measured in dev
+only; a production build may differ. The learner probe asserts the final URL
+leaves `/keystone/`, which ADR-146 already made false when it replaced that
+redirect with a 404, so the probe would not have caught it either.

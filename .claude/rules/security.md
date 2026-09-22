@@ -79,11 +79,23 @@ Non-negotiable. A PR violating any numbered rule here does not merge.
     ordinary `admin` keys; the screen splits by permission rather than hiding
     whole.
 
+    **ADR-156: Google's reCAPTCHA secret key.** Stored in
+    `CaptchaConfig.secretKeyCipher`, sealed under `CAPTCHA_SECRET_KEY`,
+    write-only, with `loadCaptchaRuntime()` (`@repo/auth`) its only reader and
+    no secret property on `CaptchaSettingsView`. The owner asked for it to be
+    entered in Settings → General rather than the environment. Gated on
+    `settings.update`, the key every other General tab uses: the key can only
+    ask Google whether a token passed, and it captures and delivers nothing.
+    The harm it adds is refusing every sign-in with keys that do not work,
+    which the service prevents by refusing to switch the check on until a
+    browser token has passed with the keys being saved. An unreadable seal
+    turns the check OFF, not "refuse all".
+
     Nothing else may follow this path without its own ADR, which must state
     why the secret cannot live in env, name its single reader, justify its
     gate by blast radius (ADR-087 #5), and — since ADR-098 — say why it is
-    not satisfied by one of the three seals that already exist. Three is
-    where a pattern starts looking like a default.
+    not satisfied by one of the seals that already exist. There are four now:
+    past three, a pattern starts looking like a default.
 
 11. Sessions are database-backed (revocable). httpOnly cookies on web; tokens
     never in localStorage. Argon2id for password hashing.

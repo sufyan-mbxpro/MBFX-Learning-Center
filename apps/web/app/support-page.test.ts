@@ -136,9 +136,23 @@ describe("the contact form accepts submissions", () => {
     expect(source).not.toMatch(/\bdisabled\b/);
   });
 
-  it("submits through a form action, so it works before hydration", () => {
-    expect(source).toContain("action={formAction}");
+  // ADR-156: with reCAPTCHA off (no site key from Settings), the form still
+  // posts the action directly and works before hydration. With a key it has to
+  // mint a token first, which needs JavaScript.
+  it("submits through a form action, so it works before hydration when reCAPTCHA is off", () => {
+    expect(source).toContain("action={captchaSiteKey ? submitWithCaptcha : formAction}");
+    expect(read(PAGE)).toContain("captchaSiteKey={captchaSiteKey}");
     expect(source).toContain("useActionState");
+  });
+
+  it("adds the reCAPTCHA token for the `support` action before the server action sees it", () => {
+    expect(source).toContain("getCaptchaToken(CAPTCHA_ACTIONS.support)");
+    expect(source).toContain("formData.set(CAPTCHA_FIELD");
+    const action = read(ACTION);
+    expect(action).toContain("verifyCaptchaToken(");
+    expect(action).toContain("action: CAPTCHA_ACTIONS.support");
+    // After both limits, so a flood costs no request to Google.
+    expect(action.indexOf("verifyCaptchaToken(")).toBeGreaterThan(action.indexOf("byEmail.ok"));
   });
 
   it("posts the locale as a hidden input rather than a closure value", () => {

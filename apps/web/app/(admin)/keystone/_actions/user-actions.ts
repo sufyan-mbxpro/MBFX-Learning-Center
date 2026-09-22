@@ -5,7 +5,7 @@
 // audit + invalidation. The level guards (strict <, last-super_admin) are
 // INSIDE the services, keyed to the actor's real Subject.
 import { z } from "zod";
-import { impersonateLearner, setUserPassword } from "@repo/auth";
+import { impersonateLearner, revokeAllSessions, setUserPassword } from "@repo/auth";
 import {
   adminResetPasswordSchema,
   adminUpdateUserSchema,
@@ -29,6 +29,7 @@ import {
   recordPasswordReset,
   removePermissionOverride,
   removeRole,
+  resetUserTwoFactor,
   revokeUserSessions,
   setEmployeeStatus,
   setPermissionOverride,
@@ -44,12 +45,20 @@ const id = z.string().min(1);
 // Literal unions rather than the @repo/db enums — apps stay off the db
 // package (architecture.md #2); the values are the schema's, verified by
 // the service's typed signature.
+//
+// Every service below that deletes session ROWS is followed by
+// `revokeAllSessions`, which ends the Redis copies Better Auth actually reads
+// first. Without it a "revoked" session stayed valid, and the next refresh of
+// it threw "Failed to get session" (core cannot import @repo/auth).
 const statusSchema = z.enum(["ACTIVE", "INACTIVE", "SUSPENDED", "PENDING_VERIFICATION"]);
 const effectSchema = z.enum(["ALLOW", "DENY"]);
 
 export async function setUserStatusAction(userId: string, status: string): Promise<void> {
   const subject = await requirePermission("users.update");
-  await setUserStatus(subject, id.parse(userId), statusSchema.parse(status));
+  const target = id.parse(userId);
+  const next = statusSchema.parse(status);
+  await setUserStatus(subject, target, next);
+  if (next !== "ACTIVE") await revokeAllSessions(target);
 }
 
 export async function assignRoleAction(userId: string, roleKey: string): Promise<void> {
@@ -117,18 +126,28 @@ export async function cloneRoleAction(
 
 export async function offboardEmployeeAction(employeeId: string): Promise<void> {
   const subject = await requirePermission("employees.update");
-  await offboardEmployee(subject.id, id.parse(employeeId));
+  const userId = await offboardEmployee(subject.id, id.parse(employeeId));
+  if (userId) await revokeAllSessions(userId);
 }
 
 // ─── changes-01 additions ────────────────────────────────────
 
-export async function resetUserPasswordAction(input: unknown): Promise<void> {
+/**
+ * `signedOut` is true when the actor reset their OWN password: the revocation
+ * takes their current session with it, so the caller has to leave for the
+ * staff sign-in screen rather than soft-navigate into a portal it can no
+ * longer read. The answer is the SERVER's — a client comparing ids would be
+ * comparing the ones it was rendered with.
+ */
+export async function resetUserPasswordAction(input: unknown): Promise<{ signedOut: boolean }> {
   const subject = await requirePermission("users.password.reset");
   const parsed = adminResetPasswordSchema.parse(input);
   // Credential replacement lives in @repo/auth (same Argon2id path sign-in
   // verifies against); core records the event, revokes sessions, notifies.
   await setUserPassword(parsed.userId, parsed.newPassword);
   await recordPasswordReset(subject, parsed.userId);
+  await revokeAllSessions(parsed.userId);
+  return { signedOut: subject.id === parsed.userId };
 }
 
 export async function createRoleAction(input: unknown): Promise<void> {
@@ -174,19 +193,24 @@ export type UpdateUserDetailsResult =
 
 export async function updateUserDetailsAction(input: unknown): Promise<UpdateUserDetailsResult> {
   const subject = await requirePermission("users.update");
+  const parsed = adminUpdateUserSchema.parse(input);
   try {
-    await adminUpdateUser(subject, adminUpdateUserSchema.parse(input));
+    await adminUpdateUser(subject, parsed);
   } catch (error) {
     if (error instanceof EmailInUseError) return { ok: false, error: "emailInUse" };
     if (error instanceof EmailChangeForbiddenError) return { ok: false, error: "emailForbidden" };
     throw error;
   }
+  if (parsed.status !== "ACTIVE") await revokeAllSessions(parsed.userId);
   return { ok: true };
 }
 
 export async function revokeUserSessionsAction(userId: string): Promise<number> {
   const subject = await requirePermission("users.update");
-  return revokeUserSessions(subject, id.parse(userId));
+  const target = id.parse(userId);
+  const count = await revokeUserSessions(subject, target);
+  await revokeAllSessions(target);
+  return count;
 }
 
 /**
@@ -200,6 +224,17 @@ export async function impersonateUserAction(userId: string): Promise<{ ok: boole
   const target = id.parse(userId);
   await recordImpersonationStart(subject, target);
   return impersonateLearner(target);
+}
+
+/**
+ * The record page's two-factor switch, OFF only (ADR-157 §5). The level
+ * guard and the self-refusal are inside the service, keyed to the real Subject.
+ */
+export async function resetUserTwoFactorAction(userId: string): Promise<void> {
+  const subject = await requirePermission("users.update");
+  const target = id.parse(userId);
+  await resetUserTwoFactor(subject, target);
+  await revokeAllSessions(target);
 }
 
 export async function setEmailVerifiedAction(userId: string, verified: boolean): Promise<void> {
