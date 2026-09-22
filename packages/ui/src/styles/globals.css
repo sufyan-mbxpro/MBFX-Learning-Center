@@ -314,6 +314,11 @@
        glossary term page and `Container size="narrow"` the same width. */
     --grid-prose-aside: minmax(0, var(--container-narrow)) 20rem;
     --grid-2-1: minmax(0, 2fr) minmax(0, 1fr);
+    /* PageHero height floors from lg (changes-49): the News masthead is the
+       `medium` reference and a tool page the `compact` one, so every banner
+       of a density renders at one height however much copy it carries. */
+    --hero-min-medium: 22.25rem;
+    --hero-min-compact: 15.25rem;
     /* A diverging-bar row: the label, then the two-sided bar (changes-44 #4). */
     --grid-diverging-row: minmax(0, 14rem) minmax(0, 1fr);
     --grid-3-2: minmax(0, 3fr) minmax(0, 2fr);
@@ -359,6 +364,8 @@
     /* A fourth, on the same 1.25rem track gaps: three gaps, not four — the
        track has no gap outside its last slide (changes-35, ADR-116 §4). */
     --width-slide-4: calc((100% - 3.75rem) / 4);
+    /* Five across, for a strip of small cover cards (changes-51). */
+    --width-slide-5: calc((100% - 5rem) / 5);
 
     /* Viewport fractions: a centred error/empty page, and a scroll region
        inside a dialog or panel. */
@@ -669,6 +676,16 @@
     }
     [data-reveal-js] .reveal-scale:not([data-reveal-timeline]) {
       transform: scale(0.96);
+    }
+    /* The alternating pair (changes-51): twice the usual travel, from below
+       and from above, with a zoom, so a row of cards meets in the middle.
+       Declared before `.is-visible` — equal specificity, so source order is
+       what lets the arrived state win. */
+    [data-reveal-js] .reveal-rise:not([data-reveal-timeline]) {
+      transform: translateY(calc(2 * var(--reveal-distance))) scale(0.92);
+    }
+    [data-reveal-js] .reveal-drop:not([data-reveal-timeline]) {
+      transform: translateY(calc(-2 * var(--reveal-distance))) scale(0.92);
     }
     [data-reveal-js] .reveal.is-visible {
       opacity: 1;

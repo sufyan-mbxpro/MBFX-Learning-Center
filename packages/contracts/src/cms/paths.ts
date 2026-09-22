@@ -61,6 +61,11 @@ export const RESERVED_PATHS = [
   // the route, per the ADR-047 precedent.
   "account",
   "admin",
+  // The staff credential screens (changes-49, ADR-146). The proxy serves
+  // them at this address; a CMS page here would shadow the only way in.
+  "keystone",
+  // Where the proxy sends an address nothing answers (changes-49, ADR-146).
+  "not-found-page",
   "api",
   "uploads",
   "_next",
@@ -106,6 +111,19 @@ export function firstPathSegment(path: string): string {
 export function isReservedFirstSegment(segment: string): boolean {
   return segment !== "" && RESERVED_SET.has(segment);
 }
+
+/**
+ * The proxy's question to `GET /api/public-path` (changes-49): "does anything
+ * answer at this public address?" — asked only for a first segment no coded
+ * route owns, so the catch-all's not-found can be a real 404 status rather
+ * than a 200 streamed before `notFound()` ran. Bounded because it is a URL a
+ * stranger chose.
+ */
+export const publicPathQuerySchema = z.object({
+  locale: z.string().regex(/^[a-z]{2}(?:-[A-Za-z]{2})?$/),
+  path: z.string().startsWith("/").max(1024),
+});
+export type PublicPathQuery = z.infer<typeof publicPathQuerySchema>;
 
 // ─── Slugs ───────────────────────────────────────────────────
 

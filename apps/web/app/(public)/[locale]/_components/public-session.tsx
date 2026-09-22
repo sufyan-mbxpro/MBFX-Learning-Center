@@ -26,7 +26,7 @@
 //
 // ─── A STAFF session reads as anonymous ───────────────────────────────────
 //
-// Staff sign in at `/admin/sign-in` and belong to the admin surface (ADR-052).
+// Staff sign in at `/keystone` and belong to the admin surface (ADR-052).
 // Putting "System Administrator" in the public header both advertises the
 // portal the public site deliberately hides and hands a visitor an identity
 // chip with nowhere to go. Display-only — the session is untouched, and

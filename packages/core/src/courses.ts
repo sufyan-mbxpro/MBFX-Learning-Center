@@ -12,10 +12,15 @@ import { revalidateTag } from "next/cache";
 import { type ContentStatus, TranslationStatus, db, type Difficulty, type Prisma } from "@repo/db";
 import type { Subject } from "@repo/rbac";
 import { isLearnTrack, isReservedCourseSlug } from "@repo/contracts";
-import type { CourseInput, CourseMetaInput, CreateCourseInput } from "@repo/contracts";
+import type {
+  CourseFaqItem,
+  CourseInput,
+  CourseMetaInput,
+  CreateCourseInput,
+} from "@repo/contracts";
 import { syncReferences } from "./cms/references.ts";
 import { COURSE, RECOMMENDED, loadRelationTargets, replaceRelations } from "./content-relations.ts";
-import { publicLessonWhere } from "./public-courses.ts";
+import { publicLessonWhere, readCourseFaq } from "./public-courses.ts";
 import {
   CONTENT_TRANSITIONS,
   contentFlagsData,
@@ -302,6 +307,9 @@ export async function saveCourse(actor: Subject, input: CourseInput): Promise<vo
     seoTitle: input.translation.seoTitle ?? null,
     seoDescription: input.translation.seoDescription ?? null,
     seoFocusKeyword: input.translation.seoFocusKeyword ?? null,
+    // changes-49: `Json?`, where `undefined` means "leave the column alone"
+    // and an empty array is "the author removed every question".
+    ...(input.translation.faq === undefined ? {} : { faq: input.translation.faq }),
     // changes-29 B3: MACHINE_TRANSLATED only while the AI text is untouched;
     // any other save, a human's review included, writes TRANSLATED.
     translationStatus: input.translation.machineTranslated
@@ -510,6 +518,8 @@ export interface CourseAdminTranslation {
   seoTitle: string | null;
   seoDescription: string | null;
   seoFocusKeyword: string | null;
+  /** changes-49 — never null here: a course with none reads as `[]`. */
+  faq: CourseFaqItem[];
   translationStatus: TranslationStatus;
 }
 
@@ -593,6 +603,7 @@ export async function loadCourseAdminDetail(courseId: string): Promise<CourseAdm
       seoTitle: t.seoTitle,
       seoDescription: t.seoDescription,
       seoFocusKeyword: t.seoFocusKeyword,
+      faq: readCourseFaq(t.faq),
       translationStatus: t.translationStatus,
     })),
     recommendations,

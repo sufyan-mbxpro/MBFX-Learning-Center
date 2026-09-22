@@ -37,10 +37,20 @@ export function adminPortalBase(adminUrl: string): string {
   return trimmed.endsWith("/admin") ? trimmed : `${trimmed}/admin`;
 }
 
+/**
+ * Where the staff credential screens are SERVED (changes-49, ADR-146):
+ * `/keystone`, on the admin portal's origin. The files still live under
+ * `/admin/*`, but the proxy answers those addresses with a 404 — only the
+ * rewrite reaches them — so a link has to name the public address.
+ */
+export function staffAuthBase(adminUrl: string): string {
+  return `${adminPortalBase(adminUrl).replace(/\/admin$/, "")}/keystone`;
+}
+
 export function resetPasswordPath(user: ResetLinkUser, token: string, origins: ResetLinkOrigins) {
   const query = `?token=${encodeURIComponent(token)}`;
   if (user.userType === "STAFF") {
-    return `${adminPortalBase(origins.admin)}/reset-password${query}`;
+    return `${staffAuthBase(origins.admin)}/reset-password${query}`;
   }
   const defaultLocale = origins.defaultLocale ?? "en";
   // Every locale but the default carries its segment, so the link lands in

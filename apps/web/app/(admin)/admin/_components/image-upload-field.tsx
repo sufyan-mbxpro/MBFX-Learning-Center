@@ -9,7 +9,7 @@
 // to persist it — a single Save per section.
 import * as React from "react";
 import { useTranslations } from "next-intl";
-import { ImageIcon, LibraryBig, Trash2, Upload } from "lucide-react";
+import { ImageIcon, ImagePlus, Trash2, Upload } from "lucide-react";
 import { Button } from "@repo/ui/components/button";
 import { ConfirmDialog } from "@repo/ui/components/confirm-dialog";
 import {
@@ -94,9 +94,11 @@ export function ImageUploadField({
   description?: string;
   previewClassName?: string;
   disabled?: boolean;
-  /** ADR-049: "Choose from library" beside the upload button. On by
-   * default — it exists so a surface that genuinely must upload fresh
-   * bytes can opt out, not as a per-screen rollout switch. */
+  /** ADR-049: the media library. On by default — it exists so a surface
+   * that genuinely must upload fresh bytes can opt out, not as a per-screen
+   * rollout switch. With it on, the field has ONE button (changes-49) that
+   * opens the picker, where "Upload from computer" also lives; with it off,
+   * that button opens the file dialog directly. */
   allowLibrary?: boolean;
   /** Which shelf an upload from this field lands on (ADR-066 §4). Required: an optional default would quietly file half the library in the wrong place. */
   category: MediaCategory;
@@ -174,31 +176,31 @@ export function ImageUploadField({
         </div>
         <div className="flex min-w-0 flex-col gap-1.5">
           <div className="flex flex-wrap items-center gap-1.5">
+            {/* ONE button (changes-49, the owner's "single media choose
+                button"): it opens the picker, which offers the library AND
+                "Upload from computer". It used to sit beside a separate
+                Upload button — two doors to the same room. It is still this
+                field's control (ADR-077). */}
             <UploadButton
               type="button"
               variant="outline"
               size="sm"
-              onClick={pick}
+              onClick={allowLibrary ? () => setPickerOpen(true) : pick}
               disabled={disabled || uploading}
             >
-              <Upload data-icon="inline-start" aria-hidden />
-              {preview ? labels.replace : labels.upload}
+              {allowLibrary ? (
+                <ImagePlus data-icon="inline-start" aria-hidden />
+              ) : (
+                <Upload data-icon="inline-start" aria-hidden />
+              )}
+              {allowLibrary
+                ? preview
+                  ? t("mediaChangeImage")
+                  : t("mediaChooseImage")
+                : preview
+                  ? labels.replace
+                  : labels.upload}
             </UploadButton>
-            {allowLibrary && (
-              // ADR-049: the reuse half of ADR-034's "never uploaded again"
-              // criterion. Every ImageUploadField call site gets it without
-              // a call-site change, which is why it lives in the field.
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setPickerOpen(true)}
-                disabled={disabled || uploading}
-              >
-                <LibraryBig data-icon="inline-start" aria-hidden />
-                {t("mediaChooseFromLibrary")}
-              </Button>
-            )}
             {preview && (
               // changes-08 #6: clearing an image is destructive — it asks
               // first, like every other remove in the admin. The write

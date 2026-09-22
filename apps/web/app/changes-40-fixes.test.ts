@@ -304,7 +304,13 @@ describe("the Tools mega panel is balanced", () => {
     const start = megaMenu.indexOf(`key: "${key}"`);
     expect(start, `column ${key} not found`).toBeGreaterThan(-1);
     const end = megaMenu.indexOf("},", megaMenu.indexOf("routeKeys:", start));
-    return [...megaMenu.slice(start, end).matchAll(/"([\w-]+)"/g)]
+    // Comment lines dropped first: a quoted word in prose is not a row.
+    const code = megaMenu
+      .slice(start, end)
+      .split(/\r?\n/)
+      .filter((line) => !line.trim().startsWith("//"))
+      .join(" ");
+    return [...code.matchAll(/"([\w-]+)"/g)]
       .map((m) => m[1]!)
       .filter((value) => value !== key && !value.startsWith("mega."));
   }
@@ -312,6 +318,10 @@ describe("the Tools mega panel is balanced", () => {
   it("no column is more than two rows longer than another", () => {
     const lengths = ["position", "timing", "rates"].map((key) => column(key).length);
     expect(Math.max(...lengths) - Math.min(...lengths)).toBeLessThanOrEqual(2);
+  });
+
+  it("holds exactly five rows a column (changes-49)", () => {
+    expect(["position", "timing", "rates"].map((key) => column(key).length)).toEqual([5, 5, 5]);
   });
 
   it("still lists every destination it listed before, and one more", () => {

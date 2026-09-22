@@ -14,12 +14,12 @@ import { formatDate } from "@repo/utils";
 // STAFF gate already ran.
 export default async function ProfilePage() {
   const session = await auth();
-  if (!session?.user?.id) redirect("/admin/sign-in");
+  if (!session?.user?.id) redirect("/keystone");
   const [t, profile] = await Promise.all([
     getTranslations("admin"),
     loadOwnProfile(session.user.id),
   ]);
-  if (!profile) redirect("/admin/sign-in");
+  if (!profile) redirect("/keystone");
 
   const initials = profile.name
     .split(/\s+/)

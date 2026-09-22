@@ -14,7 +14,7 @@ import { loadEditorAi } from "../../../_lib/editor-ai.ts";
 import { learnLabelMaps } from "../../_lib/learn-labels.ts";
 import { LessonEditor } from "./lesson-editor.tsx";
 import type { LessonEditorLabels } from "./editor-types.ts";
-import { formatDateTime } from "@repo/utils";
+import { formatDateTime, siteOrigin } from "@repo/utils";
 
 // Lesson editor (changes-11 PR 3.4). Read gate here; every write re-gates in
 // its own action (security.md #1).
@@ -268,7 +268,7 @@ export default async function LessonEditPage({ params }: PageProps<"/admin/learn
         }))}
         locales={[...routing.locales]}
         defaultLocale={routing.defaultLocale}
-        siteUrl={process.env.NEXT_PUBLIC_SITE_URL ?? ""}
+        siteUrl={siteOrigin()}
         canUpdate={can(subject, "lessons.update")}
         canPublish={can(subject, "lessons.publish")}
         canCreate={can(subject, "lessons.create")}

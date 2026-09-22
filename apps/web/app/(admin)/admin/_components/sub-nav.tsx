@@ -13,6 +13,12 @@ export interface SubNavItem {
   label: string;
   /** Match exactly instead of by prefix (index entries). */
   exact?: boolean;
+  /**
+   * The prefix that makes this item active, when it is not `href` itself — a
+   * section whose entry lands on one of its tabs (changes-51: Email opens on
+   * Sender for an admin and on the log for `support`).
+   */
+  match?: string;
 }
 
 export function SubNav({
@@ -30,13 +36,14 @@ export function SubNav({
 
   // Longest matching prefix wins, so "/admin/articles" isn't also active on
   // "/admin/articles/categories"; `exact` entries only match their own URL.
+  const matchOf = (item: SubNavItem) => item.match ?? item.href;
   const activeHref = items
     .filter((item) =>
       item.exact
         ? pathname === item.href
-        : pathname === item.href || pathname.startsWith(`${item.href}/`),
+        : pathname === matchOf(item) || pathname.startsWith(`${matchOf(item)}/`),
     )
-    .toSorted((a, b) => b.href.length - a.href.length)[0]?.href;
+    .toSorted((a, b) => matchOf(b).length - matchOf(a).length)[0]?.href;
 
   return (
     <nav

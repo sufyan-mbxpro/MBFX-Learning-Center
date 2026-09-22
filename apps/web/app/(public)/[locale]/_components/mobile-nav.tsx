@@ -28,7 +28,6 @@ import {
   LineChart,
   Menu,
   Newspaper,
-  X,
   type LucideIcon,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
@@ -227,7 +226,12 @@ export function MobileNav({
             corner close is replaced by one in the brand row, where the
             reference has it and where it cannot sit on top of a row. */}
         <SheetContent side="start" showCloseButton={false} className="w-full gap-0 p-0 sm:max-w-sm">
-          <SheetHeader className="sticky top-0 z-10 flex-row items-center justify-between gap-4 border-b border-border bg-background/95 px-5 py-4 backdrop-blur-md">
+          {/* The logo is CENTRED (changes-49), matching the bar behind the
+              sheet. The close button is the hamburger glyph pinned to the
+              inline START — the exact spot the trigger occupies in the bar, so
+              the same tap opens and closes the menu (owner, changes-51). It is
+              absolutely placed so it does not push the logo off-centre. */}
+          <SheetHeader className="sticky top-0 z-10 flex-row items-center justify-center gap-4 border-b border-border bg-background/95 px-16 py-4 backdrop-blur-md">
             {/* The title names the dialog for assistive tech; on screen the
                 logo already says whose menu this is. */}
             <SheetTitle className="sr-only">{menuLabel}</SheetTitle>
@@ -236,8 +240,13 @@ export function MobileNav({
             </Link>
             <SheetClose
               render={
-                <Button variant="outline" size="icon" aria-label={t("closeMenu")}>
-                  <X aria-hidden className="size-5" />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={t("closeMenu")}
+                  className="absolute start-5 top-1/2 -translate-y-1/2"
+                >
+                  <Menu aria-hidden className="size-5" />
                 </Button>
               }
             />

@@ -32,16 +32,23 @@ type ThemeContextValue = {
 
 const ThemeContext = React.createContext<ThemeContextValue | null>(null);
 
-function readStoredThemeMode(): ThemeMode {
+function readStoredThemeMode(storageKey: string): ThemeMode {
   try {
-    const stored = localStorage.getItem(THEME_STORAGE_KEY);
+    const stored = localStorage.getItem(storageKey);
     return isThemeMode(stored) ? stored : DEFAULT_THEME_MODE;
   } catch {
     return DEFAULT_THEME_MODE;
   }
 }
 
-function ThemeProvider({ children }: { children: React.ReactNode }) {
+function ThemeProvider({
+  children,
+  storageKey = THEME_STORAGE_KEY,
+}: {
+  children: React.ReactNode;
+  /** Which stored choice this surface reads (changes-49): the admin has its own. */
+  storageKey?: string;
+}) {
   // Same initial value on the server and on the client: the stored mode is read
   // in an effect, never during render, so hydration cannot diverge. Nothing
   // flashes, because <ThemeScript> already stamped the real mode on <html>
@@ -50,8 +57,8 @@ function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [systemTheme, setSystemTheme] = React.useState<ResolvedThemeMode>("light");
 
   React.useEffect(() => {
-    setThemeState(readStoredThemeMode());
-  }, []);
+    setThemeState(readStoredThemeMode(storageKey));
+  }, [storageKey]);
 
   React.useEffect(() => {
     const query = window.matchMedia(PREFERS_DARK_QUERY);
@@ -64,12 +71,12 @@ function ThemeProvider({ children }: { children: React.ReactNode }) {
   // Another tab of the same site changed the mode.
   React.useEffect(() => {
     const onStorage = (event: StorageEvent) => {
-      if (event.key !== THEME_STORAGE_KEY) return;
+      if (event.key !== storageKey) return;
       setThemeState(isThemeMode(event.newValue) ? event.newValue : DEFAULT_THEME_MODE);
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
-  }, []);
+  }, [storageKey]);
 
   const resolvedTheme: ResolvedThemeMode = theme === "system" ? systemTheme : theme;
 
@@ -82,14 +89,17 @@ function ThemeProvider({ children }: { children: React.ReactNode }) {
     root.style.colorScheme = resolvedTheme;
   }, [resolvedTheme]);
 
-  const setTheme = React.useCallback((mode: ThemeMode) => {
-    setThemeState(mode);
-    try {
-      localStorage.setItem(THEME_STORAGE_KEY, mode);
-    } catch {
-      // Private mode / storage disabled: the choice holds for this page only.
-    }
-  }, []);
+  const setTheme = React.useCallback(
+    (mode: ThemeMode) => {
+      setThemeState(mode);
+      try {
+        localStorage.setItem(storageKey, mode);
+      } catch {
+        // Private mode / storage disabled: the choice holds for this page only.
+      }
+    },
+    [storageKey],
+  );
 
   const value = React.useMemo<ThemeContextValue>(
     () => ({ theme, resolvedTheme, systemTheme, setTheme }),

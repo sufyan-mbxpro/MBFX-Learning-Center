@@ -106,7 +106,7 @@ packages/ai/src/
 
 packages/contracts/src/ai.ts       # AI_FEATURES + AI_ASSISTANT_ACTIONS + payload schemas
 packages/core/src/ai-admin.ts      # the ADMIN's door: reads, writes, audit, notifications
-apps/web/app/(admin)/admin/ai/     # usage (the landing screen) | features | limits | providers
+apps/web/app/(admin)/admin/settings/ai/  # Settings → AI tabs (changes-51, ADR-150): connection | usage | features | limits | providers
 apps/web/app/(admin)/admin/api/ai/run/   # the ONE generation endpoint (streams or JSON)
 apps/web/app/api/cron/housekeeping/      # gains the 90-day AiUsage purge
 ```

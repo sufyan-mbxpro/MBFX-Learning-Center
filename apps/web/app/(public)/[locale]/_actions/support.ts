@@ -89,7 +89,11 @@ export async function sendSupportRequestAction(
   // 1. A destination. Checked FIRST so that an unconfigured install answers
   //    the same way whether or not the caller got past anything else — there
   //    is nothing to rate-limit if there is nowhere to send.
-  const to = await getSetting("site.supportEmail");
+  //    changes-49 (owner): the form delivers to Settings → General → Contact
+  //    email, the inbox staff actually read; the Support email stays the
+  //    address the page PRINTS. An install with no contact address recorded
+  //    still delivers, to the printed one, rather than losing the message.
+  const to = (await getSetting("site.contactEmail")) || (await getSetting("site.supportEmail"));
   if (!to) return { status: "failed", values: echo(formData) };
 
   // 2. The honeypot, before anything is parsed or counted. A bot that fills

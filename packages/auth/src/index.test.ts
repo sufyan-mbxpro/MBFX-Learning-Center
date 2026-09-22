@@ -5,6 +5,7 @@ import {
   auth,
   clampStaffRefresh,
   nextStaffExpiry,
+  sessionTimeoutSettingKey,
   staffSlideThresholdMs,
 } from "./index.ts";
 
@@ -31,6 +32,21 @@ describe("@repo/auth", () => {
 
   it("resolves the reset-password token lifetime to 30 minutes, not Better Auth's 1-hour default (plan.md)", () => {
     expect(authInstance.options.emailAndPassword?.resetPasswordTokenExpiresIn).toBe(30 * 60);
+  });
+
+  // ── changes-49: one idle timeout per user type ──────────────
+  it("picks the idle-timeout setting by userType, never by role", () => {
+    expect(sessionTimeoutSettingKey("STAFF")).toBe("security.adminSessionTimeout");
+    expect(sessionTimeoutSettingKey("LEARNER")).toBe("security.learnerSessionTimeout");
+    expect(sessionTimeoutSettingKey(undefined)).toBeNull();
+    expect(sessionTimeoutSettingKey("admin")).toBeNull();
+  });
+
+  it("brings rate limits to sign-in and sign-up, and trusts the header nginx sets", () => {
+    const rules = authInstance.options.rateLimit?.customRules ?? {};
+    expect(rules["/sign-in/email"]).toEqual({ window: 300, max: 10 });
+    expect(rules["/sign-up/email"]).toEqual({ window: 3600, max: 5 });
+    expect(authInstance.options.advanced?.ipAddress?.ipAddressHeaders?.[0]).toBe("x-real-ip");
   });
 
   // ── ADR-105: the staff idle timeout ─────────────────────────

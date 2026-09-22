@@ -64,6 +64,7 @@ import { AiSeoButton } from "../../../_components/ai-seo-dialog.tsx";
 import { AdminCombobox } from "../../../_components/combobox.tsx";
 import { ContentStatusPanel } from "../../../_components/editor/content-status-panel.tsx";
 import { EditorSection, Field } from "../../../_components/editor/editor-section.tsx";
+import { FaqPanel } from "../../../_components/editor/faq-panel.tsx";
 import {
   ContentFlagsSection,
   type ContentFlags,
@@ -132,6 +133,7 @@ function blankTranslation(locale: string): CourseTranslationDraft {
     seoTitle: "",
     seoDescription: "",
     seoFocusKeyword: "",
+    faq: [],
     translationStatus: "DRAFT",
   };
 }
@@ -282,6 +284,8 @@ export function CourseEditor({
       seoTitle: draft.seoTitle.trim() === "" ? null : draft.seoTitle.trim(),
       seoDescription: draft.seoDescription.trim() === "" ? null : draft.seoDescription.trim(),
       seoFocusKeyword: draft.seoFocusKeyword.trim() === "" ? null : draft.seoFocusKeyword.trim(),
+      // Always sent, so removing the last question saves as `[]` (changes-49).
+      faq: draft.faq,
       // changes-29 B3: sent only while the words are untouched AI output.
       ...(draft.machineTranslated ? { machineTranslated: true } : {}),
     },
@@ -413,386 +417,409 @@ export function CourseEditor({
             <TabsTrigger value="details">{labels.tabDetails}</TabsTrigger>
             <TabsTrigger value="curriculum">{labels.tabCurriculum}</TabsTrigger>
             <TabsTrigger value="recommendations">{labels.tabRecommendations}</TabsTrigger>
+            <TabsTrigger value="faq">{labels.tabFaq}</TabsTrigger>
             <TabsTrigger value="seo">{labels.tabSeo}</TabsTrigger>
           </TabsList>
           <div className="flex flex-wrap items-center gap-2">{stateCluster}</div>
         </div>
 
-        <TabsContent value="details">
-          <div className="grid grid-cols-1 min-w-0 gap-4 lg:grid-cols-(--grid-2-1)">
-            <div className="flex min-w-0 flex-col gap-4">
-              <EditorSection
-                title={labels.detailsSection}
-                actions={
-                  aiFill ? (
-                    <AiFillButton
-                      withOptions
-                      config={aiFill}
-                      locale={locale}
-                      current={aiCurrent}
-                      fieldLabels={{
-                        title: labels.titleLabel,
-                        summary: labels.summaryLabel,
-                        description: labels.descriptionLabel,
-                        seoTitle: labels.seoTitleLabel,
-                        seoDescription: labels.seoDescriptionLabel,
-                        seoFocusKeyword: labels.focusKeywordsLabel,
-                      }}
-                      onApply={applyFill}
+        {/* changes-50 (image-3): the settings rail — status, display, settings,
+            flags, info — stays beside EVERY tab rather than only Details, so
+            publishing and the course's settings are never a tab away. Each
+            tab fills the main column. */}
+        <div className="grid grid-cols-1 min-w-0 gap-4 lg:grid-cols-(--grid-2-1)">
+          <div className="flex min-w-0 flex-col">
+            <TabsContent value="details">
+              <div className="flex min-w-0 flex-col gap-4">
+                <EditorSection
+                  title={labels.detailsSection}
+                  actions={
+                    aiFill ? (
+                      <AiFillButton
+                        withOptions
+                        config={aiFill}
+                        locale={locale}
+                        current={aiCurrent}
+                        fieldLabels={{
+                          title: labels.titleLabel,
+                          summary: labels.summaryLabel,
+                          description: labels.descriptionLabel,
+                          seoTitle: labels.seoTitleLabel,
+                          seoDescription: labels.seoDescriptionLabel,
+                          seoFocusKeyword: labels.focusKeywordsLabel,
+                        }}
+                        onApply={applyFill}
+                      />
+                    ) : undefined
+                  }
+                  description={labels.detailsSectionDescription}
+                  icon={SlidersHorizontal}
+                  accent="primary"
+                >
+                  <Field
+                    label={labels.titleLabel}
+                    required
+                    error={form.error("translation.title")}
+                    adornment={
+                      <span className="flex items-center gap-1">
+                        {fieldMenu("title")}
+                        <CharCount value={draft.title} max={255} />
+                      </span>
+                    }
+                  >
+                    <Input
+                      value={draft.title}
+                      disabled={!canUpdate}
+                      onChange={(e) => setDraft({ title: e.target.value })}
                     />
-                  ) : undefined
-                }
-                description={labels.detailsSectionDescription}
-                icon={SlidersHorizontal}
-                accent="primary"
-              >
-                <Field
-                  label={labels.titleLabel}
-                  required
-                  error={form.error("translation.title")}
-                  adornment={
-                    <span className="flex items-center gap-1">
-                      {fieldMenu("title")}
-                      <CharCount value={draft.title} max={255} />
-                    </span>
-                  }
-                >
-                  <Input
-                    value={draft.title}
-                    disabled={!canUpdate}
-                    onChange={(e) => setDraft({ title: e.target.value })}
-                  />
-                </Field>
+                  </Field>
 
-                <Field
-                  label={labels.slugLabel}
-                  hint={`${labels.courseUrl}: ${publicPath}`}
-                  error={form.error("translation.slug")}
-                >
-                  <Input
-                    value={draft.slug}
-                    disabled={!canUpdate}
-                    onChange={(e) => setDraft({ slug: e.target.value })}
-                  />
-                </Field>
+                  <Field
+                    label={labels.slugLabel}
+                    hint={`${labels.courseUrl}: ${publicPath}`}
+                    error={form.error("translation.slug")}
+                  >
+                    <Input
+                      value={draft.slug}
+                      disabled={!canUpdate}
+                      onChange={(e) => setDraft({ slug: e.target.value })}
+                    />
+                  </Field>
 
-                <Field
-                  label={labels.summaryLabel}
-                  hint={labels.summaryHint}
-                  error={form.error("translation.summary")}
-                  adornment={
-                    <span className="flex items-center gap-1">
-                      {fieldMenu("summary")}
-                      <CharCount value={draft.summary} max={1000} />
-                    </span>
-                  }
-                >
-                  <Textarea
-                    rows={4}
-                    value={draft.summary}
-                    disabled={!canUpdate}
-                    onChange={(e) => setDraft({ summary: e.target.value })}
-                  />
-                </Field>
+                  <Field
+                    label={labels.summaryLabel}
+                    hint={labels.summaryHint}
+                    error={form.error("translation.summary")}
+                    adornment={
+                      <span className="flex items-center gap-1">
+                        {fieldMenu("summary")}
+                        <CharCount value={draft.summary} max={1000} />
+                      </span>
+                    }
+                  >
+                    <Textarea
+                      rows={4}
+                      value={draft.summary}
+                      disabled={!canUpdate}
+                      onChange={(e) => setDraft({ summary: e.target.value })}
+                    />
+                  </Field>
 
-                <Field
-                  label={labels.descriptionLabel}
-                  error={form.error("translation.description")}
-                >
-                  <RichTextEditor
-                    value={draft.description}
-                    onChange={(html) => setDraft({ description: html })}
-                    labels={labels.editor}
-                    allowHtmlMode
-                    {...(ai?.assistant && canUpdate
-                      ? { ai: { ...ai.assistant, config: { ...ai.assistant.config, locale } } }
-                      : {})}
-                  />
-                </Field>
-              </EditorSection>
-            </div>
+                  <Field
+                    label={labels.descriptionLabel}
+                    error={form.error("translation.description")}
+                  >
+                    <RichTextEditor
+                      value={draft.description}
+                      onChange={(html) => setDraft({ description: html })}
+                      labels={labels.editor}
+                      allowHtmlMode
+                      {...(ai?.assistant && canUpdate
+                        ? { ai: { ...ai.assistant, config: { ...ai.assistant.config, locale } } }
+                        : {})}
+                    />
+                  </Field>
+                </EditorSection>
+              </div>
+            </TabsContent>
 
-            <div className="flex min-w-0 flex-col gap-4">
-              <ContentStatusPanel
-                status={course.status}
-                legalTransitions={course.legalTransitions}
-                publishedAt={course.publishedAt}
-                scheduledFor={course.scheduledFor}
-                updatedAt={course.updatedAt}
-                canPublish={canPublish}
-                canSave={canUpdate}
-                // The panel validates before a transition that saves first and
-                // stops there, with the fields named inline (ADR-077).
-                validate={validate}
-                save={submitForm}
-                transitionTo={(to, scheduledForIso) =>
-                  setCourseStatusAction(course.id, to, scheduledForIso)
-                }
-                labels={labels.status}
+            <TabsContent value="curriculum">
+              <CurriculumPanel
+                courseId={course.id}
+                sections={sections}
+                locale={locale}
+                canUpdate={canUpdate}
+                canCreateLesson={canCreateLesson}
+                canDeleteLesson={canDeleteLesson}
+                labels={labels.curriculum}
               />
+            </TabsContent>
 
-              {/* ADR-139 #6 put the three switches in this card's footer;
-                  changes-44 #5 moved them to their own card before Info. */}
-              <EditorSection
-                title={labels.displaySection}
-                description={labels.displaySectionDescription}
-                icon={ImageIcon}
-                accent="warning"
-              >
-                <ImageUploadField
-                  id="course-cover"
-                  label={labels.coverImageLabel}
-                  value={cover.url}
-                  purpose="content"
-                  category="learn"
-                  sourceType="COURSE"
+            <TabsContent value="recommendations">
+              <div className="flex min-w-0 flex-col gap-4">
+                <RecommendationsPanel
+                  value={recommendations}
+                  onChange={setRecommendations}
+                  options={recommendationOptions}
+                  fallbackPreview={fallbackPreview}
                   disabled={!canUpdate}
-                  error={form.error("meta.coverAssetId")}
-                  onChange={(next) => setCover({ id: next?.id ?? null, url: next?.url ?? null })}
-                  labels={labels.upload}
+                  labels={labels.recommendations}
                 />
-              </EditorSection>
+              </div>
+            </TabsContent>
 
-              <EditorSection
-                title={labels.settingsSection}
-                description={labels.settingsSectionDescription}
-                icon={SlidersHorizontal}
-                accent="neutral"
-              >
-                <Field label={labels.trackLabel}>
-                  <AdminCombobox
-                    disabled={!canUpdate}
-                    value={track}
-                    onValueChange={(v) => setTrack(v && isLearnTrack(v) ? v : track)}
-                    options={Object.entries(labels.tracks).map(([value, label]) => ({
-                      value,
-                      label,
-                    }))}
-                  />
-                </Field>
+            {/* changes-49 (ADR-147): the course's own questions, per locale like
+            every other field on this screen. Plain text, like the glossary's,
+            and emitted as FAQPage structured data on the course page. */}
+            <TabsContent value="faq">
+              <div className="flex min-w-0 flex-col gap-4">
+                <FaqPanel<{ question: string; answer: string }>
+                  items={draft.faq}
+                  onChange={(faq) => setDraft({ faq })}
+                  makeItem={(fields) => fields}
+                  labels={labels.faq}
+                />
+              </div>
+            </TabsContent>
 
-                <Field label={labels.difficultyLabel}>
-                  <AdminCombobox
-                    disabled={!canUpdate}
-                    value={difficulty}
-                    onValueChange={(v) =>
-                      setDifficulty(courseDifficultySchema.safeParse(v).data ?? difficulty)
+            <TabsContent value="seo">
+              {/* changes-50 (image-3): the analysis sits UNDER the SEO fields it
+              scores, in the one column — it was the SEO tab's right rail. */}
+              <div className="flex min-w-0 flex-col gap-4">
+                <EditorSection
+                  title={labels.seoSection}
+                  description={labels.seoSectionDescription}
+                  icon={Search}
+                  accent="info"
+                  actions={
+                    // The article editor's review dialog, in the same place: the section
+                    // header, because it fills the whole section. Absent when SEO AI is off.
+                    aiSeo ? (
+                      <AiSeoButton
+                        labels={aiSeo.labels}
+                        entity={{ type: "course", id: course.id }}
+                        keywords="single"
+                        current={{
+                          seoTitle: draft.seoTitle,
+                          seoDescription: draft.seoDescription,
+                          focusKeywords: draft.seoFocusKeyword,
+                        }}
+                        source={{
+                          title: draft.title,
+                          content: htmlToBlockText(draft.description),
+                          ...(draft.summary ? { excerpt: draft.summary } : {}),
+                          locale,
+                        }}
+                        onApply={(patch) =>
+                          setDraft({
+                            ...(patch.seoTitle !== undefined ? { seoTitle: patch.seoTitle } : {}),
+                            ...(patch.seoDescription !== undefined
+                              ? { seoDescription: patch.seoDescription }
+                              : {}),
+                            ...(patch.focusKeywords !== undefined
+                              ? { seoFocusKeyword: patch.focusKeywords }
+                              : {}),
+                          })
+                        }
+                      />
+                    ) : undefined
+                  }
+                >
+                  <Field
+                    label={labels.seoTitleLabel}
+                    hint={labels.seoTitleHint}
+                    error={form.error("translation.seoTitle")}
+                    adornment={
+                      <span className="flex items-center gap-1">
+                        {fieldMenu("seoTitle")}
+                        <CharCount value={draft.seoTitle} max={70} />
+                      </span>
                     }
-                    options={Object.entries(labels.difficulties).map(([value, label]) => ({
-                      value,
-                      label,
-                    }))}
-                  />
-                </Field>
+                  >
+                    <Input
+                      value={draft.seoTitle}
+                      disabled={!canUpdate}
+                      onChange={(e) => setDraft({ seoTitle: e.target.value })}
+                    />
+                  </Field>
 
-                <Field label={labels.visibilityLabel}>
-                  <AdminCombobox
-                    disabled={!canUpdate}
-                    value={visibility}
-                    onValueChange={(v) =>
-                      setVisibility(contentVisibilitySchema.safeParse(v).data ?? visibility)
+                  <Field
+                    label={labels.seoDescriptionLabel}
+                    hint={labels.seoDescriptionHint}
+                    error={form.error("translation.seoDescription")}
+                    adornment={
+                      <span className="flex items-center gap-1">
+                        {fieldMenu("seoDescription")}
+                        <CharCount value={draft.seoDescription} max={180} />
+                      </span>
                     }
-                    options={["PUBLIC", "AUTHENTICATED", "PREMIUM"].map((key) => ({
-                      value: key,
-                      label: labels.visibilities[key] ?? key,
-                    }))}
-                  />
-                </Field>
+                  >
+                    <Textarea
+                      rows={3}
+                      value={draft.seoDescription}
+                      disabled={!canUpdate}
+                      onChange={(e) => setDraft({ seoDescription: e.target.value })}
+                    />
+                  </Field>
 
-                <Field label={labels.estimatedHoursLabel} error={form.error("meta.estimatedHours")}>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={999}
-                    value={estimatedHours}
-                    disabled={!canUpdate}
-                    onChange={(e) => setEstimatedHours(e.target.value)}
-                  />
-                </Field>
+                  <Field
+                    label={labels.focusKeywordsLabel}
+                    hint={labels.focusKeywordsHint}
+                    error={form.error("translation.seoFocusKeyword")}
+                    adornment={fieldMenu("seoFocusKeyword")}
+                  >
+                    <Input
+                      value={draft.seoFocusKeyword}
+                      disabled={!canUpdate}
+                      onChange={(e) => setDraft({ seoFocusKeyword: e.target.value })}
+                    />
+                  </Field>
+                </EditorSection>
 
-                {/* ADR-056 #7: the final quiz is a COURSE-level completion
+                <SeoAnalysis
+                  title={draft.seoTitle || draft.title}
+                  description={draft.seoDescription || draft.summary}
+                  body={draft.description}
+                  focusKeywords={draft.seoFocusKeyword}
+                />
+              </div>
+            </TabsContent>
+          </div>
+
+          <aside className="flex min-w-0 flex-col gap-4">
+            <ContentStatusPanel
+              status={course.status}
+              legalTransitions={course.legalTransitions}
+              publishedAt={course.publishedAt}
+              scheduledFor={course.scheduledFor}
+              updatedAt={course.updatedAt}
+              canPublish={canPublish}
+              canSave={canUpdate}
+              // The panel validates before a transition that saves first and
+              // stops there, with the fields named inline (ADR-077).
+              validate={validate}
+              save={submitForm}
+              transitionTo={(to, scheduledForIso) =>
+                setCourseStatusAction(course.id, to, scheduledForIso)
+              }
+              labels={labels.status}
+            />
+
+            {/* ADR-139 #6 put the three switches in this card's footer;
+                  changes-44 #5 moved them to their own card before Info. */}
+            <EditorSection
+              title={labels.displaySection}
+              description={labels.displaySectionDescription}
+              icon={ImageIcon}
+              accent="warning"
+            >
+              <ImageUploadField
+                id="course-cover"
+                label={labels.coverImageLabel}
+                value={cover.url}
+                purpose="content"
+                category="learn"
+                sourceType="COURSE"
+                disabled={!canUpdate}
+                error={form.error("meta.coverAssetId")}
+                onChange={(next) => setCover({ id: next?.id ?? null, url: next?.url ?? null })}
+                labels={labels.upload}
+              />
+            </EditorSection>
+
+            <EditorSection
+              title={labels.settingsSection}
+              description={labels.settingsSectionDescription}
+              icon={SlidersHorizontal}
+              accent="neutral"
+            >
+              <Field label={labels.trackLabel}>
+                <AdminCombobox
+                  disabled={!canUpdate}
+                  value={track}
+                  onValueChange={(v) => setTrack(v && isLearnTrack(v) ? v : track)}
+                  options={Object.entries(labels.tracks).map(([value, label]) => ({
+                    value,
+                    label,
+                  }))}
+                />
+              </Field>
+
+              <Field label={labels.difficultyLabel}>
+                <AdminCombobox
+                  disabled={!canUpdate}
+                  value={difficulty}
+                  onValueChange={(v) =>
+                    setDifficulty(courseDifficultySchema.safeParse(v).data ?? difficulty)
+                  }
+                  options={Object.entries(labels.difficulties).map(([value, label]) => ({
+                    value,
+                    label,
+                  }))}
+                />
+              </Field>
+
+              <Field label={labels.visibilityLabel}>
+                <AdminCombobox
+                  disabled={!canUpdate}
+                  value={visibility}
+                  onValueChange={(v) =>
+                    setVisibility(contentVisibilitySchema.safeParse(v).data ?? visibility)
+                  }
+                  options={["PUBLIC", "AUTHENTICATED", "PREMIUM"].map((key) => ({
+                    value: key,
+                    label: labels.visibilities[key] ?? key,
+                  }))}
+                />
+              </Field>
+
+              <Field label={labels.estimatedHoursLabel} error={form.error("meta.estimatedHours")}>
+                <Input
+                  type="number"
+                  min={0}
+                  max={999}
+                  value={estimatedHours}
+                  disabled={!canUpdate}
+                  onChange={(e) => setEstimatedHours(e.target.value)}
+                />
+              </Field>
+
+              {/* ADR-056 #7: the final quiz is a COURSE-level completion
                     rule, not a phantom lesson. Attaching one means the course
                     is not complete until a learner passes it, however many
                     lessons they have finished. */}
-                <Field label={labels.finalQuizLabel} hint={labels.finalQuizHint}>
-                  <AdminCombobox
-                    disabled={!canUpdate}
-                    value={finalQuizId ?? ""}
-                    onValueChange={(v) => setFinalQuizId(v === "" ? null : v)}
-                    options={[
-                      { value: "", label: labels.noFinalQuiz },
-                      ...quizOptions.map((option) => ({ value: option.id, label: option.title })),
-                    ]}
-                  />
-                </Field>
-
-                <Field
-                  label={labels.externalUrlLabel}
-                  hint={labels.externalUrlHint}
-                  error={form.error("meta.externalUrl")}
-                >
-                  <Input
-                    type="url"
-                    inputMode="url"
-                    value={externalUrl}
-                    disabled={!canUpdate}
-                    onChange={(e) => setExternalUrl(e.target.value)}
-                  />
-                </Field>
-              </EditorSection>
-
-              {/* changes-44 #5: last of the settings, before the read-only Info card. */}
-              <ContentFlagsSection value={flags} onChange={setFlags} disabled={!canUpdate} />
-
-              <EditorSection
-                title={labels.infoSection}
-                description={labels.infoSectionDescription}
-                icon={Info}
-                accent="neutral"
-              >
-                {/* ADR-044 #6: no <code> for admin chrome — a muted span
-                    carries the same meaning without pulling in a monospace
-                    family the admin does not otherwise use. */}
-                <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
-                  <dt className="text-muted-foreground">{labels.idLabel}</dt>
-                  <dd className="truncate">{course.id}</dd>
-                  <dt className="text-muted-foreground">{labels.createdLabel}</dt>
-                  <dd>{course.createdAt}</dd>
-                  <dt className="text-muted-foreground">{labels.updatedLabel}</dt>
-                  <dd>{course.updatedAt}</dd>
-                  <dt className="text-muted-foreground">{labels.lessonsLabel}</dt>
-                  <dd className="tabular-nums">{course.lessonCount}</dd>
-                </dl>
-              </EditorSection>
-            </div>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="curriculum">
-          <CurriculumPanel
-            courseId={course.id}
-            sections={sections}
-            locale={locale}
-            canUpdate={canUpdate}
-            canCreateLesson={canCreateLesson}
-            canDeleteLesson={canDeleteLesson}
-            labels={labels.curriculum}
-          />
-        </TabsContent>
-
-        <TabsContent value="recommendations">
-          <div className="grid grid-cols-1 min-w-0 gap-4 lg:grid-cols-(--grid-2-1)">
-            <RecommendationsPanel
-              value={recommendations}
-              onChange={setRecommendations}
-              options={recommendationOptions}
-              fallbackPreview={fallbackPreview}
-              disabled={!canUpdate}
-              labels={labels.recommendations}
-            />
-          </div>
-        </TabsContent>
-
-        <TabsContent value="seo">
-          <div className="grid grid-cols-1 min-w-0 gap-4 lg:grid-cols-(--grid-2-1)">
-            <EditorSection
-              title={labels.seoSection}
-              description={labels.seoSectionDescription}
-              icon={Search}
-              accent="info"
-              actions={
-                // The article editor's review dialog, in the same place: the section
-                // header, because it fills the whole section. Absent when SEO AI is off.
-                aiSeo ? (
-                  <AiSeoButton
-                    labels={aiSeo.labels}
-                    entity={{ type: "course", id: course.id }}
-                    keywords="single"
-                    current={{
-                      seoTitle: draft.seoTitle,
-                      seoDescription: draft.seoDescription,
-                      focusKeywords: draft.seoFocusKeyword,
-                    }}
-                    source={{
-                      title: draft.title,
-                      content: htmlToBlockText(draft.description),
-                      ...(draft.summary ? { excerpt: draft.summary } : {}),
-                      locale,
-                    }}
-                    onApply={(patch) =>
-                      setDraft({
-                        ...(patch.seoTitle !== undefined ? { seoTitle: patch.seoTitle } : {}),
-                        ...(patch.seoDescription !== undefined
-                          ? { seoDescription: patch.seoDescription }
-                          : {}),
-                        ...(patch.focusKeywords !== undefined
-                          ? { seoFocusKeyword: patch.focusKeywords }
-                          : {}),
-                      })
-                    }
-                  />
-                ) : undefined
-              }
-            >
-              <Field
-                label={labels.seoTitleLabel}
-                hint={labels.seoTitleHint}
-                error={form.error("translation.seoTitle")}
-                adornment={
-                  <span className="flex items-center gap-1">
-                    {fieldMenu("seoTitle")}
-                    <CharCount value={draft.seoTitle} max={70} />
-                  </span>
-                }
-              >
-                <Input
-                  value={draft.seoTitle}
+              <Field label={labels.finalQuizLabel} hint={labels.finalQuizHint}>
+                <AdminCombobox
                   disabled={!canUpdate}
-                  onChange={(e) => setDraft({ seoTitle: e.target.value })}
+                  value={finalQuizId ?? ""}
+                  onValueChange={(v) => setFinalQuizId(v === "" ? null : v)}
+                  options={[
+                    { value: "", label: labels.noFinalQuiz },
+                    ...quizOptions.map((option) => ({ value: option.id, label: option.title })),
+                  ]}
                 />
               </Field>
 
               <Field
-                label={labels.seoDescriptionLabel}
-                hint={labels.seoDescriptionHint}
-                error={form.error("translation.seoDescription")}
-                adornment={
-                  <span className="flex items-center gap-1">
-                    {fieldMenu("seoDescription")}
-                    <CharCount value={draft.seoDescription} max={180} />
-                  </span>
-                }
-              >
-                <Textarea
-                  rows={3}
-                  value={draft.seoDescription}
-                  disabled={!canUpdate}
-                  onChange={(e) => setDraft({ seoDescription: e.target.value })}
-                />
-              </Field>
-
-              <Field
-                label={labels.focusKeywordsLabel}
-                hint={labels.focusKeywordsHint}
-                error={form.error("translation.seoFocusKeyword")}
-                adornment={fieldMenu("seoFocusKeyword")}
+                label={labels.externalUrlLabel}
+                hint={labels.externalUrlHint}
+                error={form.error("meta.externalUrl")}
               >
                 <Input
-                  value={draft.seoFocusKeyword}
+                  type="url"
+                  inputMode="url"
+                  value={externalUrl}
                   disabled={!canUpdate}
-                  onChange={(e) => setDraft({ seoFocusKeyword: e.target.value })}
+                  onChange={(e) => setExternalUrl(e.target.value)}
                 />
               </Field>
             </EditorSection>
 
-            <SeoAnalysis
-              title={draft.seoTitle || draft.title}
-              description={draft.seoDescription || draft.summary}
-              body={draft.description}
-              focusKeywords={draft.seoFocusKeyword}
-            />
-          </div>
-        </TabsContent>
+            {/* changes-44 #5: last of the settings, before the read-only Info card. */}
+            <ContentFlagsSection value={flags} onChange={setFlags} disabled={!canUpdate} />
+
+            <EditorSection
+              title={labels.infoSection}
+              description={labels.infoSectionDescription}
+              icon={Info}
+              accent="neutral"
+            >
+              {/* ADR-044 #6: no <code> for admin chrome — a muted span
+                    carries the same meaning without pulling in a monospace
+                    family the admin does not otherwise use. */}
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+                <dt className="text-muted-foreground">{labels.idLabel}</dt>
+                <dd className="truncate">{course.id}</dd>
+                <dt className="text-muted-foreground">{labels.createdLabel}</dt>
+                <dd>{course.createdAt}</dd>
+                <dt className="text-muted-foreground">{labels.updatedLabel}</dt>
+                <dd>{course.updatedAt}</dd>
+                <dt className="text-muted-foreground">{labels.lessonsLabel}</dt>
+                <dd className="tabular-nums">{course.lessonCount}</dd>
+              </dl>
+            </EditorSection>
+          </aside>
+        </div>
       </Tabs>
 
       <ConfirmDialog

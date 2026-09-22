@@ -21,6 +21,7 @@ import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { Container } from "@repo/ui/components/container";
 import { Empty, EmptyDescription, EmptyTitle } from "@repo/ui/components/empty";
+import { FaqPanel } from "@repo/ui/components/faq-panel";
 import { ExternalBadge } from "@repo/ui/components/external-badge";
 import { Reveal, RevealGroup } from "@repo/ui/components/reveal";
 import { RichText } from "@repo/ui/components/rich-text";
@@ -227,15 +228,38 @@ export default async function CoursePage({
           lessonCount: section.lessons.length,
         }))}
       />
+      {/* changes-49 (ADR-147): FAQPage structured data whenever the course HAS
+          questions — no toggle, for the reason the article page gives. The
+          answers are plain text. */}
+      {view.faq.length > 0 && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "FAQPage",
+              mainEntity: view.faq.map((item) => ({
+                "@type": "Question",
+                name: item.question,
+                acceptedAnswer: { "@type": "Answer", text: item.answer },
+              })),
+            }),
+          }}
+        />
+      )}
 
-      {/* `relative isolate overflow-hidden` is what the backdrop and the motif
+      {/* `relative isolate overflow-clip` is what the backdrop and the motif
           anchor to and are clipped by; Section provides none of the three.
+          CLIP, not hidden (changes-49): `overflow-hidden` makes the band a
+          scroll container, so the progress card's `lg:sticky lg:top-24`
+          measured 96px from the BAND's top and the card sat below the cover
+          instead of level with it. `clip` clips without scrolling.
           This band stays `tone="muted"` — every token below it
           (`--muted-foreground`, the tonal badges) is derived against
           `--background`, so filling it with the brand would put unchecked ink
           on an unchecked surface (ADR-018 #5). Artwork under a scrim is how
           the band gets depth without moving the contrast. */}
-      <Section spacing="sm" tone="muted" className="relative isolate overflow-hidden">
+      <Section spacing="sm" tone="muted" className="relative isolate overflow-clip">
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0 -z-10 opacity-14 select-none"
@@ -420,6 +444,20 @@ export default async function CoursePage({
                 Absent when the course has none or its quiz is not publicly
                 reachable — the same null that stops it blocking completion. */}
             {view.finalQuiz && <CourseAssessment quiz={view.finalQuiz} />}
+
+            {/* changes-49: the course's own questions close the main column,
+                after the assessment — what a reader asks once they have seen
+                what the course covers. Absent when it has none. */}
+            {view.faq.length > 0 && (
+              <Reveal variant="up" lang={view.contentLocale} dir={view.contentDirection}>
+                <FaqPanel
+                  title={t("course.faqHeading")}
+                  lead={t("course.faqLead")}
+                  items={view.faq}
+                  format="text"
+                />
+              </Reveal>
+            )}
           </div>
 
           {/* ─── Both columns open on a BARE heading (changes-40) ───────────

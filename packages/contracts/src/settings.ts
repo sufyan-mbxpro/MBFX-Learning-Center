@@ -26,7 +26,11 @@ export const HOME_SECTION_VARIANTS = {
   // The video rail, now `/learn` only (changes-31). `carousel` is gone with
   // the homepage placement it existed for: a scroll-snap shelf of tiles was
   // the shape it had there, and the learn index has always asked for `grid`.
-  learning_videos: ["grid"],
+  //
+  // changes-51 adds `strip`: the homepage's own shape, back at the owner's ask
+  // — a slider of small cover cards under a centred heading, straight after
+  // the glossary band. `grid` stays `/learn`'s.
+  learning_videos: ["grid", "strip"],
   hero: ["centered", "split", "background"],
   // "Explore the platform" — one card per destination the site offers.
   // `carousel` is the scroll-snap track; `grid` lays the same cards out
@@ -289,6 +293,11 @@ export const SETTINGS_SCHEMAS = {
   // then has to explain in prose, which is what `ai.monthlyBudgetUsd` already
   // costs. Learner sessions are not affected by this value at all.
   "security.adminSessionTimeout": z.enum(ADMIN_SESSION_TIMEOUTS),
+  // changes-49: the same idle timeout for LEARNER sessions, decided by the
+  // same pure rule in @repo/auth. Its own key rather than one shared value,
+  // because the two audiences want different answers — an unattended admin
+  // screen is a risk, an unattended lesson is a reader who went for coffee.
+  "security.learnerSessionTimeout": z.enum(ADMIN_SESSION_TIMEOUTS),
 
   "seo.titleTemplate": z.string().max(100),
   "seo.defaultOgImage": z.string().regex(/^(\/|https?:\/\/)/, "must be a path or URL"),
@@ -416,6 +425,7 @@ export const SETTING_GROUPS: Record<SettingKey, string> = {
   "site.defaultThemeMode": "general",
   "site.reviewsUrl": "general",
   "security.adminSessionTimeout": "general",
+  "security.learnerSessionTimeout": "general",
 
   "seo.titleTemplate": "seo",
   "seo.defaultOgImage": "seo",
@@ -494,6 +504,7 @@ export const SETTING_WIDGETS: Partial<Record<SettingKey, SettingWidget>> = {
   "site.defaultLocale": "locale",
   "site.defaultThemeMode": "select",
   "security.adminSessionTimeout": "select",
+  "security.learnerSessionTimeout": "select",
   "media.maxBytes.image": "megabytes",
   "media.maxBytes.video": "megabytes",
   "media.maxBytes.audio": "megabytes",
@@ -504,6 +515,7 @@ export const SETTING_WIDGETS: Partial<Record<SettingKey, SettingWidget>> = {
 export const SETTING_SELECT_OPTIONS: Partial<Record<SettingKey, readonly string[]>> = {
   "site.defaultThemeMode": ["light", "dark", "system"],
   "security.adminSessionTimeout": ADMIN_SESSION_TIMEOUTS,
+  "security.learnerSessionTimeout": ADMIN_SESSION_TIMEOUTS,
 };
 
 // ─── Upload caps in megabytes (changes-46) ────────────────────

@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { mergeProps } from "@base-ui/react/merge-props";
 import { useRender } from "@base-ui/react/use-render";
 import { cva, type VariantProps } from "class-variance-authority";
@@ -141,5 +143,33 @@ function Badge({
   });
 }
 
-export { Badge, badgeVariants };
+/**
+ * An opaque ground for a TONAL badge laid over artwork.
+ *
+ * The tonal variants are a /10 tint whose ink is derived to hold 4.5:1 inside
+ * that tint ON A SURFACE. Over a photograph there is no surface: the tint is
+ * 90% whatever the picture is, and a scrim only darkens the edges, so a
+ * `success` chip over a busy mid-tone image read at nothing like its ratio.
+ * This supplies the surface the contrast was measured on — `--background` at
+ * /90 — and the tint composites over it exactly as it would on a card, so
+ * every tone keeps its hue and its ratio whatever the cover is.
+ *
+ * A wrapper rather than a class on the badge: the tint IS the badge's
+ * background colour, so a ground set there would replace it.
+ */
+function BadgeGround({ className, children }: { className?: string; children: ReactNode }) {
+  return (
+    <span
+      data-slot="badge-ground"
+      className={cn(
+        "inline-flex w-fit shrink-0 rounded-md bg-background/90 shadow-sm backdrop-blur-sm",
+        className,
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+export { Badge, BadgeGround, badgeVariants };
 export type { BadgeProps };

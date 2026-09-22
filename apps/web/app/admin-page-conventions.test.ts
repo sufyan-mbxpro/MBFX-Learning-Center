@@ -232,7 +232,9 @@ describe("ADR-140 §3 — an editor's heading is static, and its actions share t
   const editorRoutes = inScope.filter(
     (path) =>
       /[\\/](\[[a-z]+\]|new)[\\/]page\.tsx$/.test(path) &&
-      !path.includes("settings") &&
+      // `settings/[group]` is a form, not a record. The AI provider editor
+      // moved under settings in changes-51 and is still an editor.
+      !/[\\/]settings[\\/]\[group\][\\/]/.test(path) &&
       !RECORD_PAGES.test(path),
   );
 

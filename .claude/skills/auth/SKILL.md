@@ -24,7 +24,7 @@ swap contained to this package.
 
 ## Two credential surfaces (ADR-052 — read it before touching either)
 
-- **Staff:** `/admin/sign-in`, rendered from the `(admin-auth)` route group
+- **Staff:** `/keystone` (ADR-146 — proxy-rewritten onto `/admin/sign-in`, which itself 404s), rendered from the `(admin-auth)` route group
   (its own root layout — it CANNOT live in `(admin)`, whose root layout is
   the STAFF re-check and would redirect the page to itself). It is the one
   `/admin` path `proxy.ts` lets through unauthenticated, and every gate

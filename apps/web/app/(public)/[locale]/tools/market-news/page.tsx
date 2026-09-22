@@ -73,17 +73,21 @@ export default async function MarketNewsPage({ params }: PageProps<"/[locale]/to
         title={t("title")}
         lead={t("lead")}
         motif={<AmbientMotif variant="chart" intensity={0.7} />}
-        actions={
-          analysisEnabled && (
-            <Button size="xl" render={<Link href={ROUTE_PATHS.analysis} />}>
-              {t("analysisAction")}
-              <ArrowRight data-icon="inline-end" aria-hidden className="rtl:rotate-180" />
-            </Button>
-          )
-        }
+        // changes-49: no action in the masthead, so the banner is the same
+        // height as every other tool page's. "Read our own analysis" moved
+        // under the feed, where it follows the thing it is an alternative to.
       />
 
       <MarketNewsBand locale={locale} />
+
+      {analysisEnabled && (
+        <Container className="-mt-6 pb-4">
+          <Button variant="outline" render={<Link href={ROUTE_PATHS.analysis} />}>
+            {t("analysisAction")}
+            <ArrowRight data-icon="inline-end" aria-hidden className="rtl:rotate-180" />
+          </Button>
+        </Container>
+      )}
 
       <Section tone="muted">
         <Container className="flex flex-col gap-8">

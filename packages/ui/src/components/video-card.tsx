@@ -25,7 +25,7 @@
 // That is the price of the thumbnail having its own job.
 import { Film, Play } from "lucide-react";
 
-import { Badge } from "@repo/ui/components/badge";
+import { Badge, BadgeGround } from "@repo/ui/components/badge";
 import { CardMarkers, type CardMarker } from "@repo/ui/components/card-markers";
 import { Skeleton, SkeletonText } from "@repo/ui/components/skeleton";
 import { cn } from "@repo/ui/lib/utils";
@@ -159,23 +159,19 @@ export function VideoCard({
 
         <div className="absolute inset-x-2.5 top-2.5 flex items-start justify-between gap-2">
           {categoryLabel ? (
-            <Badge
-              variant={categoryTone}
-              className="shadow-sm backdrop-blur-sm transition-transform duration-(--duration-base) ease-(--ease-out-quint) group-hover/video:scale-105"
-            >
-              {categoryLabel}
-            </Badge>
+            <BadgeGround className="transition-transform duration-(--duration-base) ease-(--ease-out-quint) group-hover/video:scale-105">
+              <Badge variant={categoryTone}>{categoryLabel}</Badge>
+            </BadgeGround>
           ) : (
             <span />
           )}
           {videoCountLabel ? (
-            <Badge
-              variant="info"
-              className="shadow-sm backdrop-blur-sm transition-transform duration-(--duration-base) ease-(--ease-out-quint) group-hover/video:scale-105"
-            >
-              <Film aria-hidden />
-              {videoCountLabel}
-            </Badge>
+            <BadgeGround className="transition-transform duration-(--duration-base) ease-(--ease-out-quint) group-hover/video:scale-105">
+              <Badge variant="info">
+                <Film aria-hidden />
+                {videoCountLabel}
+              </Badge>
+            </BadgeGround>
           ) : (
             <Badge variant="outline" className="bg-background/85 shadow-sm backdrop-blur-sm">
               {labels.readGuide}

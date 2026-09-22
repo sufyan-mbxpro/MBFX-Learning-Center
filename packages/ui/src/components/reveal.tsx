@@ -37,14 +37,21 @@ import { cn } from "@repo/ui/lib/utils";
  *
  * `up` is fade-up, `fade` is fade-in with no movement, `start`/`end` are the
  * logical slides, `scale` is zoom-in.
+ *
+ * `rise` and `drop` (changes-51) are a pair for alternating a ROW: a longer
+ * travel from below or from above, with a slight zoom, so neighbouring cards
+ * arrive from opposite edges. Observer path only — on the opt-in `timeline`
+ * path they fade without moving.
  */
-type RevealVariant = "up" | "start" | "end" | "fade" | "scale";
+type RevealVariant = "up" | "start" | "end" | "fade" | "scale" | "rise" | "drop";
 
 const REVEAL_VARIANT_CLASS: Record<RevealVariant, string> = {
   up: "reveal-up",
   start: "reveal-start",
   end: "reveal-end",
   scale: "reveal-scale",
+  rise: "reveal-rise",
+  drop: "reveal-drop",
   fade: "",
 };
 

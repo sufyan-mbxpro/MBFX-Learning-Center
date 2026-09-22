@@ -15,7 +15,7 @@ import {
 } from "../../_lib/learn-labels.ts";
 import { VideoEditor } from "./video-editor.tsx";
 import type { VideoEditorLabels } from "./editor-types.ts";
-import { formatDateTime } from "@repo/utils";
+import { formatDateTime, siteOrigin } from "@repo/utils";
 
 // Video topic editor (changes-16 PR 6, ADR-068).
 //
@@ -59,6 +59,8 @@ export default async function VideoTopicEditPage({
 
     bodySection: t("videoEditor.bodySection"),
     bodySectionDescription: t("videoEditor.bodySectionDescription"),
+    contentSection: t("videoEditor.contentSection"),
+    contentSectionDescription: t("videoEditor.contentSectionDescription"),
     localeLabel: t("localeLabel"),
     titleLabel: t("videos.titleLabel"),
     slugLabel: t("slugLabel"),
@@ -246,7 +248,7 @@ export default async function VideoTopicEditPage({
         categoryOptions={categories.map((c) => ({ id: c.id, name: c.name || t("untitled") }))}
         locales={authoringLocales.map((l) => l.code)}
         defaultLocale={routing.defaultLocale}
-        siteUrl={process.env.NEXT_PUBLIC_SITE_URL ?? ""}
+        siteUrl={siteOrigin()}
         canUpdate={can(subject, "lessons.update")}
         // The inline "New category" (ADR-144 §2) runs the categories screen's
         // own action, which gates a create on `lessons.create`.

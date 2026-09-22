@@ -1,36 +1,46 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getCookieCache, getSessionCookie } from "better-auth/cookies";
 import createMiddleware from "next-intl/middleware";
+import { isReservedFirstSegment } from "@repo/contracts";
 import { routing } from "@repo/i18n/routing";
 
 const intl = createMiddleware(routing);
 
 /**
- * The staff credential screen (ADR-052). It lives UNDER /admin — never on
- * the public site — so the public surface carries no administrator entry
- * point at all, and it is where the STAFF gate below sends people.
+ * The staff credential screens, and the address they are SERVED at
+ * (changes-49, ADR-146).
+ *
+ * The files still live at `(admin-auth)/admin/{sign-in,forgot-password,
+ * reset-password}`; the proxy rewrites `/keystone…` onto them and answers the
+ * old `/admin/…` addresses with a 404. The point is that nothing on the
+ * public internet names the staff entry point: an anonymous `/admin/*`
+ * request is a 404 too (see `staffGate`), where it used to be a redirect that
+ * printed the sign-in address in its `Location` header for anyone who asked.
+ *
+ * Membership is EXACT, never a prefix, in both maps. And this is still only a
+ * gate — the `(admin)` layout's server-side STAFF re-check is the boundary
+ * (security.md #3), and none of these three screens renders from that group.
  */
-const ADMIN_SIGN_IN_PATH = "/admin/sign-in";
+export const STAFF_SIGN_IN_PATH = "/keystone";
+
+const STAFF_AUTH_REWRITES = new Map([
+  [STAFF_SIGN_IN_PATH, "/admin/sign-in"],
+  ["/keystone/forgot-password", "/admin/forgot-password"],
+  ["/keystone/reset-password", "/admin/reset-password"],
+]);
+
+/** The internal addresses above. Reachable only through the rewrite. */
+const STAFF_AUTH_INTERNAL = new Set(STAFF_AUTH_REWRITES.values());
 
 /**
- * The /admin paths reachable WITHOUT a session (ADR-079 #3).
- *
- * All three are the same case: a person who cannot sign in. Gating sign-in
- * would redirect it to itself; gating recovery would redirect someone to the
- * screen they came here because they cannot get past. It is an allowlist
- * rather than three `!==` comparisons so that adding a fourth is a deliberate
- * edit to one named set.
- *
- * Membership is EXACT, never a prefix: `/admin/reset-password-debug` is gated
- * like everything else. And this is still only a gate — the `(admin)` layout's
- * server-side STAFF re-check is the boundary (security.md #3), and none of
- * these three routes renders from that group at all.
+ * Where a path that must not exist is rewritten to: `app/(not-found)`, a root
+ * layout with no loading boundary whose page calls `notFound()` at once — the
+ * one render that answers a REAL 404 with the site's own design (see its
+ * layout for why neither `[locale]` nor `global-not-found.tsx` can). A
+ * rewrite rather than a response built here, because Next carries the
+ * destination's own status through a rewrite and the page lives there.
  */
-const ADMIN_PUBLIC_PATHS = new Set([
-  ADMIN_SIGN_IN_PATH,
-  "/admin/forgot-password",
-  "/admin/reset-password",
-]);
+const NOT_FOUND_PATH = "/not-found-page";
 
 /**
  * The ONE /admin path that may be framed (ADR-078 #8).
@@ -50,26 +60,46 @@ const ADMIN_FRAMABLE_PATHS = new Set(["/admin/api/email/preview"]);
 // ─── Security headers (Module 14, security.md #14) ───────────
 //
 // Per-path policy: stricter on /admin than public (ADR-006 — same origin,
-// two surfaces). CSP ships REPORT-ONLY first (plan.md Module 14: "report-
-// only soak then enforce"); the hard headers below are enforced now.
+// two surfaces). The CSP shipped report-only for the Module 14 soak and is
+// ENFORCED since changes-49 (ADR-146); `baseCsp` says what each surface
+// allows and why.
 //
 // Nonce note: the admin surface is fully dynamic, so a per-request nonce
 // works there (#brand-tokens reads it via headers()). PUBLIC pages are
 // static/PPR shells — a per-request nonce would force them dynamic, which
-// architecture.md #6 forbids; their style-src stays nonce-less in the
-// report-only policy until a hash-based allowance for the cached
-// brand-tokens css lands (tracked in DEVLOG Module 14).
+// architecture.md #6 forbids.
 
 function baseCsp(nonce: string | null): string {
-  const scriptSrc = nonce ? `'self' 'nonce-${nonce}' 'strict-dynamic'` : `'self' 'unsafe-inline'`;
-  const styleSrc = nonce ? `'self' 'nonce-${nonce}'` : `'self' 'unsafe-inline'`;
+  // Next's development runtime evaluates code (React Refresh); production
+  // never does, so the allowance exists only where it is needed.
+  const devEval = process.env.NODE_ENV === "production" ? "" : " 'unsafe-eval'";
+  // ENFORCED since changes-49 (it shipped report-only and never flipped).
+  //
+  // - /admin: a per-request nonce plus 'strict-dynamic' — the only script
+  //   that runs is one Next stamped with the nonce, or one such a script
+  //   loaded. Next reads the nonce from the REQUEST's CSP header, which
+  //   `adminResponse` sets.
+  // - public: 'unsafe-inline'. Those pages are static/PPR shells, and a
+  //   per-request nonce would make every one of them dynamic (architecture
+  //   #6). Everything else in the policy still binds them: no third-party
+  //   script origin, no plugin, no foreign base URI or form target, frames
+  //   from a closed list.
+  const scriptSrc = nonce
+    ? `'self' 'nonce-${nonce}' 'strict-dynamic'${devEval}`
+    : `'self' 'unsafe-inline'${devEval}`;
+  // Styles stay 'unsafe-inline' on BOTH surfaces: component libraries
+  // (sonner, Base UI's positioning) inject <style> at runtime without a
+  // nonce, and a nonce in this directive would switch 'unsafe-inline' off.
+  const styleSrc = `'self' 'unsafe-inline'`;
   return [
     `default-src 'self'`,
     `script-src ${scriptSrc}`,
     `style-src ${styleSrc}`,
     // React style={} attributes (chart swatches, sonner) are attr-level.
     `style-src-attr 'unsafe-inline'`,
-    `img-src 'self' data: https:`,
+    // `blob:` for an upload's local preview before it is stored.
+    `img-src 'self' data: blob: https:`,
+    `media-src 'self' blob: https:`,
     `font-src 'self'`,
     `connect-src 'self'`,
     // The third parties we frame, and the only ones.
@@ -96,7 +126,14 @@ function baseCsp(nonce: string | null): string {
     `base-uri 'self'`,
     `form-action 'self'`,
     `object-src 'none'`,
+    // Violations are logged by /api/csp-report (changes-49): an enforced
+    // policy that breaks something should say what, not fail silently.
+    `report-uri /api/csp-report`,
   ].join("; ");
+}
+
+function contentSecurityPolicy(nonce: string | null, sameOrigin: boolean): string {
+  return `${baseCsp(nonce)}; frame-ancestors ${sameOrigin ? "'self'" : "'none'"}`;
 }
 
 function applySecurityHeaders(
@@ -111,11 +148,69 @@ function applySecurityHeaders(
   response.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   const sameOrigin = surface === "public" || framable;
   response.headers.set("X-Frame-Options", sameOrigin ? "SAMEORIGIN" : "DENY");
-  response.headers.set(
-    "Content-Security-Policy-Report-Only",
-    `${baseCsp(nonce)}; frame-ancestors ${sameOrigin ? "'self'" : "'none'"}`,
-  );
+  response.headers.set("Content-Security-Policy", contentSecurityPolicy(nonce, sameOrigin));
+  // HSTS in production only (changes-49): a browser that has seen it will
+  // refuse plain HTTP for two years, which on a developer's localhost would
+  // break every other project served on that host.
+  if (process.env.NODE_ENV === "production") {
+    response.headers.set("Strict-Transport-Security", "max-age=63072000; includeSubDomains");
+  }
   return response;
+}
+
+/** The address a public request points at, with its locale prefix taken off. */
+function splitLocale(pathname: string): { locale: string; prefix: string; rest: string[] } {
+  const segments = pathname.split("/").filter(Boolean);
+  const first = segments[0];
+  if (first && (routing.locales as readonly string[]).includes(first)) {
+    return { locale: first, prefix: `/${first}`, rest: segments.slice(1) };
+  }
+  return { locale: routing.defaultLocale, prefix: "", rest: segments };
+}
+
+function notFound(request: NextRequest, surface: "admin" | "public") {
+  return applySecurityHeaders(
+    NextResponse.rewrite(new URL(NOT_FOUND_PATH, request.url)),
+    surface,
+    null,
+  );
+}
+
+/**
+ * The catch-all's answer, asked BEFORE anything streams (changes-49).
+ *
+ * Only for a first segment no coded route owns — every other address is a
+ * route file, and its own `notFound()` handles a missing record. `null` means
+ * "let it through": a page exists, the draft cookie is set (a preview must
+ * render whatever the resolver thinks), or the lookup failed — a slow or
+ * broken lookup falls back to the old soft-404 rather than taking pages down.
+ */
+async function resolveUnownedPath(
+  request: NextRequest,
+  locale: string,
+  rest: string[],
+): Promise<NextResponse | null> {
+  if (request.cookies.has("__prerender_bypass")) return null;
+  const path = `/${rest.join("/")}`;
+  try {
+    const lookup = new URL("/api/public-path", request.nextUrl.origin);
+    lookup.searchParams.set("locale", locale);
+    lookup.searchParams.set("path", path);
+    const response = await fetch(lookup, { signal: AbortSignal.timeout(3000) });
+    if (!response.ok) return null;
+    const answer = (await response.json()) as { kind?: string; to?: string };
+    if (answer.kind === "not-found") return notFound(request, "public");
+    if (answer.kind === "redirect" && answer.to?.startsWith("/") && !answer.to.startsWith("//")) {
+      return applySecurityHeaders(
+        NextResponse.redirect(new URL(answer.to, request.url), 308),
+        "public",
+        null,
+      );
+    }
+  } catch {
+    // Fall through: see the doc comment.
+  }
+  return null;
 }
 
 /**
@@ -127,10 +222,12 @@ function applySecurityHeaders(
  *                 is a GATE, not the security boundary. The admin root
  *                 layout re-verifies server-side against the database
  *                 (ADR-006 consequence #4: never assume the proxy ran).
- *                 /admin/sign-in is exempt — it is where the gate SENDS
- *                 people (ADR-052).
+ *                 An anonymous request is a 404 (ADR-146).
+ *   - /keystone → the staff credential screens, rewritten onto their files
+ *                 under /admin, which are themselves unreachable directly.
  *   - everything else → next-intl locale routing (Module 06): default
- *                 locale unprefixed ("/"), others prefixed ("/es/...").
+ *                 locale unprefixed ("/"), others prefixed ("/es/..."),
+ *                 after an unowned address has been checked for a real 404.
  *                 MUST NOT touch /admin or /api — the matcher below
  *                 excludes /admin from next-intl's own matching, and this
  *                 function checks /admin first and returns before intl()
@@ -139,28 +236,67 @@ function applySecurityHeaders(
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  if (pathname.startsWith("/admin")) {
-    // The credential and recovery screens must be reachable without a session
-    // — gating sign-in would redirect it to itself (ADR-052), and gating
-    // recovery would strand exactly the person it exists for (ADR-079 #3).
-    // All three render from the (admin-auth) route group, outside the (admin)
-    // layout that carries the server-side STAFF re-check, and still get the
-    // admin surface's headers and per-request nonce below.
-    if (!ADMIN_PUBLIC_PATHS.has(pathname)) {
-      const gated = await staffGate(request, pathname);
-      if (gated) return gated;
-    }
+  // The staff credential screens, at their public address (ADR-146).
+  const staffScreen = STAFF_AUTH_REWRITES.get(pathname);
+  if (staffScreen) return adminResponse(request, pathname, staffScreen);
 
-    // Per-request nonce, forwarded as a REQUEST header so the (fully
-    // dynamic) admin layouts can attach it to #brand-tokens via headers().
-    const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
-    const requestHeaders = new Headers(request.headers);
-    requestHeaders.set("x-nonce", nonce);
-    const response = NextResponse.next({ request: { headers: requestHeaders } });
-    return applySecurityHeaders(response, "admin", nonce, ADMIN_FRAMABLE_PATHS.has(pathname));
+  // `=== "/admin" || startsWith("/admin/")`, never a bare prefix: `/admin.json`
+  // and `/administrator` are PUBLIC addresses that happen to share letters.
+  if (pathname === "/admin" || pathname.startsWith("/admin/")) {
+    // The old addresses of the three screens above, requested directly.
+    if (STAFF_AUTH_INTERNAL.has(pathname)) return notFound(request, "admin");
+    const gated = await staffGate(request);
+    if (gated) return gated;
+    return adminResponse(request, pathname, null);
+  }
+
+  const { locale, prefix, rest } = splitLocale(pathname);
+  const first = rest[0];
+
+  // A dotted first segment (`/admin.json`, `/foo.txt/news`). A real static
+  // file never reaches the proxy (the matcher skips a dotted single segment),
+  // and letting the rest through made `foo.txt` the `[locale]` param of a real
+  // page, which threw on `localeCompare` and answered 500.
+  if (first?.includes(".")) return notFound(request, "public");
+
+  if (first && !isReservedFirstSegment(first)) {
+    const resolved = await resolveUnownedPath(request, locale, rest);
+    if (resolved) return resolved;
+  }
+
+  // The learner's account pages read the session INSIDE a Suspense boundary,
+  // so an anonymous visitor got a 200 and a client-side hop (changes-49).
+  // This is the optimistic half — a cookie, no database — and the page's own
+  // `requireLearnerSession` stays the boundary.
+  if (first === "account" && getSessionCookie(request) === null) {
+    const signIn = new URL(`${prefix}/sign-in`, request.url);
+    signIn.searchParams.set("redirect", pathname);
+    return applySecurityHeaders(NextResponse.redirect(signIn), "public", null);
   }
 
   return applySecurityHeaders(intl(request), "public", null);
+}
+
+/**
+ * An /admin-surface response: a per-request nonce, forwarded as REQUEST
+ * headers so the (fully dynamic) admin layouts can attach it to
+ * #brand-tokens via headers(), and so Next stamps it on its own scripts — it
+ * reads the nonce from the request's `Content-Security-Policy`.
+ */
+function adminResponse(request: NextRequest, pathname: string, rewriteTo: string | null) {
+  const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
+  const framable = ADMIN_FRAMABLE_PATHS.has(pathname);
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-nonce", nonce);
+  requestHeaders.set("Content-Security-Policy", contentSecurityPolicy(nonce, framable));
+  const init = { request: { headers: requestHeaders } };
+  // The query rides along: a reset link's `?token=` and sign-in's
+  // `?redirect=` are read off the REWRITTEN url, and `new URL(path, base)`
+  // drops the base's search.
+  const target = rewriteTo ? new URL(rewriteTo, request.url) : null;
+  if (target) target.search = request.nextUrl.search;
+  const response = target ? NextResponse.rewrite(target, init) : NextResponse.next(init);
+  return applySecurityHeaders(response, "admin", nonce, framable);
 }
 
 /**
@@ -169,7 +305,7 @@ export async function proxy(request: NextRequest) {
  * path can skip exactly this and nothing else — headers and nonce still
  * apply to it.
  */
-async function staffGate(request: NextRequest, pathname: string): Promise<NextResponse | null> {
+async function staffGate(request: NextRequest): Promise<NextResponse | null> {
   const cache = await getCookieCache(request, { secret: process.env.BETTER_AUTH_SECRET });
   const userType = (cache?.user as { userType?: string } | undefined)?.userType;
 
@@ -207,17 +343,35 @@ async function staffGate(request: NextRequest, pathname: string): Promise<NextRe
   // real error instead of a broken one.
   const isServerAction = request.headers.has("next-action");
 
+  // A 404, not a redirect to sign-in (changes-49, ADR-146): the redirect's
+  // `Location` header was the staff entry point, handed to anyone who asked
+  // for `/admin`. Staff reach the screen by its address; a signed-in staff
+  // member whose session later lapses is sent there by the admin surface
+  // itself (idle-timeout.tsx), which only ever runs for STAFF.
   if (userType !== "STAFF" && !hasSession && !isServerAction) {
-    const signInUrl = new URL(ADMIN_SIGN_IN_PATH, request.url);
-    signInUrl.searchParams.set("redirect", pathname);
-    return applySecurityHeaders(NextResponse.redirect(signInUrl), "admin", null);
+    return notFound(request, "admin");
   }
 
   return null;
 }
 
 export const config = {
-  // Excludes /api, /_next, static files — and /admin, which must never be
-  // locale-prefixed. The STAFF gate matches /admin separately, above.
-  matcher: ["/((?!api|admin|_next|_vercel|.*\\..*).*)", "/admin/:path*"],
+  // Excludes /api, /_next, static files — and /admin and /keystone, which must
+  // never be locale-prefixed; both are matched separately below.
+  //
+  // The exclusions END at a `/` or the end of the path (changes-49): a bare
+  // `(?!api|admin…)` also skipped `/apiary` and `/administrator`, which then
+  // reached `[locale]` with no locale routing at all.
+  //
+  // The last entry catches a DOTTED first segment followed by more path
+  // (`/foo.txt/news`), which the first entry skips as a "static file" — see
+  // the dotted-segment branch in `proxy()`.
+  matcher: [
+    "/((?!api(?:/|$)|admin(?:/|$)|keystone(?:/|$)|_next|_vercel|.*\\..*).*)",
+    "/admin",
+    "/admin/:path*",
+    "/keystone",
+    "/keystone/:path*",
+    "/([^/]+\\.[^/]+/.+)",
+  ],
 };

@@ -6,6 +6,7 @@
 // integration-testable at the DB level without a Next request context.
 import { revalidateTag } from "next/cache";
 import { db } from "@repo/db";
+import { THEME_SURFACES, surfaceThemeKey, type ThemeSurface } from "@repo/contracts";
 import {
   validateTheme,
   type BrandColors,
@@ -226,6 +227,9 @@ export async function saveTheme(actorId: string, input: SaveThemeInput): Promise
   if (!canSave) return { saved: false, issues };
 
   const before = await db.theme.findUnique({ where: { key: input.themeKey } });
+  // A surface's own row (ADR-148) is created live for its surface; any other
+  // key is a preset row, inactive and usable on either.
+  const surface = THEME_SURFACES.find((name) => surfaceThemeKey(name) === input.themeKey);
   await db.theme.upsert({
     where: { key: input.themeKey },
     update: {
@@ -243,8 +247,9 @@ export async function saveTheme(actorId: string, input: SaveThemeInput): Promise
       darkSurface: input.darkSurface as never,
       darkBrandOverrides: (input.darkBrandOverrides ?? undefined) as never,
       layoutTokens: input.layoutTokens as never,
-      isActive: false,
-      scope: "both",
+      isActive: surface !== undefined,
+      isSystem: surface !== undefined,
+      scope: surface ?? "both",
     },
   });
   await recordAudit({
@@ -258,18 +263,49 @@ export async function saveTheme(actorId: string, input: SaveThemeInput): Promise
   return { saved: true, issues };
 }
 
-/** Preset switch: activates one theme for its scope and deactivates the others (instant rollback = activate the previous row again). */
-export async function activateTheme(actorId: string, themeKey: string): Promise<void> {
-  const target = await db.theme.findUniqueOrThrow({ where: { key: themeKey } });
-  await db.$transaction([
-    db.theme.updateMany({ where: { NOT: { id: target.id } }, data: { isActive: false } }),
-    db.theme.update({ where: { id: target.id }, data: { isActive: true } }),
-  ]);
+/**
+ * Apply a preset to ONE surface (changes-49, ADR-148).
+ *
+ * The public site and the admin each own a live row (`surface-web`,
+ * `surface-admin`); a preset is an inactive row either can use. Applying one
+ * COPIES its tokens into the chosen surface's row, so the other surface is
+ * untouched — which is the whole point of the split. It used to flip
+ * `isActive` across the table, which made one palette the site's AND the
+ * admin's. Rollback is applying the previous preset again.
+ */
+export async function activateTheme(
+  actorId: string,
+  themeKey: string,
+  surface: ThemeSurface,
+): Promise<void> {
+  const source = await db.theme.findUniqueOrThrow({ where: { key: themeKey } });
+  const key = surfaceThemeKey(surface);
+  const tokens = {
+    brandColors: source.brandColors as never,
+    lightSurface: source.lightSurface as never,
+    darkSurface: source.darkSurface as never,
+    darkBrandOverrides: (source.darkBrandOverrides ?? undefined) as never,
+    layoutTokens: source.layoutTokens as never,
+  };
+  await db.theme.upsert({
+    where: { key },
+    update: tokens,
+    create: {
+      key,
+      name: surface === "web" ? "Public site" : "Admin portal",
+      ...tokens,
+      isActive: true,
+      isSystem: true,
+      scope: surface,
+      createdBy: actorId,
+    },
+  });
   await recordAudit({
     userId: actorId,
     action: "theme.activate",
     entityType: "theme",
     entityId: themeKey,
+    changes: { after: { surface } },
   });
   revalidateTag("theme", { expire: 0 });
 }
@@ -278,31 +314,99 @@ export interface ThemePreset {
   key: string;
   name: string;
   description: string | null;
+  /**
+   * Given a surface: whether that surface's live palette IS this preset —
+   * the same brand colours, both modes and the dark overrides (changes-50).
+   * Without one, the row's own stored flag, which since ADR-148 is false for
+   * every preset, because activating one COPIES it onto a surface row.
+   */
   isActive: boolean;
   isSystem: boolean;
   scope: string;
   /** The seven brand swatches, for the preset card's colour strip. */
   swatches: string[];
+  /** Each mode's page ground, so a card shows the background it applies. */
+  lightBackground: string | null;
+  darkBackground: string | null;
 }
 
-export async function loadThemePresets(): Promise<ThemePreset[]> {
-  const rows = await db.theme.findMany({
-    orderBy: { createdAt: "asc" },
-    select: {
-      key: true,
-      name: true,
-      description: true,
-      isActive: true,
-      isSystem: true,
-      scope: true,
-      brandColors: true,
-    },
-  });
-  return rows.map(({ brandColors, ...row }) => ({
+/** JSON with sorted keys, so two palettes compare by value, not key order. */
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record)
+      .filter((key) => record[key] !== undefined)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value ?? null);
+}
+
+function paletteSignature(row: {
+  brandColors: unknown;
+  lightSurface: unknown;
+  darkSurface: unknown;
+  darkBrandOverrides: unknown;
+}): string {
+  return canonicalJson([
+    row.brandColors,
+    row.lightSurface,
+    row.darkSurface,
+    row.darkBrandOverrides ?? {},
+  ]);
+}
+
+function backgroundOf(surface: unknown): string | null {
+  const value = (surface as Record<string, unknown> | null)?.background;
+  return typeof value === "string" ? value : null;
+}
+
+export async function loadThemePresets(surface?: ThemeSurface): Promise<ThemePreset[]> {
+  const [rows, live] = await Promise.all([
+    db.theme.findMany({
+      // The two surface rows are what the editor EDITS, not presets to pick.
+      where: { key: { notIn: THEME_SURFACES.map(surfaceThemeKey) } },
+      orderBy: { createdAt: "asc" },
+      select: {
+        key: true,
+        name: true,
+        description: true,
+        isActive: true,
+        isSystem: true,
+        scope: true,
+        brandColors: true,
+        lightSurface: true,
+        darkSurface: true,
+        darkBrandOverrides: true,
+      },
+    }),
+    surface
+      ? db.theme.findUnique({
+          where: { key: surfaceThemeKey(surface) },
+          select: {
+            brandColors: true,
+            lightSurface: true,
+            darkSurface: true,
+            darkBrandOverrides: true,
+          },
+        })
+      : null,
+  ]);
+  const liveSignature = live ? paletteSignature(live) : null;
+  return rows.map(({ brandColors, lightSurface, darkSurface, darkBrandOverrides, ...row }) => ({
     ...row,
+    isActive: surface
+      ? liveSignature !== null &&
+        paletteSignature({ brandColors, lightSurface, darkSurface, darkBrandOverrides }) ===
+          liveSignature
+      : row.isActive,
     swatches: Object.values((brandColors ?? {}) as Record<string, unknown>).filter(
       (v): v is string => typeof v === "string",
     ),
+    lightBackground: backgroundOf(lightSurface),
+    darkBackground: backgroundOf(darkSurface),
   }));
 }
 

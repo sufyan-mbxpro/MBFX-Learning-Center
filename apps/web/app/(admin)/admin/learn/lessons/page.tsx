@@ -16,7 +16,7 @@ export default async function LessonsAdminPage() {
   const subject = await requirePermission("lessons.view");
   const [t, rows, courses] = await Promise.all([
     getTranslations("admin"),
-    listAllLessonsAdmin(),
+    listAllLessonsAdmin({ includeDeleted: true }),
     listCoursesAdmin(),
   ]);
 
@@ -43,6 +43,8 @@ export default async function LessonsAdminPage() {
     edit: t("edit"),
     duplicate: t("duplicate"),
     softDelete: t("softDelete"),
+    restore: t("restore"),
+    deleted: t("deleted"),
     confirmDeleteTitle: t("confirmDeleteLessonTitle"),
     confirmDeleteBody: t("confirmDeleteLessonBody"),
     confirm: t("confirm"),
@@ -86,6 +88,7 @@ export default async function LessonsAdminPage() {
             translationStatusLabel:
               maps.translationStatuses[l.translationStatus] ?? l.translationStatus,
           })),
+          deleted: row.deletedAt !== null,
           updatedAtLabel: formatDateTime(row.updatedAt),
           updatedAtSort: row.updatedAt.getTime(),
         }))}

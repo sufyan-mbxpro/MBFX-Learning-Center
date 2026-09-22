@@ -35,6 +35,7 @@ export function AdminSidebar({
   initialCollapsed,
   logoLight,
   logoDark,
+  favicon,
   userName,
   email,
   labels,
@@ -44,6 +45,8 @@ export function AdminSidebar({
   initialCollapsed: boolean;
   logoLight: string | null;
   logoDark: string | null;
+  /** The uploaded favicon BrandAsset; null falls back to `/favicon.ico`. */
+  favicon: string | null;
   userName: string;
   email: string;
   labels: AdminSidebarLabels;
@@ -98,8 +101,10 @@ export function AdminSidebar({
         )}
       </Button>
 
-      {/* The brand band: the logo CENTRED (changes-43). Collapsed, the band
-          stays — empty — so its rule still lines up with the header's. */}
+      {/* The brand band: the logo CENTRED (changes-43). Collapsed, it shows
+          the FAVICON (changes-49) — the site's mark at the one size a 64px
+          rail has room for — rather than an empty band. The rule still lines
+          up with the header's either way. */}
       <div className="flex min-h-16 items-center justify-center border-b px-4">
         {!collapsed && (
           <div className="flex min-w-0 justify-center">
@@ -111,6 +116,16 @@ export function AdminSidebar({
               fallback={<p className="truncate text-sm font-semibold">{labels.brand}</p>}
             />
           </div>
+        )}
+        {collapsed && (
+          // A plain <img>, like BrandLogo: the favicon may be an .ico or an
+          // SVG, neither of which next/image optimises.
+          // eslint-disable-next-line @next/next/no-img-element -- see above
+          <img
+            src={favicon ?? "/favicon.ico"}
+            alt={labels.brand}
+            className="size-8 object-contain"
+          />
         )}
       </div>
 

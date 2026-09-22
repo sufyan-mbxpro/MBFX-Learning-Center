@@ -98,7 +98,7 @@ export function IdleTimeout({
 
   const signOut = React.useCallback(async () => {
     await endSession();
-    router.push("/admin/sign-in");
+    router.push("/keystone");
     router.refresh();
   }, [router]);
 

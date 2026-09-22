@@ -433,11 +433,18 @@ describe("URL stability", () => {
 // ─── Status machine and publish permission ───────────────────
 
 describe("lifecycle", () => {
-  it("rejects DRAFT → PUBLISHED without passing review", async () => {
+  it("publishes DRAFT → PUBLISHED directly for a holder of lessons.publish (ADR-147)", async () => {
+    const { lessonId } = await makeCourse({ publish: false });
+    await lessons.setLessonStatus(editor, lessonId, ContentStatus.PUBLISHED);
+    const row = await db.lesson.findUniqueOrThrow({ where: { id: lessonId } });
+    expect(row.status).toBe(ContentStatus.PUBLISHED);
+  });
+
+  it("refuses the same direct publish without lessons.publish", async () => {
     const { lessonId } = await makeCourse({ publish: false });
     await expect(
-      lessons.setLessonStatus(editor, lessonId, ContentStatus.PUBLISHED),
-    ).rejects.toThrow(/Illegal content transition/);
+      lessons.setLessonStatus(assistant, lessonId, ContentStatus.PUBLISHED),
+    ).rejects.toThrow(/lessons\.publish/);
   });
 
   it("rejects publishing without lessons.publish", async () => {

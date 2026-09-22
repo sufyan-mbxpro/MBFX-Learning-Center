@@ -16,7 +16,7 @@ import { loadEditorAi } from "../../../_lib/editor-ai.ts";
 import { learnLabelMaps } from "../../_lib/learn-labels.ts";
 import { CourseEditor } from "./course-editor.tsx";
 import type { CourseEditorLabels } from "./editor-types.ts";
-import { formatDateTime } from "@repo/utils";
+import { formatDateTime, siteOrigin } from "@repo/utils";
 
 // Course builder (changes-11 PRs 3.2/3.3). The read gate is here; every write
 // re-gates inside its own action (security.md #1) — the `can()` results below
@@ -53,6 +53,7 @@ export default async function CourseEditPage({ params }: PageProps<"/admin/learn
     tabCurriculum: t("courseTabCurriculum"),
     tabRecommendations: t("courseTabRecommendations"),
     tabSeo: t("courseTabSeo"),
+    tabFaq: t("courseTabFaq"),
     updateCourse: t("updateCourse"),
     saved: t("saved"),
     viewLive: t("viewLive"),
@@ -185,6 +186,28 @@ export default async function CourseEditPage({ params }: PageProps<"/admin/learn
       untitled: t("untitled"),
       fallbackTitle: t("recommendationsFallbackTitle"),
     },
+    faq: {
+      section: t("faqSection"),
+      description: t("courseFaqSectionDescription"),
+      emptyTitle: t("glossaryEditor.faqEmptyTitle"),
+      emptyBody: t("courseFaqEmptyBody"),
+      add: t("addFaq"),
+      addFirst: t("addFirstFaq"),
+      edit: t("editFaq"),
+      dialogDescription: t("faqDialogDescription"),
+      answerHint: t("faqAnswerHint"),
+      saveItem: t("faqSaveItem"),
+      unanswered: t("faqUnanswered"),
+      question: t("questionLabel"),
+      answer: t("answerLabel"),
+      remove: t("remove"),
+      cancel: t("cancel"),
+      confirm: t("confirm"),
+      confirmRemoveTitle: t("confirmRemoveFaqTitle"),
+      confirmRemoveBody: t("confirmRemoveFaqBody"),
+      moveUp: t("moveUp"),
+      moveDown: t("moveDown"),
+    },
     editor: richTextLabels(t),
     upload: {
       upload: t("uploadImage"),
@@ -240,6 +263,7 @@ export default async function CourseEditPage({ params }: PageProps<"/admin/learn
             seoTitle: tr.seoTitle ?? "",
             seoDescription: tr.seoDescription ?? "",
             seoFocusKeyword: tr.seoFocusKeyword ?? "",
+            faq: tr.faq,
             translationStatus: tr.translationStatus,
           })),
           recommendations: detail.recommendations,
@@ -279,7 +303,7 @@ export default async function CourseEditPage({ params }: PageProps<"/admin/learn
         trackKeys={[...LEARN_TRACK_KEYS]}
         locales={[...routing.locales]}
         defaultLocale={routing.defaultLocale}
-        siteUrl={process.env.NEXT_PUBLIC_SITE_URL ?? ""}
+        siteUrl={siteOrigin()}
         canUpdate={can(subject, "courses.update")}
         canPublish={can(subject, "courses.publish")}
         canDelete={can(subject, "courses.delete")}

@@ -165,7 +165,6 @@ export const MEGA_MENU_PANELS = {
           "tool-margin",
           "tool-pip-value",
           "tool-profit-loss",
-          "tool-gain-loss",
         ],
       },
       {
@@ -186,7 +185,21 @@ export const MEGA_MENU_PANELS = {
         // 6 / 4 / 5 with the new headline feed, and no row filed somewhere a
         // reader would not look for it — which a forced 5 / 5 / 5 would have
         // needed.
-        routeKeys: ["tool-market-hours", "tool-pivot-points", "economic-calendar", "volatility"],
+        //
+        // **5 / 5 / 5 since changes-49** (owner: five tools in each column).
+        // `gain-loss` moved here from Position & risk: it is the one sizing
+        // tool asked AFTER a trade rather than before it — how an account
+        // performed over a period — and the heading became Timing &
+        // performance so it is not filed under a word that excludes it.
+        // (No double quotes in this comment: changes-40-fixes.test.ts counts
+        // every quoted run in the column as a destination.)
+        routeKeys: [
+          "tool-market-hours",
+          "tool-pivot-points",
+          "economic-calendar",
+          "volatility",
+          "tool-gain-loss",
+        ],
       },
       {
         key: "rates",

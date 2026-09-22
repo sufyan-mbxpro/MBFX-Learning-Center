@@ -34,6 +34,11 @@ import {
 } from "../../_components/status-badge.tsx";
 import { useClientTable } from "../../_hooks/use-client-table.ts";
 import { useServerAction } from "../../_hooks/use-server-action.ts";
+import {
+  inStatusFilter,
+  useDeletedFilterOption,
+  usePermanentDelete,
+} from "../../_components/trash.tsx";
 
 /**
  * The tones a free-text category is drawn from.
@@ -128,6 +133,7 @@ function RowActions({
   const router = useRouter();
   const { run, pending } = useServerAction();
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const purge = usePermanentDelete("quiz", row.id);
 
   return (
     <div className="flex justify-end">
@@ -169,13 +175,16 @@ function RowActions({
               {row.deleted ? (
                 // ADR-044 #7: restore is NOT confirmed. It is the undo, and
                 // gating it makes the destructive path harder to reverse.
-                <DropdownMenuItem
-                  disabled={pending}
-                  onClick={() => run(() => setQuizDeletedAction(row.id, false))}
-                >
-                  <Undo2 aria-hidden data-icon="inline-start" />
-                  {labels.restore}
-                </DropdownMenuItem>
+                <>
+                  <DropdownMenuItem
+                    disabled={pending}
+                    onClick={() => run(() => setQuizDeletedAction(row.id, false))}
+                  >
+                    <Undo2 aria-hidden data-icon="inline-start" />
+                    {labels.restore}
+                  </DropdownMenuItem>
+                  {purge.item}
+                </>
               ) : (
                 <DropdownMenuItem
                   variant="destructive"
@@ -200,6 +209,7 @@ function RowActions({
         cancelLabel={labels.cancel}
         onConfirm={() => run(() => setQuizDeletedAction(row.id, true))}
       />
+      {purge.dialog}
     </div>
   );
 }
@@ -218,9 +228,14 @@ export function QuizzesTable({
   labels: QuizzesTableLabels;
 }) {
   const [status, setStatus] = useState("");
+  const deletedOption = useDeletedFilterOption();
 
   const visible = useMemo(
-    () => rows.filter((row) => status === "" || row.status === status),
+    () =>
+      rows.filter((row) =>
+        // Live rows by default; the trash only under the Deleted filter.
+        inStatusFilter(row.deleted, status, () => row.status === status),
+      ),
     [rows, status],
   );
 
@@ -382,6 +397,8 @@ export function QuizzesTable({
             options={[
               { value: "", label: labels.allStatuses },
               ...statusKeys.map((key) => ({ value: key, label: labels.statuses[key] ?? key })),
+              // The trash (changes-49): deleted quizzes are listed only here.
+              deletedOption,
             ]}
           />
         </FilterBarRow>

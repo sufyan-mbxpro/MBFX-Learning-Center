@@ -268,7 +268,7 @@
       },
       {
         "key": "connect",
-        "enabled": true,
+        "enabled": false,
         "order": 14
       },
       {
@@ -314,6 +314,7 @@
     "newsletter.placements.home": true,
     "newsletter.placements.news": true,
     "security.adminSessionTimeout": "30",
+    "security.learnerSessionTimeout": "never",
     "seo.defaultOgImage": "/og-default.png",
     "seo.googleSiteVerification": "",
     "seo.robotsIndex": true,

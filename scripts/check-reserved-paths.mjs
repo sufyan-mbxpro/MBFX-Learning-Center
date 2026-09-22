@@ -27,8 +27,8 @@ const ROOT_FILE_MAP = [
   ["../public/favicon.ico", "favicon.ico"],
 ];
 
-/** Reserved names that exist but aren't discoverable as a route directory or one of ROOT_FILE_MAP's files — `admin` is a route GROUP one level up, `_next` is a Next.js internal, neither ever appears here. */
-const SYSTEM_EXEMPT = new Set(["admin", "_next"]);
+/** Reserved names that exist but aren't discoverable as a route directory or one of ROOT_FILE_MAP's files — `admin` is a route GROUP one level up, `_next` is a Next.js internal, and `keystone` is served by the proxy (changes-49, ADR-146); none ever appears here. */
+const SYSTEM_EXEMPT = new Set(["admin", "_next", "keystone", "not-found-page"]);
 
 /** Extracts string entries from `export const NAME = [...] as const`. */
 export function extractArrayConst(source, name) {

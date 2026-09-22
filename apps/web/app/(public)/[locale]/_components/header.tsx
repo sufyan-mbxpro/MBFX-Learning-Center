@@ -68,7 +68,7 @@ export async function SiteHeader({ locale }: { locale: string }) {
           It sits on the <header>, not on StickyHeaderShell's div: a transform
           on the sticky element's wrapper is how a sticky bar stops sticking. */}
       <header className="header-enter bg-glow-primary relative isolate border-b border-border/70 bg-background/95 shadow-sm backdrop-blur-md">
-        <Container className="flex h-(--height-header) items-center gap-3 md:gap-6">
+        <Container className="relative flex h-(--height-header) items-center gap-3 md:gap-6">
           {/* Below xl the nav lives behind the hamburger; same rows
               (changes-21 D-1 — the desktop nav does not fit under 1280). */}
           <MobileNav
@@ -87,10 +87,16 @@ export async function SiteHeader({ locale }: { locale: string }) {
 
           {/* Uploaded logo (changes-02, ADR-017) when set — light/dark
               variants swap via the `dark:` class variant, same as every
-              other theme-aware surface; falls back to the site name. */}
+              other theme-aware surface; falls back to the site name.
+              Below xl the logo is CENTRED in the bar (changes-49): the
+              hamburger holds the start and the account controls the end, so
+              the middle is the one place it does not read as a third button.
+              `inset-x-0 mx-auto w-fit` rather than `left-1/2` + a translate,
+              because it is direction-neutral and leaves `transform` free for
+              the hover scale. */}
           <Link
             href="/"
-            className="flex shrink-0 items-center truncate transition-transform duration-(--duration-base) ease-(--ease-out-quint) hover:scale-103"
+            className="flex shrink-0 items-center truncate transition-transform duration-(--duration-base) ease-(--ease-out-quint) hover:scale-103 max-xl:absolute max-xl:inset-x-0 max-xl:mx-auto max-xl:w-fit"
           >
             <BrandLogo
               light={brandAssets.logo_light?.url ?? null}

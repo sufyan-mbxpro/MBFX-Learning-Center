@@ -6,9 +6,9 @@ import { adminPortalBase, resetPasswordPath } from "./reset-url.ts";
 const ORIGINS = { site: "https://mbx.example", admin: "https://admin.mbx.example" };
 
 describe("resetPasswordPath", () => {
-  it("sends staff to the admin screen", () => {
+  it("sends staff to the staff screen at /keystone (ADR-146)", () => {
     expect(resetPasswordPath({ userType: "STAFF" }, "abc", ORIGINS)).toBe(
-      "https://admin.mbx.example/admin/reset-password?token=abc",
+      "https://admin.mbx.example/keystone/reset-password?token=abc",
     );
   });
 
@@ -37,7 +37,7 @@ describe("resetPasswordPath", () => {
 
   it("ignores the locale for staff, whose portal is English (ADR-043 #2)", () => {
     expect(resetPasswordPath({ userType: "STAFF", locale: "ar" }, "abc", ORIGINS)).toBe(
-      "https://admin.mbx.example/admin/reset-password?token=abc",
+      "https://admin.mbx.example/keystone/reset-password?token=abc",
     );
   });
 
@@ -51,12 +51,12 @@ describe("resetPasswordPath", () => {
       ["https://mbx.example/admin", "the documented value, which already ends in /admin"],
       ["https://mbx.example/admin/", "the same with a trailing slash"],
       ["https://mbx.example", "the bare-origin fallback when the variable is unset"],
-    ])("%s (%s) yields exactly one /admin segment", (admin) => {
+    ])("%s (%s) yields the /keystone screen on that origin", (admin) => {
       const url = resetPasswordPath({ userType: "STAFF" }, "abc", {
         site: "https://mbx.example",
         admin,
       });
-      expect(url).toBe("https://mbx.example/admin/reset-password?token=abc");
+      expect(url).toBe("https://mbx.example/keystone/reset-password?token=abc");
       expect(url).not.toContain("/admin/admin");
     });
 

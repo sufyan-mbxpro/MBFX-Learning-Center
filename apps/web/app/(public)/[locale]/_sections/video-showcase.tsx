@@ -33,10 +33,12 @@ import { getFeaturedVideoTopics } from "@repo/core";
 import { Link } from "@repo/i18n/navigation";
 import { isFeatureVisible } from "@repo/settings";
 import { Button } from "@repo/ui/components/button";
+import { Carousel } from "@repo/ui/components/carousel";
 import { Container } from "@repo/ui/components/container";
 import { Reveal } from "@repo/ui/components/reveal";
 import { Section } from "@repo/ui/components/section";
 
+import { VideoStripCard } from "../_components/video-strip-card.tsx";
 import { VideoTile } from "../_components/video-tile.tsx";
 import { videoTopicCoverUrl } from "../_content/video-covers.ts";
 import type { SectionProps } from "./registry.ts";
@@ -82,7 +84,11 @@ export async function VideoShowcase({
   //
   // First, and before any I/O: it is a pure check on a prop, and a band that
   // is not going to render should not cost a query to find that out.
-  if (variant !== "grid") return null;
+  //
+  // changes-51 (owner) brings it BACK as `strip`: a slider of small cover
+  // cards after the glossary band. A stale row holding any other variant
+  // still renders nothing.
+  if (variant !== "grid" && variant !== "strip") return null;
 
   // The rail teaches; it belongs to the videos feature. An operator who turns
   // off `videos` should not still be shown a wall of them. (It was gated on
@@ -100,6 +106,59 @@ export async function VideoShowcase({
   // rather than a heading over an empty rail. The same rule every other band
   // that lists things already follows.
   if (topics.length === 0) return null;
+
+  // ── The homepage: a strip of small cover cards ──────────────────────────
+  if (variant === "strip") {
+    return (
+      // `section-flush-end`: the next band's own top padding is the whole
+      // gap, rather than two rhythms stacked (owner, changes-51).
+      <Section spacing="md" className="section-flush-end">
+        <Container className="flex flex-col gap-6">
+          {/* A centred title between two hairlines — the owner's reference.
+              The rules are decoration, so they are hidden from AT. */}
+          <Reveal variant="scale" className="flex items-center justify-center gap-4">
+            <span aria-hidden className="h-px w-16 bg-border sm:w-24" />
+            <h2 className="font-display text-2xl font-bold text-foreground">
+              {t("videoStripTitle")}
+            </h2>
+            <span aria-hidden className="h-px w-16 bg-border sm:w-24" />
+          </Reveal>
+          <Carousel
+            label={t("videoCarouselLabel")}
+            previousLabel={t("videoCarouselPrevious")}
+            nextLabel={t("videoCarouselNext")}
+            itemClassName="w-5/12 sm:w-(--width-slide-3) md:w-(--width-slide-4) lg:w-(--width-slide-5)"
+            controls="arrows"
+            controlsAlign="center"
+            slideLabels={topics.map((topic) => topic.title)}
+          >
+            {/* One Reveal per CARD, not one around the track. Alternate cards
+                  rise from below and drop from above, staggered across a view
+                  of five. The observer clips by the track's overflow, so a card
+                  scrolled in from either side of the slider plays it too, and
+                  since ADR-111 it replays scrolling the page up as well as
+                  down. */}
+            {topics.map((topic, index) => (
+              <Reveal
+                key={topic.id}
+                variant={index % 2 === 0 ? "rise" : "drop"}
+                delay={(index % 5) * 90}
+                duration={650}
+                className="h-full"
+              >
+                <VideoStripCard
+                  href={`${learnTrackVideosPath(topic.track)}/${topic.slug}`}
+                  poster={topic.coverUrl ?? videoTopicCoverUrl(topic.slug)}
+                  title={topic.title}
+                  hasVideo={topic.source !== null}
+                />
+              </Reveal>
+            ))}
+          </Carousel>
+        </Container>
+      </Section>
+    );
+  }
 
   // ── /learn: the tile grid, unchanged ────────────────────────────────────
   const tiles = topics.map((topic) => (

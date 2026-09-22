@@ -243,6 +243,22 @@ export type CourseMetaInput = z.infer<typeof courseMetaSchema>;
  * a property of "a course's slug", not of slugs in general — a SECTION could
  * legitimately be titled "Quizzes".
  */
+/**
+ * A course's FAQ (changes-49, ADR-147) — the glossary term's shape and caps,
+ * restated here rather than imported because `glossary.ts` already imports
+ * from this file. Plain text: the editor is a textarea, like the glossary's.
+ */
+export const COURSE_FAQ_MAX = 12;
+export const courseFaqSchema = z
+  .array(
+    z.object({
+      question: z.string().trim().min(1).max(300),
+      answer: z.string().trim().min(1).max(5000),
+    }),
+  )
+  .max(COURSE_FAQ_MAX);
+export type CourseFaqItem = z.infer<typeof courseFaqSchema>[number];
+
 export const courseTranslationSchema = z
   .object({
     // No `courseId` here on purpose. This schema is only ever nested inside
@@ -257,6 +273,8 @@ export const courseTranslationSchema = z
     seoTitle: z.string().trim().max(70).nullable().optional(),
     seoDescription: z.string().trim().max(180).nullable().optional(),
     seoFocusKeyword: z.string().trim().max(100).nullable().optional(),
+    /** Omitted = leave the stored FAQ alone; `[]` = the author removed it all. */
+    faq: courseFaqSchema.optional(),
     /**
      * This locale's text came from AI and has not been edited since (changes-29
      * B3, as `saveArticleTranslationSchema` has it). The save writes

@@ -21,7 +21,7 @@ export default async function AdminForgotPasswordPage() {
       footer={
         <p className="text-center text-sm text-muted-foreground">
           <Link
-            href="/admin/sign-in"
+            href="/keystone"
             className="font-medium text-primary-interactive underline-offset-4 hover:underline"
           >
             {t("passwordReset.backToSignIn")}

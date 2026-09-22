@@ -49,6 +49,8 @@ export async function LearnMasthead({
 
   return (
     <PageHero
+      // changes-49: the News banner's density on every Learn listing.
+      size="medium"
       // `priority` on this one piece: it is the LCP candidate on the route.
       // Every other image on the page — course covers included — stays lazy.
       backdrop={backdrop ?? <LearnBackdrop slot="banner" priority />}

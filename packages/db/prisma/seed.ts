@@ -479,6 +479,9 @@ const SETTINGS = [
   // how long before an unattended admin screen locks is operational detail a
   // public page has no reason to serialise (security.md #12).
   ["general", "security.adminSessionTimeout", "never", "SELECT", "Admin session timeout", false],
+  // changes-49 — the same timeout for LEARNER sessions, seeded "never" for
+  // the same reason. Not public either.
+  ["general", "security.learnerSessionTimeout", "never", "SELECT", "User session timeout", false],
 
   // SEO
   ["seo", "seo.titleTemplate", "%s | MBX Pro", "STRING", "Title template", true],
@@ -511,7 +514,12 @@ const SETTINGS = [
       // the homepage section composer is paused (ADR-038), so there is no
       // screen on which to flip it. `VideoShowcase` therefore renders nothing
       // for any variant but `grid` — see its own comment.
-      { key: "learning_videos", enabled: false, order: 2, variant: "grid", limit: 6 },
+      //
+      // changes-51 (owner): back on the home page as `strip` — a slider of
+      // small cover cards straight after the glossary band (order 10, where
+      // only disabled rows sat). Migration 20260922130000 moves an existing
+      // install whose row still holds the old `grid` value.
+      { key: "learning_videos", enabled: true, order: 10, variant: "strip", limit: 10 },
       // changes-31 (ADR-103). Placed where the reference puts them — the
       // marks a reader is asked to trust, then the figures that back the
       // claim, both directly under the hero and before the page starts
@@ -612,7 +620,10 @@ const SETTINGS = [
       // else to find us" reads as a closing offer, not as a second header.
       // Renders nothing until an admin activates a social link. changes-35
       // took its video panel (ADR-116 §5), so it is one row now.
-      { key: "connect", enabled: true, order: 14 },
+      // OFF since changes-49 (owner): "Follow us … remove this section from the
+      // home page". The footer carries the social links and, signed out, the
+      // subscribe strip; migration 20260922090000 flips an existing install.
+      { key: "connect", enabled: false, order: 14 },
 
       // changes-35 (ADR-116 §6): questions BEFORE the ask. Answer the
       // objection, then request the email address — which is also the order
@@ -1121,11 +1132,40 @@ export async function seed(db: PrismaClient) {
       darkBrandOverrides: DEFAULT_DARK_BRAND_OVERRIDES,
       layoutTokens: DEFAULT_LAYOUT,
       defaultMode: "SYSTEM",
-      isActive: true,
+      // A PRESET since changes-49 (ADR-148): the live palettes are the two
+      // surface rows below, so this row is what "reset to the default"
+      // applies, not what either surface reads.
+      isActive: false,
       isSystem: true,
       scope: "both",
     },
   });
+
+  // The public site's and the admin's own live palettes (changes-49, ADR-148).
+  // Create-only: after the first seed each belongs to the theme editor, and a
+  // re-seed must not overwrite an admin's colours.
+  for (const [surface, name] of [
+    ["web", "Public site"],
+    ["admin", "Admin portal"],
+  ] as const) {
+    await db.theme.upsert({
+      where: { key: `surface-${surface}` },
+      update: {},
+      create: {
+        key: `surface-${surface}`,
+        name,
+        brandColors: DEFAULT_BRAND,
+        lightSurface: DEFAULT_LIGHT_SURFACE,
+        darkSurface: DEFAULT_DARK_SURFACE,
+        darkBrandOverrides: DEFAULT_DARK_BRAND_OVERRIDES,
+        layoutTokens: DEFAULT_LAYOUT,
+        defaultMode: "SYSTEM",
+        isActive: true,
+        isSystem: true,
+        scope: surface,
+      },
+    });
+  }
   console.log("  theme: mbx-pro-default (active)");
 
   // Brand logos (changes-32). The theme shipped with colours and no marks, so

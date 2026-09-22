@@ -32,10 +32,20 @@ import { cn } from "@repo/ui/lib/utils";
 // is the only axis here — the TYPE scale is untouched, because ADR-072's
 // rule is that a band which looks wrong gets its spacing fixed, never a
 // private font size.
+//
+// **A size is also a HEIGHT FLOOR since changes-49.** Padding alone made the
+// height a property of the copy: two `medium` banners, one with a breadcrumb
+// and a row of buttons and one without, came out 356px and 256px, and the
+// owner read that as two banner sizes. `minHeight` is the tallest ordinary
+// banner of the density (the News masthead for `medium`, a tool page for
+// `compact`), applied from `lg` only — below it the copy wraps unpredictably
+// and a floor would open empty bands on a phone. The copy centres in the
+// floor rather than hugging the top of it. It is a FLOOR, not a height: a
+// banner with more to say grows, it is never clipped.
 const HERO_SIZE = {
-  default: { spacing: "lg", copyGap: "gap-5" },
-  medium: { spacing: "md", copyGap: "gap-4" },
-  compact: { spacing: "sm", copyGap: "gap-3" },
+  default: { spacing: "lg", copyGap: "gap-5", minHeight: "" },
+  medium: { spacing: "md", copyGap: "gap-4", minHeight: "lg:min-h-(--hero-min-medium)" },
+  compact: { spacing: "sm", copyGap: "gap-3", minHeight: "lg:min-h-(--hero-min-compact)" },
 } as const;
 
 const ALIGN_CLASS = {
@@ -174,7 +184,12 @@ function PageHero({
       data-slot="page-hero"
       spacing={HERO_SIZE[size].spacing}
       data-tone={resolvedTone}
-      className={cn("relative isolate overflow-hidden", HERO_TONE_CLASS[resolvedTone], className)}
+      className={cn(
+        "relative isolate flex flex-col justify-center overflow-hidden",
+        HERO_SIZE[size].minHeight,
+        HERO_TONE_CLASS[resolvedTone],
+        className,
+      )}
       {...props}
     >
       {backdrop && (

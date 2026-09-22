@@ -245,16 +245,20 @@ export interface QuizAdminRow {
   usedByLessons: number;
   usedByCourses: number;
   updatedAt: Date;
+  /** Set once soft-deleted; only returned under `includeDeleted` (changes-49). */
+  deletedAt: Date | null;
 }
 
 export async function listQuizzesAdmin(filter?: {
   status?: ContentStatus;
   search?: string;
+  /** The trash (changes-49): live rows only unless asked. */
+  includeDeleted?: boolean;
 }): Promise<QuizAdminRow[]> {
   const { locales, defaultLocale } = await localeContext();
   const rows = await db.quiz.findMany({
     where: {
-      deletedAt: null,
+      ...(filter?.includeDeleted ? {} : { deletedAt: null }),
       ...(filter?.status ? { status: filter.status } : {}),
       ...(filter?.search ? { translations: { some: { title: { contains: filter.search } } } } : {}),
     },
@@ -267,6 +271,7 @@ export async function listQuizzesAdmin(filter?: {
       track: true,
       category: true,
       updatedAt: true,
+      deletedAt: true,
       translations: { select: { locale: true, title: true, slug: true } },
       _count: { select: { questions: true, attempts: true, lessons: true, courses: true } },
     },
@@ -288,6 +293,7 @@ export async function listQuizzesAdmin(filter?: {
       usedByLessons: row._count.lessons,
       usedByCourses: row._count.courses,
       updatedAt: row.updatedAt,
+      deletedAt: row.deletedAt,
     };
   });
 }

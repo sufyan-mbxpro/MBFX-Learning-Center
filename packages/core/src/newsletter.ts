@@ -33,6 +33,7 @@ import type {
 import { db, SubscriberStatus } from "@repo/db";
 import { getSetting } from "@repo/settings";
 import { recordAudit } from "./index.ts";
+import { siteOrigin } from "@repo/utils";
 
 /** ADR-080 #1. A row that never gets confirmed disappears and can try again. */
 export const CONFIRM_TOKEN_TTL_HOURS = 48;
@@ -85,7 +86,8 @@ export function newsletterLink(
 }
 
 function origins(): NewsletterLinkOrigins {
-  return { site: process.env.NEXT_PUBLIC_SITE_URL ?? "" };
+  // changes-49: the shared precedence, so a confirm link is never a bare path.
+  return { site: siteOrigin() };
 }
 
 // ─── Signup ──────────────────────────────────────────────────

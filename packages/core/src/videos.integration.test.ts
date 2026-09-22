@@ -534,11 +534,18 @@ describe("publishing", () => {
     ).rejects.toThrow(/lessons\.publish/);
   });
 
-  it("refuses DRAFT to PUBLISHED even for an editor who may publish", async () => {
+  it("publishes DRAFT directly for an editor who may publish (ADR-147)", async () => {
+    const topicId = await makeTopic({ publish: false });
+    await content.transitionContentStatus(editor, "videos", topicId, ContentStatus.PUBLISHED);
+    const row = await db.videoTopic.findUniqueOrThrow({ where: { id: topicId } });
+    expect(row.status).toBe(ContentStatus.PUBLISHED);
+  });
+
+  it("still refuses a DRAFT direct publish to someone without the key", async () => {
     const topicId = await makeTopic({ publish: false });
     await expect(
-      content.transitionContentStatus(editor, "videos", topicId, ContentStatus.PUBLISHED),
-    ).rejects.toThrow(content.IllegalTransitionError);
+      content.transitionContentStatus(assistant, "videos", topicId, ContentStatus.PUBLISHED),
+    ).rejects.toThrow(/lessons\.publish/);
   });
 });
 

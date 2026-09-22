@@ -1111,7 +1111,7 @@ export const aiSetupModelSchema = z.object({
   modelId: z.string().min(1).max(80),
   label: z.string().min(1).max(80),
   // Optional: connecting a provider does not ask for a price. Absent keeps the
-  // stored price (or starts at 0); prices are edited on /admin/ai/providers.
+  // stored price (or starts at 0); prices are edited on Settings → AI → Providers.
   inputPricePerMTok: priceSchema.nullish(),
   outputPricePerMTok: priceSchema.nullish(),
   cachedInputPricePerMTok: priceSchema.nullish(),
@@ -1124,7 +1124,7 @@ export type AiSetupModelInput = z.infer<typeof aiSetupModelSchema>;
 /**
  * One save for the whole connection: provider, key, the models it offers and
  * the three tiers. The provider becomes enabled and the default — that is what
- * "connect" means on this screen; `/admin/ai/providers` stays the place for a
+ * "connect" means on this screen; the Providers tab stays the place for a
  * second provider that is NOT the default.
  */
 export const aiSetupSchema = z

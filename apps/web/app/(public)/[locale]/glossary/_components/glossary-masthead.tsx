@@ -37,6 +37,8 @@ export async function GlossaryMasthead({
   return (
     <>
       <PageHero
+        // changes-49: the News banner's density.
+        size="medium"
         // `priority` on this one piece: it is the LCP candidate on the route.
         backdrop={<GlossaryBackdrop slot="banner" priority />}
         // Composed WITH the artwork rather than instead of it: the generated

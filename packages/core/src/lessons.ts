@@ -879,11 +879,13 @@ export async function listAllLessonsAdmin(filter?: {
   status?: ContentStatus;
   translationStatus?: TranslationStatus;
   search?: string;
+  /** The trash (changes-49): live rows only unless asked. */
+  includeDeleted?: boolean;
 }): Promise<LessonFlatRow[]> {
   const defaultLocale = await defaultLocaleCode();
   const rows = await db.lesson.findMany({
     where: {
-      deletedAt: null,
+      ...(filter?.includeDeleted ? {} : { deletedAt: null }),
       ...(filter?.status ? { status: filter.status } : {}),
       ...(filter?.courseId ? { section: { courseId: filter.courseId } } : {}),
       ...(filter?.translationStatus

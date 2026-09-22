@@ -12,7 +12,7 @@
 // consumer that returned `null` until its fetch resolved would remove content
 // that was already on screen and shift the layout — the exact cost ADR-056
 // accepted the island in order to avoid.
-import { CircleCheckBig, LogIn, UserPlus } from "lucide-react";
+import { CircleCheckBig, LockKeyhole, LogIn, UserPlus } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { ROUTE_PATHS } from "@repo/contracts";
@@ -125,23 +125,52 @@ export function SaveProgressPrompt({ title, body }: { title: string; body: strin
     ? `${ROUTE_PATHS["sign-in"]}?${new URLSearchParams({ redirect: pathname }).toString()}`
     : ROUTE_PATHS["sign-in"];
 
+  // A container query, not `md:`: the same prompt sits full width on the quiz
+  // index and inside the lesson page's narrow rail, and whether the buttons fit
+  // beside the text is a question about THIS box, not the viewport.
   return (
-    <div className="flex flex-col gap-2 rounded-xl border border-primary/20 bg-primary/5 p-4">
-      <p className="flex items-center gap-2 text-sm font-semibold">
-        <LogIn aria-hidden className="size-4 text-primary-interactive" />
-        {title}
-      </p>
-      <p className="text-sm text-muted-foreground">{body}</p>
-      <div className="flex flex-wrap gap-2">
-        <Button size="sm" render={<Link href={signInHref} />}>
-          <LogIn data-icon="inline-start" aria-hidden />
-          {t("progress.signInAction")}
-        </Button>
-        <Button size="sm" variant="outline" render={<Link href={ROUTE_PATHS["sign-up"]} />}>
-          <UserPlus data-icon="inline-start" aria-hidden />
-          {t("progress.joinAction")}
-        </Button>
+    <div className="@container rounded-xl border border-primary/20 bg-primary/5 px-4 py-3">
+      <div className="flex flex-col gap-3 @2xl:flex-row @2xl:items-center @2xl:gap-6">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary-interactive">
+            <LogIn aria-hidden className="size-5" />
+          </span>
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <p className="text-sm font-semibold">{title}</p>
+            <p className="text-sm text-muted-foreground">{body}</p>
+          </div>
+        </div>
+        <LockedProgressTrack />
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <Button size="sm" render={<Link href={signInHref} />}>
+            <LogIn data-icon="inline-start" aria-hidden />
+            {t("progress.signInAction")}
+          </Button>
+          <Button size="sm" variant="outline" render={<Link href={ROUTE_PATHS["sign-up"]} />}>
+            <UserPlus data-icon="inline-start" aria-hidden />
+            {t("progress.joinAction")}
+          </Button>
+        </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * A picture of the progress a guest is not keeping: a track with a padlock
+ * where the knob would be. Decorative, so `aria-hidden` — the title beside it
+ * already says it in words — and deliberately NOT `ProgressBar`, whose
+ * role="progressbar" would announce a value that measures nothing.
+ */
+function LockedProgressTrack() {
+  return (
+    <div aria-hidden className="relative flex h-8 w-full max-w-48 shrink-0 items-center">
+      <div className="h-2.5 w-full rounded-full bg-muted">
+        <div className="h-full w-1/4 rounded-full bg-muted-foreground/40" />
+      </div>
+      <span className="absolute start-1/3 flex size-8 -translate-x-1/2 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm rtl:translate-x-1/2">
+        <LockKeyhole className="size-4" />
+      </span>
     </div>
   );
 }

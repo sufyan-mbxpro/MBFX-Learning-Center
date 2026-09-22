@@ -88,7 +88,7 @@ export interface SectionPending {
 }
 
 export const SECTION_PENDING: Partial<Record<HomeSectionKey | string, SectionPending>> = {
-  learning_videos: { tone: "inverted", cards: 2 },
+  learning_videos: { cards: 5 },
   explore_platform: { cards: 3 },
   popular_tools: { cards: 4 },
   feature_highlights: { tone: "muted", cards: 3 },

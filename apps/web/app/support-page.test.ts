@@ -180,7 +180,7 @@ describe("the anonymous mutation keeps all five of its guards", () => {
   // `requirePermission()` this endpoint cannot have; deleting any one of them
   // should fail here before it fails in production.
   it.each([
-    ["a recorded inbox", 'getSetting("site.supportEmail")'],
+    ["a recorded inbox", 'getSetting("site.contactEmail")'],
     ["the honeypot", "SUPPORT_HONEYPOT_FIELD"],
     ["the schema", "supportRequestSchema"],
     ["a per-IP limit", "support:ip:"],
@@ -193,7 +193,9 @@ describe("the anonymous mutation keeps all five of its guards", () => {
   // from a staff-only setting (ADR-131), never from the request.
   it("never reads a destination off the form", () => {
     expect(source).not.toMatch(/formData\.get\(\s*["']to["']\s*\)/);
-    expect(source).toMatch(/const to = await getSetting\("site\.supportEmail"\)/);
+    expect(source).toContain(
+      'const to = (await getSetting("site.contactEmail")) || (await getSetting("site.supportEmail"));',
+    );
   });
 
   // Two is a pattern; a third without its own ADR is how a repo ends up with

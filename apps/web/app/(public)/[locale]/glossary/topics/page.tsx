@@ -72,7 +72,7 @@ export default async function GlossaryTopicsPage({
           are recognisably one place (ADR-117's photo tone: `--secondary`, the
           photograph at full strength, the scrim carrying the contrast). */}
       <PageHero
-        size="compact"
+        size="medium"
         backdrop={<GlossaryBackdrop slot="topicsBanner" priority />}
         motif={<AmbientMotif variant="learn" intensity={0.7} />}
         eyebrow={t("eyebrow")}

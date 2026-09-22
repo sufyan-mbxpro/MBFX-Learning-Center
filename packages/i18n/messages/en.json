@@ -78,6 +78,7 @@
     "videoLead": "Short sessions on what the market is, how to read a chart, and how to size a trade before you place one.",
     "videoAll": "Browse the library",
     "videoPlay": "Play: {title}",
+    "videoStripTitle": "Our videos",
     "videoCarouselLabel": "Learning videos",
     "videoCarouselPrevious": "Previous videos",
     "videoCarouselNext": "More videos",
@@ -180,7 +181,19 @@
   "notFound": {
     "title": "Page not found",
     "backHome": "Back to home",
-    "description": "The page may have moved, or the address may be mistyped."
+    "description": "The page may have moved, or the address may be mistyped.",
+    "eyebrow": "Coming soon",
+    "comingTitle": "This page is on its way",
+    "comingDescription": "We are still building this part of the site, or the address may have been mistyped. While we finish it, here is where to go next.",
+    "exploreTitle": "Meanwhile, explore",
+    "learnTitle": "Courses",
+    "learnBody": "Structured forex and crypto lessons, free to read.",
+    "toolsTitle": "Trading tools",
+    "toolsBody": "Calculators, market hours and live rates.",
+    "newsTitle": "News & analysis",
+    "newsBody": "What moved the markets, in plain language.",
+    "supportTitle": "Get support",
+    "supportBody": "Questions about the site or your account."
   },
   "notTranslated": {
     "title": "Not yet translated",
@@ -272,7 +285,7 @@
       },
       "tools": {
         "position": "Position & risk",
-        "timing": "Market timing",
+        "timing": "Timing & performance",
         "rates": "Rates & relationships"
       }
     },
@@ -545,11 +558,15 @@
     "group": "Group",
     "publicBadge": "public",
     "privateBadge": "private",
-    "themeBrand": "Colors & Branding",
+    "themeBrand": "Colors",
     "themeLayout": "Layout & Display",
     "themeModes": "Theme Modes (light / dark)",
     "themePresets": "Presets",
     "themeEditor": {
+      "surfaceLabel": "Which palette",
+      "surfaceWeb": "Public site",
+      "surfaceAdmin": "Admin portal",
+      "surfaceHint": "Each has its own colours and presets apply to one at a time — changing one never changes the other.",
       "inputName": "“{name}”",
       "whereBrand": "on the {tab} tab",
       "whereSurface": "under {palette} on the {tab} tab",
@@ -571,6 +588,8 @@
       "apply": "Apply suggestion",
       "applied": "Applied — press Save to keep it and re-check.",
       "presetsIntro": "Activate a preset to use it on the site. Save the editor's current colours as a new preset to come back to them later.",
+      "presetActiveNow": "Active now: {name}. Its colours are loaded in the Colors and Theme Modes tabs.",
+      "presetCustom": "Active now: custom colours — the palette matches no saved preset.",
       "savePreset": "Save as preset",
       "savePresetTitle": "Save these colours as a preset",
       "savePresetDescription": "Keeps the colours in the editor right now, unsaved changes included, as a preset you can activate later. The live site does not change.",
@@ -722,19 +741,26 @@
       "media": "Media",
       "ai": "AI"
     },
+    "settingsTabs": {
+      "site": "Site",
+      "contact": "Contact",
+      "regional": "Language & region",
+      "security": "Security",
+      "branding": "Branding"
+    },
     "settingsGroupDesc": {
-      "general": "Site identity, contact details, and defaults",
+      "general": "Site identity, contact details, defaults and branding",
       "seo": "Titles, indexing, and search appearance",
       "layout": "Header, footer, and homepage structure",
       "legal": "Risk disclaimer, company details, copyright, and the documents the footer links to",
       "social": "Social links shown across the site",
       "features": "Feature flags and visibility",
       "navigation": "Menus and their ordering",
-      "theme": "Branding, colors, and layout tokens",
+      "theme": "Brand colours, light and dark modes, and presets",
       "articles": "Listing size, bylines, and related articles",
-      "email": "Sender identity, delivery, and newsletter placement",
+      "email": "Sender, delivery, newsletter placement, templates, and the delivery log",
       "media": "Upload limits and accepted file types",
-      "ai": "Connect an AI provider, choose its models, and set usage limits",
+      "ai": "Connect a provider, watch usage and spend, and set features, budget, and limits",
       "emailTemplates": "Subjects, bodies, and senders for every email the site sends",
       "emailLog": "Every email sent or attempted, with its delivery status",
       "market": "The market data API, its key, and how often rates refresh"
@@ -976,6 +1002,23 @@
     "dashboardActivityEntity": "on {entity}",
     "selectPlaceholder": "Select…",
     "settingMegabytes": "{size} MB",
+    "trash": {
+      "filter": "Deleted",
+      "purge": "Delete permanently",
+      "purgeTitle": "Delete permanently?",
+      "purgeBody": "This removes the item and everything inside it for good. It cannot be restored.",
+      "purged": "Deleted permanently"
+    },
+    "settingDescriptions": {
+      "security": {
+        "adminSessionTimeout": "Signs a staff member out of the admin after this long without activity.",
+        "learnerSessionTimeout": "Signs a learner out of the public site after this long without activity."
+      },
+      "site": {
+        "contactEmail": "Messages sent through the contact form on the Support page are delivered to this address.",
+        "supportEmail": "Shown to readers on the Support page and in the footer. The contact form sends here only when no contact email is set."
+      }
+    },
     "settingLabels": {
       "media": {
         "maxBytes": {
@@ -996,6 +1039,15 @@
       },
       "security": {
         "adminSessionTimeout": {
+          "2": "After 2 minutes",
+          "5": "After 5 minutes",
+          "15": "After 15 minutes",
+          "30": "After 30 minutes",
+          "60": "After 1 hour",
+          "120": "After 2 hours",
+          "never": "Never sign out"
+        },
+        "learnerSessionTimeout": {
           "2": "After 2 minutes",
           "5": "After 5 minutes",
           "15": "After 15 minutes",
@@ -1038,7 +1090,6 @@
     "editorRedo": "Redo",
     "editorLinkPrompt": "Link URL",
     "editorPlaceholder": "Start writing…",
-    "themeLogos": "Logos & Favicon",
     "logoLight": "Logo (light mode)",
     "logoDark": "Logo (dark mode)",
     "favicon": "Favicon",
@@ -1082,7 +1133,17 @@
     "websiteCards": "Cards",
     "websiteMedia": "Media",
     "websiteRedirects": "Redirects",
-    "mediaUpload": "Upload",
+    "mediaUpload": "Upload from computer",
+    "mediaSourceLibrary": "Media library",
+    "mediaSourceWeb": "Web address",
+    "mediaWebUrlLabel": "Image address",
+    "mediaWebAltLabel": "Alt text",
+    "mediaWebHint": "Paste the full address of an image, starting with https://. A preview appears here.",
+    "mediaWebBroken": "No image loads from that address. Check it and try again.",
+    "mediaWebInvalid": "Enter a full image address that starts with https://.",
+    "mediaWebInsert": "Insert image",
+    "mediaChooseImage": "Choose image",
+    "mediaChangeImage": "Change image",
     "mediaSearchPlaceholder": "Search media…",
     "mediaKindAll": "All",
     "mediaKindImage": "Images",
@@ -1192,26 +1253,23 @@
     "keywordDensityHint": "Optimal keyword density: 2–3%. These figures are a hint, not a requirement.",
     "keywordDensityEmpty": "Add focus keywords under SEO to measure their density.",
     "seoTabBasic": "Basic SEO",
-    "seoTabSocial": "Social Media",
-    "seoTabAdvanced": "Advanced",
+    "seoTabSocial": "Social sharing",
+    "socialIntro": "How this post looks when its link is shared on Facebook, LinkedIn, X or WhatsApp. Empty fields fall back to the SEO title and description, then to the post itself.",
+    "sharePreviewLabel": "Share preview",
     "seoTabAnalysis": "SEO Analysis",
     "seoTitleHint": "Leave empty to use the post title. Optimal length: 50–60 characters.",
     "seoDescriptionHint": "Leave empty to use the excerpt. Optimal length: 120–160 characters.",
     "focusKeywordsLabel": "Focus Keywords",
     "focusKeywordsHint": "Separate multiple keywords with commas. They should appear naturally in your content.",
     "canonicalUrlHint": "Leave empty to use the default URL. Use for duplicate content management.",
-    "canonicalDefault": "default URL",
     "allowIndexLabel": "Allow search engines to index this post",
     "allowFollowLabel": "Allow search engines to follow links",
-    "ogTitleLabel": "Open Graph title",
-    "ogDescriptionLabel": "Open Graph description",
-    "twitterCardLabel": "Twitter card",
+    "ogTitleLabel": "Share title",
+    "ogDescriptionLabel": "Share description",
+    "twitterCardLabel": "X (Twitter) card style",
     "twitterCardSummary": "Summary",
     "twitterCardLargeImage": "Summary with large image",
-    "twitterImageLabel": "Twitter image",
-    "robotsSummaryHint": "What search engines will be told for this post, derived from the Basic SEO tab.",
-    "robotsIndexRow": "Indexing",
-    "robotsFollowRow": "Link following",
+    "twitterImageLabel": "X (Twitter) image",
     "postSettingsSection": "Post Settings",
     "mediaTabImage": "Image",
     "mediaTabVideo": "Video",
@@ -1359,7 +1417,8 @@
       "addSocialLink": "Add a social profile to the site footer. The platform decides which icon is shown.",
       "editSocialLink": "Change where this social link points, or which platform it represents.",
       "mediaDetail": "File details, replacement, and every place this asset is currently used.",
-      "mediaPicker": "Pick a file from the media library, or upload a new one to use here."
+      "mediaPicker": "Pick a file from the media library, or upload a new one to use here.",
+      "mediaPickerWeb": "Pick an image from your media library, upload a new one, or use a web address."
     },
     "pageDesc": {
       "dashboard": "Activity, content and account totals at a glance",
@@ -1376,7 +1435,7 @@
       "articleTags": "The tags used to cross-link articles",
       "media": "Every image, video, audio file and document uploaded for use across the site",
       "features": "Feature flags that turn parts of the site on and off without a deploy",
-      "theme": "Brand colours, light and dark modes, presets and logos",
+      "theme": "Brand colours, light and dark modes, and presets",
       "profile": "Your own account details and password",
       "learnCourses": "Structured courses, their curriculum, and how they reach the learn area",
       "learnLessons": "Every lesson across every course, including translations that have gone stale",
@@ -1516,6 +1575,9 @@
     "courseTabCurriculum": "Curriculum",
     "courseTabRecommendations": "Recommendations",
     "courseTabSeo": "SEO",
+    "courseTabFaq": "FAQ",
+    "courseFaqSectionDescription": "Questions answered on the course page, and emitted as FAQPage structured data.",
+    "courseFaqEmptyBody": "Add the questions learners ask before they start this course.",
     "courseDetailsSection": "Course details",
     "courseDetailsSectionDescription": "What the course is, who it is for and how it is presented",
     "courseSettingsSection": "Course settings",
@@ -1905,7 +1967,9 @@
       "backToList": "All video topics",
       "updateTopic": "Save topic",
       "bodySection": "Page",
-      "bodySectionDescription": "The title, the summary a card shows, and the written body beneath the player.",
+      "bodySectionDescription": "The title, the address and the summary a card shows.",
+      "contentSection": "Body",
+      "contentSectionDescription": "The written guide beneath the player — it follows the videos, as it does on the page.",
       "summaryLabel": "Summary",
       "summaryHint": "One or two sentences. Shown on the card and used as the meta description when no SEO description is set.",
       "contentLabel": "Body",
@@ -1972,6 +2036,9 @@
       "driver": "Method",
       "driverHint": "SMTP sends real mail. Log writes each message to the server console instead — the default until a server is configured.",
       "driverSmtp": "SMTP server",
+      "driverSendgrid": "SendGrid",
+      "sendgridKey": "SendGrid API key",
+      "sendgridKeyHint": "Create a key with Mail Send access in SendGrid → Settings → API Keys. The sender address below must be a verified sender in SendGrid.",
       "driverLog": "Server log only",
       "host": "Host",
       "port": "Port",
@@ -2075,7 +2142,12 @@
       "clearFilters": "Clear filters",
       "loadMore": "Load more",
       "logEmpty": "No deliveries yet",
-      "logEmptyBody": "Every email this site sends will be recorded here, with the reason when one does not arrive."
+      "logEmptyBody": "Every email this site sends will be recorded here, with the reason when one does not arrive.",
+      "tabSender": "Sender",
+      "tabDelivery": "Delivery",
+      "tabNewsletter": "Newsletter",
+      "tabTemplates": "Templates",
+      "tabLog": "Delivery log"
     },
     "passwordReset": {
       "forgotLink": "Forgot your password?",
@@ -2823,7 +2895,10 @@
         "statReading": "~{count} min read",
         "statAgainst": "{count} / {target} {unit}",
         "failed": "Could not write that"
-      }
+      },
+      "navSetup": "Connection",
+      "liveUpdated": "Live · updated {time}",
+      "liveRefresh": "Refresh now"
     },
     "machineTranslatedQueue": "Machine-translated, not yet reviewed",
     "statusMACHINE_TRANSLATED": "Machine translated",
@@ -3873,6 +3948,8 @@
       "openResource": "Open resource"
     },
     "course": {
+      "faqHeading": "Common questions",
+      "faqLead": "What learners ask before they start this course.",
       "breadcrumb": "Learn",
       "curriculum": "Curriculum",
       "curriculumIntro": "What the course covers, in order.",
@@ -3974,9 +4051,12 @@
       "emptyBody": "Quizzes are being written. The courses are ready in the meantime.",
       "filterLabel": "Filter by topic",
       "filterAll": "All topics",
-      "noneTitle": "No quizzes on this topic",
-      "noneBody": "Try another topic, or clear the filter.",
-      "clearFilter": "Clear filter",
+      "searchLabel": "Search quizzes",
+      "searchPlaceholder": "Search quizzes…",
+      "clearSearch": "Clear search",
+      "noneTitle": "No quizzes match",
+      "noneBody": "Try another topic or search, or clear the filters.",
+      "clearFilter": "Clear filters",
       "questionCount": "{count, plural, one {# question} other {# questions}}",
       "passMark": "Pass at {percent}%",
       "start": "Start the quiz",

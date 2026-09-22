@@ -32,13 +32,34 @@ import {
 } from "../../_actions/email-actions.ts";
 import { formatDateTime } from "@repo/utils";
 
+/**
+ * SendGrid, as a PROVIDER rather than a driver (changes-49, owner: "sendgrid
+ * add option for email"). SendGrid accepts SMTP, so choosing it stores an
+ * ordinary SMTP row with SendGrid's fixed host, port, security and username —
+ * and the API key goes in the password slot, sealed exactly as the SMTP
+ * password is (ADR-078 #3). No new driver, no new column, no second secret
+ * store: security.md #10 names three sealed secrets and this is not a fourth.
+ */
+const SENDGRID = {
+  host: "smtp.sendgrid.net",
+  port: 587,
+  security: "STARTTLS",
+  // SendGrid's documented SMTP username — the literal word, for every account.
+  username: "apikey",
+} as const;
+
+type ProviderChoice = "SMTP" | "SENDGRID" | "LOG";
+
 export interface EmailTransportLabels {
   section: string;
   sectionDescription: string;
   driver: string;
   driverHint: string;
   driverSmtp: string;
+  driverSendgrid: string;
   driverLog: string;
+  sendgridKey: string;
+  sendgridKeyHint: string;
   host: string;
   port: string;
   security: string;
@@ -75,7 +96,11 @@ export function EmailTransportForm({
   labels: EmailTransportLabels;
 }) {
   const { run, pending } = useServerAction();
-  const [driver, setDriver] = React.useState(transport.driver);
+  const [choice, setChoice] = React.useState<ProviderChoice>(() =>
+    transport.driver === "SMTP" && transport.host === SENDGRID.host ? "SENDGRID" : transport.driver,
+  );
+  const driver: EmailTransportView["driver"] = choice === "LOG" ? "LOG" : "SMTP";
+  const isSendgrid = choice === "SENDGRID";
   const [host, setHost] = React.useState(transport.host ?? "");
   const [port, setPort] = React.useState(transport.port === null ? "" : String(transport.port));
   const [security, setSecurity] = React.useState(transport.security);
@@ -85,18 +110,21 @@ export function EmailTransportForm({
   const [testResult, setTestResult] = React.useState<string | null>(null);
 
   const values = React.useMemo(
-    () => ({
-      driver,
-      host: host.trim() || undefined,
-      // An empty port must reach the schema as `undefined`, not `NaN`: the
-      // SMTP branch refuses a missing port, and `NaN` would fail as "not a
-      // number" instead of naming the field that is blank.
-      port: port.trim() === "" ? undefined : Number(port),
-      security,
-      username: username.trim() || undefined,
-      password: password || undefined,
-    }),
-    [driver, host, port, security, username, password],
+    () =>
+      isSendgrid
+        ? { driver, ...SENDGRID, password: password || undefined }
+        : {
+            driver,
+            host: host.trim() || undefined,
+            // An empty port must reach the schema as `undefined`, not `NaN`:
+            // the SMTP branch refuses a missing port, and `NaN` would fail as
+            // "not a number" instead of naming the field that is blank.
+            port: port.trim() === "" ? undefined : Number(port),
+            security,
+            username: username.trim() || undefined,
+            password: password || undefined,
+          },
+    [driver, isSendgrid, host, port, security, username, password],
   );
   const form = useFieldErrors(emailTransportSaveSchema, values);
 
@@ -114,7 +142,7 @@ export function EmailTransportForm({
     );
   };
 
-  const isSmtp = driver === "SMTP";
+  const isSmtp = choice === "SMTP";
 
   return (
     <EditorSection
@@ -159,14 +187,33 @@ export function EmailTransportForm({
 
       <Field label={labels.driver} hint={labels.driverHint} error={form.error("driver")}>
         <AdminCombobox
-          value={driver}
-          onValueChange={(value) => setDriver(value as EmailTransportView["driver"])}
+          value={choice}
+          onValueChange={(value) => setChoice(value as ProviderChoice)}
           options={[
+            { value: "SENDGRID", label: labels.driverSendgrid },
             { value: "SMTP", label: labels.driverSmtp },
             { value: "LOG", label: labels.driverLog },
           ]}
         />
       </Field>
+
+      {isSendgrid && (
+        <Field
+          label={labels.sendgridKey}
+          required={!transport.hasPassword}
+          hint={transport.hasPassword ? labels.passwordSaved : labels.sendgridKeyHint}
+          error={form.error("password")}
+        >
+          <PasswordInput
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            autoComplete="new-password"
+            spellCheck={false}
+            showLabel={labels.showPassword}
+            hideLabel={labels.hidePassword}
+          />
+        </Field>
+      )}
 
       {isSmtp && (
         <>

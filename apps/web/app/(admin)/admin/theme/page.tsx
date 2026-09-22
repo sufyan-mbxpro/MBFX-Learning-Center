@@ -1,5 +1,6 @@
 import { getTranslations } from "next-intl/server";
-import { loadActiveThemeTokens, loadBrandAssets, loadThemePresets } from "@repo/core";
+import { loadActiveThemeTokens, loadThemePresets } from "@repo/core";
+import { themeSurfaceSchema } from "@repo/contracts";
 import { requirePermission } from "@repo/rbac";
 import { BRAND_FIELD_REGISTRY, CURATED_FONTS, deriveInteractive, validateTheme } from "@repo/theme";
 import { ThemeEditor } from "./theme-editor.tsx";
@@ -7,13 +8,18 @@ import { AdminSection } from "../_components/admin-page.tsx";
 import { SettingsScreen } from "../settings/_components/settings-screen.tsx";
 import { loadSettingsIndex } from "../settings/_components/settings-shared.ts";
 
-export default async function ThemePage() {
+export default async function ThemePage({ searchParams }: PageProps<"/admin/theme">) {
   const subject = await requirePermission("theme.update");
   const t = await getTranslations("admin");
-  const [tokens, presets, brandAssets, { navEntries }] = await Promise.all([
-    loadActiveThemeTokens(),
-    loadThemePresets(),
-    loadBrandAssets(),
+  // Which surface's palette is open (changes-49, ADR-148). The public site by
+  // default; anything unrecognised falls back to it rather than erroring.
+  const requested = (await searchParams).surface;
+  const surface = themeSurfaceSchema.catch("web").parse(requested);
+  const [tokens, presets, { navEntries }] = await Promise.all([
+    loadActiveThemeTokens(surface),
+    // Asked per surface (changes-50), so the preset marked active is the one
+    // THIS surface is showing.
+    loadThemePresets(surface),
     loadSettingsIndex(subject, t),
   ]);
   const { brand, light, dark, overrides, layout } = tokens;
@@ -34,43 +40,30 @@ export default async function ThemePage() {
     >
       <AdminSection>
         <ThemeEditor
-          // Keyed by the active row: activating a preset re-renders this page
-          // with another theme's tokens, and the editor's local state must
-          // start again from them rather than keep the previous theme's.
-          key={tokens.themeKey}
+          // Keyed by the palette itself, not the row: since ADR-148 activating
+          // a preset COPIES it onto the same surface row, so the row key never
+          // changed and every tab kept the previous colours in local state
+          // (changes-50). A new palette is a new editor.
+          key={`${tokens.themeKey}:${JSON.stringify({ brand, light, dark, overrides })}`}
           themeKey={tokens.themeKey}
+          surface={surface}
           initial={{ brand, light, dark, overrides, layout }}
           derived={derived}
           // The saved palette's advisories on arrival (changes-46), not only
           // after the next Save — the same server-side check the save runs.
           initialIssues={validateTheme(brand, light, dark, overrides).issues}
           presets={presets}
-          brandAssets={{
-            logo_light: brandAssets.logo_light?.url ?? null,
-            logo_dark: brandAssets.logo_dark?.url ?? null,
-            favicon: brandAssets.favicon?.url ?? null,
-          }}
           brandFields={BRAND_FIELD_REGISTRY.map((f) => f.key)}
           fonts={CURATED_FONTS}
           labels={{
             brand: t("themeBrand"),
+            surfaceLabel: t("themeEditor.surfaceLabel"),
+            surfaceWeb: t("themeEditor.surfaceWeb"),
+            surfaceAdmin: t("themeEditor.surfaceAdmin"),
+            surfaceHint: t("themeEditor.surfaceHint"),
             layout: t("themeLayout"),
             modes: t("themeModes"),
             presets: t("themePresets"),
-            logos: t("themeLogos"),
-            logoLight: t("logoLight"),
-            logoDark: t("logoDark"),
-            favicon: t("favicon"),
-            upload: {
-              upload: t("uploadImage"),
-              replace: t("replaceImage"),
-              remove: t("removeImage"),
-              uploading: t("uploading"),
-              hint: t("uploadHint"),
-              cancel: t("cancel"),
-              confirmRemoveTitle: t("confirmRemoveImageTitle"),
-              confirmRemoveBody: t("confirmRemoveImageBody"),
-            },
             lightSurface: t("lightSurface"),
             darkSurface: t("darkSurface"),
             save: t("save"),

@@ -141,25 +141,11 @@ export default async function EconomicCalendarPage({
         eyebrow={t("heroEyebrow")}
         title={t("title")}
         lead={t("intro")}
-        footnote={t("heroFootnote")}
-        actions={
-          <>
-            {/* A same-page anchor, so `render` takes a plain <a>: @repo/i18n's
-                Link would locale-prefix a bare fragment. */}
-            <Button size="xl" render={<a href="#calendar" />}>
-              {t("viewWeekAction")}
-              <ArrowRight data-icon="inline-end" aria-hidden className="rtl:rotate-180" />
-            </Button>
-            {analysisEnabled && (
-              // `inverted` is the class string this band used to spell out by
-              // hand (ADR-117): opacities of `--secondary-foreground`, the one
-              // ink ADR-003 derives readable on this fill.
-              <Button size="xl" variant="inverted" render={<Link href={ROUTE_PATHS.analysis} />}>
-                {t("readAnalysisAction")}
-              </Button>
-            )}
-          </>
-        }
+        // changes-49: no actions and no footnote in the masthead, so this
+        // banner is the height of every tool page's (a compact PageHero with
+        // eyebrow, title and lead). The "see this week" anchor was a scroll to
+        // the band directly below it; the footnote moved under the calendar
+        // it describes, and the analysis link lives in the header menu.
       />
 
       <Section spacing="lg" id="calendar" className="scroll-mt-(--height-header)">
@@ -179,6 +165,7 @@ export default async function EconomicCalendarPage({
           <Reveal variant="up" delay={80}>
             <CalendarBoard locale={locale} />
           </Reveal>
+          <p className="-mt-4 text-xs text-muted-foreground">{t("heroFootnote")}</p>
 
           {/* How to WORK the calendar, directly under the calendar (ADR-137
               §4). Distinct from the "plan the week" callout further down: that

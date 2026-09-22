@@ -485,7 +485,28 @@ export function VideoEditor({
                 onChange={(e) => setDraft({ summary: e.target.value })}
               />
             </Field>
+          </EditorSection>
 
+          <VideosPanel
+            items={videos}
+            onChange={setVideos}
+            disabled={!canUpdate}
+            labels={labels.videos}
+            issues={{
+              invalid: (path) => form.invalid(`videos.${path}`),
+              error: (path) => form.error(`videos.${path}`),
+            }}
+          />
+
+          {/* changes-50: the body FOLLOWS the videos, because that is the
+              order the public topic page draws them in — player first, then
+              the written guide beneath it. */}
+          <EditorSection
+            title={labels.contentSection}
+            description={labels.contentSectionDescription}
+            icon={FileText}
+            accent="neutral"
+          >
             <Field label={labels.contentLabel} hint={labels.contentHint} error={contentError}>
               <RichTextEditor
                 value={draft.content}
@@ -505,17 +526,6 @@ export function VideoEditor({
               <p className="text-sm text-muted-foreground">{labels.capabilityWarning}</p>
             )}
           </EditorSection>
-
-          <VideosPanel
-            items={videos}
-            onChange={setVideos}
-            disabled={!canUpdate}
-            labels={labels.videos}
-            issues={{
-              invalid: (path) => form.invalid(`videos.${path}`),
-              error: (path) => form.error(`videos.${path}`),
-            }}
-          />
 
           <LinksPanel
             items={links}

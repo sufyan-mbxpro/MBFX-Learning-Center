@@ -24,6 +24,7 @@ import { FilterBarRow } from "@repo/ui/components/filter-bar";
 import { useFieldErrors } from "../../_hooks/use-field-errors.ts";
 import { useServerAction } from "../../_hooks/use-server-action.ts";
 import { useUrlFilters } from "../../_hooks/use-url-filters.ts";
+import { useDeletedFilterOption } from "../../_components/trash.tsx";
 
 const KINDS = ["NEWS", "ANALYSIS", "TRADE_IDEA"] as const;
 const STATUSES = ["DRAFT", "SCHEDULED", "PUBLISHED", "ARCHIVED"] as const;
@@ -44,6 +45,7 @@ export function ArticlesToolbar({
 }) {
   const searchParams = useSearchParams();
   const setParams = useUrlFilters();
+  const deletedOption = useDeletedFilterOption();
 
   return (
     <FilterBarRow>
@@ -68,6 +70,10 @@ export function ArticlesToolbar({
             value: status,
             label: labels.statuses[status] ?? status,
           })),
+          // The trash (changes-49): deleted articles are listed only here. The
+          // value is `ARTICLE_DELETED_FILTER`'s, which the page's contract
+          // accepts and turns into the service's `deleted` flag.
+          deletedOption,
         ]}
       />
       <AdminCombobox

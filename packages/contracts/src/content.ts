@@ -8,8 +8,27 @@ import { z } from "zod";
 export const articleKindSchema = z.enum(["NEWS", "ANALYSIS", "TRADE_IDEA"]);
 export type ArticleKindInput = z.infer<typeof articleKindSchema>;
 
-/** The lean article lifecycle (ADR-015 #4) — review states are unused here. */
-export const articleStatusFilterSchema = z.enum(["DRAFT", "SCHEDULED", "PUBLISHED", "ARCHIVED"]);
+/**
+ * The admin list's "show the trash" status value (changes-49). The SAME
+ * string as `DELETED_FILTER` in the admin's `_components/trash.tsx`, which the
+ * client-filtered lists use; spelled out again here because contracts cannot
+ * import from an app, and the articles list is filtered on the SERVER, so the
+ * URL's `?status=` must survive this schema.
+ */
+export const ARTICLE_DELETED_FILTER = "__deleted";
+
+/**
+ * The lean article lifecycle (ADR-015 #4) — review states are unused here —
+ * plus the trash, which is not a `ContentStatus` and is mapped to a
+ * `deletedAt` clause by the page before it reaches the service.
+ */
+export const articleStatusFilterSchema = z.enum([
+  "DRAFT",
+  "SCHEDULED",
+  "PUBLISHED",
+  "ARCHIVED",
+  ARTICLE_DELETED_FILTER,
+]);
 export type ArticleStatusFilter = z.infer<typeof articleStatusFilterSchema>;
 
 export const articleSortBySchema = z.enum(["updatedAt", "publishedAt", "status"]);
@@ -274,3 +293,21 @@ export const EDITORIAL_CLASSES = [
   "ed-align-justify",
   "ed-embed",
 ] as const;
+
+// ─── Permanent delete (changes-49, ADR-147) ──────────────────
+
+/** The content modules whose trash can be emptied row by row. */
+export const PURGEABLE_ENTITIES = [
+  "course",
+  "lesson",
+  "quiz",
+  "glossary",
+  "video",
+  "article",
+] as const;
+export type PurgeableEntity = (typeof PURGEABLE_ENTITIES)[number];
+
+export const purgeContentSchema = z.object({
+  entity: z.enum(PURGEABLE_ENTITIES),
+  id: z.string().min(1).max(64),
+});

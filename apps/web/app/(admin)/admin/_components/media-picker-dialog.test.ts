@@ -69,7 +69,9 @@ describe("picker chrome (ADR-067 §5)", () => {
     ];
     // From the body's own markup, not the import block, whose order is
     // alphabetical and says nothing about what the admin sees.
-    const markup = source.slice(source.indexOf("function MediaPickerBody"));
+    // From the library pane: the web-address tabs above it (changes-49) are
+    // a different decision and come first on purpose.
+    const markup = source.slice(source.indexOf("<LibraryPane>"));
     const positions = order.map((token) => markup.indexOf(token));
     expect(positions.every((position) => position > -1)).toBe(true);
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);

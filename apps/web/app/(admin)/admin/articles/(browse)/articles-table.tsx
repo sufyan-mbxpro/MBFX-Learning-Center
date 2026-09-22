@@ -17,6 +17,7 @@ import {
   SquareArrowOutUpRight,
   Star,
   Trash2,
+  Undo2,
 } from "lucide-react";
 import type { ColumnDef, SortingState, PaginationState, Updater } from "@tanstack/react-table";
 import { Badge } from "@repo/ui/components/badge";
@@ -45,6 +46,7 @@ import { RowSwitch } from "../../_components/row-switch.tsx";
 import { ARTICLE_STATUS_TONE, StatusBadge, statusTone } from "../../_components/status-badge.tsx";
 import { useServerAction } from "../../_hooks/use-server-action.ts";
 import { useUrlFilters, useUrlFiltersPending } from "../../_hooks/use-url-filters.ts";
+import { usePermanentDelete } from "../../_components/trash.tsx";
 
 export interface ArticleRow {
   id: string;
@@ -128,6 +130,7 @@ function RowActions({
   const { run, pending } = useServerAction();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [quickOpen, setQuickOpen] = useState(false);
+  const purge = usePermanentDelete("article", row.id);
 
   // The reference's colour coding maps onto the existing semantic tokens —
   // amber for "unpublish", info-blue for "view", destructive for delete. No
@@ -209,9 +212,16 @@ function RowActions({
           )}
           {canDelete &&
             (row.deleted ? (
-              <DropdownMenuItem onClick={() => run(() => setArticleDeletedAction(row.id, false))}>
-                {labels.restore}
-              </DropdownMenuItem>
+              // ADR-044 #7: restore is NOT confirmed — it is the undo. The
+              // row only appears under the trash filter (changes-49), where
+              // it may also be deleted for good.
+              <>
+                <DropdownMenuItem onClick={() => run(() => setArticleDeletedAction(row.id, false))}>
+                  <Undo2 data-icon="inline-start" aria-hidden />
+                  {labels.restore}
+                </DropdownMenuItem>
+                {purge.item}
+              </>
             ) : (
               <DropdownMenuItem variant="destructive" onClick={() => setConfirmOpen(true)}>
                 <Trash2 data-icon="inline-start" aria-hidden />
@@ -242,6 +252,7 @@ function RowActions({
           router.refresh();
         }}
       />
+      {purge.dialog}
     </div>
   );
 }

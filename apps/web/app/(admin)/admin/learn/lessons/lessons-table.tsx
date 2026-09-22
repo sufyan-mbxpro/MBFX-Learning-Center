@@ -9,7 +9,14 @@
 // "Outdated translations only" filter is the whole point of the screen.
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { ListChecks, MoreHorizontal, Pencil, SquareArrowOutUpRight, Trash2 } from "lucide-react";
+import {
+  ListChecks,
+  MoreHorizontal,
+  Pencil,
+  SquareArrowOutUpRight,
+  Trash2,
+  Undo2,
+} from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
@@ -36,6 +43,11 @@ import {
 } from "../../_components/status-badge.tsx";
 import { useClientTable } from "../../_hooks/use-client-table.ts";
 import { useServerAction } from "../../_hooks/use-server-action.ts";
+import {
+  inStatusFilter,
+  useDeletedFilterOption,
+  usePermanentDelete,
+} from "../../_components/trash.tsx";
 
 export interface LessonLocaleChip {
   locale: string;
@@ -56,6 +68,7 @@ export interface LessonRow {
   estimatedMinutes: number | null;
   isOutdated: boolean;
   locales: LessonLocaleChip[];
+  deleted: boolean;
   updatedAtLabel: string;
   /** Epoch ms — the formatted label sorts lexically, which is not chronological. */
   updatedAtSort: number;
@@ -82,6 +95,8 @@ export interface LessonsTableLabels {
   edit: string;
   duplicate: string;
   softDelete: string;
+  restore: string;
+  deleted: string;
   confirmDeleteTitle: string;
   confirmDeleteBody: string;
   confirm: string;
@@ -116,6 +131,7 @@ function RowActions({
 }) {
   const { run, pending } = useServerAction();
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const purge = usePermanentDelete("lesson", row.id);
 
   return (
     <div className="flex justify-end">
@@ -144,14 +160,29 @@ function RowActions({
           {canDelete && (
             <>
               <DropdownMenuSeparator />
-              <DropdownMenuItem
-                variant="destructive"
-                disabled={pending}
-                onClick={() => setConfirmOpen(true)}
-              >
-                <Trash2 aria-hidden data-icon="inline-start" />
-                {labels.softDelete}
-              </DropdownMenuItem>
+              {/* ADR-044 #7: restore is NOT confirmed. It is the undo, and
+                  gating it makes the destructive path harder to reverse. */}
+              {row.deleted ? (
+                <>
+                  <DropdownMenuItem
+                    disabled={pending}
+                    onClick={() => run(() => setLessonDeletedAction(row.id, false))}
+                  >
+                    <Undo2 aria-hidden data-icon="inline-start" />
+                    {labels.restore}
+                  </DropdownMenuItem>
+                  {purge.item}
+                </>
+              ) : (
+                <DropdownMenuItem
+                  variant="destructive"
+                  disabled={pending}
+                  onClick={() => setConfirmOpen(true)}
+                >
+                  <Trash2 aria-hidden data-icon="inline-start" />
+                  {labels.softDelete}
+                </DropdownMenuItem>
+              )}
             </>
           )}
         </DropdownMenuContent>
@@ -166,6 +197,7 @@ function RowActions({
         cancelLabel={labels.cancel}
         onConfirm={() => run(() => setLessonDeletedAction(row.id, true))}
       />
+      {purge.dialog}
     </div>
   );
 }
@@ -190,13 +222,15 @@ export function LessonsTable({
     status: "",
     outdatedOnly: false,
   });
+  const deletedOption = useDeletedFilterOption();
 
   const visible = useMemo(
     () =>
       rows.filter(
         (row) =>
           (filters.courseId === "" || row.courseId === filters.courseId) &&
-          (filters.status === "" || row.status === filters.status) &&
+          // Live rows by default; the trash only under the Deleted filter.
+          inStatusFilter(row.deleted, filters.status, () => row.status === filters.status) &&
           (!filters.outdatedOnly || row.isOutdated),
       ),
     [rows, filters],
@@ -231,7 +265,7 @@ export function LessonsTable({
         meta: { label: labels.titleCol },
         enableHiding: false,
         cell: ({ row }) => (
-          <div className="flex max-w-80 flex-col">
+          <div className={`flex max-w-80 flex-col ${row.original.deleted ? "opacity-60" : ""}`}>
             <Link
               href={`/admin/learn/lessons/${row.original.id}`}
               className="truncate font-medium hover:underline"
@@ -248,6 +282,9 @@ export function LessonsTable({
                 <span className="tabular-nums">
                   {row.original.estimatedMinutes} {labels.minutesLabel}
                 </span>
+              )}
+              {row.original.deleted && (
+                <StatusBadge tone="destructive">{labels.deleted}</StatusBadge>
               )}
             </span>
           </div>
@@ -362,6 +399,8 @@ export function LessonsTable({
                 value: key,
                 label: labels.statuses[key] ?? key,
               })),
+              // The trash (changes-49): deleted lessons are listed only here.
+              deletedOption,
             ]}
           />
 

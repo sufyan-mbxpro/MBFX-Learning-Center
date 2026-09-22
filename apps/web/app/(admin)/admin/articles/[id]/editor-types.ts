@@ -149,7 +149,9 @@ export interface EditorLabels {
   seoSectionDescription: string;
   seoTabBasic: string;
   seoTabSocial: string;
-  seoTabAdvanced: string;
+  /** What the Social tab is for (changes-50): the share card, not a feed. */
+  socialIntro: string;
+  sharePreview: string;
   seoTabAnalysis: string;
   seoTitle: string;
   seoTitleHint: string;
@@ -159,7 +161,6 @@ export interface EditorLabels {
   focusKeywordsHint: string;
   canonicalUrl: string;
   canonicalUrlHint: string;
-  canonicalDefault: string;
   allowIndex: string;
   allowFollow: string;
   ogTitle: string;
@@ -168,9 +169,6 @@ export interface EditorLabels {
   twitterCard: string;
   twitterCardOptions: Record<string, string>;
   twitterImage: string;
-  robotsSummaryHint: string;
-  robotsIndexRow: string;
-  robotsFollowRow: string;
 
   // Post settings
   postSettings: string;

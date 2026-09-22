@@ -46,7 +46,6 @@ import {
   Highlighter,
   ImagePlus,
   Italic,
-  LibraryBig,
   Link as LinkIcon,
   List,
   ListOrdered,
@@ -768,15 +767,12 @@ export function RichTextEditor({
             >
               <Unlink aria-hidden />
             </ToolbarButton>
-            <ToolbarButton
-              label={labels.image}
-              disabled={upload.status === "uploading"}
-              onClick={() => fileRef.current?.click()}
-            >
+            {/* changes-49: ONE image button. The dialog it opens offers the
+                library, a web address, and "Upload from computer" — there
+                used to be an upload button and a library button side by side,
+                two doors to one room. */}
+            <ToolbarButton label={labels.image} onClick={() => setPickerOpen(true)}>
               <ImagePlus aria-hidden />
-            </ToolbarButton>
-            <ToolbarButton label={t("mediaChooseFromLibrary")} onClick={() => setPickerOpen(true)}>
-              <LibraryBig aria-hidden />
             </ToolbarButton>
             <ToolbarButton label={labels.video} onClick={() => insertVideo(editor)}>
               <Video aria-hidden />
@@ -931,6 +927,7 @@ export function RichTextEditor({
             category={mediaCategory}
             kinds={["IMAGE"]}
             title={labels.image}
+            allowWebAddress
             onSelect={(picked) => {
               setSizeError(null);
               editor

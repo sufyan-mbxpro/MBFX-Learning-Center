@@ -835,6 +835,12 @@ export interface ListArticlesParams {
   kind?: ArticleKind;
   status?: ContentStatus;
   categoryId?: string;
+  /**
+   * The trash (changes-49): true lists ONLY soft-deleted articles; absent or
+   * false lists only live ones. Never both — "published AND deleted" is a
+   * question with no useful answer.
+   */
+  deleted?: boolean;
 }
 
 export interface ArticleAdminRow {
@@ -863,6 +869,7 @@ export interface ListArticlesResult {
 export async function listArticlesAdmin(params: ListArticlesParams): Promise<ListArticlesResult> {
   const defaultLocale = await defaultLocaleCode();
   const where = {
+    deletedAt: params.deleted ? { not: null } : null,
     ...(params.kind ? { kind: params.kind } : {}),
     ...(params.status ? { status: params.status } : {}),
     ...(params.categoryId ? { categoryId: params.categoryId } : {}),

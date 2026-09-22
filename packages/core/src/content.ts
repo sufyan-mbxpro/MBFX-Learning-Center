@@ -19,14 +19,24 @@ import { recordAudit } from "./index.ts";
 // ─── Status machine ──────────────────────────────────────────
 
 /**
- * Frozen transition map. Notably ABSENT: DRAFT → PUBLISHED (must pass
- * review), anything → APPROVED except SEO_REVIEW, and edits to ARCHIVED
- * except reviving to DRAFT.
+ * The transition map. Notably ABSENT: anything → APPROVED except SEO_REVIEW,
+ * and edits to ARCHIVED except reviving to DRAFT.
+ *
+ * **Direct publish since changes-49 (ADR-147).** DRAFT, IN_REVIEW and
+ * SEO_REVIEW each reach PUBLISHED in one move — the owner asked for "an
+ * option to publish directly" on courses and every other section, while
+ * keeping the review states for teams that use them. The review chain was
+ * never what stopped an unauthorised publish: the entity's `*.publish` key
+ * is, and `transitionContentStatus` still demands it for every move into
+ * PUBLISHED or SCHEDULED. What changes is that someone who HOLDS that key no
+ * longer has to walk four states to use it. APPROVED stays the only state
+ * that may SCHEDULE — a date on the calendar still means the piece was
+ * reviewed.
  */
 export const CONTENT_TRANSITIONS: Record<ContentStatus, ContentStatus[]> = {
-  DRAFT: [ContentStatus.IN_REVIEW, ContentStatus.ARCHIVED],
-  IN_REVIEW: [ContentStatus.DRAFT, ContentStatus.SEO_REVIEW],
-  SEO_REVIEW: [ContentStatus.IN_REVIEW, ContentStatus.APPROVED],
+  DRAFT: [ContentStatus.IN_REVIEW, ContentStatus.PUBLISHED, ContentStatus.ARCHIVED],
+  IN_REVIEW: [ContentStatus.DRAFT, ContentStatus.SEO_REVIEW, ContentStatus.PUBLISHED],
+  SEO_REVIEW: [ContentStatus.IN_REVIEW, ContentStatus.APPROVED, ContentStatus.PUBLISHED],
   APPROVED: [ContentStatus.SCHEDULED, ContentStatus.PUBLISHED, ContentStatus.IN_REVIEW],
   SCHEDULED: [ContentStatus.PUBLISHED, ContentStatus.APPROVED],
   PUBLISHED: [ContentStatus.ARCHIVED],

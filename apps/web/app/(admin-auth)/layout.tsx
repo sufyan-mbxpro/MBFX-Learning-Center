@@ -7,6 +7,7 @@ import { buildThemeStyleSheet, getActiveTheme, withAdminTypeface } from "@repo/t
 import { curatedFontVariables } from "@repo/ui/fonts";
 import { ThemeProvider } from "@repo/ui/components/theme-provider";
 import { ThemeScript } from "@repo/ui/components/theme-script";
+import { ADMIN_THEME_STORAGE_KEY } from "@repo/ui/lib/theme-mode";
 import "@repo/ui/globals.css";
 import { faviconIcons } from "../_lib/favicon.ts";
 
@@ -61,14 +62,14 @@ export default async function AdminAuthRootLayout({ children }: LayoutProps<"/">
       <body className="min-h-full" suppressHydrationWarning>
         {/* ADR-064: the pre-paint mode guard, server-rendered so the browser
             actually executes it. Carries the nonce, like #brand-tokens. */}
-        <ThemeScript nonce={nonce} />
+        <ThemeScript nonce={nonce} storageKey={ADMIN_THEME_STORAGE_KEY} />
         <style
           id="brand-tokens"
           nonce={nonce}
           dangerouslySetInnerHTML={{ __html: buildThemeStyleSheet(withAdminTypeface(theme)) }}
         />
         <NextIntlClientProvider messages={messages}>
-          <ThemeProvider>{children}</ThemeProvider>
+          <ThemeProvider storageKey={ADMIN_THEME_STORAGE_KEY}>{children}</ThemeProvider>
         </NextIntlClientProvider>
       </body>
     </html>

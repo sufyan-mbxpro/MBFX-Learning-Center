@@ -24,6 +24,7 @@ import { setCourseDeletedAction } from "../../_actions/learn-actions.ts";
 import { CONTENT_STATUS_TONE, StatusBadge, statusTone } from "../../_components/status-badge.tsx";
 import { useClientTable } from "../../_hooks/use-client-table.ts";
 import { useServerAction } from "../../_hooks/use-server-action.ts";
+import { inStatusFilter, usePermanentDelete } from "../../_components/trash.tsx";
 import {
   CoursesToolbar,
   type CoursesFilterLabels,
@@ -95,6 +96,7 @@ function RowActions({
 }) {
   const { run, pending } = useServerAction();
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const purge = usePermanentDelete("course", row.id);
 
   return (
     <div className="flex justify-end">
@@ -118,13 +120,16 @@ function RowActions({
                   undo, and gating it makes the destructive path harder to
                   reverse than it was to take. */}
               {row.deleted ? (
-                <DropdownMenuItem
-                  disabled={pending}
-                  onClick={() => run(() => setCourseDeletedAction(row.id, false))}
-                >
-                  <SquareArrowOutUpRight aria-hidden data-icon="inline-start" />
-                  {labels.restore}
-                </DropdownMenuItem>
+                <>
+                  <DropdownMenuItem
+                    disabled={pending}
+                    onClick={() => run(() => setCourseDeletedAction(row.id, false))}
+                  >
+                    <SquareArrowOutUpRight aria-hidden data-icon="inline-start" />
+                    {labels.restore}
+                  </DropdownMenuItem>
+                  {purge.item}
+                </>
               ) : (
                 <DropdownMenuItem
                   variant="destructive"
@@ -149,6 +154,7 @@ function RowActions({
         cancelLabel={labels.cancel}
         onConfirm={() => run(() => setCourseDeletedAction(row.id, true))}
       />
+      {purge.dialog}
     </div>
   );
 }
@@ -179,7 +185,8 @@ export function CoursesTable({
       rows.filter(
         (row) =>
           (filters.track === "" || row.track === filters.track) &&
-          (filters.status === "" || row.status === filters.status) &&
+          // Live rows by default; the trash only under the Deleted filter.
+          inStatusFilter(row.deleted, filters.status, () => row.status === filters.status) &&
           (filters.difficulty === "" || row.difficulty === filters.difficulty),
       ),
     [rows, filters],

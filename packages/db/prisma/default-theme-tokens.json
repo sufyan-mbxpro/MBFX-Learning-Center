@@ -9,7 +9,7 @@
     "accent": "#EAE5DE"
   },
   "DEFAULT_LIGHT_SURFACE": {
-    "background": "#F7F3ED",
+    "background": "#FFFFFF",
     "surface": "#FFFFFF",
     "surfaceMuted": "#F0EBE3",
     "textPrimary": "#1E1B18",

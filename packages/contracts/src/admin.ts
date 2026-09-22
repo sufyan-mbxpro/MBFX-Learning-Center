@@ -240,3 +240,18 @@ export const adminSearchSchema = z.object({
   query: z.string().trim().min(1).max(100),
 });
 export type AdminSearchInput = z.infer<typeof adminSearchSchema>;
+
+// ─── Theme surfaces (changes-49, ADR-148) ────────────────────
+
+/**
+ * The two surfaces that each own a palette. `web` is the public site (the
+ * name `@repo/theme`'s loader already uses for the scope), `admin` the
+ * portal. Each has exactly one live row, keyed `surface-<name>`.
+ */
+export const THEME_SURFACES = ["web", "admin"] as const;
+export type ThemeSurface = (typeof THEME_SURFACES)[number];
+export const themeSurfaceSchema = z.enum(THEME_SURFACES);
+
+export function surfaceThemeKey(surface: ThemeSurface): string {
+  return `surface-${surface}`;
+}

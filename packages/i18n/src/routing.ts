@@ -19,6 +19,21 @@ export const routing = defineRouting({
   // Default locale has no prefix: "/" not "/en" — keeps the highest-traffic
   // path stable and avoids a redirect hop.
   localePrefix: "as-needed",
+  // No `Link: <…>; rel="alternate"` RESPONSE header (changes-49). next-intl
+  // builds it from the Host the server sees, which behind the reverse proxy
+  // is `localhost:3003`, so production advertised five hreflang URLs on a
+  // private origin — and for every locale in this STATIC list, the inactive
+  // ones included. The page metadata already emits hreflang for the
+  // SERVABLE locales only (`alternatesFor`, apps/web/app/_lib/seo.ts), from
+  // `siteUrl()`, which is the one place the public origin is spelled.
+  alternateLinks: false,
+  // `Secure` in production (changes-49): the cookie remembers a reader's
+  // language and has no business travelling over plain HTTP. Off in dev,
+  // where `http://localhost` would otherwise drop it.
+  localeCookie: {
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+  },
 });
 
 export type AppLocale = (typeof routing.locales)[number];

@@ -38,11 +38,14 @@ const ADMIN_PAGES = FILES.filter((file) => rel(file).startsWith("(admin)/admin/"
 
 /**
  * Screens that fall back to the generic spinner on purpose: the specimen
- * board renders nothing it waits on, and `/admin/social` only redirects.
+ * board renders nothing it waits on, and `/admin/social` and `/admin/ai`
+ * (changes-51) only redirect.
  */
 const GENERIC_FALLBACK_OK = new Set([
   "(admin)/admin/design-system/page.tsx",
   "(admin)/admin/social/page.tsx",
+  "(admin)/admin/ai/page.tsx",
+  "(admin)/admin/ai/[...path]/page.tsx",
 ]);
 
 describe("admin pending states (changes-21 Phase A)", () => {
@@ -124,9 +127,11 @@ describe("the ad-hoc patterns are gone (changes-21 Phase A)", () => {
     ["(admin)/error.tsx", "ErrorState"],
     ["(admin)/not-found.tsx", "EmptyState"],
     ["(public)/[locale]/error.tsx", "ErrorState"],
-    ["(public)/[locale]/not-found.tsx", "EmptyState"],
+    // changes-49: the public 404s share the designed coming-soon view.
+    ["(public)/[locale]/not-found.tsx", "NotFoundView"],
     ["global-error.tsx", "ErrorState"],
-    ["global-not-found.tsx", "EmptyState"],
+    ["global-not-found.tsx", "NotFoundView"],
+    ["(not-found)/not-found.tsx", "NotFoundView"],
   ])("%s renders the shared %s", (path, component) => {
     const file = join(APP, path);
     expect(existsSync(file)).toBe(true);

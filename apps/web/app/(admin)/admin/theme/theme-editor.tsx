@@ -1,15 +1,15 @@
 "use client";
 
 // Theme editor client shell (Module 09 core). Tabs mirror the engine:
-// Colors & Branding (BRAND_FIELD_REGISTRY-driven), Layout & Display,
-// Theme Modes side-by-side, Presets, Logos & Favicons (changes-02, plan.md
-// Module 09: BrandAsset upload). validateTheme runs SERVER-side in
+// Colors (BRAND_FIELD_REGISTRY-driven), Layout & Display, Theme Modes
+// side-by-side, Presets. The logos and favicon moved to Settings → General →
+// Branding in changes-50. validateTheme runs SERVER-side in
 // saveThemeAction — this component renders the returned issues verbatim;
 // blocking errors mean the save was refused (SKILL.md). Live preview
 // iframe is the remaining deferred polish.
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Bookmark, Trash2, Wand2 } from "lucide-react";
+import { Bookmark, CircleAlert, CircleCheck, Trash2, TriangleAlert, Wand2 } from "lucide-react";
 // Type-only imports — erased at compile time, so no next/cache pulls into
 // the client bundle.
 import type {
@@ -19,9 +19,16 @@ import type {
   LayoutTokens,
   SurfacePalette,
 } from "@repo/theme";
-import { saveThemePresetSchema, saveThemeSchema } from "@repo/contracts";
+import Link from "next/link";
+import { saveThemePresetSchema, saveThemeSchema, type ThemeSurface } from "@repo/contracts";
 import { humanizeKey } from "@repo/utils";
-import { Alert, AlertDescription, AlertTitle } from "@repo/ui/components/alert";
+import { cn } from "@repo/ui/lib/utils";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@repo/ui/components/accordion";
 import { Button } from "@repo/ui/components/button";
 import { ConfirmDialog } from "@repo/ui/components/confirm-dialog";
 import {
@@ -42,8 +49,6 @@ import {
   saveThemeAction,
   saveThemePresetAction,
 } from "../_actions/admin-actions.ts";
-import { clearBrandAssetAction, setBrandAssetAction } from "../_actions/media-actions.ts";
-import { ImageUploadField, type ImageUploadLabels } from "../_components/image-upload-field.tsx";
 import { StatusBadge } from "../_components/status-badge.tsx";
 import { AdminCombobox } from "../_components/combobox.tsx";
 import { useFieldErrors } from "../_hooks/use-field-errors.ts";
@@ -60,6 +65,10 @@ interface Labels {
   saved: string;
   activate: string;
   activeBadge: string;
+  surfaceLabel: string;
+  surfaceWeb: string;
+  surfaceAdmin: string;
+  surfaceHint: string;
   issues: string;
   blockingError: string;
   advisory: string;
@@ -68,17 +77,6 @@ interface Labels {
   needsRatio: string;
   hexValue: string;
   fieldLabels: Record<string, string>;
-  logos: string;
-  logoLight: string;
-  logoDark: string;
-  favicon: string;
-  upload: ImageUploadLabels;
-}
-
-export interface BrandAssetUrls {
-  logo_light: string | null;
-  logo_dark: string | null;
-  favicon: string | null;
 }
 
 const HEX_COLOR_RE = /^#[0-9A-Fa-f]{6}$/;
@@ -164,20 +162,24 @@ export interface ThemePresetView {
   isActive: boolean;
   isSystem: boolean;
   swatches: string[];
+  lightBackground: string | null;
+  darkBackground: string | null;
 }
 
 export function ThemeEditor({
   themeKey,
+  surface,
   initial,
   derived,
   initialIssues,
   presets,
-  brandAssets,
   brandFields,
   fonts,
   labels,
 }: {
   themeKey: string;
+  /** The surface whose palette this editor is changing (ADR-148). */
+  surface: ThemeSurface;
   initial: {
     brand: BrandColors;
     light: SurfacePalette;
@@ -189,7 +191,6 @@ export function ThemeEditor({
   /** The saved palette's issues, so the editor opens with them shown. */
   initialIssues: ContrastIssue[];
   presets: ThemePresetView[];
-  brandAssets: BrandAssetUrls;
   brandFields: string[];
   fonts: { key: string; label: string; category: string }[];
   labels: Labels;
@@ -205,15 +206,13 @@ export function ThemeEditor({
   const [presetOpen, setPresetOpen] = useState(false);
   const [presetToDelete, setPresetToDelete] = useState<ThemePresetView | null>(null);
   const te = useTranslations("admin.themeEditor");
-  const [logos, setLogos] = useState(brandAssets);
   // Which tab is open decides whether Save is drawn (changes-43): Presets
-  // activate on their own button and every logo saves on upload, so a Save
-  // under either was a permanently disabled control that looked like it
-  // was owed a click.
+  // activate on their own button, so a Save under it was a permanently
+  // disabled control that looked like it was owed a click.
   const [tab, setTab] = useState("brand");
   const tabUsesSave = tab === "brand" || tab === "layout" || tab === "modes";
   const { run, pending } = useServerAction();
-  const logoAction = useServerAction();
+  const activePreset = presets.find((preset) => preset.isActive) ?? null;
 
   // Registry token ids ("primaryHover") shown as words ("Primary Hover")
   // when no catalog label exists — the registry is code-defined, so the id
@@ -353,13 +352,40 @@ export function ThemeEditor({
 
   return (
     <div className="flex flex-col gap-6">
+      {/* changes-49 (ADR-148): the public site and the admin each own a
+          palette. The switch is a pair of LINKS, not client state — the
+          surface is a query parameter the server reads, so each palette
+          loads fresh and a reload keeps the one being edited. */}
+      <div className="flex flex-col gap-1.5">
+        <nav aria-label={labels.surfaceLabel} className="flex w-fit rounded-lg bg-muted p-1">
+          {(
+            [
+              ["web", labels.surfaceWeb],
+              ["admin", labels.surfaceAdmin],
+            ] as const
+          ).map(([value, label]) => (
+            <Link
+              key={value}
+              href={`/admin/theme?surface=${value}`}
+              aria-current={surface === value ? "page" : undefined}
+              className={cn(
+                "rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground",
+                surface === value && "bg-background text-foreground shadow-sm",
+              )}
+            >
+              {label}
+            </Link>
+          ))}
+        </nav>
+        <p className="text-xs text-muted-foreground">{labels.surfaceHint}</p>
+      </div>
+
       <Tabs value={tab} onValueChange={(next) => setTab(String(next))}>
         <TabsList>
           <TabsTrigger value="brand">{labels.brand}</TabsTrigger>
           {THEME_LAYOUT_TAB_ENABLED && <TabsTrigger value="layout">{labels.layout}</TabsTrigger>}
           <TabsTrigger value="modes">{labels.modes}</TabsTrigger>
           <TabsTrigger value="presets">{labels.presets}</TabsTrigger>
-          <TabsTrigger value="logos">{labels.logos}</TabsTrigger>
         </TabsList>
 
         {/* changes-08 #5: Brand & Colours is TWO columns at most. A colour
@@ -464,7 +490,16 @@ export function ThemeEditor({
 
         <TabsContent value="presets" className="flex flex-col gap-4 pt-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-muted-foreground">{te("presetsIntro")}</p>
+            <div className="flex flex-col gap-1">
+              <p className="text-sm text-muted-foreground">{te("presetsIntro")}</p>
+              {/* changes-50: which preset is live, said in words as well as
+                  marked on its card — or that the palette is a custom one. */}
+              <p className="text-sm font-medium">
+                {activePreset
+                  ? te("presetActiveNow", { name: activePreset.name })
+                  : te("presetCustom")}
+              </p>
+            </div>
             <Button variant="outline" onClick={() => setPresetOpen(true)}>
               <Bookmark data-icon="inline-start" aria-hidden />
               {te("savePreset")}
@@ -474,11 +509,22 @@ export function ThemeEditor({
             {presets.map((preset) => (
               <div
                 key={preset.key}
-                className="card-hover flex flex-col gap-3 rounded-md border p-3"
+                aria-current={preset.isActive ? "true" : undefined}
+                className={cn(
+                  "card-hover flex flex-col gap-3 rounded-md border p-3",
+                  // The live preset is unmistakable: a primary ring, not only
+                  // a badge in the corner (changes-50).
+                  preset.isActive && "border-primary bg-primary/5 ring-2 ring-primary",
+                )}
               >
                 <div className="flex items-start gap-3">
                   <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <span className="text-sm font-medium">{preset.name}</span>
+                    <span className="flex items-center gap-1.5 text-sm font-medium">
+                      {preset.isActive && (
+                        <CircleCheck aria-hidden className="size-4 text-primary-interactive" />
+                      )}
+                      {preset.name}
+                    </span>
                     {preset.description && (
                       <span className="text-xs text-muted-foreground">{preset.description}</span>
                     )}
@@ -490,6 +536,30 @@ export function ThemeEditor({
                     <StatusBadge tone="neutral">{te("presetBuiltIn")}</StatusBadge>
                   )}
                 </div>
+                {/* The page grounds the preset applies (light, then dark),
+                    then its brand swatches — a built-in's white background
+                    is shown, not implied. */}
+                {(preset.lightBackground || preset.darkBackground) && (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    {(
+                      [
+                        [preset.lightBackground, labels.lightSurface],
+                        [preset.darkBackground, labels.darkSurface],
+                      ] as const
+                    ).map(([color, label]) =>
+                      color ? (
+                        <span key={label} className="flex items-center gap-1.5">
+                          <span
+                            aria-hidden
+                            className="size-4 shrink-0 rounded border"
+                            style={{ backgroundColor: color }}
+                          />
+                          <span className="tracking-wide uppercase">{color}</span>
+                        </span>
+                      ) : null,
+                    )}
+                  </div>
+                )}
                 {preset.swatches.length > 0 && (
                   <div aria-hidden className="flex h-5 overflow-hidden rounded border">
                     {preset.swatches.map((color, i) => (
@@ -515,7 +585,7 @@ export function ThemeEditor({
                       size="sm"
                       disabled={pending}
                       onClick={() =>
-                        run(() => activateThemeAction(preset.key), {
+                        run(() => activateThemeAction(preset.key, surface), {
                           successMessage: labels.saved,
                         })
                       }
@@ -528,87 +598,92 @@ export function ThemeEditor({
             ))}
           </div>
         </TabsContent>
-
-        <TabsContent
-          value="logos"
-          className="grid grid-cols-1 items-start gap-6 pt-4 md:grid-cols-2 xl:grid-cols-3"
-        >
-          {(
-            [
-              ["logo_light", labels.logoLight, "brand"],
-              ["logo_dark", labels.logoDark, "brand"],
-              ["favicon", labels.favicon, "brand"],
-            ] as const
-          ).map(([key, label]) => (
-            // Each upload saves on its own through its own action, outside
-            // the theme payload — so it carries no `error` from `form`.
-            <ImageUploadField
-              key={key}
-              label={label}
-              value={logos[key]}
-              purpose="brand"
-              category="brand"
-              sourceType="BRAND"
-              labels={labels.upload}
-              disabled={logoAction.pending}
-              onChange={(next) => {
-                setLogos((current) => ({ ...current, [key]: next?.url ?? null }));
-                logoAction.run(
-                  () =>
-                    next
-                      ? setBrandAssetAction({ key, mediaAssetId: next.id })
-                      : clearBrandAssetAction(key),
-                  { successMessage: labels.saved, skipRefresh: true },
-                );
-              }}
-            />
-          ))}
-        </TabsContent>
       </Tabs>
 
+      {/* changes-50: each suggestion is a collapsible TICKET — its title and
+          severity on one line, the measurement and the fix inside — so a
+          palette with several advisories reads as a list to work through
+          rather than a wall of alerts. Blocking errors open by default. */}
       {issues.length > 0 && (
         <div className="flex flex-col gap-2">
           <h3 className="text-sm font-semibold">{labels.issues}</h3>
-          {issues.map((issue, i) => (
-            <Alert key={i} variant={issue.severity === "error" ? "destructive" : "warning"}>
-              <AlertTitle>
-                {issue.severity === "error" ? labels.blockingError : labels.advisory}:{" "}
-                {issueTitle(issue)}
-              </AlertTitle>
-              <AlertDescription className="flex flex-col gap-2">
-                <p>{issueBody(issue)}</p>
-                {issue.palette === "darkOverride" ? (
-                  <p>{te("override", { input: inputName(issue) })}</p>
-                ) : issue.suggestion ? (
-                  <div className="flex flex-wrap items-center gap-3">
-                    <span
-                      aria-hidden
-                      className="size-5 shrink-0 rounded border"
-                      style={{ backgroundColor: issue.suggestion }}
-                    />
-                    <span className="min-w-0 flex-1">
-                      {te(issue.kind === "linkText" ? "suggestionOptional" : "suggestion", {
-                        input: inputName(issue),
-                        where: where(issue),
-                        current: issue.current,
-                        suggestion: issue.suggestion,
-                      })}
-                      {issue.conflictsAcrossModes &&
-                        ` ${te("conflict", { otherMode: issue.mode === "light" ? "dark" : "light" })}`}
+          <Accordion
+            multiple
+            defaultValue={issues.flatMap((issue, i) =>
+              issue.severity === "error" ? [`issue-${i}`] : [],
+            )}
+            className="gap-2"
+          >
+            {issues.map((issue, i) => {
+              const blocking = issue.severity === "error";
+              const Icon = blocking ? CircleAlert : TriangleAlert;
+              return (
+                <AccordionItem
+                  key={i}
+                  value={`issue-${i}`}
+                  className={cn(
+                    "rounded-md border px-3",
+                    blocking ? "border-destructive/40 bg-destructive/5" : "bg-warning/5",
+                  )}
+                >
+                  <AccordionTrigger className="gap-2 py-2.5 text-start hover:no-underline">
+                    <span className="flex min-w-0 flex-1 items-start gap-2">
+                      <Icon
+                        aria-hidden
+                        className={cn(
+                          "mt-0.5 size-4 shrink-0",
+                          blocking ? "text-destructive-interactive" : "text-warning-interactive",
+                        )}
+                      />
+                      <span className="min-w-0">
+                        <span className="font-semibold">
+                          {blocking ? labels.blockingError : labels.advisory}:
+                        </span>{" "}
+                        {issueTitle(issue)}
+                      </span>
                     </span>
-                    {applied.has(i) ? (
-                      <span className="text-xs font-medium">{te("applied")}</span>
-                    ) : (
-                      <Button variant="outline" size="sm" onClick={() => applySuggestion(issue, i)}>
-                        <Wand2 data-icon="inline-start" aria-hidden />
-                        {te("apply")}
-                      </Button>
+                    {applied.has(i) && (
+                      <span className="shrink-0 text-xs font-medium">{te("applied")}</span>
                     )}
-                  </div>
-                ) : null}
-              </AlertDescription>
-            </Alert>
-          ))}
+                  </AccordionTrigger>
+                  <AccordionContent className="flex flex-col gap-2 ps-6 text-muted-foreground">
+                    <p>{issueBody(issue)}</p>
+                    {issue.palette === "darkOverride" ? (
+                      <p>{te("override", { input: inputName(issue) })}</p>
+                    ) : issue.suggestion ? (
+                      <div className="flex flex-wrap items-center gap-3">
+                        <span
+                          aria-hidden
+                          className="size-5 shrink-0 rounded border"
+                          style={{ backgroundColor: issue.suggestion }}
+                        />
+                        <span className="min-w-0 flex-1">
+                          {te(issue.kind === "linkText" ? "suggestionOptional" : "suggestion", {
+                            input: inputName(issue),
+                            where: where(issue),
+                            current: issue.current,
+                            suggestion: issue.suggestion,
+                          })}
+                          {issue.conflictsAcrossModes &&
+                            ` ${te("conflict", { otherMode: issue.mode === "light" ? "dark" : "light" })}`}
+                        </span>
+                        {!applied.has(i) && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => applySuggestion(issue, i)}
+                          >
+                            <Wand2 data-icon="inline-start" aria-hidden />
+                            {te("apply")}
+                          </Button>
+                        )}
+                      </div>
+                    ) : null}
+                  </AccordionContent>
+                </AccordionItem>
+              );
+            })}
+          </Accordion>
         </div>
       )}
 

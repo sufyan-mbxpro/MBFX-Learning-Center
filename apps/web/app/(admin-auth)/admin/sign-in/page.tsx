@@ -47,7 +47,7 @@ export default async function AdminSignInPage() {
       />
       <p className="-mt-2 text-end text-sm">
         <Link
-          href="/admin/forgot-password"
+          href="/keystone/forgot-password"
           className="font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
         >
           {t("passwordReset.forgotLink")}

@@ -240,10 +240,30 @@ const authOptions: BetterAuthOptions = {
       "/request-password-reset": { window: 600, max: 3 },
       "/send-verification-email": { window: 600, max: 3 },
       "/reset-password": { window: 600, max: 10 },
+      // changes-49. Both were on Better Auth's built-in 3-per-10-seconds,
+      // which is a burst limit, not a brute-force one: it allows 1,080
+      // password guesses an hour from one address. The lockout below
+      // (per ACCOUNT, exponential) stops a guess campaign against one
+      // person; this stops one address walking many accounts. Sign-up is the
+      // email-spam half — every sign-up sends a verification mail.
+      "/sign-in/email": { window: 300, max: 10 },
+      "/sign-up/email": { window: 3600, max: 5 },
     },
   },
 
   advanced: {
+    // Which header names the client (changes-49). The default is
+    // `x-forwarded-for`, and nginx APPENDS to whatever the client sent there
+    // (`$proxy_add_x_forwarded_for`), so any request carrying its own header
+    // arrived as a two-entry list, which Better Auth refuses to trust — and
+    // every such request then shared ONE rate-limit bucket per path. That is
+    // a denial of service against sign-in, not a per-IP limit. `x-real-ip`
+    // is `$remote_addr`, set by nginx and overwritten rather than appended
+    // (docs/ops/deploy.md), so it is the one header a client cannot choose.
+    // `x-forwarded-for` stays as the fallback for a host without it.
+    ipAddress: {
+      ipAddressHeaders: ["x-real-ip", "x-forwarded-for"],
+    },
     // Sending happens AFTER the response (ADR-078 #11). It also closes the
     // timing side channel in anti-enumeration: a known address and an unknown
     // one now take the same time to answer, because neither waits for a
@@ -314,12 +334,16 @@ const authOptions: BetterAuthOptions = {
         // Redis and the row. The public site calls get-session on every page
         // (ADR-094), so one visit to the site re-armed a week-long session.
         // Clamp the refresh for STAFF to the configured timeout instead.
+        //
+        // changes-49: the same clamp for a LEARNER session under its own
+        // setting. `userType` still decides which setting applies.
         before: async (data, context) => {
           if (!(data.expiresAt instanceof Date)) return;
           const current = (context?.context as { session?: { user?: { userType?: unknown } } })
             ?.session;
-          if (current?.user?.userType !== "STAFF") return;
-          const setting = await getSetting("security.adminSessionTimeout");
+          const key = sessionTimeoutSettingKey(current?.user?.userType);
+          if (!key) return;
+          const setting = await getSetting(key);
           const expiresAt = clampStaffRefresh(
             data.expiresAt,
             setting === null ? null : adminSessionTimeoutMs(setting),
@@ -498,7 +522,20 @@ export function clampStaffRefresh(
 }
 
 /**
- * Slide a STAFF session's expiry to `now + timeout`, so an idle one simply
+ * Which idle-timeout setting governs a session, by the user's `userType`
+ * (changes-49): the ADR-105 staff one, or its learner twin. `null` for a
+ * session whose user type is neither, which is left alone.
+ */
+export function sessionTimeoutSettingKey(
+  userType: unknown,
+): "security.adminSessionTimeout" | "security.learnerSessionTimeout" | null {
+  if (userType === "STAFF") return "security.adminSessionTimeout";
+  if (userType === "LEARNER") return "security.learnerSessionTimeout";
+  return null;
+}
+
+/**
+ * Slide a session's expiry to `now + timeout`, so an idle one simply
  * EXPIRES rather than being flagged as idle somewhere a call site has to
  * remember to look (ADR-105 #1).
  *
@@ -513,9 +550,12 @@ export function clampStaffRefresh(
  * outage.
  */
 async function slideStaffExpiry(session: Session): Promise<Date | null> {
-  if (session.user.userType !== "STAFF") return null;
+  // STAFF read the ADR-105 setting, LEARNERs its twin (changes-49). Still
+  // decided by `userType`, never by a role.
+  const key = sessionTimeoutSettingKey(session.user.userType);
+  if (!key) return null;
 
-  const setting = await getSetting("security.adminSessionTimeout");
+  const setting = await getSetting(key);
   // A missing row is a database seeded before ADR-105: no timeout, which is
   // also what the row seeds to.
   const next = nextStaffExpiry(

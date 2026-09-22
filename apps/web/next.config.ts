@@ -16,6 +16,9 @@ config({ path: fileURLToPath(new URL("../../.env", import.meta.url)) });
 // Turbopack is the default bundler — no optimizePackageImports or
 // webpack-specific config needed (see docs/memory/decisions).
 const nextConfig: NextConfig = {
+  // No `X-Powered-By: Next.js` (changes-49): it tells a scanner which
+  // framework — and so which advisories — to try, and tells a reader nothing.
+  poweredByHeader: false,
   // Normally `.next`. The E2E harness sets it to something else so its own
   // server can run while `pnpm dev` is up: Next 16 takes a dev lock at
   // `<distDir>/lock` and REFUSES to start a second dev server sharing it

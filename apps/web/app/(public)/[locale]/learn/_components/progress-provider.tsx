@@ -26,6 +26,8 @@ import type {
   LessonProgressState,
 } from "@repo/contracts";
 
+import { usePublicSession } from "../../_components/public-session.tsx";
+
 /**
  * - `loading` — the fetch is in flight; render the not-started state.
  * - `guest`   — 401. The reader may read everything and save nothing
@@ -167,16 +169,27 @@ export function ProgressProvider({
     [apply],
   );
 
+  // changes-50 (image-4): the public site shows a STAFF session as signed out
+  // (ADR-094), so progress does too. The endpoint answers a staff session with
+  // real progress, which hid the "Save your progress" card and the "Track your
+  // progress" band from an admin browsing the site while the header beside
+  // them said "Sign in". A signed-out reader is a guest wherever progress
+  // exists; `off` is left alone, because the feature is off for everyone.
+  const session = usePublicSession();
+  const readsAsGuest = session.status === "anonymous" && (status === "ready" || status === "guest");
+  const shownStatus: ProgressStatus = readsAsGuest ? "guest" : status;
+  const shownView = readsAsGuest ? null : view;
+
   const value = useMemo<ProgressContextValue>(() => {
-    const byLesson = new Map(view?.lessons.map((row) => [row.lessonId, row.state]) ?? []);
+    const byLesson = new Map(shownView?.lessons.map((row) => [row.lessonId, row.state]) ?? []);
     return {
-      status,
-      view,
+      status: shownStatus,
+      view: shownView,
       stateFor: (lessonId: string) => byLesson.get(lessonId),
       pending,
       write,
     };
-  }, [status, view, pending, write]);
+  }, [shownStatus, shownView, pending, write]);
 
   return <ProgressContext value={value}>{children}</ProgressContext>;
 }
@@ -200,6 +213,7 @@ export function useLearnerDashboard(): {
 } {
   const [status, setStatus] = useState<ProgressStatus>("loading");
   const [enrollments, setEnrollments] = useState<EnrollmentSummary[]>([]);
+  const session = usePublicSession();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -219,5 +233,10 @@ export function useLearnerDashboard(): {
     return () => controller.abort();
   }, []);
 
+  // The same rule as `ProgressProvider`: a reader the public site shows as
+  // signed out has no enrollments to pick up.
+  if (session.status === "anonymous" && (status === "ready" || status === "guest")) {
+    return { status: "guest", enrollments: [] };
+  }
   return { status, enrollments };
 }

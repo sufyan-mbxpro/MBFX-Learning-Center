@@ -12,7 +12,7 @@ import { trackLabels } from "../../learn/_lib/learn-labels.ts";
 import { GlossaryEditor } from "./glossary-editor.tsx";
 import type { GlossaryEditorLabels } from "./editor-types.ts";
 import { mergeGlossaryProse, type GlossaryProseHeadings } from "./merge-prose.ts";
-import { formatDateTime } from "@repo/utils";
+import { formatDateTime, siteOrigin } from "@repo/utils";
 
 // Glossary term editor (ADR-069). Read gate here; every write re-gates in its
 // own action (security.md #1).
@@ -247,7 +247,7 @@ export default async function GlossaryTermEditPage({ params }: PageProps<"/admin
         }))}
         locales={authoringLocales.map((l) => l.code)}
         defaultLocale={routing.defaultLocale}
-        siteUrl={process.env.NEXT_PUBLIC_SITE_URL ?? ""}
+        siteUrl={siteOrigin()}
         canUpdate={can(subject, "glossary.update")}
         canPublish={can(subject, "glossary.publish")}
         canDelete={can(subject, "glossary.delete")}

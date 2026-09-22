@@ -49,10 +49,6 @@ interface NavEntryDef {
     | "website"
     | "market"
     | "tools"
-    // code-style.md #29 — the label lives under `admin.nav.<section>` so that
-    // `admin.ai` can be the OBJECT holding the screens' strings. Every entry
-    // above it predates that rule and keeps its flat key.
-    | "nav.ai"
     | "settings"
     | "navigation"
     | "homepage"
@@ -71,28 +67,6 @@ const ADMIN_NAV_GROUPS: {
     labelKey: null,
     entries: [
       { href: "/admin", labelKey: "dashboard", icon: "dashboard", permission: null, exact: true },
-    ],
-  },
-  {
-    labelKey: "navPeople",
-    entries: [
-      { href: "/admin/users", labelKey: "users", icon: "users", permission: "users.view" },
-      { href: "/admin/roles", labelKey: "roles", icon: "roles", permission: "roles.view" },
-      {
-        href: "/admin/employees",
-        labelKey: "employees",
-        icon: "employees",
-        permission: "employees.view",
-      },
-      // Subscribers (ADR-080 #7). Under People rather than System: a
-      // newsletter list is an AUDIENCE, and the person who curates it is the
-      // one who manages users — not the one who can repoint the SMTP host.
-      {
-        href: "/admin/newsletter",
-        labelKey: "newsletter",
-        icon: "newsletter",
-        permission: "newsletter.view",
-      },
     ],
   },
   {
@@ -208,21 +182,34 @@ const ADMIN_NAV_GROUPS: {
     ],
   },
   {
+    // AFTER Content since changes-49 (owner: "users section place after the
+    // content"). The sidebar leads with what an editor works on every day —
+    // courses, lessons, articles — and People, which most sessions never
+    // open, follows it.
+    labelKey: "navPeople",
+    entries: [
+      { href: "/admin/users", labelKey: "users", icon: "users", permission: "users.view" },
+      { href: "/admin/roles", labelKey: "roles", icon: "roles", permission: "roles.view" },
+      {
+        href: "/admin/employees",
+        labelKey: "employees",
+        icon: "employees",
+        permission: "employees.view",
+      },
+      // Subscribers (ADR-080 #7). Under People rather than System: a
+      // newsletter list is an AUDIENCE, and the person who curates it is the
+      // one who manages users — not the one who can repoint the SMTP host.
+      {
+        href: "/admin/newsletter",
+        labelKey: "newsletter",
+        icon: "newsletter",
+        permission: "newsletter.view",
+      },
+    ],
+  },
+  {
     labelKey: "navSystem",
     entries: [
-      // AI (Module 18, ADR-097). Above Settings, and its own destination
-      // rather than a settings card, for the reason Market has one: a spend
-      // meter and a sealed credential are not a card in a grid. The entry is
-      // shown to anyone holding ANY of the three read-or-write keys, and each
-      // screen re-checks its own — `ai.providers.manage` is super_admin-only
-      // (ADR-098), so an `admin` sees Usage, Features and Limits and no
-      // Providers tab at all.
-      {
-        href: "/admin/ai",
-        labelKey: "nav.ai",
-        icon: "ai",
-        permission: ["ai.usage.view", "ai.settings.manage", "ai.providers.manage"],
-      },
       // Settings is the ONLY system entry in the main sidebar (changes-05):
       // Features, Navigation, Homepage and Theme are all settings-shaped
       // screens the hub already fronts as cards, each reachable from any
@@ -233,11 +220,22 @@ const ADMIN_NAV_GROUPS: {
       // `email.log.view` is here for the same reason: `support` holds it and
       // nothing else under settings (ADR-078 #4), so without it the one key
       // that role was granted would have no route to reach.
+      //
+      // changes-51: AI is no longer an entry of its own — "only show in the
+      // settings page". It is Settings → AI, so the three AI keys open
+      // Settings too, or an `ai.usage.view`-only role would lose its way in.
       {
         href: "/admin/settings",
         labelKey: "settings",
         icon: "settings",
-        permission: ["settings.view", "social.manage", "email.log.view"],
+        permission: [
+          "settings.view",
+          "social.manage",
+          "email.log.view",
+          "ai.usage.view",
+          "ai.settings.manage",
+          "ai.providers.manage",
+        ],
       },
     ],
   },
@@ -401,6 +399,7 @@ export async function AdminShell({
         initialCollapsed={sidebarCollapsed}
         logoLight={brandAssets.logo_light?.url ?? null}
         logoDark={brandAssets.logo_dark?.url ?? null}
+        favicon={brandAssets.favicon?.url ?? null}
         userName={userName}
         email={email}
         labels={{

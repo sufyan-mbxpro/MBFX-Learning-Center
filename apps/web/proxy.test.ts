@@ -9,8 +9,19 @@
 // themselves for the one claim that can't be observed through `proxy()`
 // alone — that /admin and /api are excluded from next-intl's own pattern.
 import { NextRequest } from "next/server";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { proxy, config } from "./proxy.ts";
+
+// The proxy asks `/api/public-path` whether an unowned address answers
+// (ADR-146). Stubbed at the network edge: the answer is what each test says,
+// and "page" by default so the older routing tests see the old pass-through.
+const lookup = vi.fn(async (): Promise<{ kind: string; to?: string }> => ({ kind: "page" }));
+const fetchMock = vi.fn(async (_url: URL | string) => Response.json(await lookup()));
+vi.stubGlobal("fetch", fetchMock);
+beforeEach(() => {
+  lookup.mockReset();
+  lookup.mockResolvedValue({ kind: "page" });
+});
 
 function requestFor(path: string, cookie?: string) {
   const headers = new Headers();
@@ -56,65 +67,85 @@ describe("proxy — locale routing (public surface)", () => {
   });
 });
 
-describe("proxy — /admin STAFF gate (security.md #3: the two-lock proxy gate)", () => {
-  it("redirects to /admin/sign-in with the original path preserved when there is no STAFF session cookie", async () => {
-    const response = await proxy(requestFor("/admin"));
-    expect(response.status).toBe(307);
-    const location = new URL(response.headers.get("location")!);
-    expect(location.pathname).toBe("/admin/sign-in");
-    expect(location.searchParams.get("redirect")).toBe("/admin");
-  });
+/** A rewrite to the global not-found (ADR-146): Next serves it with a real 404. */
+function rewrittenTo(response: Response): string | null {
+  const target = response.headers.get("x-middleware-rewrite");
+  return target ? new URL(target).pathname : null;
+}
 
-  it("a nested /admin/* path is also gated and preserves its own path in the redirect", async () => {
-    const response = await proxy(requestFor("/admin/users"));
-    expect(response.status).toBe(307);
-    const location = new URL(response.headers.get("location")!);
-    expect(location.searchParams.get("redirect")).toBe("/admin/users");
-  });
-
-  it("/admin is never routed through next-intl — no locale prefix ever appears in the redirect target", async () => {
-    const response = await proxy(requestFor("/admin"));
-    const location = new URL(response.headers.get("location")!);
-    expect(location.pathname).not.toMatch(/^\/(en|es|ar|ur)\//);
-  });
-
-  it("the Module 16 admin surface ('/admin/website') is gated exactly like every other /admin/* path, never locale-prefixed", async () => {
-    const response = await proxy(requestFor("/admin/website"));
-    expect(response.status).toBe(307);
-    const location = new URL(response.headers.get("location")!);
-    expect(location.pathname).toBe("/admin/sign-in");
-    expect(location.searchParams.get("redirect")).toBe("/admin/website");
-    expect(location.pathname).not.toMatch(/^\/(en|es|ar|ur)\//);
-  });
-
-  it("/admin/sign-in is the one /admin path the gate lets through unauthenticated — gating it would redirect it to itself (ADR-052)", async () => {
-    const response = await proxy(requestFor("/admin/sign-in"));
+describe("proxy — the staff credential screens live at /keystone (changes-49, ADR-146)", () => {
+  it.each([
+    ["/keystone", "/admin/sign-in"],
+    ["/keystone/forgot-password", "/admin/forgot-password"],
+    ["/keystone/reset-password", "/admin/reset-password"],
+  ])("%s is served anonymously from %s", async (path, internal) => {
+    const response = await proxy(requestFor(path));
     expect(response.status).not.toBe(307);
-    expect(response.status).not.toBe(308);
     expect(response.headers.get("location")).toBeNull();
+    expect(rewrittenTo(response)).toBe(internal);
   });
 
-  it("/admin/sign-in still gets the admin surface's headers and a per-request nonce", async () => {
-    const response = await proxy(requestFor("/admin/sign-in"));
-    expect(response.headers.get("X-Frame-Options")).toBe("DENY");
-    const csp = response.headers.get("Content-Security-Policy-Report-Only")!;
-    expect(csp).toContain("frame-ancestors 'none'");
-    expect(csp).toMatch(/script-src 'self' 'nonce-[^']+' 'strict-dynamic'/);
+  it("a reset link's ?token= survives the rewrite untouched", async () => {
+    const response = await proxy(requestFor("/keystone/reset-password?token=abc123"));
+    expect(new URL(response.headers.get("x-middleware-rewrite")!).search).toBe("?token=abc123");
+  });
+
+  it.each(["/keystone", "/keystone/forgot-password", "/keystone/reset-password"])(
+    "%s gets the admin surface's headers and a per-request nonce",
+    async (path) => {
+      const response = await proxy(requestFor(path));
+      expect(response.headers.get("X-Frame-Options")).toBe("DENY");
+      const csp = response.headers.get("Content-Security-Policy")!;
+      expect(csp).toContain("frame-ancestors 'none'");
+      expect(csp).toMatch(/script-src 'self' 'nonce-[^']+' 'strict-dynamic'/);
+    },
+  );
+
+  it.each(["/admin/sign-in", "/admin/forgot-password", "/admin/reset-password"])(
+    "the OLD address %s is a 404, even with a session — only the rewrite reaches it",
+    async (path) => {
+      for (const cookie of [undefined, "better-auth.session_token=a-real-session-token"]) {
+        const response = await proxy(requestFor(path, cookie));
+        expect(response.headers.get("location")).toBeNull();
+        expect(rewrittenTo(response)).toBe("/not-found-page");
+      }
+    },
+  );
+
+  it.each(["/keystone-debug", "/keystone/sign-in", "/keystone/reset-password/extra"])(
+    "%s is not a staff screen — membership is exact, never a prefix",
+    async (path) => {
+      const response = await proxy(requestFor(path));
+      expect(rewrittenTo(response)).not.toBe("/admin/sign-in");
+      expect(rewrittenTo(response)).not.toBe("/admin/reset-password");
+    },
+  );
+});
+
+describe("proxy — /admin STAFF gate (security.md #3: the two-lock proxy gate)", () => {
+  it.each(["/admin", "/admin/users", "/admin/website", "/admin/forgot-password-debug"])(
+    "an anonymous %s is a 404, never a redirect that names the sign-in address",
+    async (path) => {
+      const response = await proxy(requestFor(path));
+      expect(response.status).not.toBe(307);
+      expect(response.headers.get("location")).toBeNull();
+      expect(rewrittenTo(response)).toBe("/not-found-page");
+    },
+  );
+
+  it("/admin is never routed through next-intl", async () => {
+    const response = await proxy(requestFor("/admin"));
+    expect(rewrittenTo(response)).not.toMatch(/^\/(en|es|ar|ur)\//);
   });
 
   // changes-21 F5 / ADR-078 #8 — the email preview is framed by the template
   // editor, and a frame the surrounding policy says DENY to renders nothing.
-  // The exception widens what may be EMBEDDED, never what the embedded document
-  // can reach: the route answers with its own `sandbox; default-src 'none'` CSP,
-  // so the framed page has an opaque origin and no script.
   it("the email preview is the one /admin path that may be framed", async () => {
     const response = await proxy(
       requestFor("/admin/api/email/preview", "better-auth.session_token=a-real-session-token"),
     );
     expect(response.headers.get("X-Frame-Options")).toBe("SAMEORIGIN");
-    expect(response.headers.get("Content-Security-Policy-Report-Only")).toContain(
-      "frame-ancestors 'self'",
-    );
+    expect(response.headers.get("Content-Security-Policy")).toContain("frame-ancestors 'self'");
   });
 
   it("every other /admin path — its own siblings included — stays DENY", async () => {
@@ -122,8 +153,6 @@ describe("proxy — /admin STAFF gate (security.md #3: the two-lock proxy gate)"
       "/admin",
       "/admin/settings/email",
       "/admin/settings/email/templates/auth.password_reset",
-      // Exact, not a prefix: a route that merely starts with the preview path
-      // must not inherit the exception.
       "/admin/api/email/preview-all",
       "/admin/api/email",
     ]) {
@@ -131,105 +160,133 @@ describe("proxy — /admin STAFF gate (security.md #3: the two-lock proxy gate)"
         requestFor(path, "better-auth.session_token=a-real-session-token"),
       );
       expect(response.headers.get("X-Frame-Options"), path).toBe("DENY");
-      expect(response.headers.get("Content-Security-Policy-Report-Only"), path).toContain(
+      expect(response.headers.get("Content-Security-Policy"), path).toContain(
         "frame-ancestors 'none'",
       );
     }
   });
 
-  // changes-21 F6 / ADR-079 #3 — recovery joins sign-in in ADMIN_PUBLIC_PATHS.
-  // All three are the same case: a person who cannot sign in. Gating recovery
-  // would redirect them to the screen they came here because they cannot pass.
-  it.each(["/admin/forgot-password", "/admin/reset-password"])(
-    "%s is reachable anonymously",
-    async (path) => {
-      const response = await proxy(requestFor(path));
-      expect(response.status).not.toBe(307);
-      expect(response.headers.get("location")).toBeNull();
-    },
-  );
-
-  it("a reset link's ?token= survives the gate untouched", async () => {
-    // The whole point of the allowlist: the token is in the URL, and a
-    // redirect to sign-in would drop it.
-    const response = await proxy(requestFor("/admin/reset-password?token=abc123"));
-    expect(response.status).not.toBe(307);
-    expect(response.headers.get("location")).toBeNull();
+  it("the admin CSP is ENFORCED, and Next is handed the nonce on the request", async () => {
+    const response = await proxy(
+      requestFor("/admin", "better-auth.session_token=a-real-session-token"),
+    );
+    expect(response.headers.get("Content-Security-Policy-Report-Only")).toBeNull();
+    const csp = response.headers.get("Content-Security-Policy")!;
+    expect(csp).toContain("report-uri /api/csp-report");
+    // Next forwards request-header overrides as `x-middleware-request-*`.
+    expect(response.headers.get("x-middleware-request-content-security-policy")).toBe(csp);
   });
 
-  it.each([
-    "/admin/forgot-password-debug",
-    "/admin/reset-password/extra",
-    "/admin/forgot",
-    "/admin/reset-password-x",
-  ])("%s is STILL gated — allowlist membership is exact, never a prefix", async (path) => {
-    const response = await proxy(requestFor(path));
-    expect(response.status).toBe(307);
-    expect(new URL(response.headers.get("location")!).pathname).toBe("/admin/sign-in");
-  });
-
-  it.each(["/admin/forgot-password", "/admin/reset-password"])(
-    "%s still gets the admin surface's headers and nonce",
-    async (path) => {
-      const response = await proxy(requestFor(path));
-      expect(response.headers.get("X-Frame-Options")).toBe("DENY");
-      expect(response.headers.get("Content-Security-Policy-Report-Only")).toMatch(
-        /script-src 'self' 'nonce-[^']+' 'strict-dynamic'/,
-      );
-    },
-  );
-
-  it("a path that merely STARTS with the sign-in path is still gated — the exemption is exact, not a prefix", async () => {
-    const response = await proxy(requestFor("/admin/sign-in-secrets"));
-    expect(response.status).toBe(307);
-    const location = new URL(response.headers.get("location")!);
-    expect(location.pathname).toBe("/admin/sign-in");
-  });
-
-  it("a NAVIGATION carrying a session token but no fresh cookie cache is NOT redirected — the cache expires after 5 minutes and nothing rewrites it on a page view, so this gate was bouncing valid 7-day staff sessions to sign-in every few minutes (changes-18 PR 1)", async () => {
+  it("a NAVIGATION carrying a session token but no fresh cookie cache is let through — the cache expires after 5 minutes and nothing rewrites it on a page view (changes-18 PR 1)", async () => {
     const response = await proxy(
       requestFor("/admin/glossary", "better-auth.session_token=a-real-session-token"),
     );
-    expect(response.status).not.toBe(307);
-    expect(response.status).not.toBe(308);
     expect(response.headers.get("location")).toBeNull();
+    expect(rewrittenTo(response)).toBeNull();
   });
 
-  it("that fall-through is not a hole: the request reaches (admin)/layout.tsx, which loads the subject from the database and redirects a non-STAFF user (ADR-006 — the proxy is a gate, the layout is the boundary)", async () => {
-    // Asserted here as the shape of the contract: the proxy no longer claims
-    // to decide, so the layout's own re-check is what a learner meets. The
-    // learner-session probes against every /admin/* route stay owed to
-    // Module 14 (security.md #7), where a real session can be constructed.
+  it("that fall-through is not a hole: the request reaches (admin)/layout.tsx, which loads the subject from the database and 404s a non-STAFF user (ADR-006 — the proxy is a gate, the layout is the boundary)", async () => {
     const response = await proxy(requestFor("/admin", "better-auth.session_token=learner-token"));
     expect(response.headers.get("X-Frame-Options")).toBe("DENY");
     expect(response.headers.get("location")).toBeNull();
   });
 
-  it("a Server Action request with a stale/missing cookie cache is NOT redirected — redirecting it breaks the client's action-response parsing (regression: 'An unexpected response was received from the server' saving the theme)", async () => {
+  it("a Server Action request with a stale/missing cookie cache is let through — rejecting it breaks the client's action-response parsing (regression: 'An unexpected response was received from the server' saving the theme)", async () => {
     const request = requestFor("/admin/theme");
     request.headers.set("next-action", "0123456789abcdef0123456789abcdef01234567");
     const response = await proxy(request);
-    expect(response.status).not.toBe(307);
-    expect(response.status).not.toBe(308);
     expect(response.headers.get("location")).toBeNull();
+    expect(rewrittenTo(response)).toBeNull();
   });
 });
 
-describe("proxy matcher — /admin and /api excluded from next-intl's own pattern", () => {
-  // Next's matcher strings compile via path-to-regexp, not `new RegExp()` —
-  // reconstructing that compiler here would just be a second, less-trusted
-  // implementation of the thing under test. These assert the pattern's own
-  // source text names the right exclusions (architecture.md #4/#7: the
-  // matcher must never locale-prefix /admin or /api) rather than pretending
-  // to execute it; `proxy()`'s own /admin-first branch above is what
-  // actually proves the gate runs correctly, end to end.
-  const [localeRoutingSource] = config.matcher;
+describe("proxy — real 404s on the public surface (changes-49, ADR-146)", () => {
+  it.each(["/login", "/dashboard", "/LICENSE", "/xx/anything", "/es/nothing-here"])(
+    "an address nothing answers (%s) is rewritten to the global not-found",
+    async (path) => {
+      lookup.mockResolvedValueOnce({ kind: "not-found" });
+      const response = await proxy(requestFor(path));
+      expect(rewrittenTo(response)).toBe("/not-found-page");
+    },
+  );
 
-  it("the locale-routing pattern's negative lookahead excludes admin and api by name", () => {
-    expect(localeRoutingSource).toContain("(?!api|admin|");
+  it("asks the resolver with the locale split off the path", async () => {
+    lookup.mockResolvedValueOnce({ kind: "not-found" });
+    await proxy(requestFor("/es/nothing-here"));
+    const asked = new URL(String(fetchMock.mock.calls.at(-1)![0]));
+    expect(asked.pathname).toBe("/api/public-path");
+    expect(asked.searchParams.get("locale")).toBe("es");
+    expect(asked.searchParams.get("path")).toBe("/nothing-here");
   });
 
-  it("the second matcher entry explicitly covers /admin/*, so the STAFF gate still runs for it", () => {
-    expect(config.matcher[1]).toBe("/admin/:path*");
+  it("a stored redirect is a real 308 to a same-site path", async () => {
+    lookup.mockResolvedValueOnce({ kind: "redirect", to: "/support" });
+    const response = await proxy(requestFor("/about/support"));
+    expect(response.status).toBe(308);
+    expect(new URL(response.headers.get("location")!).pathname).toBe("/support");
+  });
+
+  it("a redirect to another host is ignored, never followed", async () => {
+    lookup.mockResolvedValueOnce({ kind: "redirect", to: "//evil.example" });
+    const response = await proxy(requestFor("/about/support"));
+    expect(response.status).not.toBe(308);
+  });
+
+  it("a page that exists is let through to locale routing", async () => {
+    lookup.mockResolvedValueOnce({ kind: "page" });
+    const response = await proxy(requestFor("/es/about"));
+    expect(rewrittenTo(response)).not.toBe("/not-found-page");
+  });
+
+  it("a failed lookup falls back to letting the page answer (the old soft 404), never an outage", async () => {
+    fetchMock.mockRejectedValueOnce(new Error("down"));
+    const response = await proxy(requestFor("/somewhere"));
+    expect(rewrittenTo(response)).not.toBe("/not-found-page");
+  });
+
+  it("a coded route's first segment is never looked up", async () => {
+    fetchMock.mockClear();
+    await proxy(requestFor("/news/some-article"));
+    await proxy(requestFor("/learn/forex"));
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each(["/foo.txt/news", "/admin.json", "/es/foo.txt"])(
+    "a dotted first segment (%s) is a 404 — it used to become a bogus [locale] and a 500",
+    async (path) => {
+      const response = await proxy(requestFor(path));
+      expect(rewrittenTo(response)).toBe("/not-found-page");
+    },
+  );
+
+  it("an anonymous /account is sent to sign-in by the proxy, with its way back", async () => {
+    const response = await proxy(requestFor("/account/progress"));
+    expect(response.status).toBe(307);
+    const location = new URL(response.headers.get("location")!);
+    expect(location.pathname).toBe("/sign-in");
+    expect(location.searchParams.get("redirect")).toBe("/account/progress");
+  });
+
+  it("a public response carries an enforced CSP and no hreflang Link header", async () => {
+    const response = await proxy(requestFor("/"));
+    expect(response.headers.get("Content-Security-Policy")).toContain("default-src 'self'");
+    expect(response.headers.get("Content-Security-Policy-Report-Only")).toBeNull();
+    expect(response.headers.get("link")).toBeNull();
+  });
+});
+
+describe("proxy matcher — /admin, /keystone and /api excluded from next-intl's own pattern", () => {
+  // Next's matcher strings compile via path-to-regexp, not `new RegExp()`,
+  // so these assert the source text rather than re-implementing the compiler.
+  const [localeRoutingSource] = config.matcher;
+
+  it("the negative lookahead names each exclusion up to a `/` or the end — never a bare prefix", () => {
+    expect(localeRoutingSource).toContain("(?!api(?:/|$)|admin(?:/|$)|keystone(?:/|$)|");
+  });
+
+  it("the gate's own entries cover /admin and /keystone, bare and nested", () => {
+    for (const entry of ["/admin", "/admin/:path*", "/keystone", "/keystone/:path*"]) {
+      expect(config.matcher).toContain(entry);
+    }
   });
 });

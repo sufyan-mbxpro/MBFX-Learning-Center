@@ -23762,3 +23762,283 @@ before 24. The move back to 24+ is owed before then and is a pin change.
   `--experimental-strip-types`.
 - A `pnpm install` with pnpm 12 on a machine that can run it.
 - The production server upgrade.
+
+## 2026-09-22 — changes-49: 404s, /keystone, CSP, trash, course FAQ, per-surface palettes (ADR-146/147/148)
+
+**Shipped (public site):**
+
+- The course page's progress card sits level with the cover. The band was
+  `overflow-hidden`, which made it the sticky card's scroll container, so
+  `lg:top-24` measured from the band; it is `overflow-clip` now.
+- The logo is centred in the mobile header and in the mobile nav sheet.
+- The footer's "Stay in the loop" strip takes the visitor band's
+  `--secondary` surface, puts title and blurb on one line and uses `py-6`.
+- The homepage `connect` band ("Follow us…") is off: seed, live defaults and
+  migration `20260922090000`.
+- The Tools menu is 5 / 5 / 5; `gain-loss` moved to the timing column, now
+  headed "Timing & performance".
+- Every Learn listing, the glossary and its topics use the News banner's
+  `medium` density, and `PageHero` has a height floor per size from `lg`
+  (`--hero-min-medium`, `--hero-min-compact`), so each density is one height.
+  The tool pages (market news and the calendar included) are all compact
+  with no masthead actions; the track glossary got a real masthead.
+- The market news chips filter for real: the vendor renders the Timeline on
+  its server, and a `#fragment` never reaches a server, so the feed now goes
+  in the query too. The calendar chips were already correct; neither widget
+  can paginate (vendor "More events" / "Keep reading").
+- Course FAQs (below), and a designed coming-soon 404 (`NotFoundView`).
+
+**Shipped (security, ADR-146):** real 404 statuses (the proxy asks
+`/api/public-path` for an unowned first segment and rewrites to
+`app/(not-found)`); dotted paths are 404 not 500; enforced CSP with
+`/api/csp-report`; HSTS in production; no `X-Powered-By`; next-intl
+`alternateLinks: false` and a `Secure` locale cookie; `/admin` exact-prefix
+matching; staff sign-in at `/keystone` (+ recovery), `/admin/*` anonymous =
+404; sign-in/sign-up rate limits keyed on `x-real-ip`; `/account` redirected
+by the proxy; backslash open-redirect closed; a learner idle timeout
+(`security.learnerSessionTimeout`).
+
+**Shipped (admin):** People after Content in the sidebar; the favicon in the
+collapsed sidebar; direct publish from DRAFT / review states (ADR-147); a
+"Deleted" filter and Delete permanently on courses, lessons, quizzes, videos,
+glossary terms and articles (`purgeContent`, ADR-147); a course FAQ tab
+(`CourseTranslation.faq`, migration `20260922100000`); one image button per
+field and a Media library / Web address / Upload from computer picker (web
+addresses are hotlinked, HTTPS only, rich text only); separate public and
+admin palettes with a surface switch in the theme editor and separate mode
+storage (ADR-148, migration `20260922110000`); a SendGrid provider option on
+the email transport (SMTP relay, key sealed like the SMTP password); the
+support form mails Settings → General → Contact email, with descriptions under
+both email settings; absolute URLs come from one `siteOrigin()`
+(`@repo/utils`), and the legal-document redirect is relative (it leaked
+`localhost:3003`).
+
+**Checked, no change needed:** `seo.googleSiteVerification` is emitted by the
+public layout when set; the media size settings are read by the upload
+pipeline (only the admin's client-side pre-check is a fixed 5 MB).
+
+**Decisions:** ADR-146, ADR-147, ADR-148. CAPTCHA and enforced staff 2FA are
+not done (they need a vendor / an enrolment flow); nested soft 404s
+(`/news/<missing>`) remain 200 + `noindex`.
+
+**Tests:**
+
+- `apps/web` vitest: 2,793 pass (proxy suite rewritten for the new gate: 47).
+- `@repo/core`: 870, all pass. That includes `purge.integration.test.ts`
+  (new, 3), and `content`, `learn`, `videos` and `admin` integration updated
+  for direct publish and per-surface themes. `media.integration` failed once
+  on container start under load and passes alone (33).
+- `contracts` 484, `utils` 350 (`siteOrigin` +3), `ui` 500, `auth` 50,
+  `i18n` 26, `theme` 84.
+- Typecheck is clean in `apps/web`, `core`, `ui`, `auth`, `contracts` and
+  `db`. ESLint is clean on the changed files.
+- The integration suites need `NODE_PATH=<repo>/packages/db/node_modules` on
+  this machine: the Prisma CLI is linked only under `packages/db`.
+
+**Still owed:** a production `next build`; E2E for the trash, the FAQ tab and
+the theme surface switch; a real SendGrid send (locally the transport is LOG).
+
+## 2026-09-22 — changes-50: settings tabs, branding under General, white ground, live presets (ADR-149)
+
+**Shipped (admin):**
+
+- **Settings rows.** The public/private badge, the key's name and the
+  description now sit UNDER the input. The label row holds only the label.
+- **General is tabbed:** Site · Contact · Language & region · Security ·
+  Branding.
+  - The tabs come from `SETTINGS_GROUP_TABS` (`settings-shared.ts`). A key
+    that no tab lists falls onto the first tab.
+  - One form and one Save cover every field tab. A failed Save opens the tab
+    that holds the first invalid field.
+  - **Branding** holds the logos and favicon that were the theme editor's
+    Logos tab (`_components/brand-assets-form.tsx`). Each upload still saves
+    through its own action, so the tab draws no Save. It is shown only to a
+    subject with `theme.update`, the key those actions check.
+- **Theme editor.**
+  - The Logos tab is gone and the first tab is now "Colors".
+  - Presets mark the one the open surface is showing: a primary ring and a
+    check on its card, and an "Active now: …" line. When the palette matches
+    no preset, the line says "custom colours".
+  - Each preset card shows its light and dark page backgrounds.
+  - Activating a preset reloads every tab. The editor is keyed by the
+    palette, because since ADR-148 activation copies onto the same surface
+    row, so the row key never changed and the old colours stayed in state.
+  - Contrast suggestions are collapsible tickets (Accordion). Blocking errors
+    start open.
+- **Course editor.** The settings rail (status, display, settings, flags,
+  info) sits beside every tab, not only Details. The SEO analysis moved under
+  the SEO fields.
+- **Video topic editor.** The body is its own section after Videos, which is
+  the order the public page uses. New keys: `videoEditor.contentSection` and
+  `videoEditor.contentSectionDescription`.
+- **Article SEO panel.**
+  - Advanced is removed. It only restated the Basic tab's robots and
+    canonical fields.
+  - Social stays, because the article page's Open Graph and X metadata read
+    every field on it. It is renamed "Social sharing", explains what it is
+    for, and shows a share-card preview built from the same fallback chain.
+
+**Shipped (public):**
+
+- **Guest prompts for staff.** "Save your progress" and "Track your progress"
+  now show for a staff session too. It was never removed: the public header
+  shows staff as signed out (ADR-094), but the progress endpoint answered
+  them with real progress, so an admin browsing the site never saw the
+  prompts. The provider now reports `guest` whenever the public session reads
+  anonymous, and the quiz listing's prompt does the same. The endpoint's
+  authorization is unchanged.
+- **Footer subscribe strip.** It is a full-width flat `bg-secondary` band
+  outside the footer's Container, so it matches the sign-in strip above the
+  footer instead of showing the footer's texture.
+- **White background.** The default light background is `#FFFFFF`
+  (ADR-149), in `@repo/theme` and `default-theme-tokens.json`. Migration
+  `20260922120000` moves the built-in preset and both surface rows, but only
+  rows that still hold the seeded ivory `#F7F3ED`. It has been applied to the
+  local database.
+
+**Decisions:** ADR-149.
+
+**Tests:**
+
+- New file: `apps/web/app/changes-50-fixes.test.ts` (19).
+- `apps/web` vitest: 2,817 pass.
+- `@repo/theme`: 84 pass.
+  - Pinned values moved to the white ground: link ink `#906D4D`, raw
+    primary 2.57:1.
+  - The snapshot was updated.
+- `admin.integration.test.ts` passes (7, Testcontainers). It gained a
+  per-surface active-preset case.
+- `@repo/db`: 41 pass.
+- `tsc` is clean in `apps/web`, `core` and `theme`. ESLint is clean on the
+  changed files.
+- Checked in a headless browser against the dev server: General tabs, the
+  Branding tab, Presets, the course editor's SEO and Curriculum tabs, the
+  video editor, the article Social tab, the footer, and the course page's
+  guest card.
+
+**Still owed:** E2E for the General tabs and the preset switch. The theme
+cache keeps the old ivory until the `theme` tag is revalidated or the dev
+server restarts.
+
+## 2026-09-22 — changes-51: Email and AI as tabbed settings sections, live AI usage (ADR-150)
+
+**Shipped (admin):**
+
+- **Email is one tabbed section:** Sender · Delivery · Newsletter · Templates ·
+  Delivery log, under `/admin/settings/email`. The heading and tab strip sit in
+  a route-group layout (`settings/email/(tabs)/`). The template editor stays
+  outside the group, with its own heading.
+- **AI is one tabbed section under Settings:** Connection · Usage · Features ·
+  Budget & limits · Providers, under `/admin/settings/ai`.
+  - The sidebar's AI entry is gone. Settings (sidebar and hub) now also opens
+    for the three AI keys.
+  - `/admin/ai` redirects to the Usage tab, and `/admin/ai/<tab>/…` to the
+    same tab under Settings.
+  - The Connection tab no longer repeats the limits form or links to the tabs.
+- **One settings-nav entry per section.** It lands on the first tab the viewer
+  can open and stays lit on every tab. The tabs come from
+  `emailSectionTabs`/`aiSectionTabs`, so `support` still reaches the log
+  alone. `SubNav` items take an optional `match` prefix.
+- **The AI Usage tab refreshes itself** (`_components/live-refresh.tsx`):
+  `router.refresh()` on mount, every 30 s while visible, and on returning to
+  the tab. It shows when the figures were read and has a "Refresh now" button.
+
+**Checked, no change needed:** the Anthropic driver meters streams and single
+calls correctly, including an aborted stream (usage is yielded in a
+`finally`). Metering is written in the same request as the call, and no usage
+read is cached. The seeded prices match Anthropic's current rates (Opus 5
+$5/$25, Sonnet 5 $2/$10, Haiku 4.5 $1/$5). Cache-write tokens are priced at the
+input rate, but nothing sends `cache_control`, so the count is zero.
+
+**Decisions:** ADR-150.
+
+**Tests:**
+
+- `apps/web` vitest: 2,840 pass. Updated: `ai-degradation`,
+  `email-admin-conventions`, `loading-states`, `admin-page-conventions` (the
+  provider editor under settings is still checked as an editor).
+- `tsc` is clean in `apps/web` and `core`. ESLint is clean on the changed
+  files.
+- E2E specs repointed (`admin/ai.spec.ts`, `learner-admin-probe.spec.ts`,
+  which now also probes the two new email tabs and `/admin/ai`). Not run.
+- Checked with a signed-in session against the dev server:
+  - All 13 new routes and the template editor answer 200, with one h1 per
+    page and the right tab and nav entry active.
+  - `/admin/ai` and `/admin/ai/limits` emit `NEXT_REDIRECT` to their new
+    addresses.
+
+**Still owed:** E2E runs for both sections. A real Anthropic call against the
+Usage tab (locally the provider is ECHO).
+
+## 2026-09-22 — changes-51: an "Our videos" strip on the home page (Module 12)
+
+**What shipped:** the owner asked for the videos back on the home page, placed
+right after the "From the glossary" band, as a slider of small cover cards
+with a centred title (from the owner's reference image).
+
+- `learning_videos` accepts a second variant, `strip`
+  (`HOME_SECTION_VARIANTS`). `grid` is still what `/learn` uses. Any other
+  stale variant still renders nothing, and that check still runs before any
+  I/O.
+- `VideoShowcase`'s `strip` branch: a centred "Our videos" `h2` between two
+  hairlines, then a `Carousel` with arrows under the track and arrows on
+  hover. It shows five cards on desktop, four at `md`, three at `sm` and about
+  two on a phone. The new `--width-slide-5` token sets the desktop width.
+- `_components/video-strip-card.tsx`: a 16:10 cover, a scrim and the title.
+  Topics with a playable video get a play mark. The whole card links to the
+  topic page. It deliberately does not play in place like `VideoTile`,
+  because a card this small is too small to watch.
+- The content is dynamic: the same `getFeaturedVideoTopics` published set the
+  rail already read, cover or generated fallback, up to `limit` (seeded 10).
+- Seed: `learning_videos` is `enabled: true, order: 10, variant: "strip"`.
+  Migration `20260922130000_home_video_strip_changes51` moves an existing
+  install, but only while its row still holds the old `grid` value.
+
+**Decisions:** no ADR. This is a variant on an existing band, placed by the
+owner. It reverses the 2026-09-15 "no video content on the home page" call
+made the same way, at the owner's ask.
+
+**Tests:** `apps/web` vitest 2,794 pass. The `home-opening.test.ts` guards now
+pin `strip` as the only home variant. `contracts` 484 and `settings` 33 pass.
+`tsc` and ESLint are clean on the changed files. `check:home-sections` is OK.
+The migration was applied locally.
+
+## 2026-09-22 — changes-51 follow-up: the video strip's spacing and entrance (Module 12)
+
+**What shipped:** the owner asked for less space between "Our videos" and
+"In practice", and for a different, unique loading effect on the strip.
+
+- The strip's `Section` takes `section-flush-end`, so the gap is now only the
+  next band's top padding instead of two paddings stacked.
+- Each card is now its own `Reveal`, replacing the one wrapper around the
+  track. Alternate cards use `rise` (from below) and `drop` (from above),
+  with a zoom. They are staggered 90ms across a view of five and take 650ms.
+  The observer clips by the track's overflow, so a card that slides in from
+  either side of the slider plays the effect. It also replays when the page
+  scrolls up or down (ADR-111). The heading enters with `scale`.
+- `@repo/ui` `Reveal` gains the `rise` and `drop` variants. Their CSS comes
+  before `.reveal.is-visible`, because at equal specificity source order is
+  what lets the arrived state win. They work on the observer path only: on
+  the opt-in `timeline` path they fade without moving.
+
+**Decisions:** no ADR. These are presets added to an existing vocabulary.
+
+**Tests:** `apps/web` vitest 2,842 pass (`home-opening.test.ts` pins the
+alternation, the flush edge and the CSS order). `@repo/ui` 500 pass. `tsc` is
+clean in `web` and `ui`, and ESLint is clean on the changed file. Checked
+against the dev server: the classes render on the page.
+
+## 2026-09-22 — Module 08: footer subscribe band is an inset strip (changes-51)
+
+- The footer's subscribe band moved back inside the footer's `Container`. It is
+  now a bordered, `rounded-lg` panel with a lifted `bg-secondary-foreground/5`
+  fill, so the footer texture shows around it. It had been a full-width
+  `bg-secondary` band.
+- The form column widened from `sm:w-96` to `sm:w-xl`. The email input is
+  larger, and the consent line fits on one row. Heading and form sit side by
+  side from `xl`, because `lg` squeezed the blurb once the form was wider.
+
+**Decisions:** no ADR. This only changes presentation.
+
+**Tests:** `newsletter-consent.test.ts` and `radius-scale.test.ts` pass.
+ESLint is clean on `footer.tsx`.

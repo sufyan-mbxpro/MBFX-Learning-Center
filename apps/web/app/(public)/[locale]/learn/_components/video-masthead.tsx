@@ -27,6 +27,8 @@ export async function VideoMasthead({
 
   return (
     <PageHero
+      // changes-49: the News banner's density on every Learn listing.
+      size="medium"
       // `priority` on this one piece: it is the LCP candidate on the route.
       // Every video panel below it stays lazy.
       backdrop={<LearnBackdrop slot="videoBanner" priority />}

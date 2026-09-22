@@ -173,21 +173,24 @@ export const DEFAULT_BRAND: BrandColors = {
 };
 
 /**
- * Warm neutrals (ADR-101 §2, superseding ADR-072 §4's slate).
+ * Warm neutrals (ADR-101 §2, superseding ADR-072 §4's slate) on a WHITE
+ * ground (ADR-149, changes-50: "the built in theme have the white background
+ * by default").
  *
  * The changes-31 reference shares our bronze `primary` almost exactly, so the
  * whole colour delta between our surface and its was TEMPERATURE: slate is
  * blue-biased at every step, and a bronze primary on it reads as a brown
  * button on a grey site rather than as one material.
  *
- * `background` is the ivory ground and `surface` stays white on purpose: that
- * 1.11:1 step is what separates a card from the page, which is why the public
- * card can drop its resting shadow (ADR-101 §4). A lighter ivory was tried
- * first and measured 1.04:1 — too small to separate anything, which would have
- * put the border back to do the ground's job.
+ * `background` was the ivory `#F7F3ED` until ADR-149; the owner asked for
+ * white. A card no longer separates from the page by a change of ground, so
+ * the card's own border and `shadow-sm` (both already on `Card`) do that job.
+ * The rest of the ramp is unchanged: every ink and border was chosen to clear
+ * its threshold on the ivory AND the muted surface, and white is lighter than
+ * the ivory, so every ratio against the ground only rises.
  */
 export const DEFAULT_LIGHT_SURFACE: SurfacePalette = {
-  background: "#F7F3ED",
+  background: "#FFFFFF",
   surface: "#FFFFFF",
   surfaceMuted: "#F0EBE3",
   textPrimary: "#1E1B18",

@@ -15,7 +15,12 @@
 import { cacheLife, cacheTag } from "next/cache";
 import { FeatureVisibility, db, type Difficulty } from "@repo/db";
 import { pickTranslation, type LocaleFallbackInfo } from "@repo/i18n";
-import { LEARN_TRACK_KEYS, type LearnTrackKey, type QuizLinkView } from "@repo/contracts";
+import {
+  type CourseFaqItem,
+  LEARN_TRACK_KEYS,
+  type LearnTrackKey,
+  type QuizLinkView,
+} from "@repo/contracts";
 import { COURSE, RECOMMENDED, loadRelationTargets } from "./content-relations.ts";
 import { scheduledVisibilityOr } from "./content.ts";
 import { loadQuizLinks } from "./quiz-links.ts";
@@ -162,6 +167,8 @@ export interface CourseView extends CourseCardView, ReadingView {
    * assessment it does not show.
    */
   finalQuiz: QuizLinkView | null;
+  /** changes-49 — the course's own questions, in the words' locale; `[]` for none. */
+  faq: CourseFaqItem[];
 }
 
 export interface LessonAttachmentView {
@@ -449,6 +456,7 @@ export async function loadCourseBySlug(
           description: true,
           seoTitle: true,
           seoDescription: true,
+          faq: true,
           translationStatus: true,
         },
       },
@@ -518,6 +526,7 @@ export async function loadCourseBySlug(
     alternates: advertisedAlternates(course.translations, defaultLocale),
     sections: buildSections(course.sections, locale, defaultLocale, locales),
     finalQuiz: course.finalQuizId ? (quizLinks.get(course.finalQuizId) ?? null) : null,
+    faq: readCourseFaq(words.faq),
     ...cardFlags(course),
   };
 }
@@ -984,4 +993,21 @@ export async function loadLearnSitemapEntries(): Promise<LearnSitemapEntry[]> {
   }
 
   return entries;
+}
+
+/**
+ * A course's stored FAQ, defensively (changes-49). `faq` is a `Json?` column,
+ * so what comes back is `unknown`: anything that is not a `{ question, answer }`
+ * pair of non-empty strings is dropped, and a row with none reads as `[]`.
+ * Exported because the admin loader in courses.ts reads the same column.
+ */
+export function readCourseFaq(value: unknown): CourseFaqItem[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (typeof item !== "object" || item === null) return [];
+    const { question, answer } = item as Record<string, unknown>;
+    if (typeof question !== "string" || typeof answer !== "string") return [];
+    if (question.trim() === "" || answer.trim() === "") return [];
+    return [{ question, answer }];
+  });
 }

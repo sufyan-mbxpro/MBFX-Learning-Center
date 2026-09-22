@@ -88,8 +88,17 @@ afterAll(async () => {
 // ─── Pure: status machine + sanitize + slugify ───────────────
 
 describe("status machine", () => {
-  it("rejects DRAFT → PUBLISHED outright (must pass review)", () => {
-    expect(() => assertTransition("DRAFT", "PUBLISHED")).toThrow(IllegalTransitionError);
+  // ADR-147 (changes-49): a direct publish. The publish KEY is still the
+  // gate — `transitionContentStatus` checks it — the review states are no
+  // longer a mandatory route to it.
+  it("allows DRAFT, IN_REVIEW and SEO_REVIEW → PUBLISHED directly", () => {
+    for (const from of ["DRAFT", "IN_REVIEW", "SEO_REVIEW"] as const) {
+      expect(() => assertTransition(from, "PUBLISHED"), from).not.toThrow();
+    }
+  });
+
+  it("still refuses DRAFT → SCHEDULED (a scheduled date means it was approved)", () => {
+    expect(() => assertTransition("DRAFT", "SCHEDULED")).toThrow(IllegalTransitionError);
   });
 
   it("rejects IN_REVIEW → APPROVED (SEO review is not skippable)", () => {
@@ -149,8 +158,9 @@ describe("transitionContentStatus", () => {
   it("moves a glossary term along legal transitions, refuses illegal ones, and gates publish on glossary.publish", async () => {
     const termId = await content.createGlossaryTerm(actor);
 
+    // ADR-147: a DRAFT may publish directly, but never SCHEDULE without review.
     await expect(
-      content.transitionContentStatus(actor, "glossary", termId, "PUBLISHED"),
+      content.transitionContentStatus(actor, "glossary", termId, "SCHEDULED"),
     ).rejects.toThrow(IllegalTransitionError);
 
     await content.transitionContentStatus(actor, "glossary", termId, "IN_REVIEW");

@@ -17,7 +17,8 @@ import { join, relative, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const APP_ROOT = resolve(process.cwd(), "app");
-const AI_ROOT = join(APP_ROOT, "(admin)", "admin", "ai");
+// changes-51: the AI screens are Settings → AI.
+const AI_ROOT = join(APP_ROOT, "(admin)", "admin", "settings", "ai");
 
 const raw = (path: string) => readFileSync(path, "utf8");
 
@@ -94,7 +95,7 @@ describe("an AI affordance is ABSENT, never disabled", () => {
 });
 
 describe("the four states have somewhere to be said", () => {
-  const usage = stripped(join(AI_ROOT, "page.tsx"));
+  const usage = stripped(join(AI_ROOT, "(tabs)", "usage", "page.tsx"));
 
   it("says when AI is off", () => {
     expect(usage).toContain('tAi("off")');
@@ -116,7 +117,7 @@ describe("the four states have somewhere to be said", () => {
 });
 
 describe("the usage log holds no bodies, and the screen says so", () => {
-  const table = stripped(join(AI_ROOT, "usage-table.tsx"));
+  const table = stripped(join(AI_ROOT, "(tabs)", "usage", "usage-table.tsx"));
 
   it("renders no prompt or completion column", () => {
     for (const forbidden of ["prompt", "completion", "output"]) {
@@ -126,7 +127,9 @@ describe("the usage log holds no bodies, and the screen says so", () => {
   });
 
   it("states the omission in one line, so nobody files it as a bug", () => {
-    expect(stripped(join(AI_ROOT, "page.tsx"))).toContain('tAi("recentDescription")');
+    expect(stripped(join(AI_ROOT, "(tabs)", "usage", "page.tsx"))).toContain(
+      'tAi("recentDescription")',
+    );
   });
 });
 

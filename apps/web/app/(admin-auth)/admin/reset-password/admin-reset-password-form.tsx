@@ -67,7 +67,7 @@ export function AdminResetPasswordForm({
         // belong to a session that no longer exists. The rule's suggestion
         // would keep exactly what has to be thrown away.
         // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- see above
-        window.location.assign("/admin/sign-in?reset=1");
+        window.location.assign("/keystone?reset=1");
         return;
       }
       setFailure(
@@ -89,7 +89,7 @@ export function AdminResetPasswordForm({
         <Button
           variant="outline"
           className="w-full"
-          render={<Link href="/admin/forgot-password" />}
+          render={<Link href="/keystone/forgot-password" />}
         >
           {labels.requestAnother}
         </Button>

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import { redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { NextIntlClientProvider } from "next-intl";
 import { getMessages } from "next-intl/server";
 import { auth } from "@repo/auth";
@@ -10,6 +10,7 @@ import { buildThemeStyleSheet, getActiveTheme, withAdminTypeface } from "@repo/t
 import { curatedFontVariables } from "@repo/ui/fonts";
 import { ThemeProvider } from "@repo/ui/components/theme-provider";
 import { ThemeScript } from "@repo/ui/components/theme-script";
+import { ADMIN_THEME_STORAGE_KEY } from "@repo/ui/lib/theme-mode";
 import { AdminShell } from "./admin/_components/admin-shell.tsx";
 import { faviconIcons } from "../_lib/favicon.ts";
 import "@repo/ui/globals.css";
@@ -70,7 +71,9 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function AdminRootLayout({ children }: LayoutProps<"/">) {
   const session = await auth();
   const subject = session?.user?.id ? await loadSubject(session.user.id) : null;
-  if (subject?.userType !== "STAFF") redirect("/admin/sign-in");
+  // A 404, not a redirect to the staff sign-in (changes-49, ADR-146): a
+  // redirect names the staff entry point to whoever asked. Staff know it.
+  if (subject?.userType !== "STAFF") notFound();
 
   // Cached read (tag "theme", ADR-004) — an admin theme save invalidates
   // it; nothing polls. The style element id is frozen API: Module 14's CSP
@@ -105,7 +108,7 @@ export default async function AdminRootLayout({ children }: LayoutProps<"/">) {
       <body className="min-h-full" suppressHydrationWarning>
         {/* ADR-064: the pre-paint mode guard, server-rendered so the browser
             actually executes it. Carries the nonce, like #brand-tokens. */}
-        <ThemeScript nonce={nonce} />
+        <ThemeScript nonce={nonce} storageKey={ADMIN_THEME_STORAGE_KEY} />
         {/* ADR-141: the admin is set in Inter, whatever face the public
             site's theme uses. */}
         <style
@@ -114,7 +117,7 @@ export default async function AdminRootLayout({ children }: LayoutProps<"/">) {
           dangerouslySetInnerHTML={{ __html: buildThemeStyleSheet(withAdminTypeface(theme)) }}
         />
         <NextIntlClientProvider messages={messages}>
-          <ThemeProvider>
+          <ThemeProvider storageKey={ADMIN_THEME_STORAGE_KEY}>
             <AdminShell
               subject={subject!}
               userName={userName}

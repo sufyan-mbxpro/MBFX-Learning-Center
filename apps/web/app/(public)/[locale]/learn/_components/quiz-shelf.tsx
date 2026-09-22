@@ -20,9 +20,9 @@
 //     card is complete without it. Nothing here waits for it and nothing
 //     reserves space that collapses if it never comes: the meter is on screen
 //     from the first frame showing the quiz's pass mark, and gains a fill.
-import { useMemo, useState } from "react";
+import { useDeferredValue, useMemo, useState } from "react";
 import Image from "next/image";
-import { Award } from "lucide-react";
+import { Award, SlidersHorizontal, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type { QuizCardView } from "@repo/contracts";
 import { humanizeKey } from "@repo/utils";
@@ -33,6 +33,7 @@ import { Empty, EmptyDescription, EmptyTitle } from "@repo/ui/components/empty";
 import { ProgressBar } from "@repo/ui/components/progress-bar";
 import { QuizCard } from "@repo/ui/components/quiz-card";
 import { Reveal } from "@repo/ui/components/reveal";
+import { SearchInput } from "@repo/ui/components/search-input";
 import { Section } from "@repo/ui/components/section";
 import { cn } from "@repo/ui/lib/utils";
 import { isGeneratedCover, quizCoverUrl } from "../_content/learn-media.ts";
@@ -45,6 +46,8 @@ import { useQuizResults } from "../_lib/use-quiz-results.ts";
 export function QuizShelf({ quizzes, basePath }: { quizzes: QuizCardView[]; basePath: string }) {
   const t = useTranslations("learn");
   const [category, setCategory] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const deferredQuery = useDeferredValue(query);
   // ADR-139 #5 — Popular is by finished attempts, an aggregate the shelf's
   // cached payload already carries.
   const [view, setView] = useState<ShelfView>("all");
@@ -72,14 +75,24 @@ export function QuizShelf({ quizzes, basePath }: { quizzes: QuizCardView[]; base
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [quizzes]);
 
+  // Title and description only, as the course shelf searches title and summary:
+  // a match the card cannot show reads as a wrong result.
+  const needle = deferredQuery.trim().toLocaleLowerCase();
   const viewed = applyShelfView(viewItems, view);
-  const visible = category === null ? viewed : viewed.filter((quiz) => quiz.category === category);
+  const visible = viewed.filter(
+    (quiz) =>
+      (category === null || quiz.category === category) &&
+      (needle === "" ||
+        quiz.title.toLocaleLowerCase().includes(needle) ||
+        (quiz.description?.toLocaleLowerCase().includes(needle) ?? false)),
+  );
+  const filtering = category !== null || needle !== "";
 
   // Six a page (changes-37, ADR-121 §2), in state like the category above and
   // for the same reason. A new category starts again at page one.
   const paginationLabels = usePaginationLabels();
   const { page, pageCount, pageItems, setPage } = usePagedList(visible, {
-    resetKey: `${view}|${category ?? ""}`,
+    resetKey: `${view}|${category ?? ""}|${needle}`,
   });
 
   // The learner's record across the quizzes ON THIS PAGE, not across every
@@ -126,15 +139,43 @@ export function QuizShelf({ quizzes, basePath }: { quizzes: QuizCardView[]; base
         {/* ADR-139 #5: the top-level view, above the category chips. */}
         <ShelfViewChips views={views} value={view} onChange={setView} />
 
-        {/* One category is not a filter, it is a label — a chip row that can
-            only ever produce the set already on screen is a dead control. */}
-        {categories.length > 1 && (
-          <div className="flex flex-wrap items-center justify-between gap-3">
+        {/* Search and topic share ONE toolbar card, the course shelf's shape
+            (changes-47), so the two learn indexes narrow their lists the same
+            way. Below lg it stacks. */}
+        <div className="flex flex-col gap-3 rounded-lg border bg-card/60 p-4 shadow-sm backdrop-blur-sm lg:flex-row lg:flex-wrap lg:items-center lg:gap-4">
+          <div className="relative min-w-64 flex-1">
+            {/* SearchInput owns the glyph; pe-9 leaves room for the clear
+                button beside it in this positioned box. */}
+            <SearchInput
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              aria-label={t("quizzes.searchLabel")}
+              placeholder={t("quizzes.searchPlaceholder")}
+              className="pe-9"
+            />
+            {query !== "" && (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                aria-label={t("quizzes.clearSearch")}
+                className="absolute end-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground transition-colors duration-(--duration-base) hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+              >
+                <X aria-hidden className="size-4" />
+              </button>
+            )}
+          </div>
+
+          {/* One category is not a filter, it is a label — a chip row that can
+              only ever produce the set already on screen is a dead control. */}
+          {categories.length > 1 && (
             <div
               role="group"
               aria-label={t("quizzes.filterLabel")}
               className="flex flex-wrap items-center gap-1.5"
             >
+              {/* The glyph marks the group in the row; the group's aria-label
+                  is what names it to assistive tech. */}
+              <SlidersHorizontal aria-hidden className="size-4 text-muted-foreground" />
               <Chip
                 active={category === null}
                 onClick={() => setCategory(null)}
@@ -155,23 +196,30 @@ export function QuizShelf({ quizzes, basePath }: { quizzes: QuizCardView[]; base
                 />
               ))}
             </div>
+          )}
+        </div>
 
-            {/* The count is announced, not just shown: filtering with the
-                keyboard moves nothing into view, so a sighted-only change
-                would be silent for a screen-reader user. */}
-            {category !== null && (
-              <p aria-live="polite" className="text-sm text-muted-foreground">
-                {t("quizzes.resultCount", { count: visible.length })}
-              </p>
-            )}
-          </div>
+        {/* The count is announced, not just shown: filtering with the keyboard
+            moves nothing into view, so a sighted-only change would be silent
+            for a screen-reader user. */}
+        {filtering && (
+          <p aria-live="polite" className="text-end text-sm text-muted-foreground">
+            {t("quizzes.resultCount", { count: visible.length })}
+          </p>
         )}
 
         {visible.length === 0 ? (
           <Empty>
             <EmptyTitle>{t("quizzes.noneTitle")}</EmptyTitle>
             <EmptyDescription>{t("quizzes.noneBody")}</EmptyDescription>
-            <Button variant="outline" size="sm" onClick={() => setCategory(null)}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setCategory(null);
+                setQuery("");
+              }}
+            >
               {t("quizzes.clearFilter")}
             </Button>
           </Empty>

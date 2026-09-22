@@ -21,7 +21,7 @@ import {
 import { richTextLabels } from "../../_components/editor-labels.ts";
 import { ArticleEditor } from "./article-editor.tsx";
 import type { TranslationDraft } from "./editor-types.ts";
-import { formatDateTime } from "@repo/utils";
+import { formatDateTime, siteOrigin } from "@repo/utils";
 
 // Article editor v2 (changes-07 PRs 4–6). Rebuilt to the reference screen's
 // information architecture; the kind-specific and publish gates still live in
@@ -212,7 +212,7 @@ export default async function ArticleEditPage({ params }: PageProps<"/admin/arti
         }))}
         relatedOptions={relatedOptions}
         locales={[...routing.locales]}
-        siteUrl={process.env.NEXT_PUBLIC_SITE_URL ?? ""}
+        siteUrl={siteOrigin()}
         defaultLocale={routing.defaultLocale}
         canPublish={canPublish}
         canDelete={canDelete}
@@ -253,7 +253,8 @@ export default async function ArticleEditPage({ params }: PageProps<"/admin/arti
           seoSectionDescription: t("seoSectionDescription"),
           seoTabBasic: t("seoTabBasic"),
           seoTabSocial: t("seoTabSocial"),
-          seoTabAdvanced: t("seoTabAdvanced"),
+          socialIntro: t("socialIntro"),
+          sharePreview: t("sharePreviewLabel"),
           seoTabAnalysis: t("seoTabAnalysis"),
           seoTitle: t("seoTitleLabel"),
           seoTitleHint: t("seoTitleHint"),
@@ -263,7 +264,6 @@ export default async function ArticleEditPage({ params }: PageProps<"/admin/arti
           focusKeywordsHint: t("focusKeywordsHint"),
           canonicalUrl: t("canonicalUrlLabel"),
           canonicalUrlHint: t("canonicalUrlHint"),
-          canonicalDefault: t("canonicalDefault"),
           allowIndex: t("allowIndexLabel"),
           allowFollow: t("allowFollowLabel"),
           ogTitle: t("ogTitleLabel"),
@@ -275,9 +275,6 @@ export default async function ArticleEditPage({ params }: PageProps<"/admin/arti
             summary_large_image: t("twitterCardLargeImage"),
           },
           twitterImage: t("twitterImageLabel"),
-          robotsSummaryHint: t("robotsSummaryHint"),
-          robotsIndexRow: t("robotsIndexRow"),
-          robotsFollowRow: t("robotsFollowRow"),
 
           postSettings: t("postSettingsSection"),
           postSettingsDescription: t("postSettingsSectionDescription"),

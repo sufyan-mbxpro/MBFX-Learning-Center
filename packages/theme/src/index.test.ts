@@ -452,14 +452,14 @@ const darkVars = cssVars(
 // engine actually emits and the reasons behind them — and, via ADR-018 rule
 // 5, why raw --primary is still never used for thin or small elements.
 describe("ADR-072 / ADR-143 — brand primary #C8986B and its derived states", () => {
-  it("derives #886749 as link text on the ivory ground, and uses the raw swatch on dark", () => {
+  it("derives #906D4D as link text on the white ground, and uses the raw swatch on dark", () => {
     expect(DEFAULT_BRAND.primary).toBe("#C8986B");
-    // Was #936B44 while the light ground was pure white (ADR-072); the ivory
-    // ground (ADR-101) is darker, so clearing 4.5:1 on it takes one more step
-    // of shade. The brand swatch is unchanged — this is the DERIVED ink.
-    expect(deriveInteractive(DEFAULT_BRAND.primary, DEFAULT_LIGHT_SURFACE.background)).toBe(
-      "#886749",
-    );
+    // #886749 while the ground was ivory (ADR-101); white again since ADR-149,
+    // which is lighter, so 4.5:1 is reached one step of shade sooner. The
+    // brand swatch is unchanged — this is the DERIVED ink.
+    expect(
+      deriveInteractive(DEFAULT_BRAND.primary, DEFAULT_LIGHT_SURFACE.background).toUpperCase(),
+    ).toBe("#906D4D");
     // On the dark surface the raw swatch already clears 4.5:1, so the
     // engine returns it untouched — the brand colour IS the link colour there.
     expect(deriveInteractive(DEFAULT_BRAND.primary, DEFAULT_DARK_SURFACE.background)).toBe(
@@ -488,15 +488,16 @@ describe("ADR-072 / ADR-143 — brand primary #C8986B and its derived states", (
   });
 
   it("raw --primary clears NEITHER text nor non-text floors on a light surface — ADR-018 rule 5's reason", () => {
-    // 2.33:1 is below 4.5:1 (text) AND below 3:1 (non-text UI). A 1px bronze
+    // 2.57:1 is below 4.5:1 (text) AND below 3:1 (non-text UI). A 1px bronze
     // border or small icon glyph in raw --primary on the page ground fails,
     // and validateMode only flags the TEXT case — so the rule ("fills and
     // large shapes only") is structural, not linted. The figure moved from
     // 2.9 when the ground went from white to ivory (ADR-101); the rule it
-    // documents is unchanged, which is what `toBeLessThan(3.0)` holds.
+    // documents is unchanged, which is what `toBeLessThan(3.0)` holds. It is
+    // 2.57 again since ADR-149 put the ground back to white.
     const ratio = contrastRatio(DEFAULT_BRAND.primary, DEFAULT_LIGHT_SURFACE.background);
     expect(ratio).toBeLessThan(3.0);
-    expect(ratio).toBeCloseTo(2.33, 1);
+    expect(ratio).toBeCloseTo(2.57, 1);
   });
 
   it("the palette introduces no BLOCKING validation issue — only the link-text advisory", () => {

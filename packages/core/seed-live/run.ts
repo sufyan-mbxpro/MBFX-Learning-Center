@@ -243,8 +243,10 @@ async function applyDefaults(actor: Subject, defaults: DefaultsFile, aiReady: bo
         where: { key: t.key },
         data: { name: t.name, description: t.description, defaultMode: t.defaultMode as never },
       });
-      await activateTheme(actor.id, t.key);
-      console.log(`  theme: ${t.key} saved and activated`);
+      // Both surfaces start from the exported palette (ADR-148).
+      await activateTheme(actor.id, t.key, "web");
+      await activateTheme(actor.id, t.key, "admin");
+      console.log(`  theme: ${t.key} saved and applied to both surfaces`);
     } else {
       console.warn(`  ! theme ${t.key} failed validation — kept the seeded theme`);
     }

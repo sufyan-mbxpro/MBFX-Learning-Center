@@ -77,7 +77,7 @@ describe("tradingViewWidgetUrl", () => {
       colorTheme: "light",
       settings: {},
     });
-    expect(url).toContain("/embed-widget/timeline/?locale=en#");
+    expect(url).toContain("/embed-widget/timeline/?locale=en&feedMode=all_symbols#");
     expect(settingsOf(url)).toMatchObject({ feedMode: "all_symbols", displayMode: "regular" });
   });
 
@@ -96,6 +96,19 @@ describe("tradingViewWidgetUrl", () => {
       settings: { feedMode: "market", market: "forex" },
     });
     expect(settingsOf(forex)).toMatchObject({ feedMode: "market", market: "forex" });
+  });
+
+  it("puts the timeline's feed in the QUERY, which the vendor's server reads (changes-49)", () => {
+    const url = new URL(
+      tradingViewWidgetUrl({
+        widget: "timeline",
+        locale: "en",
+        colorTheme: "light",
+        settings: { feedMode: "market", market: "crypto" },
+      }),
+    );
+    expect(url.searchParams.get("feedMode")).toBe("market");
+    expect(url.searchParams.get("market")).toBe("crypto");
   });
 
   it("refuses a widget outside the closed list", () => {

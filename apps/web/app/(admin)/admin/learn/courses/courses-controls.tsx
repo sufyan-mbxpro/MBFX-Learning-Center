@@ -26,6 +26,7 @@ import { AdminCombobox } from "../../_components/combobox.tsx";
 import { createCourseAction } from "../../_actions/learn-actions.ts";
 import { FilterBarRow } from "@repo/ui/components/filter-bar";
 import { useFieldErrors } from "../../_hooks/use-field-errors.ts";
+import { useDeletedFilterOption } from "../../_components/trash.tsx";
 import { useServerAction } from "../../_hooks/use-server-action.ts";
 
 export interface CoursesFilterLabels {
@@ -62,6 +63,7 @@ export function CoursesToolbar({
   labels: CoursesFilterLabels;
 }) {
   const set = (patch: Partial<CoursesFilterState>) => onChange({ ...value, ...patch });
+  const deletedOption = useDeletedFilterOption();
 
   return (
     <FilterBarRow>
@@ -86,6 +88,8 @@ export function CoursesToolbar({
         options={[
           { value: "", label: labels.allStatuses },
           ...statusKeys.map((key) => ({ value: key, label: labels.statuses[key] ?? key })),
+          // The trash (changes-49): deleted courses are listed only here.
+          deletedOption,
         ]}
       />
 

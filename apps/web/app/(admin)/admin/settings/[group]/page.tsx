@@ -1,12 +1,18 @@
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
-import { requirePermission } from "@repo/rbac";
-import { loadAdminMenus } from "@repo/core";
+import { can, requirePermission } from "@repo/rbac";
+import { loadAdminMenus, loadBrandAssets } from "@repo/core";
 import { getActiveLocales } from "@repo/i18n";
 import { AdminSection } from "../../_components/admin-page.tsx";
 import { SettingsScreen } from "../_components/settings-screen.tsx";
-import { groupDescription, groupLabel, loadSettingsIndex } from "../_components/settings-shared.ts";
-import { SettingsGroupForm } from "../settings-group-form.tsx";
+import {
+  SETTINGS_GROUP_TABS,
+  groupDescription,
+  groupLabel,
+  loadSettingsIndex,
+} from "../_components/settings-shared.ts";
+import { BrandAssetsForm } from "../../_components/brand-assets-form.tsx";
+import { SettingsGroupForm, type SettingsTab } from "../settings-group-form.tsx";
 
 // One settings category on its own page (changes-01, image-4): sub-sidebar
 // for switching categories, type-driven fields for this group, ONE Save for
@@ -32,8 +38,63 @@ export default async function SettingsGroupPage({ params }: PageProps<"/admin/se
     .filter((s) => s.groupName === group)
     .map((s) =>
       t.has(`settingLabels.${s.key}`) ? { ...s, label: t(`settingLabels.${s.key}`) } : s,
+    )
+    // The same two-step for the line under a field (changes-49): a setting
+    // whose EFFECT is not obvious from its name — which inbox the support
+    // form writes to — says so from the catalog.
+    .map((s) =>
+      t.has(`settingDescriptions.${s.key}`)
+        ? { ...s, description: t(`settingDescriptions.${s.key}`) }
+        : s,
     );
   const description = groupDescription(t, group);
+
+  const uploadLabels = {
+    upload: t("uploadImage"),
+    replace: t("replaceImage"),
+    remove: t("removeImage"),
+    uploading: t("uploading"),
+    hint: t("uploadHint"),
+    cancel: t("cancel"),
+    confirmRemoveTitle: t("confirmRemoveImageTitle"),
+    confirmRemoveBody: t("confirmRemoveImageBody"),
+  };
+
+  // changes-50: General is tabbed, and its Branding tab is the logos and
+  // favicon that were the theme editor's. Their actions gate on
+  // `theme.update`, so a subject without it gets no Branding tab rather than
+  // uploads that would be refused.
+  const tabDefs = (SETTINGS_GROUP_TABS[group] ?? []).filter(
+    (tab) => tab.id !== "branding" || can(subject, "theme.update"),
+  );
+  const brandAssets = tabDefs.some((tab) => tab.id === "branding") ? await loadBrandAssets() : null;
+  const tabs: SettingsTab[] | undefined =
+    tabDefs.length > 0
+      ? tabDefs.map((tab) => ({
+          id: tab.id,
+          label: t(`settingsTabs.${tab.id}`),
+          ...(tab.id === "branding" && brandAssets
+            ? {
+                content: (
+                  <BrandAssetsForm
+                    initial={{
+                      logo_light: brandAssets.logo_light?.url ?? null,
+                      logo_dark: brandAssets.logo_dark?.url ?? null,
+                      favicon: brandAssets.favicon?.url ?? null,
+                    }}
+                    labels={{
+                      logoLight: t("logoLight"),
+                      logoDark: t("logoDark"),
+                      favicon: t("favicon"),
+                      saved: t("saved"),
+                      upload: uploadLabels,
+                    }}
+                  />
+                ),
+              }
+            : { keys: tab.keys }),
+        }))
+      : undefined;
 
   return (
     <SettingsScreen
@@ -51,6 +112,7 @@ export default async function SettingsGroupPage({ params }: PageProps<"/admin/se
             nativeName: l.nativeName,
           }))}
           menus={menus.map((m) => ({ value: m.key, label: m.name }))}
+          {...(tabs ? { tabs } : {})}
           labels={{
             save: t("save"),
             saved: t("saved"),
@@ -58,16 +120,7 @@ export default async function SettingsGroupPage({ params }: PageProps<"/admin/se
             privateBadge: t("privateBadge"),
             selectPlaceholder: t("selectPlaceholder"),
             managedElsewhere: t("settingManagedElsewhere"),
-            upload: {
-              upload: t("uploadImage"),
-              replace: t("replaceImage"),
-              remove: t("removeImage"),
-              uploading: t("uploading"),
-              hint: t("uploadHint"),
-              cancel: t("cancel"),
-              confirmRemoveTitle: t("confirmRemoveImageTitle"),
-              confirmRemoveBody: t("confirmRemoveImageBody"),
-            },
+            upload: uploadLabels,
             fields: {
               addRow: t("fieldAddRow"),
               removeRow: t("fieldRemoveRow"),

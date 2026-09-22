@@ -332,7 +332,8 @@ describe("ADR-116 §5/§6/§7 — what the seed says about the absorbed bands", 
     expect(seededRow("risk_disclaimer")).toMatch(/enabled: false/);
     const footer = readFileSync(join(ROOT, "_components/footer.tsx"), "utf8");
     expect(footer).toContain('getSetting("legal.riskDisclaimer")');
-    expect(footer).toContain("<CtaBand");
+    // changes-49: the subscribe strip is the visitor band's surface now.
+    expect(footer).toContain('source="footer"');
     for (const page of ["tools/page.tsx", "tools/[tool]/page.tsx", "economic-calendar/page.tsx"]) {
       expect(readFileSync(join(ROOT, page), "utf8"), page).not.toContain("RiskDisclaimer");
     }

@@ -2,6 +2,7 @@
 // touching @repo/db (architecture.md #1/#2: core is the only code that
 // touches db). Uncached: the admin surface is fully dynamic by design.
 import { ContentStatus, db } from "@repo/db";
+import { surfaceThemeKey, type ThemeSurface } from "@repo/contracts";
 import {
   DEFAULT_BRAND,
   DEFAULT_DARK_BRAND_OVERRIDES,
@@ -472,10 +473,21 @@ export interface RawThemeTokens {
 }
 
 /** The theme editor's initial state: the ACTIVE row's raw token JSON (not the compiled CSS), defaults when none is active. */
-export async function loadActiveThemeTokens(): Promise<RawThemeTokens> {
-  const active = await db.theme.findFirst({ where: { isActive: true } });
+/**
+ * The palette the theme editor opens on, for ONE surface (changes-49,
+ * ADR-148): its own `surface-<name>` row. Before the split there was one
+ * active row for both; a database that has not been migrated yet still has
+ * that row, and the editor opens on it — its first Save then creates the
+ * surface's own row under the surface key.
+ */
+export async function loadActiveThemeTokens(
+  surface: ThemeSurface = "web",
+): Promise<RawThemeTokens> {
+  const active =
+    (await db.theme.findUnique({ where: { key: surfaceThemeKey(surface) } })) ??
+    (await db.theme.findFirst({ where: { isActive: true } }));
   return {
-    themeKey: active?.key ?? "mbx-pro-default",
+    themeKey: surfaceThemeKey(surface),
     brand: (active?.brandColors as unknown as BrandColors) ?? DEFAULT_BRAND,
     light: (active?.lightSurface as unknown as SurfacePalette) ?? DEFAULT_LIGHT_SURFACE,
     dark: (active?.darkSurface as unknown as SurfacePalette) ?? DEFAULT_DARK_SURFACE,

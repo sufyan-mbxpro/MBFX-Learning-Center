@@ -128,7 +128,7 @@ pnpm dev                    # or: pnpm --filter web dev
 Open:
 
 - <http://localhost:3000> for the public site
-- <http://localhost:3000/admin/sign-in> for the admin portal
+- <http://localhost:3000/keystone> for the admin portal
 - <http://localhost:8025> to read any email the app sent (Mailpit)
 
 > **Windows:** if `pnpm dev` fails with `spawn UNKNOWN`, Windows Smart App
@@ -165,13 +165,13 @@ With the `.env` from §2.3:
 
 | Role                  | Sign-in URL                           | Email              | Password          |
 | --------------------- | ------------------------------------- | ------------------ | ----------------- |
-| Super Admin (staff)   | <http://localhost:3000/admin/sign-in> | `admin@mbxpro.com` | `LocalAdmin#2026` |
+| Super Admin (staff)   | <http://localhost:3000/keystone> | `admin@mbxpro.com` | `LocalAdmin#2026` |
 | Learner (public user) | <http://localhost:3000/en/sign-up>    | any email you type | any 8–128 chars   |
 
 - Learners register themselves at `/en/sign-up`. No email check is needed to
   sign in. The welcome/verification email appears in Mailpit.
 - Staff and learners use **different sign-in pages**: staff at
-  `/admin/sign-in`, learners at `/en/sign-in`. A learner account can never
+  `/keystone` (ADR-146), learners at `/en/sign-in`. A learner account can never
   open `/admin`, even with a role.
 - More staff accounts: sign in as the admin → **Users** / **Employees** →
   create a user and give it a role (for example Content Manager).
@@ -192,7 +192,7 @@ With the `.env` from §2.3:
    `openssl rand -base64 18`.
 2. Put it in the server's `.env` as `SEED_ADMIN_PASSWORD` for the **first
    seed only**.
-3. Sign in at `https://your-domain.com/admin/sign-in`, then change the
+3. Sign in at `https://your-domain.com/keystone`, then change the
    password at `/admin/profile`.
 4. **Delete the `SEED_ADMIN_PASSWORD` line** from the server's `.env`.
    Otherwise every later `db:seed` resets the password back.
@@ -425,7 +425,7 @@ pnpm --filter web build
 ### 6.6 Sign in once, then remove the seed password
 
 1. Start the app (next step), then sign in at
-   `https://example.com/admin/sign-in`.
+   `https://example.com/keystone`.
 2. Change the password at `/admin/profile`.
 3. Delete the `SEED_ADMIN_PASSWORD` line (and any other `SEED_*` lines) from
    `/srv/mbx/shared/.env`.
@@ -505,7 +505,7 @@ Details and the expected responses are in [docs/ops/cron.md](docs/ops/cron.md).
 ### 6.10 Check it works
 
 - `https://example.com` loads the homepage.
-- `https://example.com/admin/sign-in` accepts the admin account.
+- `https://example.com/keystone` accepts the admin account.
 - `pm2 logs mbx` shows no errors.
 - **Admin → Settings → Email:** set SMTP and send a test mail. Password reset
   and newsletter emails need it.
@@ -584,7 +584,7 @@ rollback, so write migrations that the previous release can still work with.
 | Symptom                                                 | Cause and fix                                                                                                                           |
 | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | `SKIPPED admin user` during seed                        | `SEED_ADMIN_PASSWORD` was empty. Set it and run `pnpm db:seed` again                                                                    |
-| Admin sign-in says the credentials are wrong            | You may be on the learner page. Staff use `/admin/sign-in`                                                                              |
+| Admin sign-in says the credentials are wrong            | You may be on the learner page. Staff use `/keystone`                                                                              |
 | Every page fails with a Redis or `ECONNREFUSED` error   | Redis is not running: `docker compose up -d` (local) or `systemctl status redis-server` (server)                                        |
 | `Can't reach database server`                           | Check `DATABASE_URL` and that MariaDB is up                                                                                             |
 | Changed `.env` but nothing happened                     | `.env` is read at startup. Restart the app. `NEXT_PUBLIC_*` values also need a rebuild                                                  |

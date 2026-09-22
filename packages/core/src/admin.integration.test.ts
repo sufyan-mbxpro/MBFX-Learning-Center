@@ -182,7 +182,7 @@ describe("saveTheme — validateTheme reports, it does not block (changes-05)", 
     await expect(db.theme.findUnique({ where: { key } })).resolves.not.toBeNull();
   });
 
-  it("saves a passing palette, audits it, and activateTheme round-trips as the ONLY active row", async () => {
+  it("saves a passing palette, audits it, and applies it to ONE surface only (ADR-148)", async () => {
     const key = `good-${Date.now()}`;
     const result = await admin.saveTheme(ACTOR, {
       themeKey: key,
@@ -196,11 +196,28 @@ describe("saveTheme — validateTheme reports, it does not block (changes-05)", 
       db.auditLog.findFirstOrThrow({ where: { action: "theme.update", entityId: key } }),
     ).resolves.toBeTruthy();
 
-    await admin.activateTheme(ACTOR, key);
-    const actives = await db.theme.findMany({ where: { isActive: true } });
-    expect(actives.map((t) => t.key)).toEqual([key]);
+    const adminBefore = await db.theme.findUnique({ where: { key: "surface-admin" } });
+    await admin.activateTheme(ACTOR, key, "web");
+    const web = await db.theme.findUniqueOrThrow({ where: { key: "surface-web" } });
+    expect(web).toMatchObject({ scope: "web", isActive: true, brandColors: goodBrand });
+    // The other surface is exactly what it was — the point of the split.
+    const adminAfter = await db.theme.findUnique({ where: { key: "surface-admin" } });
+    expect(adminAfter?.brandColors ?? null).toEqual(adminBefore?.brandColors ?? null);
+    // The preset stays a preset, and the surface rows are not listed as ones.
     const presets = await admin.loadThemePresets();
-    expect(presets.find((p) => p.key === key)?.isActive).toBe(true);
+    expect(presets.find((p) => p.key === key)?.isActive).toBe(false);
+    expect(presets.some((p) => p.key.startsWith("surface-"))).toBe(false);
+    // changes-50: asked about a SURFACE, the preset that surface now shows is
+    // the active one — the stored flag cannot say it, the copy can.
+    const forWeb = await admin.loadThemePresets("web");
+    expect(forWeb.find((p) => p.key === key)?.isActive).toBe(true);
+    const forAdmin = await admin.loadThemePresets("admin");
+    expect(forAdmin.find((p) => p.key === key)?.isActive).toBe(
+      JSON.stringify(adminAfter?.brandColors) === JSON.stringify(goodBrand),
+    );
+    expect(forWeb.find((p) => p.key === key)?.lightBackground).toBe(
+      (web.lightSurface as { background: string }).background,
+    );
   });
 });
 
@@ -231,16 +248,18 @@ describe("theme presets", () => {
     expect(listed?.swatches).toEqual(Object.values(goodBrand));
   });
 
-  it("activates a saved preset, then refuses to delete it while active or built-in", async () => {
+  it("applying a preset copies it, so the preset can still be deleted; a built-in cannot", async () => {
     const { key } = await admin.saveThemePreset(ACTOR, {
       name: `Use me ${Date.now()}`,
       description: "",
       ...tokens(),
     });
-    await admin.activateTheme(ACTOR, key);
-    await expect(admin.deleteThemePreset(ACTOR, key)).rejects.toBeInstanceOf(
-      admin.ThemePresetInUseError,
-    );
+    await admin.activateTheme(ACTOR, key, "admin");
+    await admin.deleteThemePreset(ACTOR, key);
+    expect(await db.theme.findUnique({ where: { key } })).toBeNull();
+    // The surface kept its copy of the colours.
+    const adminRow = await db.theme.findUniqueOrThrow({ where: { key: "surface-admin" } });
+    expect(adminRow.brandColors).toEqual(goodBrand);
 
     const system = await db.theme.create({
       data: {

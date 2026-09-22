@@ -31,7 +31,7 @@
 // rendered as a 70% fill would tell every reader they were 70% done.
 import { Award, ListChecks, RotateCcw, Target } from "lucide-react";
 
-import { Badge } from "@repo/ui/components/badge";
+import { Badge, BadgeGround } from "@repo/ui/components/badge";
 import { CardMarkers, type CardMarker } from "@repo/ui/components/card-markers";
 import { Button } from "@repo/ui/components/button";
 import { Skeleton, SkeletonButton, SkeletonText } from "@repo/ui/components/skeleton";
@@ -208,34 +208,30 @@ export function QuizCard({
 
         <div className="absolute inset-x-2.5 top-2.5 flex items-start justify-between gap-2">
           {categoryLabel ? (
-            <Badge
-              variant={categoryTone}
-              className="shadow-sm backdrop-blur-sm transition-transform duration-(--duration-base) ease-(--ease-out-quint) group-hover/quiz:scale-105"
-            >
-              {categoryLabel}
-            </Badge>
+            <BadgeGround className="transition-transform duration-(--duration-base) ease-(--ease-out-quint) group-hover/quiz:scale-105">
+              <Badge variant={categoryTone}>{categoryLabel}</Badge>
+            </BadgeGround>
           ) : (
             <span />
           )}
-          <Badge
-            variant="info"
-            className="shadow-sm backdrop-blur-sm transition-transform duration-(--duration-base) ease-(--ease-out-quint) group-hover/quiz:scale-105"
-          >
-            <ListChecks aria-hidden />
-            {questionsLabel}
-          </Badge>
+          <BadgeGround className="transition-transform duration-(--duration-base) ease-(--ease-out-quint) group-hover/quiz:scale-105">
+            <Badge variant="info">
+              <ListChecks aria-hidden />
+              {questionsLabel}
+            </Badge>
+          </BadgeGround>
         </div>
 
         {/* The verdict rides on the artwork rather than in the body, because
             it is the one thing a returning learner scans a grid for. */}
         <CardMarkers markers={markers} />
         {progress?.passed && (
-          <span className="absolute bottom-2.5 start-2.5">
-            <Badge variant="success" className="shadow-sm backdrop-blur-sm">
+          <BadgeGround className="absolute bottom-2.5 start-2.5">
+            <Badge variant="success">
               <Award aria-hidden />
               {labels.passed}
             </Badge>
-          </span>
+          </BadgeGround>
         )}
       </div>
 

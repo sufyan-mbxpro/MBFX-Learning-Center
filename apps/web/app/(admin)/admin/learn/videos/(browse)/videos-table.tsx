@@ -37,6 +37,11 @@ import {
 } from "../../../_components/status-badge.tsx";
 import { useClientTable } from "../../../_hooks/use-client-table.ts";
 import { useServerAction } from "../../../_hooks/use-server-action.ts";
+import {
+  inStatusFilter,
+  useDeletedFilterOption,
+  usePermanentDelete,
+} from "../../../_components/trash.tsx";
 
 export interface VideoTopicRow {
   id: string;
@@ -107,6 +112,7 @@ function RowActions({
 }) {
   const { run, pending } = useServerAction();
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const purge = usePermanentDelete("video", row.id);
 
   return (
     <div className="flex justify-end">
@@ -129,13 +135,16 @@ function RowActions({
               {row.deleted ? (
                 // ADR-044 #7: restore is NOT confirmed. It is the undo, and
                 // gating it makes the destructive path harder to reverse.
-                <DropdownMenuItem
-                  disabled={pending}
-                  onClick={() => run(() => setVideoTopicDeletedAction(row.id, false))}
-                >
-                  <Undo2 aria-hidden data-icon="inline-start" />
-                  {labels.restore}
-                </DropdownMenuItem>
+                <>
+                  <DropdownMenuItem
+                    disabled={pending}
+                    onClick={() => run(() => setVideoTopicDeletedAction(row.id, false))}
+                  >
+                    <Undo2 aria-hidden data-icon="inline-start" />
+                    {labels.restore}
+                  </DropdownMenuItem>
+                  {purge.item}
+                </>
               ) : (
                 <DropdownMenuItem
                   variant="destructive"
@@ -160,6 +169,7 @@ function RowActions({
         cancelLabel={labels.cancel}
         onConfirm={() => run(() => setVideoTopicDeletedAction(row.id, true))}
       />
+      {purge.dialog}
     </div>
   );
 }
@@ -182,12 +192,14 @@ export function VideosTable({
   const [status, setStatus] = useState("");
   const [track, setTrack] = useState("");
   const [category, setCategory] = useState("");
+  const deletedOption = useDeletedFilterOption();
 
   const visible = useMemo(
     () =>
       rows.filter(
         (row) =>
-          (status === "" || row.status === status) &&
+          // Live rows by default; the trash only under the Deleted filter.
+          inStatusFilter(row.deleted, status, () => row.status === status) &&
           (track === "" || row.track === track) &&
           (category === "" || row.categoryId === category),
       ),
@@ -315,6 +327,8 @@ export function VideosTable({
             options={[
               { value: "", label: labels.allStatuses },
               ...statusKeys.map((key) => ({ value: key, label: labels.statuses[key] ?? key })),
+              // The trash (changes-49): deleted topics are listed only here.
+              deletedOption,
             ]}
           />
           <AdminCombobox

@@ -43,6 +43,7 @@ import {
 import { isTranslationOutdated } from "@repo/i18n";
 import type { Subject } from "@repo/rbac";
 import { recordAudit } from "./index.ts";
+import { siteOrigin } from "@repo/utils";
 
 // ─── The transport ───────────────────────────────────────────
 
@@ -615,7 +616,7 @@ export async function sendTestEmail(
     ...(input.key.startsWith("newsletter.")
       ? {
           unsubscribe: {
-            url: `${process.env.NEXT_PUBLIC_SITE_URL ?? "https://example.com"}/newsletter/unsubscribe?token=test-${randomUUID()}`,
+            url: `${siteOrigin()}/newsletter/unsubscribe?token=test-${randomUUID()}`,
             label: "Unsubscribe",
           },
         }

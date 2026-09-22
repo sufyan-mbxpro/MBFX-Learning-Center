@@ -35,7 +35,7 @@ export function ImpersonationBanner() {
     const restored =
       response?.ok === true &&
       ((await response.json().catch(() => null)) as { restored?: boolean } | null)?.restored;
-    window.location.assign(restored ? "/admin/users" : "/admin/sign-in");
+    window.location.assign(restored ? "/admin/users" : "/keystone");
   };
 
   return (

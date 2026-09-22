@@ -15,7 +15,10 @@ import { QuizzesTable, type QuizzesTableLabels } from "./quizzes-table.tsx";
 // cross-check exists to catch exactly that.
 export default async function QuizzesAdminPage() {
   const subject = await requirePermission("lessons.view");
-  const [t, rows] = await Promise.all([getTranslations("admin"), listQuizzesAdmin()]);
+  const [t, rows] = await Promise.all([
+    getTranslations("admin"),
+    listQuizzesAdmin({ includeDeleted: true }),
+  ]);
 
   const statuses = contentStatusLabels(t);
 
@@ -87,11 +90,12 @@ export default async function QuizzesAdminPage() {
           slug: row.slug,
           status: row.status,
           statusLabel: statuses[row.status] ?? row.status,
-          // Exactly `publicQuizWhere()` in @repo/core, minus the `deletedAt`
-          // clause the list query has already applied. Derived here rather
-          // than in the table so the rule lives beside the loader that
-          // enforces it, not in a component.
-          isActive: row.status === "PUBLISHED" && row.visibility === "PUBLIC",
+          // Exactly `publicQuizWhere()` in @repo/core, including its
+          // `deletedAt` clause now that the trash is loaded too (changes-49).
+          // Derived here rather than in the table so the rule lives beside the
+          // loader that enforces it, not in a component.
+          isActive:
+            row.deletedAt === null && row.status === "PUBLISHED" && row.visibility === "PUBLIC",
           isStandalone: row.isStandalone,
           // `Quiz.category` is free text an editor typed, so no catalog key can
           // exist for it — `humanizeKey` is ADR-044 #5's stated last resort.
@@ -100,7 +104,7 @@ export default async function QuizzesAdminPage() {
           attemptCount: row.attemptCount,
           usageCount: row.usedByLessons + row.usedByCourses,
           usageLabel: usageLabel(row.usedByLessons, row.usedByCourses, t),
-          deleted: false,
+          deleted: row.deletedAt !== null,
           updatedAtLabel: formatDateTime(row.updatedAt),
           updatedAtSort: row.updatedAt.getTime(),
         }))}

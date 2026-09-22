@@ -69,7 +69,8 @@ describe("the happy path", () => {
     const result = await sendSupportRequestAction({ status: "idle" }, form(VALID));
 
     expect(result).toEqual({ status: "sent" });
-    expect(getSetting).toHaveBeenCalledWith("site.supportEmail");
+    // changes-49: the Contact email is the inbox; Support email is the fallback.
+    expect(getSetting).toHaveBeenCalledWith("site.contactEmail");
     // Lower-cased by the schema, not the service — so the per-email limit
     // bucket and the send see the same string.
     expect(sendSupportRequest).toHaveBeenCalledWith({

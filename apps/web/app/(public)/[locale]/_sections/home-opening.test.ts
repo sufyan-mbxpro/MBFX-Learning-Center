@@ -5,8 +5,8 @@
 // is visible in a type or a lint:
 //
 //   1. The band is STATIC. No query, no feature flag, no published rows — it
-//      is composition in the ADR-042 sense, and the homepage carries no
-//      dynamic video content at all.
+//      is composition in the ADR-042 sense. (The homepage's video content is
+//      the `strip` band further down, changes-51 — never the opening.)
 //   2. The footage never reaches the critical path: `preload="metadata"`, no
 //      `autoPlay` attribute, and playback started only after hydration and
 //      only when motion is wanted. Its POSTER is what paints.
@@ -89,17 +89,30 @@ describe("the opening band is a slider of published articles", () => {
     expect(slider).toContain("inert={!isActive}");
   });
 
-  it("the homepage carries no dynamic video band", () => {
-    // The rail renders nothing for any variant but `grid`, which only
-    // `/learn` asks for. A database seeded before this change still holds an
-    // enabled homepage row and there is no screen on which to flip it
-    // (ADR-038), so the guard is what keeps the band off an existing install.
-    expect(code(RAIL)).toContain('if (variant !== "grid") return null;');
+  it("the homepage's video band is the `strip`, and nothing else", () => {
+    // changes-51 (owner) brought the videos back as a slider of small cards.
+    // Any other stale variant still renders nothing: a database seeded before
+    // this change may hold one, and there is no screen to fix it (ADR-038).
+    expect(code(RAIL)).toContain('if (variant !== "grid" && variant !== "strip") return null;');
+    expect(code(RAIL)).toContain("<VideoStripCard");
+    expect(code(RAIL)).toContain("lg:w-(--width-slide-5)");
+  });
+
+  it("its cards arrive alternately from below and above, and it hands its bottom edge on", () => {
+    const src = code(RAIL);
+    expect(src).toContain('index % 2 === 0 ? "rise" : "drop"');
+    expect(src).toContain("section-flush-end");
+    const css = readFileSync(
+      resolve(process.cwd(), "../../packages/ui/src/styles/globals.css"),
+      "utf8",
+    );
+    // Before `.is-visible`, or the hidden state would outrank the arrived one.
+    expect(css.indexOf(".reveal-drop:not")).toBeLessThan(css.indexOf(".reveal.is-visible"));
   });
 
   it("that check happens before any I/O", () => {
     const src = code(RAIL);
-    const guard = src.indexOf('if (variant !== "grid") return null;');
+    const guard = src.indexOf('if (variant !== "grid" && variant !== "strip") return null;');
     const firstAwait = src.indexOf("await ");
     expect(guard).toBeGreaterThan(-1);
     // A band that is not going to render should not cost a query to find out.
@@ -224,9 +237,9 @@ describe("/learn's rail is untouched", () => {
     expect(src).toContain("sm:grid-cols-2 lg:grid-cols-3");
   });
 
-  it("`grid` is the only variant it accepts at all", () => {
+  it("`grid` and the homepage's `strip` are the only variants it accepts", () => {
     expect(
       readFileSync(resolve(process.cwd(), "../../packages/contracts/src/settings.ts"), "utf8"),
-    ).toContain('learning_videos: ["grid"]');
+    ).toContain('learning_videos: ["grid", "strip"]');
   });
 });

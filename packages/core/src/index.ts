@@ -48,6 +48,7 @@ export * from "./newsletter.ts";
 export * from "./support.ts";
 export * from "./ai-admin.ts";
 export * from "./ai-media.ts";
+export * from "./purge.ts";
 export * from "./cms/index.ts";
 
 export interface RecordAuditInput {

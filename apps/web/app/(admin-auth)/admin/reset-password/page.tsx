@@ -3,7 +3,7 @@ import { MIN_PASSWORD_LENGTH } from "@repo/contracts";
 import { AdminAuthScreen } from "../_components/admin-auth-screen.tsx";
 import { AdminResetPasswordForm } from "./admin-reset-password-form.tsx";
 
-// Where a STAFF reset link lands (ADR-079 #2) — `${ADMIN_URL}/admin/reset-password`.
+// Where a STAFF reset link lands (ADR-079 #2) — `/keystone/reset-password` (served here by the proxy, ADR-146).
 //
 // The third entry in the proxy's `ADMIN_PUBLIC_PATHS`: someone arriving here
 // has no session by definition, and gating the screen would make the link

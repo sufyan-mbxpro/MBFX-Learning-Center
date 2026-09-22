@@ -142,6 +142,16 @@ describe("resolveRedirect — the open-redirect guard", () => {
     expect(resolveRedirect("/", () => true)).toBe("/");
   });
 
+  it("refuses a backslash, which browsers read as a second slash (changes-49)", () => {
+    for (const target of ["/%5Cevil.example", "/%5C%5Cevil.example/x", "/news%5C..%5C"]) {
+      withSearch(`?redirect=${target}`);
+      expect(
+        resolveRedirect("/", () => true),
+        target,
+      ).toBe("/");
+    }
+  });
+
   it("accepts a same-origin path the surface allows", () => {
     withSearch("?redirect=%2Fadmin%2Fusers");
     expect(resolveRedirect("/admin", isAdminPath)).toBe("/admin/users");

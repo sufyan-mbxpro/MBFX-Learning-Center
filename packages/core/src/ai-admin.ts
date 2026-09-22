@@ -1030,7 +1030,7 @@ export async function notifyAiBudget(event: "warning" | "capped"): Promise<void>
     await recordNotification({
       userId,
       type: event === "capped" ? "aiBudgetReached" : "aiBudgetWarning",
-      href: "/admin/ai/limits",
+      href: "/admin/settings/ai/limits",
     });
   }
 }

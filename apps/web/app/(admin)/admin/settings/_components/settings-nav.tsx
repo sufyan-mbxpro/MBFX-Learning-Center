@@ -5,9 +5,22 @@
 // (scrollable) instead of stacking above the content.
 import { SubNav } from "../../_components/sub-nav.tsx";
 
+/** One route tab of a tabbed settings section (changes-51). */
+export interface SettingsSectionTab {
+  href: string;
+  label: string;
+  exact?: boolean;
+}
+
 export interface SettingsNavEntry {
   href: string;
   label: string;
+  /**
+   * Match by prefix instead of exactly (changes-51). A tabbed section — Email,
+   * AI — stays highlighted on every tab under it, where a registry group's
+   * entry must not light up for `/admin/settings/email` while on `general`.
+   */
+  prefix?: string;
 }
 
 export function SettingsNav({
@@ -24,7 +37,11 @@ export function SettingsNav({
       </p>
       <SubNav
         aria-label={heading}
-        items={entries.map((entry) => ({ ...entry, exact: true }))}
+        items={entries.map((entry) =>
+          entry.prefix
+            ? { href: entry.href, label: entry.label, match: entry.prefix }
+            : { href: entry.href, label: entry.label, exact: true },
+        )}
         orientation="vertical"
         className="flex-row overflow-x-auto md:flex-col md:overflow-x-visible"
       />

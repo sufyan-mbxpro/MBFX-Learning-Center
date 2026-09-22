@@ -6,7 +6,7 @@ import { AuthScreen } from "../_components/auth-screen.tsx";
 import { ForgotPasswordForm } from "./forgot-password-form.tsx";
 
 // LEARNER password recovery (ADR-079). The staff equivalent is a separate
-// surface at /admin/forgot-password and is never linked from here — the public
+// surface at /keystone/forgot-password and is never linked from here — the public
 // site carries no administrator entry point (ADR-052).
 //
 // The address typed here does NOT decide where the link points: `@repo/auth`'s

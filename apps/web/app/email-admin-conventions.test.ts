@@ -19,7 +19,8 @@ const APP = resolve(process.cwd(), "app");
 const read = (relative: string) => readFileSync(resolve(APP, relative), "utf8");
 
 const ACTIONS = read("(admin)/admin/_actions/email-actions.ts");
-const SETTINGS_PAGE = read("(admin)/admin/settings/email/page.tsx");
+// changes-51: the transport is the Delivery tab of the email section.
+const SETTINGS_PAGE = read("(admin)/admin/settings/email/(tabs)/delivery/page.tsx");
 const PREVIEW_ROUTE = read("(admin)/admin/api/email/preview/route.ts");
 const PROXY = readFileSync(resolve(process.cwd(), "proxy.ts"), "utf8");
 

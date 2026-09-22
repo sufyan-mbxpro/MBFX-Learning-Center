@@ -56,7 +56,7 @@ export function AuthSlot({
     );
   }
 
-  // Both learner entry points (ADR-052). The staff screen at /admin/sign-in
+  // Both learner entry points (ADR-052). The staff screen at /keystone
   // is deliberately absent — the public header advertises no way into the
   // admin portal.
   // `whitespace-nowrap` + the narrower phone gap: at 14px (ADR-072 §7) the

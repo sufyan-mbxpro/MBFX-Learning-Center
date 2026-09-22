@@ -14,7 +14,7 @@ import {
   transitionLabels,
 } from "../../_lib/learn-labels.ts";
 import { QuizEditor, type EditorQuestion } from "./quiz-editor.tsx";
-import { formatDateTime } from "@repo/utils";
+import { formatDateTime, siteOrigin } from "@repo/utils";
 
 // Quiz editor (changes-11 Phase 6, ADR-058).
 //
@@ -159,7 +159,7 @@ export default async function QuizEditPage({
         ai={ai}
         {...(editorAi?.fill ? { fillAi: editorAi.fill } : {})}
         liveSlug={sourceTranslation?.slug ?? ""}
-        siteUrl={process.env.NEXT_PUBLIC_SITE_URL ?? ""}
+        siteUrl={siteOrigin()}
         canPublish={can(subject, "lessons.publish")}
         canUpdate={can(subject, "lessons.update")}
         statusLabels={statusLabels}

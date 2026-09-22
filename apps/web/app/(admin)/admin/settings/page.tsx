@@ -37,12 +37,20 @@ export default async function SettingsHubPage() {
     "email.log.view",
     // changes-37: the market provider card (ADR-121 §6).
     "market.providers.manage",
+    // changes-51: AI lives here now, and has no sidebar entry of its own.
+    "ai.usage.view",
+    "ai.settings.manage",
+    "ai.providers.manage",
   ]);
   const t = await getTranslations("admin");
   const { navEntries, groups } = await loadSettingsIndex(subject, t);
 
   const cards = navEntries.map((entry) => {
-    const group = groups.find((g) => `/admin/settings/${g}` === entry.href);
+    // A tabbed section's card (Email, AI) may land on any of its tabs, so it
+    // is matched by the section it belongs to, not by the tab it opens.
+    const group =
+      groups.find((g) => `/admin/settings/${g}` === (entry.prefix ?? entry.href)) ??
+      entry.prefix?.replace("/admin/settings/", "");
     const key = descriptionKey(entry.href);
     return {
       ...entry,

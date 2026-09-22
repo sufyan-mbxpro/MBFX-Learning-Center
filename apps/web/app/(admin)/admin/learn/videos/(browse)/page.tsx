@@ -18,7 +18,9 @@ export default async function VideosAdminPage() {
   const subject = await requirePermission("lessons.view");
   const [t, rows, categories] = await Promise.all([
     getTranslations("admin"),
-    listVideoTopicsAdmin(),
+    // The trash (changes-49): deleted topics load too, and the table hides
+    // them until its status filter asks for them.
+    listVideoTopicsAdmin({ includeDeleted: true }),
     listVideoCategoriesAdmin(),
   ]);
 

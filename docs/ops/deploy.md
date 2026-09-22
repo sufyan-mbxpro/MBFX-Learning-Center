@@ -165,8 +165,23 @@ pnpm --filter web start     # next start, listens on $PORT (default 3000)
 ```
 
 `start` runs with `apps/web` as its working directory. Bind it to loopback
-only and let nginx face the internet (`PORT=3000`, and `-H 127.0.0.1` if you
+only and let nginx face the internet (`PORT=3000`, and `-H localhost` if you
 call `next start` directly).
+
+**`-H localhost`, never `-H 127.0.0.1`.** Found on the first live deploy: the
+proxy's next-intl rewrite (`/` → `/en`) is built on a `localhost` origin, and
+with the server bound to `127.0.0.1` Next treats that as an EXTERNAL rewrite
+and fetches it over HTTP. The fetched `/en` then gets next-intl's
+strip-the-default-prefix redirect back to `/`, so every public page answers
+`307 → itself` forever while `/admin` (which never reaches next-intl) works.
+Check after any change to the start command:
+`curl -s -o /dev/null -w '%{http_code}
+' http://localhost:3000/` must be 200.
+
+`localhost` may resolve to IPv6 only (`::1`) — it did on the first live host,
+so `curl http://127.0.0.1:3000/` answered `000` while `localhost` answered 200. nginx must then proxy to `http://[::1]:3000` (on CloudPanel: edit the
+site's Vhost, `proxy_pass http://[::1]:{{app_port}};`). Check which one the
+server bound: `ss -ltn | grep :3000`.
 
 ### pm2
 
@@ -178,7 +193,8 @@ module.exports = {
       name: "mbx",
       cwd: "/srv/mbx/app/apps/web",
       script: "node_modules/next/dist/bin/next",
-      args: "start -H 127.0.0.1 -p 3000",
+      args: "start -H localhost -p 3000",
+      exec_mode: "fork", // pm2 defaults to cluster when `instances` is set
       env: { NODE_ENV: "production" },
       instances: 1, // one process; see "zero downtime" below before raising this
       max_memory_restart: "1500M",
@@ -203,7 +219,7 @@ After=network.target mariadb.service redis-server.service
 User=mbx
 WorkingDirectory=/srv/mbx/app/apps/web
 Environment=NODE_ENV=production PORT=3000
-ExecStart=/usr/bin/node node_modules/next/dist/bin/next start -H 127.0.0.1 -p 3000
+ExecStart=/usr/bin/node node_modules/next/dist/bin/next start -H localhost -p 3000
 Restart=always
 RestartSec=5
 # The app reads /srv/mbx/app/.env itself (next.config.ts); no EnvironmentFile needed.
@@ -256,6 +272,20 @@ server {
 Other media caps (seeded, editable in Settings → Media): image 5 MiB, audio
 and document 20 MiB.
 
+**Security headers are the app's (ADR-146).** The proxy sets
+`Content-Security-Policy`, `Strict-Transport-Security` (production),
+`X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy` and
+`Permissions-Policy` on every response. Do not add them again in nginx: a
+vhost that also has `add_header X-Frame-Options …` / `Referrer-Policy …`
+lines (CloudPanel's default template does) sends each header twice, and two
+`Referrer-Policy` values conflict. Remove those `add_header` lines from the
+site's vhost. Keep `X-Real-IP $remote_addr` as above — Better Auth's per-IP
+rate limit reads it first.
+
+**The staff sign-in is `/keystone`** (ADR-146). `/admin/sign-in` answers
+404, and so does any `/admin/*` address without a staff session. Bookmark
+`https://example.com/keystone`.
+
 ## 7. Uploads
 
 - `UPLOADS_DIR` must be an **absolute path outside the release directory**.
@@ -293,7 +323,7 @@ sealing keys a restored database's provider credentials cannot be opened
 ## 10. First sign-in
 
 1. Seed with `SEED_ADMIN_EMAIL` and a strong one-off `SEED_ADMIN_PASSWORD`.
-2. Sign in at `https://example.com/admin/sign-in`.
+2. Sign in at `https://example.com/keystone`.
 3. Change the password at `/admin/profile`, then **remove `SEED_ADMIN_PASSWORD`** from
    the env file — a later `db:seed` with it still set resets the password.
 4. Check `/admin/settings` (site identity, email), `/admin/market/provider`

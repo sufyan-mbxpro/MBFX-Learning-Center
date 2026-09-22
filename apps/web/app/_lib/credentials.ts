@@ -182,7 +182,11 @@ export async function signOutSilently(): Promise<void> {
  */
 export function resolveRedirect(fallback: string, isAllowed: (path: string) => boolean): string {
   const target = new URLSearchParams(window.location.search).get("redirect");
-  if (!target || !target.startsWith("/") || target.startsWith("//")) return fallback;
+  // A backslash anywhere is refused too (changes-49): browsers read `/\evil`
+  // as `//evil`, a protocol-relative URL to another host.
+  if (!target || !target.startsWith("/") || target.startsWith("//") || target.includes("\\")) {
+    return fallback;
+  }
   return isAllowed(target) ? target : fallback;
 }
 

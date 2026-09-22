@@ -722,7 +722,6 @@ export function ArticleEditor({
               <TabsList>
                 <TabsTrigger value="basic">{labels.seoTabBasic}</TabsTrigger>
                 <TabsTrigger value="social">{labels.seoTabSocial}</TabsTrigger>
-                <TabsTrigger value="advanced">{labels.seoTabAdvanced}</TabsTrigger>
                 <TabsTrigger value="analysis">{labels.seoTabAnalysis}</TabsTrigger>
               </TabsList>
 
@@ -793,7 +792,19 @@ export function ArticleEditor({
                 </UiField>
               </TabsContent>
 
+              {/* changes-50: this tab IS used publicly — the article page's
+                  Open Graph and X card metadata read every field here — so it
+                  stays, and now says what it is for and shows the card. The
+                  Advanced tab went: it only restated the Basic tab's robots
+                  and canonical settings. */}
               <TabsContent value="social" className="flex flex-col gap-3 pt-3">
+                <p className="text-xs text-muted-foreground">{labels.socialIntro}</p>
+                <SharePreview
+                  label={labels.sharePreview}
+                  title={tr.ogTitle || tr.seoTitle || tr.title}
+                  description={tr.ogDescription || tr.seoDescription || tr.excerpt}
+                  image={tr.ogImageUrl || coverImageUrl || null}
+                />
                 <Field
                   label={labels.ogTitle}
                   adornment={fieldMenu("ogTitle")}
@@ -854,22 +865,6 @@ export function ArticleEditor({
                     })
                   }
                 />
-              </TabsContent>
-
-              <TabsContent value="advanced" className="flex flex-col gap-3 pt-3">
-                <p className="text-xs text-muted-foreground">{labels.robotsSummaryHint}</p>
-                <ul className="flex flex-col gap-1 text-sm">
-                  <li>
-                    {labels.robotsIndexRow}: <strong>{tr.noIndex ? "noindex" : "index"}</strong>
-                  </li>
-                  <li>
-                    {labels.robotsFollowRow}: <strong>{tr.noFollow ? "nofollow" : "follow"}</strong>
-                  </li>
-                  <li className="break-words">
-                    {labels.canonicalUrl}:{" "}
-                    <strong>{tr.canonicalUrl || labels.canonicalDefault}</strong>
-                  </li>
-                </ul>
               </TabsContent>
 
               <TabsContent value="analysis" className="pt-3">
@@ -1066,5 +1061,40 @@ export function ArticleEditor({
         }}
       />
     </div>
+  );
+}
+
+/**
+ * The card a shared link unfurls into (changes-50), built from the same
+ * fallback chain the public article's metadata uses: share field → SEO field
+ * → the post itself, and the cover when no share image is set.
+ */
+function SharePreview({
+  label,
+  title,
+  description,
+  image,
+}: {
+  label: string;
+  title: string;
+  description: string;
+  image: string | null;
+}) {
+  return (
+    <figure className="flex max-w-md flex-col gap-1.5">
+      <figcaption className="text-xs font-medium text-muted-foreground">{label}</figcaption>
+      <div className="overflow-hidden rounded-md border bg-card">
+        {image && (
+          // eslint-disable-next-line @next/next/no-img-element -- an admin preview of an arbitrary stored URL, never optimised
+          <img src={image} alt="" className="aspect-1200/630 w-full object-cover" />
+        )}
+        <div className="flex flex-col gap-0.5 border-t bg-muted/40 p-3">
+          <p className="line-clamp-2 text-sm font-semibold">{title}</p>
+          {description && (
+            <p className="line-clamp-2 text-xs text-muted-foreground">{description}</p>
+          )}
+        </div>
+      </div>
+    </figure>
   );
 }

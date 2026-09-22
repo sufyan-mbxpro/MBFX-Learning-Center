@@ -22,11 +22,16 @@ import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Container } from "@repo/ui/components/container";
 import { Section } from "@repo/ui/components/section";
+import { cn } from "@repo/ui/lib/utils";
+import { usePublicSession } from "../../_components/public-session.tsx";
 import { SaveProgressPrompt } from "./course-progress.tsx";
 
 export function QuizSignInPrompt({ className }: { className?: string }) {
   const t = useTranslations("learn");
   const [isGuest, setIsGuest] = useState<boolean | null>(null);
+  // null until the probe answers; true when the feature exists for this reader.
+  const [available, setAvailable] = useState<boolean | null>(null);
+  const session = usePublicSession();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -34,6 +39,7 @@ export function QuizSignInPrompt({ className }: { className?: string }) {
       try {
         const response = await fetch("/api/learn/progress", { signal: controller.signal });
         setIsGuest(response.status === 401);
+        setAvailable(response.status !== 404);
       } catch {
         // A failed probe is not evidence of anything. Staying silent is the
         // conservative answer: the worst case is a guest who is not offered
@@ -44,12 +50,20 @@ export function QuizSignInPrompt({ className }: { className?: string }) {
     return () => controller.abort();
   }, []);
 
-  if (isGuest !== true) return null;
+  // changes-50: a staff session reads as signed out on the public site
+  // (ADR-094), so it gets the prompt the header's "Sign in" already implies.
+  const showAsGuest = isGuest === true || (session.status === "anonymous" && available === true);
+  if (!showAsGuest) return null;
 
   return (
-    <Section spacing="sm">
+    // Flush on both edges with a short gap of its own above, and it pulls the
+    // shelf below up into its top padding: the rhythm steps left the prompt
+    // floating in ~90px of nothing between two bands it only annotates.
+    <Section spacing="sm" className="section-flush-start section-flush-end">
       <Container>
-        <div className={className}>
+        {/* `relative z-1`: the shelf's band paints its own ground, and the
+            negative margin slides the card's lower edge underneath it. */}
+        <div className={cn("relative z-1 -mb-4 pt-6", className)}>
           <SaveProgressPrompt title={t("quizzes.guestTitle")} body={t("quizzes.guestBody")} />
         </div>
       </Container>

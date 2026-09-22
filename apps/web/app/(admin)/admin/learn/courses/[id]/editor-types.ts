@@ -3,6 +3,7 @@
 // without importing each other, and `page.tsx` has one place to look when it
 // builds props.
 import type { ContentStatusLabels } from "../../../_components/editor/content-status-panel.tsx";
+import type { FaqLabels } from "../../../_components/editor/faq-panel.tsx";
 import type { ImageUploadLabels } from "../../../_components/image-upload-field.tsx";
 import type { RichTextLabels } from "../../../_components/rich-text-editor.tsx";
 import type { CurriculumLabels } from "./_panels/curriculum-panel.tsx";
@@ -25,6 +26,8 @@ export interface CourseTranslationDraft {
   seoTitle: string;
   seoDescription: string;
   seoFocusKeyword: string;
+  /** changes-49 — this locale's questions; `[]` for none. */
+  faq: { question: string; answer: string }[];
   translationStatus: string;
   /**
    * Untouched AI output (changes-29 B3). Set by "Translate", cleared by any
@@ -65,6 +68,7 @@ export interface CourseEditorLabels {
   tabCurriculum: string;
   tabRecommendations: string;
   tabSeo: string;
+  tabFaq: string;
   updateCourse: string;
   saved: string;
   viewLive: string;
@@ -132,6 +136,8 @@ export interface CourseEditorLabels {
   status: ContentStatusLabels;
   curriculum: CurriculumLabels;
   recommendations: RecommendationsLabels;
+  /** changes-49 — the course FAQ tab. */
+  faq: FaqLabels;
   editor: RichTextLabels;
   upload: ImageUploadLabels;
 }

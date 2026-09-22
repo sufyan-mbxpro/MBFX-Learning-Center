@@ -824,6 +824,11 @@ model CourseTranslation {
   seoFocusKeyword String? @db.VarChar(100)
   ogImageUrl      String? @db.VarChar(500)
 
+  // changes-49 (ADR-147): the course's own questions and answers, shaped like
+  // `GlossaryTermTranslation.faq` — `[{ question, answer }]`, plain text,
+  // per locale because both halves are translatable prose.
+  faq Json?
+
   translationStatus TranslationStatus @default(DRAFT)
   translatedBy      String?
   createdAt         DateTime          @default(now())

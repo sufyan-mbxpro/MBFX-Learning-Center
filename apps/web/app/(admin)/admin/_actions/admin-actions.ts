@@ -22,6 +22,7 @@ import {
 } from "@repo/core";
 import { requirePermission } from "@repo/rbac";
 import {
+  themeSurfaceSchema,
   createSocialLinkSchema,
   isKnownSettingKey,
   saveThemePresetSchema,
@@ -146,7 +147,12 @@ export async function deleteThemePresetAction(themeKey: string): Promise<void> {
   await deleteThemePreset(subject.id, themePresetKeySchema.parse(themeKey));
 }
 
-export async function activateThemeAction(themeKey: string): Promise<void> {
+/** Apply a preset to ONE surface — the public site or the admin (ADR-148). */
+export async function activateThemeAction(themeKey: string, surface: string): Promise<void> {
   const subject = await requirePermission("theme.update");
-  await activateTheme(subject.id, z.string().min(1).parse(themeKey));
+  await activateTheme(
+    subject.id,
+    z.string().min(1).parse(themeKey),
+    themeSurfaceSchema.parse(surface),
+  );
 }

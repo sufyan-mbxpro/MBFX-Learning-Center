@@ -1,5 +1,8 @@
 import { Fragment, Suspense } from "react";
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+import { hasLocale } from "next-intl";
+import { routing } from "@repo/i18n/routing";
 import { siteUrl } from "../../_lib/site-url.ts";
 import { alternatesFor, jsonLd, localizedPath, shareMetadata } from "../../_lib/seo.ts";
 import { getTranslations, setRequestLocale } from "next-intl/server";
@@ -44,6 +47,12 @@ import { SectionSkeleton } from "./_sections/section-skeleton.tsx";
 // no prefix for the default locale (`localePrefix: "as-needed"`).
 export async function generateMetadata({ params }: PageProps<"/[locale]">): Promise<Metadata> {
   const { locale } = await params;
+  // `/foo.txt` reaches THIS route with `locale = "foo.txt"` (a dotted single
+  // segment skips the proxy, which must let real static files through). The
+  // layout's own guard runs in parallel with this page, so without one here
+  // the sections threw on `localeCompare("foo.txt")` and the answer was a
+  // 500 instead of the 404 (changes-49).
+  if (!hasLocale(routing.locales, locale)) notFound();
   setRequestLocale(locale);
 
   const [t, tCommon, servable] = await Promise.all([
@@ -99,6 +108,7 @@ const EAGER_SECTIONS = 2;
 
 export default async function Home({ params }: PageProps<"/[locale]">) {
   const { locale } = await params;
+  if (!hasLocale(routing.locales, locale)) notFound();
   setRequestLocale(locale);
 
   const [sectionSetting, tCommon, brandAssets] = await Promise.all([

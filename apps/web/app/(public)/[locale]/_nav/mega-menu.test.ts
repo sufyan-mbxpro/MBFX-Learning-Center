@@ -138,8 +138,9 @@ describe("resolveMegaMenuPanel — binding the spec to live menu rows", () => {
       "Margin",
       "Pip Value",
       "Profit & Loss",
-      "Gain & Loss",
     ]);
+    // changes-49: 5 / 5 / 5 — gain-loss closes the timing column.
+    expect(resolved.columns[1]?.items.at(-1)?.item.label).toBe("Gain & Loss");
   });
 
   // changes-43. The owner asked for this panel to match Learn Forex's, whose

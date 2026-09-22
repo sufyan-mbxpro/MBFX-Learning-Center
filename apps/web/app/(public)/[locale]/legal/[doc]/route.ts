@@ -56,7 +56,14 @@ export async function GET(_request: Request, { params }: RouteContext<"/[locale]
     // A committed file under `public/`. `307`, not `301`: the target is a
     // setting an admin can change this afternoon, and a permanent redirect is
     // cached by browsers past any deploy that changes it.
-    return Response.redirect(new URL(stored, _request.url), 307);
+    //
+    // A RELATIVE `Location` (changes-49), never one built from
+    // `request.url`: behind the reverse proxy that URL is the app's own
+    // listener (`http://localhost:3003`), so the absolute form sent every
+    // reader of `/legal/terms` to a host only the server can reach. A
+    // relative target resolves against whatever address the READER used —
+    // the deployed domain, a staging host, localhost in development.
+    return new Response(null, { status: 307, headers: { Location: stored } });
   }
 
   const key = stored.slice(STORED_UPLOAD_PREFIX.length);

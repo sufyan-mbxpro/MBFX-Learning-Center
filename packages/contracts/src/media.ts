@@ -195,3 +195,17 @@ export function clampPageSize(value: number | string | undefined): number {
   if (parsed === undefined || !Number.isFinite(parsed)) return MEDIA_PAGE_SIZE;
   return Math.min(Math.max(Math.trunc(parsed), 1), MAX_MEDIA_PAGE_SIZE);
 }
+
+/**
+ * An image hotlinked by its web address (changes-49, owner's choice): the
+ * rich-text editor's "Web address" tab puts this URL straight into an
+ * `<img src>`. Nothing is fetched server-side (security.md #9 — no SSRF
+ * surface), and the address must be HTTPS so a published page never mixes
+ * content. The sanitizer and the CSP's `img-src https:` already admit it.
+ */
+export const webImageUrlSchema = z
+  .string()
+  .trim()
+  .max(2000)
+  .url()
+  .refine((value) => value.startsWith("https://"), { message: "https" });

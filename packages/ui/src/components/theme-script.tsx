@@ -26,7 +26,7 @@ import { useRef } from "react";
 
 import { buildThemeInitScript } from "@repo/ui/lib/theme-mode";
 
-function ThemeScript({ nonce }: { nonce?: string }) {
+function ThemeScript({ nonce, storageKey }: { nonce?: string; storageKey?: string }) {
   // Next invokes every registered callback on each flush; the guard keeps a
   // streamed response from emitting the same script twice.
   const emitted = useRef(false);
@@ -34,7 +34,12 @@ function ThemeScript({ nonce }: { nonce?: string }) {
   useServerInsertedHTML(() => {
     if (emitted.current) return null;
     emitted.current = true;
-    return <script nonce={nonce} dangerouslySetInnerHTML={{ __html: buildThemeInitScript() }} />;
+    return (
+      <script
+        nonce={nonce}
+        dangerouslySetInnerHTML={{ __html: buildThemeInitScript(storageKey) }}
+      />
+    );
   });
 
   return null;

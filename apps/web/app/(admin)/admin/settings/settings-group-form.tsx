@@ -18,6 +18,7 @@ import { ArrowRight } from "lucide-react";
 import { z } from "zod";
 import {
   SETTINGS_SCHEMAS,
+  validateFields,
   SETTING_FIELDS,
   SETTING_SELECT_OPTIONS,
   SETTING_WIDGETS,
@@ -40,6 +41,7 @@ import {
   FieldTitle,
 } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@repo/ui/components/tabs";
 import { Textarea } from "@repo/ui/components/textarea";
 import { updateSettingsAction } from "../_actions/admin-actions.ts";
 import { ImageUploadField, type ImageUploadLabels } from "../_components/image-upload-field.tsx";
@@ -61,6 +63,19 @@ export interface SettingFieldData {
   type: string;
   value: unknown;
   isPublic: boolean;
+}
+
+/**
+ * One tab of a tabbed group (changes-50: "the general settings page should be
+ * shown in tabs"). A tab lists the setting KEYS it holds, or carries its own
+ * `content` — a screen that saves on its own (the Branding tab's uploads) and
+ * so draws no Save beneath it.
+ */
+export interface SettingsTab {
+  id: string;
+  label: string;
+  keys?: readonly string[];
+  content?: React.ReactNode;
 }
 
 export interface SettingsGroupLabels {
@@ -163,14 +178,18 @@ export function SettingsGroupForm({
   locales,
   menus,
   labels,
+  tabs,
 }: {
   settings: SettingFieldData[];
   locales: LocaleOption[];
   /** Resolves SETTING_FIELDS' `optionsFrom: "menus"` choices. */
   menus: { value: string; label: string }[];
   labels: SettingsGroupLabels;
+  /** Split the group into tabs. Absent means one grid, as every other group. */
+  tabs?: SettingsTab[];
 }) {
   const { run, pending } = useServerAction();
+  const [tab, setTab] = React.useState(tabs?.[0]?.id ?? "");
   // The SELECT option names only (ADR-105 #7). Every other string on this
   // screen still arrives in `labels` from the server component — these are
   // read here for the reason `AdminCombobox` reads its two: the alternative
@@ -236,7 +255,27 @@ export function SettingsGroupForm({
   }
   const form = useFieldErrors(z.object(shape), values);
 
+  // Which tab a setting sits on. A key no tab names lands on the FIRST field
+  // tab, so a general setting added later is never unreachable.
+  const fieldTabs = (tabs ?? []).filter((t) => !t.content);
+  const tabFor = (key: string) =>
+    (fieldTabs.find((t) => t.keys?.includes(key)) ?? fieldTabs[0])?.id;
+
   const submit = () => {
+    // An invalid field on a tab that is not open cannot be focused, so open
+    // its tab first and let `validate()` name and focus it as usual.
+    const firstInvalid = Object.keys(validateFields(z.object(shape), values))[0];
+    // An issue's path IS the setting key, or `key.field` / `key.0.field`, and
+    // a key has dots of its own, so it is matched as a prefix, never split.
+    const invalidKey = settings.find(
+      (setting) => firstInvalid === setting.key || firstInvalid?.startsWith(`${setting.key}.`),
+    )?.key;
+    const invalidTab = invalidKey ? tabFor(invalidKey) : undefined;
+    if (tabs && invalidTab && invalidTab !== tab) {
+      setTab(invalidTab);
+      requestAnimationFrame(() => form.validate());
+      return;
+    }
     if (!form.validate()) return;
     const entries = Object.entries(values).map(([key, value]) => ({ key, value }));
     if (entries.length === 0) return;
@@ -265,13 +304,16 @@ export function SettingsGroupForm({
   const rowClass = (setting: SettingFieldData) =>
     cn("border-b pb-4", spansFullRow(setting) && "xl:col-span-2");
 
+  // changes-50 (image-2): the badge and the key's name are DETAILS about a
+  // field, so they sit UNDER its input with its description. The label row
+  // carries the label alone, and the eye goes label, then control.
   const badges = (setting: SettingFieldData) => (
-    <>
+    <div className="flex flex-wrap items-center gap-2">
       <Badge variant="secondary">
         {setting.isPublic ? labels.publicBadge : labels.privateBadge}
       </Badge>
       <span className="text-xs text-muted-foreground">{humanizeKey(setting.key)}</span>
-    </>
+    </div>
   );
 
   /**
@@ -371,13 +413,7 @@ export function SettingsGroupForm({
     if (managedHref) {
       return (
         <div key={setting.key} className={cn("flex flex-col gap-2", rowClass(setting))}>
-          <div className="flex flex-wrap items-center gap-2">
-            <FieldTitle>{setting.label}</FieldTitle>
-            {badges(setting)}
-          </div>
-          {setting.description && (
-            <p className="text-sm text-muted-foreground">{setting.description}</p>
-          )}
+          <FieldTitle>{setting.label}</FieldTitle>
           <Link
             href={managedHref}
             className="inline-flex w-fit items-center gap-1.5 text-sm text-primary-interactive hover:underline"
@@ -385,6 +421,10 @@ export function SettingsGroupForm({
             {labels.managedElsewhere}
             <ArrowRight aria-hidden className="size-3.5 rtl:rotate-180" />
           </Link>
+          {setting.description && (
+            <p className="text-sm text-muted-foreground">{setting.description}</p>
+          )}
+          {badges(setting)}
         </div>
       );
     }
@@ -412,16 +452,14 @@ export function SettingsGroupForm({
           aria-labelledby={`${id}-title`}
           className={cn("flex flex-col gap-2", rowClass(setting))}
         >
-          <div className="flex flex-wrap items-center gap-2">
-            <FieldTitle id={`${id}-title`}>{setting.label}</FieldTitle>
-            {badges(setting)}
-          </div>
-          {setting.description && (
-            <p className="text-sm text-muted-foreground">{setting.description}</p>
-          )}
+          <FieldTitle id={`${id}-title`}>{setting.label}</FieldTitle>
           {fieldsDef.shape === "list" ? <ListField {...shared} /> : <ObjectField {...shared} />}
           {/* A whole-list issue (too many rows) has no one sub-field to sit on. */}
           <FieldError>{form.error(setting.key)}</FieldError>
+          {setting.description && (
+            <p className="text-sm text-muted-foreground">{setting.description}</p>
+          )}
+          {badges(setting)}
         </div>
       );
     }
@@ -441,12 +479,10 @@ export function SettingsGroupForm({
             }
           />
           <FieldContent>
-            <div className="flex flex-wrap items-center gap-2">
-              <FieldLabel>{setting.label}</FieldLabel>
-              {badges(setting)}
-            </div>
-            {setting.description && <FieldDescription>{setting.description}</FieldDescription>}
+            <FieldLabel>{setting.label}</FieldLabel>
             <FieldError>{form.error(setting.key)}</FieldError>
+            {setting.description && <FieldDescription>{setting.description}</FieldDescription>}
+            {badges(setting)}
           </FieldContent>
         </Field>
       );
@@ -465,7 +501,7 @@ export function SettingsGroupForm({
             error={form.error(setting.key)}
             onChange={(next) => setValue(setting.key, next)}
           />
-          <div className="flex flex-wrap items-center gap-2">{badges(setting)}</div>
+          {badges(setting)}
         </div>
       );
     }
@@ -487,7 +523,7 @@ export function SettingsGroupForm({
             error={form.error(setting.key)}
             onChange={(next) => setValue(setting.key, next?.url ?? "")}
           />
-          <div className="flex flex-wrap items-center gap-2">{badges(setting)}</div>
+          {badges(setting)}
         </div>
       );
     }
@@ -499,52 +535,78 @@ export function SettingsGroupForm({
         required={refusesEmpty(setting)}
         className={rowClass(setting)}
       >
-        <div className="flex flex-wrap items-center gap-2">
-          <FieldLabel>{setting.label}</FieldLabel>
-          {badges(setting)}
-        </div>
-        {setting.description && <FieldDescription>{setting.description}</FieldDescription>}
+        <FieldLabel>{setting.label}</FieldLabel>
         {renderControl(setting)}
         <FieldError>{form.error(setting.key)}</FieldError>
+        {setting.description && <FieldDescription>{setting.description}</FieldDescription>}
+        {badges(setting)}
       </Field>
     );
   };
 
+  // changes-38: typed inputs first, then the file pickers. Legal read terms
+  // PDF, privacy PDF, agreement PDF, then the copyright line: seed order, and
+  // a picker between two text boxes. A stable partition, so every other group
+  // keeps its seeded order.
+  const ordered = [
+    ...settings.filter((setting) => setting.type !== "DOCUMENT"),
+    ...settings.filter((setting) => setting.type === "DOCUMENT"),
+  ];
+  const grid = (list: SettingFieldData[]) => (
+    <div className="grid grid-cols-1 items-start gap-x-8 gap-y-5 xl:grid-cols-2">
+      {list.map((setting) => renderRow(setting))}
+    </div>
+  );
+  // A tab with its own content saves on its own, so no Save is drawn under it.
+  const showSave = !tabs?.find((t) => t.id === tab)?.content;
+
   return (
     // `noValidate`: the controls now carry `required`, and the browser's own
     // bubbles would otherwise block the submit before the inline messages
-    // (ADR-077) — which say the same thing, in the page, per field — can run.
+    // (ADR-077), which say the same thing in the page per field, can run.
     <form
       noValidate
-      className="grid grid-cols-1 items-start gap-x-8 gap-y-5 xl:grid-cols-2"
+      className="flex flex-col gap-5"
       onSubmit={(e) => {
         e.preventDefault();
         submit();
       }}
     >
-      {/* changes-38: typed inputs first, then the file pickers. Legal read
-          terms PDF, privacy PDF, agreement PDF, then the copyright line —
-          seed order, and a picker between two text boxes. A stable partition,
-          so every other group keeps its seeded order. */}
-      {[
-        ...settings.filter((setting) => setting.type !== "DOCUMENT"),
-        ...settings.filter((setting) => setting.type === "DOCUMENT"),
-      ].map((setting) => renderRow(setting))}
+      {tabs ? (
+        <Tabs value={tab} onValueChange={(next) => setTab(String(next))}>
+          <TabsList>
+            {tabs.map((t) => (
+              <TabsTrigger key={t.id} value={t.id}>
+                {t.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          {tabs.map((t) => (
+            <TabsContent key={t.id} value={t.id} className="pt-5">
+              {t.content ?? grid(ordered.filter((setting) => tabFor(setting.key) === t.id))}
+            </TabsContent>
+          ))}
+        </Tabs>
+      ) : (
+        grid(ordered)
+      )}
       {/* changes-08 #3: Save at the inline-END of the section. The
           dirty-field summary reads BEFORE it (start-aligned) so the button
           keeps the corner every other confirming action in the admin uses.
           #2: the summary names the changed fields in words, not raw
           setting keys. */}
-      <div className="flex flex-wrap items-center justify-end gap-3 border-t pt-4 xl:col-span-2">
-        {dirty && (
-          <span className="me-auto text-xs text-muted-foreground">
-            {changedKeys.length} · {changedKeys.map((key) => humanizeKey(key)).join(", ")}
-          </span>
-        )}
-        <Button type="submit" disabled={!dirty} loading={pending}>
-          {labels.save}
-        </Button>
-      </div>
+      {showSave && (
+        <div className="flex flex-wrap items-center justify-end gap-3 border-t pt-4">
+          {dirty && (
+            <span className="me-auto text-xs text-muted-foreground">
+              {changedKeys.length} · {changedKeys.map((key) => humanizeKey(key)).join(", ")}
+            </span>
+          )}
+          <Button type="submit" disabled={!dirty} loading={pending}>
+            {labels.save}
+          </Button>
+        </div>
+      )}
     </form>
   );
 }

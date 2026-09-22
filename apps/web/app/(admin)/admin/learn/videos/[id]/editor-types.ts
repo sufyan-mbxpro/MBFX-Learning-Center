@@ -70,6 +70,8 @@ export interface VideoEditorLabels {
   // Body
   bodySection: string;
   bodySectionDescription: string;
+  contentSection: string;
+  contentSectionDescription: string;
   localeLabel: string;
   titleLabel: string;
   slugLabel: string;

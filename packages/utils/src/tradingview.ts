@@ -144,6 +144,17 @@ export function tradingViewWidgetUrl<W extends TradingViewWidget>({
   // The vendor's loader forces the Timeline to English whatever it is given,
   // so asking for Arabic would only make our URL disagree with what renders.
   const lang = widget === "timeline" ? "en" : tradingViewLocale(locale);
-  const hash = encodeURIComponent(JSON.stringify(hashSettings(widget, colorTheme, settings)));
-  return `${TRADINGVIEW_WIDGET_ORIGIN}/embed-widget/${widget}/?locale=${lang}#${hash}`;
+  const hashed = hashSettings(widget, colorTheme, settings);
+  const hash = encodeURIComponent(JSON.stringify(hashed));
+  // The Timeline renders its stories on the VENDOR'S SERVER (changes-49), and
+  // a fragment never reaches a server: with the feed only in the hash, every
+  // chip rendered the same all-markets list and "Crypto" showed Nasdaq
+  // headlines. The feed goes in the QUERY as well, which the server does
+  // read; the hash keeps it too, for the client that hydrates the result.
+  const query = new URLSearchParams({ locale: lang });
+  if (widget === "timeline") {
+    query.set("feedMode", String(hashed.feedMode));
+    if (typeof hashed.market === "string") query.set("market", hashed.market);
+  }
+  return `${TRADINGVIEW_WIDGET_ORIGIN}/embed-widget/${widget}/?${query.toString()}#${hash}`;
 }

@@ -6,7 +6,7 @@ import { AuthScreen } from "../_components/auth-screen.tsx";
 import { SignInForm } from "./sign-in-form.tsx";
 
 // LEARNER sign-in (ADR-052). The staff credential screen is a separate
-// surface at /admin/sign-in and is never linked from here — the public site
+// surface at /keystone and is never linked from here — the public site
 // carries no administrator entry point.
 //
 // Posts to Better Auth's /api/auth/sign-in/email — the ONLY correct entry

@@ -16,3 +16,4 @@ export * from "./statistics.ts";
 export * from "./duration.ts";
 export * from "./text-stats.ts";
 export * from "./date-format.ts";
+export * from "./site-origin.ts";

@@ -8,6 +8,13 @@
 // file never touches brand tokens.
 
 const THEME_STORAGE_KEY = "theme";
+/**
+ * The ADMIN surface's key (changes-49): the owner asked for the two surfaces'
+ * light/dark choices to be independent, so a staff member reading the site in
+ * dark mode can keep the admin light. Same origin, so it is a second KEY in
+ * the one localStorage, not a second store.
+ */
+const ADMIN_THEME_STORAGE_KEY = "admin-theme";
 const PREFERS_DARK_QUERY = "(prefers-color-scheme: dark)";
 
 const RESOLVED_THEME_MODES = ["light", "dark"] as const;
@@ -51,8 +58,8 @@ function applyStoredThemeMode(storageKey: string, defaultMode: string, modeClass
 }
 
 /** The IIFE `<ThemeScript>` inlines. Deterministic — safe inside a cached page. */
-function buildThemeInitScript(): string {
-  const args = [THEME_STORAGE_KEY, DEFAULT_THEME_MODE, RESOLVED_THEME_MODES as unknown as string[]]
+function buildThemeInitScript(storageKey: string = THEME_STORAGE_KEY): string {
+  const args = [storageKey, DEFAULT_THEME_MODE, RESOLVED_THEME_MODES as unknown as string[]]
     .map((arg) => JSON.stringify(arg))
     .join(",");
 
@@ -60,6 +67,7 @@ function buildThemeInitScript(): string {
 }
 
 export {
+  ADMIN_THEME_STORAGE_KEY,
   DEFAULT_THEME_MODE,
   PREFERS_DARK_QUERY,
   RESOLVED_THEME_MODES,

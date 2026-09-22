@@ -90,7 +90,7 @@ export default async function GlossaryTopicPage({
           band is gone — "Browse by topic 16" repeated the tab below it and a
           number the cards already say. */}
       <PageHero
-        size="compact"
+        size="medium"
         backdrop={<TopicCover coverUrl={view.coverUrl} sizes="100vw" priority />}
         motif={<AmbientMotif variant="learn" intensity={0.7} />}
         breadcrumb={

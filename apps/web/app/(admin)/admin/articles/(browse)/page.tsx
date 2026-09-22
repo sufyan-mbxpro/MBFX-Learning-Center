@@ -1,6 +1,11 @@
 import { getTranslations } from "next-intl/server";
 import { listArticlesAdmin, loadArticleCategoriesAdmin, type ListArticlesParams } from "@repo/core";
-import { articleKindSchema, articleSortBySchema, articleStatusFilterSchema } from "@repo/contracts";
+import {
+  ARTICLE_DELETED_FILTER,
+  articleKindSchema,
+  articleSortBySchema,
+  articleStatusFilterSchema,
+} from "@repo/contracts";
 import { can, requireAnyPermission } from "@repo/rbac";
 import { ArticlesToolbar, NewArticleDialog } from "./articles-controls.tsx";
 import { ArticlesTable, type ArticlesTableLabels } from "./articles-table.tsx";
@@ -26,6 +31,12 @@ export default async function ArticlesAdminPage({ searchParams }: PageProps<"/ad
   const categoryId =
     typeof params.category === "string" && params.category !== "" ? params.category : undefined;
   const sortDir = params.sortDir === "asc" ? "asc" : "desc";
+  // The trash (changes-49) rides on the status filter but is not a status:
+  // it becomes the service's `deleted` flag, and a real status narrows the
+  // live rows as before.
+  const showDeleted = status.success && status.data === ARTICLE_DELETED_FILTER;
+  const contentStatus =
+    status.success && status.data !== ARTICLE_DELETED_FILTER ? status.data : undefined;
 
   const listParams: ListArticlesParams = {
     page,
@@ -34,7 +45,8 @@ export default async function ArticlesAdminPage({ searchParams }: PageProps<"/ad
     sortDir,
     search,
     kind: kind.success ? kind.data : undefined,
-    status: status.success ? status.data : undefined,
+    status: contentStatus,
+    deleted: showDeleted,
     categoryId,
   };
 

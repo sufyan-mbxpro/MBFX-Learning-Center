@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { isToolKey, TOOLS } from "@repo/contracts";
 import { listInstruments, listRelatedCandidates, loadTool } from "@repo/core";
 import { can, requirePermission } from "@repo/rbac";
+import { siteOrigin } from "@repo/utils";
 import { richTextLabels } from "../../_components/editor-labels.ts";
 import { EditorPage } from "../../_components/admin-page.tsx";
 import { loadEditorAi } from "../../_lib/editor-ai.ts";
@@ -238,7 +239,7 @@ export default async function ToolEditorPage({ params }: PageProps<"/admin/tools
         }))}
         relatedOptions={relatedOptions}
         canPublish={can(subject, "tools.publish")}
-        siteUrl={process.env.NEXT_PUBLIC_SITE_URL ?? ""}
+        siteUrl={siteOrigin()}
         labels={labels}
         {...(ai ? { ai } : {})}
       />

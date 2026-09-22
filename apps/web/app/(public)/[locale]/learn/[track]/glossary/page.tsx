@@ -11,8 +11,9 @@ import { AmbientMotif } from "@repo/ui/components/ambient-motif";
 import { Button } from "@repo/ui/components/button";
 import { Container } from "@repo/ui/components/container";
 import { Empty, EmptyDescription, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
-import { Reveal } from "@repo/ui/components/reveal";
+import { PageHero } from "@repo/ui/components/page-hero";
 import { Section } from "@repo/ui/components/section";
+import { GlossaryBackdrop } from "../../../glossary/_components/glossary-art.tsx";
 import { GlossaryBrowser } from "../../../glossary/_components/glossary-browser.tsx";
 
 // One school's glossary — `/learn/forex/glossary` (ADR-065 §2).
@@ -72,20 +73,17 @@ export default async function TrackGlossaryPage({
 
   return (
     <>
-      <Section spacing="sm" tone="muted" className="relative isolate overflow-hidden">
-        <AmbientMotif variant="learn" />
-        <Container>
-          <Reveal variant="up">
-            <header className="flex flex-col gap-1.5">
-              <p className="text-sm font-medium text-primary-interactive">
-                {learn(LEARN_TRACKS[track].titleKey)}
-              </p>
-              <h1 className="text-display-sm font-semibold tracking-tight">{t("title")}</h1>
-              <p className="text-muted-foreground">{t("intro")}</p>
-            </header>
-          </Reveal>
-        </Container>
-      </Section>
+      {/* changes-49: the same masthead, at the same density, as every other
+          surface of the track — this page used to open on a muted strip half
+          the height of the Courses / Videos / Quizzes banners beside it. */}
+      <PageHero
+        size="medium"
+        backdrop={<GlossaryBackdrop slot="banner" priority />}
+        motif={<AmbientMotif variant="learn" intensity={0.7} />}
+        eyebrow={learn(LEARN_TRACKS[track].titleKey)}
+        title={t("title")}
+        lead={t("intro")}
+      />
 
       <Section spacing="md">
         <Container className="flex flex-col gap-6">

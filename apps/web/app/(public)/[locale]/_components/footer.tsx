@@ -39,7 +39,6 @@ import {
 import { Link } from "@repo/i18n/navigation";
 import { getSetting, isFeatureVisible } from "@repo/settings";
 import { BrandLogo } from "@repo/ui/components/brand-logo";
-import { CtaBand } from "@repo/ui/components/cta-band";
 import { SocialLinkIcon } from "./social-link-icon.tsx";
 import { Container } from "@repo/ui/components/container";
 import { Reveal } from "@repo/ui/components/reveal";
@@ -440,39 +439,46 @@ export async function SiteFooter({ locale }: { locale: string }) {
               </div>
             )}
           </div>
+        </Container>
 
-          {/* ── Band 2: the subscribe banner ─────────────────────────── */}
-          {/* changes-36 (ADR-119): "replace with the subscribe banner". It
-              takes the place the risk disclaimer held, and it is the SAME
-              `CtaBand` `/news` closes on rather than the muted strip this band
-              used to be — one subscribe banner on the site, not two designs
-              of it. A `--primary` FILL with its own paired ink is ADR-018
-              rule 5's allowed case, so its contrast does not depend on this
-              band's `--secondary`. `full-width` plus a radius rather than
-              `default`, because `default` carries `.container-page` and this
-              already sits inside the footer's Container. */}
-          {newsletterFlag && newsletterPlaced && (
-            <div
-              className={`border-t border-secondary-foreground/12 py-8 ${SIGNED_OUT_ONLY_CLASS}`}
-            >
-              <CtaBand
-                variant="full-width"
-                className="rounded-lg"
-                title={t("newsletterHeading")}
-                description={t("newsletterBlurb")}
-              >
-                <div className="w-full sm:w-80">
+        {/* ── Band 2: the subscribe banner ─────────────────────────── */}
+        {/* changes-36 (ADR-119) put the subscribe banner where the risk
+            disclaimer was; changes-49 gave it the VISITOR band's `--secondary`
+            and `py-6`, title and blurb on one line from lg.
+            changes-50 (image-5): it still read as part of the textured footer,
+            because the dot grid and the primary glow painted through it. It is
+            now a FULL-WIDTH flat `bg-secondary` strip, outside the footer's
+            Container, so it covers the texture edge to edge and matches the
+            "Sign in / Create free account" strip above the footer exactly.
+            changes-51: the owner wanted it as a STRIP ON the footer, not a
+            page-wide band — so it went back inside the Container as an inset,
+            bordered panel with its own lifted fill, and the texture shows
+            around it. The form widened from w-96 to w-xl so the consent line
+            fits on one row instead of wrapping under a cramped input. */}
+        {newsletterFlag && newsletterPlaced && (
+          <Container className={`pb-8 ${SIGNED_OUT_ONLY_CLASS}`}>
+            <div className="relative rounded-lg border border-secondary-foreground/12 bg-secondary-foreground/5 px-6 py-5 text-secondary-foreground">
+              <div className="flex flex-col items-center gap-4 text-center xl:flex-row xl:justify-between xl:gap-8 xl:text-start">
+                <p className="min-w-0 text-pretty">
+                  <span className="text-lg font-semibold">{t("newsletterHeading")}</span>{" "}
+                  <span className="text-sm text-secondary-foreground/70">
+                    {t("newsletterBlurb")}
+                  </span>
+                </p>
+                <div className="w-full shrink-0 sm:w-xl">
                   <NewsletterForm
-                    tone="onFill"
+                    tone="onSecondary"
                     locale={locale}
                     source="footer"
                     labels={newsletterFormLabels(t)}
                   />
                 </div>
-              </CtaBand>
+              </div>
             </div>
-          )}
+          </Container>
+        )}
 
+        <Container>
           {/* ── Band 3: who we are ───────────────────────────────────── */}
           {/* The registration number and the registered address, each its own
               setting (ADR-110) and each absent rather than labelled-and-empty
