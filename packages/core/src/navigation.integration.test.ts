@@ -134,7 +134,7 @@ describe("assembleNavigation — truth table", () => {
   // changes-26 #1 — the tool switch is a THIRD pruning source, and the one
   // the header was missing: /tools' section bar, the index and the homepage
   // band all read `getEnabledTools`, so a tool switched off in
-  // /admin/tools vanished from every surface except the menu that links to it.
+  // /keystone/tools vanished from every surface except the menu that links to it.
   it("prunes a tool row whose tool is switched off, keeps it when on", () => {
     const items = [item({ routeKey: "tool-position-size" })];
     expect(

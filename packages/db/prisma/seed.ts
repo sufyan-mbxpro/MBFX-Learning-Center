@@ -35,7 +35,7 @@ const HOME_PAGE_LAYOUT = homePageLayout;
 // ─────────────────────────────────────────────────────────────
 
 const PERMISSIONS = [
-  // Learning — /admin/learn/* (courses, lessons, quizzes, videos).
+  // Learning — /keystone/learn/* (courses, lessons, quizzes, videos).
   // Quizzes (ADR-058 #8) and videos (ADR-068 §3) are gated on the LESSON keys
   // rather than groups of their own, which is why this card is "Courses &
   // lessons" and covers four screens.
@@ -50,7 +50,7 @@ const PERMISSIONS = [
   ["learning", "lessons.delete", "Delete lessons"],
   ["learning", "lessons.publish", "Publish lessons"],
 
-  // Glossary — /admin/glossary and /admin/glossary/topics. A topic IS glossary
+  // Glossary — /keystone/glossary and /keystone/glossary/topics. A topic IS glossary
   // data (D27), so it reuses these keys rather than adding three nobody holds.
   ["glossary", "glossary.view", "View glossary"],
   ["glossary", "glossary.create", "Create glossary terms"],
@@ -58,13 +58,13 @@ const PERMISSIONS = [
   ["glossary", "glossary.delete", "Delete glossary terms"],
   ["glossary", "glossary.publish", "Publish glossary terms"],
 
-  // Media library — /admin/media
+  // Media library — /keystone/media
   ["media", "media.view", "View the media library"],
   ["media", "media.upload", "Upload media"],
   ["media", "media.update", "Edit media metadata, replace files"],
   ["media", "media.delete", "Delete media"],
 
-  // News & Analysis — /admin/articles (+ its categories and tags). Comments
+  // News & Analysis — /keystone/articles (+ its categories and tags). Comments
   // hang off an article and are moderated nowhere else, so they belong here.
   ["articles", "analysis.view", "View analysis"],
   ["articles", "analysis.create", "Create analysis"],
@@ -111,7 +111,7 @@ const PERMISSIONS = [
   ["seo", "redirects.manage", "Manage redirects"],
   ["seo", "sitemaps.manage", "Manage sitemaps"],
 
-  // Users & roles — /admin/users, /admin/roles
+  // Users & roles — /keystone/users, /keystone/roles
   ["users", "users.view", "View users"],
   ["users", "users.create", "Create users"],
   ["users", "users.update", "Edit users"],
@@ -122,7 +122,7 @@ const PERMISSIONS = [
   ["users", "roles.manage", "Create and edit roles"],
   ["users", "permissions.assign", "Assign permissions"],
 
-  // Employees — /admin/employees
+  // Employees — /keystone/employees
   ["employees", "employees.view", "View employees"],
   ["employees", "employees.create", "Add employees"],
   ["employees", "employees.update", "Edit employees"],
@@ -164,7 +164,7 @@ const PERMISSIONS = [
   ["ai", "ai.providers.manage", "Manage AI providers, keys, and models"],
   ["ai", "ai.usage.view", "View AI usage and spend"],
 
-  // Settings & branding — /admin/settings and the screens its sub-nav fronts
+  // Settings & branding — /keystone/settings and the screens its sub-nav fronts
   // (theme, navigation, features, social, integrations).
   ["settings", "settings.view", "View settings"],
   ["settings", "settings.update", "Edit settings"],
@@ -175,7 +175,7 @@ const PERMISSIONS = [
   ["settings", "integrations.manage", "Manage integrations"],
 
   // System. `analytics.view` stays here rather than under Learning even though
-  // it gates /admin/learn/progress: it also gates the dashboard, and the
+  // it gates /keystone/learn/progress: it also gates the dashboard, and the
   // sidebar already records why a numbers audience is not an editing one.
   ["system", "audit.view", "View audit logs"],
   ["system", "analytics.view", "View analytics"],

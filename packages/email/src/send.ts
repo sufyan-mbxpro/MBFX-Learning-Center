@@ -18,6 +18,9 @@ import { TRANSPORT_ID, loadTransportDriver } from "./transport.ts";
 /** The locale every template is guaranteed to have (ADR-043 #3). */
 export const DEFAULT_EMAIL_LOCALE = "en";
 
+/** The delivery-log reason on a send SendGrid accepted in sandbox mode (ADR-152). */
+export const SANDBOX_REASON = "SendGrid sandbox mode — validated, not delivered";
+
 export type DeliveryStatus = "SENT" | "FAILED" | "SUPPRESSED";
 
 export interface SendTemplatedEmailInput {
@@ -263,7 +266,7 @@ export async function sendTemplatedEmail(input: SendTemplatedEmailInput): Promis
   //    site-wide setting.
   try {
     const driver = await loadTransportDriver();
-    const { messageId } = await driver.send({
+    const { messageId, sandbox } = await driver.send({
       to: input.to,
       from: {
         name: template.fromName ?? fromName ?? resolvedSiteName,
@@ -286,6 +289,9 @@ export async function sendTemplatedEmail(input: SendTemplatedEmailInput): Promis
       subject: rendered.subject,
       status: "SENT",
       providerMessageId: messageId,
+      // ADR-152: accepted and validated, delivered to nobody. Said on the row,
+      // or the log would claim an inbox received it.
+      ...(sandbox ? { reason: SANDBOX_REASON } : {}),
     });
   } catch (error) {
     // Not rethrown: a mail server being down must not fail the sign-up,

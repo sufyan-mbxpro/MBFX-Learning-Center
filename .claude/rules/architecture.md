@@ -26,8 +26,10 @@ rules named below.
    graph. Backstop: blocking Lighthouse budgets on public routes (Module 12/14).
 6. The `(admin)` root layout is `force-dynamic`. Public routes use ISR + cache
    tags. Do not "fix" a caching problem by making public routes dynamic.
-7. Admin URLs live under `/admin/*` only. The proxy matcher must never
-   locale-prefix `/admin` or `/api`.
+7. Admin URLs live under `/keystone/*` only (ADR-151; `/admin/*` answers
+   404). `/keystone` itself is the staff sign-in and the dashboard is
+   `/keystone/dashboard`. The proxy matcher must never locale-prefix
+   `/keystone`, `/admin` or `/api`.
 
 ## Packages
 

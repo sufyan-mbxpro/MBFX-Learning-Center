@@ -14,7 +14,7 @@ import en from "@repo/i18n/messages/en.json" with { type: "json" };
 
 const read = (path: string) => readFileSync(resolve(process.cwd(), path), "utf8");
 
-const ADMIN = "app/(admin)/admin/";
+const ADMIN = "app/(admin)/keystone/";
 const PUBLIC = "app/(public)/[locale]/";
 
 // ─── "all the live view pages should be open in the new page" ────────────

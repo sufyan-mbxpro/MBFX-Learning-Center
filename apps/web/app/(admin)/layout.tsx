@@ -11,7 +11,7 @@ import { curatedFontVariables } from "@repo/ui/fonts";
 import { ThemeProvider } from "@repo/ui/components/theme-provider";
 import { ThemeScript } from "@repo/ui/components/theme-script";
 import { ADMIN_THEME_STORAGE_KEY } from "@repo/ui/lib/theme-mode";
-import { AdminShell } from "./admin/_components/admin-shell.tsx";
+import { AdminShell } from "./keystone/_components/admin-shell.tsx";
 import { faviconIcons } from "../_lib/favicon.ts";
 import "@repo/ui/globals.css";
 

@@ -148,7 +148,7 @@ export interface DashboardTrend {
  * #9, extending ADR-085's rule to the tiles that predate it).
  *
  * **Every tile is gated, including the four that were not.** Until F8 any
- * STAFF member opening `/admin` saw the user count, the employee count and
+ * STAFF member opening `/keystone` saw the user count, the employee count and
  * the published-article count — three numbers each of which has a screen
  * behind it that refuses them. A dashboard is not a lesser surface: an
  * aggregate over rows someone may not read is still a read of those rows,
@@ -156,8 +156,8 @@ export interface DashboardTrend {
  * content permission.
  *
  * The keys are the ones the corresponding SCREEN requires, deliberately —
- * `analysis.view` for articles because that is what `/admin/articles` takes.
- * (The feature-flag tile went with `/admin/features`, ADR-144 §5: a count
+ * `analysis.view` for articles because that is what `/keystone/articles` takes.
+ * (The feature-flag tile went with `/keystone/features`, ADR-144 §5: a count
  * linking to a deleted screen is the "Active menu items" mistake again.) A tile whose number an admin can see is a tile
  * whose screen they can open.
  */
@@ -168,11 +168,11 @@ const OVERVIEW_TILES = [
   { tile: "employees", permission: "employees.view" },
   { tile: "settings", permission: "settings.view" },
   // Replaces the "Active menu items" card, which linked to
-  // `/admin/navigation` — a screen ADR-038 hid, so the tile was a count of
+  // `/keystone/navigation` — a screen ADR-038 hid, so the tile was a count of
   // something nobody could act on and a link to a 404-shaped destination.
   { tile: "deliveries", permission: "email.log.view" },
   // changes-43: the subscriber list is an audience (ADR-080 #7), so the tile
-  // takes the key `/admin/newsletter` itself requires.
+  // takes the key `/keystone/newsletter` itself requires.
   { tile: "newsletter", permission: "newsletter.view" },
 ] as const satisfies readonly { tile: string; permission: string }[];
 

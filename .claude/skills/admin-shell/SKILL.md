@@ -11,6 +11,11 @@ plan.md Module 09. The admin shell IS the `(admin)` route-group root layout
 
 ## Screens
 
+- **Address (ADR-151):** every screen is served under `/keystone/*` from
+  `app/(admin)/keystone/**`; the dashboard is `/keystone/dashboard` because
+  `/keystone` itself is the staff sign-in. `/admin/*` answers 404. Link to a
+  screen as `/keystone/…`, never `/admin/…`.
+
 - **Shell:** sidebar from a permission-filtered admin menu, breadcrumbs,
   command palette optional.
 - **Settings CRUD:** generated from the settings registry — type-driven

@@ -18,8 +18,8 @@ import { faviconIcons } from "../_lib/favicon.ts";
 // STAFF re-check (it redirects a non-STAFF subject to this very page), so a
 // sign-in screen inside it would redirect to itself forever. Next.js
 // "multiple root layouts" — already the mechanism behind ADR-006's two
-// surfaces — lets `/admin/sign-in` render from here with its own <html>
-// while every other `/admin/*` path keeps the gated layout.
+// surfaces — lets `/keystone` render from here with its own <html>
+// while every other `/keystone/*` path keeps the gated layout.
 //
 // No session read, no AdminShell, no navigation: this page is reachable
 // unauthenticated by design, so it exposes nothing but the form.

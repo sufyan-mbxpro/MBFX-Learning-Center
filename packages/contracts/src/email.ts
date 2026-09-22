@@ -25,7 +25,7 @@ export type EmailAudience = (typeof EMAIL_AUDIENCES)[number];
 export const EMAIL_BODY_MODES = ["RICH", "HTML"] as const;
 export type EmailBodyMode = (typeof EMAIL_BODY_MODES)[number];
 
-export const EMAIL_DRIVERS = ["SMTP", "LOG"] as const;
+export const EMAIL_DRIVERS = ["SMTP", "SENDGRID", "LOG"] as const;
 export const SMTP_SECURITIES = ["NONE", "STARTTLS", "TLS"] as const;
 
 /** Available to every template, whatever its key. */
@@ -258,6 +258,8 @@ export const emailTransportSaveSchema = z
     // Empty means KEEP the stored password: the field is write-only, so the
     // form cannot round-trip the current value back to us (ADR-078 #3).
     password: z.string().max(255).optional(),
+    // ADR-152: read by the SENDGRID driver only; stored as given either way.
+    sandboxMode: z.boolean().optional(),
   })
   .superRefine((value, ctx) => {
     if (value.driver !== "SMTP") return;

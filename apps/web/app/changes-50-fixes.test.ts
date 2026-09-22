@@ -9,10 +9,10 @@ import { describe, expect, it } from "vitest";
 import { SETTING_GROUPS } from "@repo/contracts";
 import en from "@repo/i18n/messages/en.json" with { type: "json" };
 
-import { SETTINGS_GROUP_TABS } from "./(admin)/admin/settings/_components/settings-shared.ts";
+import { SETTINGS_GROUP_TABS } from "./(admin)/keystone/settings/_components/settings-shared.ts";
 
 const read = (path: string) => readFileSync(resolve(process.cwd(), path), "utf8");
-const ADMIN = "app/(admin)/admin/";
+const ADMIN = "app/(admin)/keystone/";
 const PUBLIC = "app/(public)/[locale]/";
 
 // ─── #1 "all the extra input details will be under the inputs" ───────────

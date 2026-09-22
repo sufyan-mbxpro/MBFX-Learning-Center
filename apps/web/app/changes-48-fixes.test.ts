@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 import en from "@repo/i18n/messages/en.json" with { type: "json" };
 
 const read = (path: string) => readFileSync(resolve(process.cwd(), path), "utf8");
-const ADMIN = "app/(admin)/admin/";
+const ADMIN = "app/(admin)/keystone/";
 
 // ─── #1 "show the live button on every module if missing" ────────────────
 
@@ -65,13 +65,13 @@ describe("video categories and glossary topics are tabs, not sidebar rows", () =
   const shell = read(ADMIN + "_components/admin-shell.tsx");
 
   it("the sidebar has no row for either", () => {
-    expect(shell).not.toContain('"/admin/learn/videos/categories"');
-    expect(shell).not.toContain('"/admin/glossary/topics"');
+    expect(shell).not.toContain('"/keystone/learn/videos/categories"');
+    expect(shell).not.toContain('"/keystone/glossary/topics"');
   });
 
   it.each([
-    ["learn/videos/(browse)", ["/admin/learn/videos", "/admin/learn/videos/categories"]],
-    ["glossary/(browse)", ["/admin/glossary", "/admin/glossary/topics"]],
+    ["learn/videos/(browse)", ["/keystone/learn/videos", "/keystone/learn/videos/categories"]],
+    ["glossary/(browse)", ["/keystone/glossary", "/keystone/glossary/topics"]],
   ] as const)("%s has a section layout with the tab strip", (group, hrefs) => {
     const layout = read(`${ADMIN}${group}/layout.tsx`);
     expect(layout).toContain("<SubNav");

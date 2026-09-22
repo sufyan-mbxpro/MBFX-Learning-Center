@@ -23,7 +23,7 @@ const TRACK_HEIGHT = { xs: "h-1", sm: "h-1.5", default: "h-2" } as const;
  * gate — and unlike most a11y props there is nothing sensible the component
  * could default to: only the call site knows whether the bar measures a
  * budget, an upload, an SEO score or a quiz. Left optional, it was forgotten
- * on three real screens and five showcase blocks, and `/admin/ai` was the
+ * on three real screens and five showcase blocks, and `/keystone/ai` was the
  * page whose axe run finally said so.
  *
  * Pass a catalog string. `aria-labelledby` is the alternative for a bar whose

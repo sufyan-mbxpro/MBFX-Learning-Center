@@ -13,7 +13,7 @@ import { describe, expect, it } from "vitest";
 
 const LISTENERS = [
   "app/(public)/[locale]/_components/site-search.tsx",
-  "app/(admin)/admin/_components/admin-search.tsx",
+  "app/(admin)/keystone/_components/admin-search.tsx",
 ];
 
 describe("shortcut listeners tolerate a keydown with no key", () => {

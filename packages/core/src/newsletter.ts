@@ -980,7 +980,7 @@ export interface SubscriberDetail extends SubscriberRow {
 }
 
 /**
- * One subscriber for `/admin/newsletter/[id]`. Null when absent (the screen
+ * One subscriber for `/keystone/newsletter/[id]`. Null when absent (the screen
  * 404s, security.md #7). `withDeliveries` is the caller's `email.log.view`:
  * the delivery log has its own key, and holding `newsletter.view` does not
  * grant a read of it.

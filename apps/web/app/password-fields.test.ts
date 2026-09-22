@@ -28,10 +28,10 @@ const read = (relative: string) => readFileSync(resolve(APP_ROOT, relative), "ut
 // Written POSIX-style: `read()` resolves them, and node accepts forward
 // slashes on Windows too.
 const PASSWORD_FORMS = [
-  "(admin-auth)/admin/sign-in/admin-sign-in-form.tsx",
+  "(admin-auth)/keystone/admin-sign-in-form.tsx",
   "(public)/[locale]/sign-in/sign-in-form.tsx",
   "(public)/[locale]/sign-up/sign-up-form.tsx",
-  "(admin)/admin/profile/profile-forms.tsx",
+  "(admin)/keystone/profile/profile-forms.tsx",
 ];
 
 describe("every password field is PasswordInput", () => {

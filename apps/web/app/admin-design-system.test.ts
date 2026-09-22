@@ -1,4 +1,4 @@
-// changes-20 Phase 4 (Q13) — /admin/design-system is a PERMANENT admin
+// changes-20 Phase 4 (Q13) — /keystone/design-system is a PERMANENT admin
 // screen, not a dev tool, so it answers to the admin conventions:
 //   · every string is a catalog key that exists (code-style #2, ADR-043 #2 —
 //     English-only, but still keyed);
@@ -11,8 +11,8 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const read = (p: string) => readFileSync(resolve(process.cwd(), p), "utf8");
-const PAGE = "app/(admin)/admin/design-system/page.tsx";
-const CLIENT = "app/(admin)/admin/design-system/design-system-client.tsx";
+const PAGE = "app/(admin)/keystone/design-system/page.tsx";
+const CLIENT = "app/(admin)/keystone/design-system/design-system-client.tsx";
 const catalog = JSON.parse(
   readFileSync(resolve(process.cwd(), "../../packages/i18n/messages/en.json"), "utf8"),
 ) as { admin: { designSystem: Record<string, unknown> } };
@@ -28,7 +28,7 @@ function has(obj: unknown, path: string): boolean {
   );
 }
 
-describe("/admin/design-system (changes-20 Phase 4)", () => {
+describe("/keystone/design-system (changes-20 Phase 4)", () => {
   const client = read(CLIENT);
 
   it("ships to production — no NODE_ENV gate like the retired kitchen sink", () => {

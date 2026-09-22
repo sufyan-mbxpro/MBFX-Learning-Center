@@ -32,7 +32,7 @@ import {
   ENTITY_LABEL_KEYS,
   PIPELINE_BUCKETS,
   PIPELINE_LABEL_KEYS,
-} from "./(admin)/admin/_lib/dashboard-content.ts";
+} from "./(admin)/keystone/_lib/dashboard-content.ts";
 
 const catalog = JSON.parse(
   readFileSync(resolve(process.cwd(), "../../packages/i18n/messages/en.json"), "utf8"),
@@ -44,7 +44,7 @@ describe("dashboard content entities", () => {
   it.each(DASHBOARD_CONTENT_ENTITIES)("%s has an icon, a destination and a label", (entity) => {
     // lucide icons are forwardRef objects, not plain functions.
     expect(ENTITY_ICONS[entity]).toBeTruthy();
-    expect(ENTITY_HREFS[entity]).toMatch(/^\/admin\//);
+    expect(ENTITY_HREFS[entity]).toMatch(/^\/keystone\//);
     expect(catalog.admin[ENTITY_LABEL_KEYS[entity]]).toBeTypeOf("string");
   });
 
@@ -90,7 +90,7 @@ describe("dashboard content permissions", () => {
 // ─── The platform tiles (changes-21 F8 §2.2 #9) ──────────────
 //
 // ADR-085 gated the content blocks and left the four tiles that predate it
-// ungated: any STAFF member opening `/admin` saw the user count, the employee
+// ungated: any STAFF member opening `/keystone` saw the user count, the employee
 // headcount and the published-article count. The registry below closes that,
 // and these tests are what keep it closed — a tile added without a permission
 // entry cannot compile, but a tile added with a MISSPELLED one would hide
@@ -134,7 +134,7 @@ describe("dashboard platform tiles", () => {
     ]);
   });
 
-  it("no longer counts menu items — /admin/navigation is hidden (ADR-038)", () => {
+  it("no longer counts menu items — /keystone/navigation is hidden (ADR-038)", () => {
     // The card it fed linked to a screen nobody can open, so the number was
     // unactionable and the link went nowhere useful. `deliveries` replaced it.
     expect(DASHBOARD_OVERVIEW_TILES).not.toContain("menuItems");

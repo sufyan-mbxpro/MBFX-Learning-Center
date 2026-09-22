@@ -193,7 +193,7 @@ describe("Progress", () => {
 
   it("names itself, because an unnamed progressbar is an axe failure", () => {
     // The regression test for the fix that made `aria-label` required
-    // (testing.md #2). `/admin/ai`'s axe run found the budget meter unnamed,
+    // (testing.md #2). `/keystone/ai`'s axe run found the budget meter unnamed,
     // and two more screens plus the showcase had the same gap — the type is
     // what stops a fourth. This asserts the NAME reaches the role, since a
     // prop the component forgot to forward would type-check and still fail.
@@ -208,7 +208,7 @@ describe("Breadcrumb (tokens.md §6.14)", () => {
       <Breadcrumb>
         <BreadcrumbList>
           <BreadcrumbItem>
-            <BreadcrumbLink href="/admin">Admin</BreadcrumbLink>
+            <BreadcrumbLink href="/keystone/dashboard">Admin</BreadcrumbLink>
           </BreadcrumbItem>
           <BreadcrumbSeparator />
           <BreadcrumbItem>
@@ -233,7 +233,7 @@ describe("Breadcrumb (tokens.md §6.14)", () => {
 describe("NavItem (tokens.md §6.12)", () => {
   it("the reference's 40px, 13px medium item, accent hover, 16px icon", () => {
     render(
-      <NavItem href="/admin/users" icon={<svg />}>
+      <NavItem href="/keystone/users" icon={<svg />}>
         Users
       </NavItem>,
     );
@@ -254,7 +254,7 @@ describe("NavItem (tokens.md §6.12)", () => {
 
   it("active marks aria-current and sits on the accent; a trailing count spreads the row", () => {
     render(
-      <NavItem href="/admin/users" active trailing={<CountBadge count={120} />}>
+      <NavItem href="/keystone/users" active trailing={<CountBadge count={120} />}>
         Users
       </NavItem>,
     );

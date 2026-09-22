@@ -57,11 +57,11 @@ export default defineConfig({
       name: "admin",
       dependencies: ["auth"],
       use: { ...devices["Desktop Chrome"], storageState: STORAGE_STATE },
-      testMatch: /admin\/.*\.spec\.ts/,
+      testMatch: /keystone\/.*\.spec\.ts/,
     },
     {
       // No storageState: the public surface is tested as an anonymous
-      // visitor, which is also what makes the /admin probe meaningful.
+      // visitor, which is also what makes the /keystone probe meaningful.
       name: "public",
       use: { ...devices["Desktop Chrome"] },
       testMatch: /public\/.*\.spec\.ts/,

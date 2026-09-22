@@ -380,7 +380,7 @@ export async function deleteAiModel(subject: Subject, id: string): Promise<void>
 
 // ─── Guided setup (ADR-120) ──────────────────────────────────
 //
-// `/admin/settings/ai` in one flow: choose a provider, type its key, test it,
+// `/keystone/settings/ai` in one flow: choose a provider, type its key, test it,
 // pick models from the list the provider itself returns, save. Everything here
 // is composed from the same rules the providers screen follows — the key is
 // write-only and sealed on save, blank means unchanged, exactly one default —
@@ -1030,7 +1030,7 @@ export async function notifyAiBudget(event: "warning" | "capped"): Promise<void>
     await recordNotification({
       userId,
       type: event === "capped" ? "aiBudgetReached" : "aiBudgetWarning",
-      href: "/admin/settings/ai/limits",
+      href: "/keystone/settings/ai/limits",
     });
   }
 }

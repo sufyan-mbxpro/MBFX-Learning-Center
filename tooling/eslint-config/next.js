@@ -25,7 +25,7 @@ import { noPhysicalSpacingRule, reactInternalConfig } from "./react-internal.js"
  */
 export const adminComboboxRule = {
   files: ["app/(admin)/**/*.tsx"],
-  ignores: ["app/(admin)/admin/website/**", "app/(admin)/admin/homepage/**"],
+  ignores: ["app/(admin)/keystone/website/**", "app/(admin)/keystone/homepage/**"],
   rules: {
     "no-restricted-imports": [
       "error",
@@ -39,7 +39,7 @@ export const adminComboboxRule = {
           {
             name: "@repo/ui/components/select",
             message:
-              "Admin dropdowns are searchable and full width (ADR-057) — import AdminCombobox from app/(admin)/admin/_components/combobox.tsx instead. It renders a plain Select below 8 options on its own; pass searchable={false} if a longer list genuinely should not be filterable.",
+              "Admin dropdowns are searchable and full width (ADR-057) — import AdminCombobox from app/(admin)/keystone/_components/combobox.tsx instead. It renders a plain Select below 8 options on its own; pass searchable={false} if a longer list genuinely should not be filterable.",
           },
         ],
       },
@@ -57,7 +57,7 @@ export const adminComboboxRule = {
  * @type {import("eslint").Linter.Config}
  */
 export const retainedSurfacesRule = {
-  files: ["app/(admin)/admin/website/**/*.tsx", "app/(admin)/admin/homepage/**/*.tsx"],
+  files: ["app/(admin)/keystone/website/**/*.tsx", "app/(admin)/keystone/homepage/**/*.tsx"],
   rules: {
     "no-restricted-syntax": ["error", noColorLiteralRule, noPhysicalSpacingRule],
   },

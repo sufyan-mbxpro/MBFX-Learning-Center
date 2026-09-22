@@ -94,7 +94,7 @@ export function SignInForm({
     // ADR-124 §3: the page we land on hides its subscribe bands at first
     // paint rather than after its own session read.
     rememberSession(true);
-    // Never into /admin, whatever `?redirect=` says.
+    // Never into /keystone, whatever `?redirect=` says.
     window.location.assign(resolveRedirect(homeHref, (path) => !isAdminPath(path)));
   };
 

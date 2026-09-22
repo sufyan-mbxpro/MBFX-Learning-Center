@@ -4,7 +4,7 @@ import { expectNoSeriousAxeViolations } from "../axe.ts";
 
 // changes-07 plan criterion 19, as an anonymous visitor.
 //
-// The anonymous /admin check below is the WEAK half of ADR-006's cross-surface
+// The anonymous /keystone check below is the WEAK half of ADR-006's cross-surface
 // gate and stays here because it is cheap: an anonymous request has no session
 // cookie and dies at `proxy.ts`. The half that matters — a real LEARNER
 // session, refused for `userType` alone by the layout and the services behind
@@ -78,8 +78,13 @@ test("renders the key takeaways block, and it passes axe", async ({ page }) => {
   await expectNoSeriousAxeViolations(page);
 });
 
-test("ADR-006 — an anonymous visitor cannot reach any /admin route", async ({ page }) => {
-  for (const path of ["/admin", "/admin/articles", "/admin/users", "/admin/settings"]) {
+test("ADR-006 — an anonymous visitor cannot reach any /keystone route", async ({ page }) => {
+  for (const path of [
+    "/keystone/dashboard",
+    "/keystone/articles",
+    "/keystone/users",
+    "/keystone/settings",
+  ]) {
     const response = await page.goto(path);
     // Either bounced to sign-in by the proxy, or refused outright. What must
     // never happen is a 200 that renders admin content.

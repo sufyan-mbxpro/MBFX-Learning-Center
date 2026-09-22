@@ -8,7 +8,7 @@ import { assertPathNotReserved } from "./paths.ts";
 describe("assertPathNotReserved", () => {
   it("refuses a STATIC path starting with a reserved segment", () => {
     expect(() => assertPathNotReserved("/news", PageKind.STATIC)).toThrow(ReservedPathError);
-    expect(() => assertPathNotReserved("/admin/whatever", PageKind.STATIC)).toThrow(
+    expect(() => assertPathNotReserved("/keystone/whatever", PageKind.STATIC)).toThrow(
       ReservedPathError,
     );
   });

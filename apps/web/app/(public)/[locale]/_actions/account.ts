@@ -8,7 +8,7 @@
 // subject). What stands in for it is the scope: the only row any of these can
 // write is `session.user.id`'s own — no input carries a user id
 // (security.md #7) — and a STAFF session is refused outright, because staff
-// edit themselves at `/admin/profile` and a second self-service surface for
+// edit themselves at `/keystone/profile` and a second self-service surface for
 // them is a second thing to secure.
 //
 // Password and two-factor are NOT here. They go to Better Auth's own handler

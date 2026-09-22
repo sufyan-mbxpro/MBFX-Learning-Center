@@ -58,11 +58,11 @@ const nextConfig: NextConfig = {
     // cap is 1 MB; MAX_UPLOAD_BYTES (@repo/core media) is 5 MB, plus the
     // multipart overhead the installed docs say to leave room for.
     serverActions: { bodySizeLimit: "6mb" },
-    // changes-46 (ADR-144 §4): `/admin/:path*` runs through proxy.ts (the
+    // changes-46 (ADR-144 §4): `/keystone/:path*` runs through proxy.ts (the
     // STAFF gate), and Next buffers a proxied request body only up to this
     // limit — 10 MB by default — then hands the route handler a TRUNCATED
     // body without failing. Every video over 10 MB therefore reached
-    // `/admin/api/uploads/media` as "Failed to parse body as FormData", while
+    // `/keystone/api/uploads/media` as "Failed to parse body as FormData", while
     // Settings → Media advertised a 100 MB video cap. Sized to that default
     // cap plus multipart overhead; an admin who raises `media.maxBytes.video`
     // past ~100 MB must raise this with it.

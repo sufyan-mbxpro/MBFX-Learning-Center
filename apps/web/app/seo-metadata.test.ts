@@ -127,7 +127,7 @@ describe("robots never arrives as an undefined key", () => {
 });
 
 describe("the seo settings are read, not just stored", () => {
-  // Both were seeded, typed and editable at /admin/settings/seo while nothing
+  // Both were seeded, typed and editable at /keystone/settings/seo while nothing
   // read them: turning "Allow search indexing" off changed nothing a crawler
   // saw, and the verification token never reached a meta tag.
   it("seo.robotsIndex gates robots.txt", () => {

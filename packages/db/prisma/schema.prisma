@@ -2123,6 +2123,7 @@ model ContentReference {
 
 enum EmailDriver {
   SMTP
+  SENDGRID // v3 Web API; the key lives in `passwordCipher` (ADR-152)
   LOG // unconfigured / dev: the send is logged, never transmitted
 }
 
@@ -2156,6 +2157,9 @@ model EmailTransport {
   security       SmtpSecurity @default(STARTTLS)
   username       String?      @db.VarChar(255)
   passwordCipher String?      @db.Text
+  /// ADR-152: SendGrid validates every send and delivers none. Read only by
+  /// the SENDGRID driver — SMTP has no equivalent, so the switch is absent there.
+  sandboxMode    Boolean      @default(false)
   lastVerifiedAt DateTime?
   lastError      String?      @db.Text
   updatedBy      String?

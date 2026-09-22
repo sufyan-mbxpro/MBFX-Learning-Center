@@ -12,17 +12,17 @@ describe("resetPasswordPath", () => {
     );
   });
 
-  it("never sends a learner anywhere near /admin", () => {
+  it("never sends a learner anywhere near the portal", () => {
     const url = resetPasswordPath({ userType: "LEARNER" }, "abc", ORIGINS);
     expect(url).toBe("https://mbx.example/reset-password?token=abc");
-    expect(url).not.toContain("/admin");
+    expect(url).not.toContain("/keystone");
   });
 
   it("treats an unknown or missing type as a learner", () => {
     // The safe default: a public link tells the recipient nothing about the
     // portal, while an admin link handed to a learner advertises it.
     for (const user of [{}, { userType: null }, { userType: "GUEST" }]) {
-      expect(resetPasswordPath(user, "abc", ORIGINS)).not.toContain("/admin");
+      expect(resetPasswordPath(user, "abc", ORIGINS)).not.toContain("/keystone");
     }
   });
 
@@ -48,8 +48,9 @@ describe("resetPasswordPath", () => {
   // value of NEXT_PUBLIC_ADMIN_URL already ends in `/admin`.
   describe("the admin base is normalised, whatever NEXT_PUBLIC_ADMIN_URL holds", () => {
     it.each([
-      ["https://mbx.example/admin", "the documented value, which already ends in /admin"],
-      ["https://mbx.example/admin/", "the same with a trailing slash"],
+      ["https://mbx.example/keystone", "the documented value, which already ends in /keystone"],
+      ["https://mbx.example/keystone/", "the same with a trailing slash"],
+      ["https://mbx.example/admin", "a value written before ADR-151, ending in the old prefix"],
       ["https://mbx.example", "the bare-origin fallback when the variable is unset"],
     ])("%s (%s) yields the /keystone screen on that origin", (admin) => {
       const url = resetPasswordPath({ userType: "STAFF" }, "abc", {
@@ -57,13 +58,14 @@ describe("resetPasswordPath", () => {
         admin,
       });
       expect(url).toBe("https://mbx.example/keystone/reset-password?token=abc");
-      expect(url).not.toContain("/admin/admin");
+      expect(url).not.toContain("/keystone/keystone");
+      expect(url).not.toContain("/admin");
     });
 
     it("never degrades a staff link into the LEARNER screen", () => {
       // The failure mode of the other possible fix: with the variable unset,
       // dropping the append would send staff to /reset-password.
-      expect(adminPortalBase("https://mbx.example")).toBe("https://mbx.example/admin");
+      expect(adminPortalBase("https://mbx.example")).toBe("https://mbx.example/keystone");
     });
   });
 

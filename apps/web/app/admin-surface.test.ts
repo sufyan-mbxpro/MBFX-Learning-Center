@@ -1,7 +1,7 @@
 // The cross-surface probe's drift guard (ADR-006, testing.md #4).
 //
 // `e2e/public/learner-admin-probe.spec.ts` asserts that a learner session is
-// turned away from every `/admin/*` route. It holds its targets as a LITERAL
+// turned away from every `/keystone/*` route. It holds its targets as a LITERAL
 // LIST, because a probe that globs the tree at runtime silently stops covering
 // a route the day the glob breaks — and reads green while doing it. The cost of
 // a literal list is that it goes stale, which is exactly what this file is for.
@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const appDir = fileURLToPath(new URL(".", import.meta.url));
-const adminRoot = path.join(appDir, "(admin)", "admin");
+const adminRoot = path.join(appDir, "(admin)", "keystone");
 const probe = readFileSync(
   path.join(appDir, "..", "e2e", "public", "learner-admin-probe.spec.ts"),
   "utf8",
@@ -29,7 +29,7 @@ function isTransparentSegment(name: string): boolean {
   return name.startsWith("(") || name.startsWith("_");
 }
 
-/** Every routed path under `/admin`, by walking for `page.tsx` / `route.ts`. */
+/** Every routed path under `/keystone`, by walking for `page.tsx` / `route.ts`. */
 function walk(dir: string, urlPath: string, out: { pages: string[]; handlers: string[] }) {
   for (const entry of readdirSync(dir)) {
     const full = path.join(dir, entry);
@@ -43,7 +43,7 @@ function walk(dir: string, urlPath: string, out: { pages: string[]; handlers: st
 }
 
 const routed = { pages: [] as string[], handlers: [] as string[] };
-walk(adminRoot, "/admin", routed);
+walk(adminRoot, "/keystone", routed);
 
 /**
  * A dynamic segment cannot be probed by name, so the probe substitutes a
@@ -57,11 +57,11 @@ function probeShape(routePath: string): string {
 
 /** Paths the probe deliberately does not carry, each with its reason. */
 const EXEMPT_PAGES = new Set([
-  // ADR-052: the ONE /admin path reachable without a session, by design — the
+  // ADR-052: the ONE /keystone path reachable without a session, by design — the
   // gate SENDS people here, so "a learner is turned away" is false of it.
-  "/admin/sign-in",
-  "/admin/forgot-password",
-  "/admin/reset-password",
+  "/keystone",
+  "/keystone/forgot-password",
+  "/keystone/reset-password",
 ]);
 
 /**
@@ -82,7 +82,7 @@ function hasProbedAncestor(shape: string, probed: Set<string>): boolean {
 
 describe("the learner probe covers the admin surface", () => {
   const probed = new Set(
-    [...probe.matchAll(/"(\/admin(?:\/[^"?]*)?)(?:\?[^"]*)?"/g)].map((m) => m[1]!),
+    [...probe.matchAll(/"(\/keystone(?:\/[^"?]*)?)(?:\?[^"]*)?"/g)].map((m) => m[1]!),
   );
 
   it("probes every admin page, or inherits a probed parent's gate", () => {
@@ -108,7 +108,7 @@ describe("the learner probe covers the admin surface", () => {
   it("probes nothing that has stopped existing", () => {
     const shapes = new Set([...routed.pages, ...routed.handlers].map(probeShape));
     const stale = [...probed].filter(
-      (shape) => !shapes.has(shape) && !EXEMPT_PAGES.has(shape) && shape !== "/admin/sign-in",
+      (shape) => !shapes.has(shape) && !EXEMPT_PAGES.has(shape) && shape !== "/keystone",
     );
     expect(stale, "probed paths with no route behind them").toEqual([]);
   });

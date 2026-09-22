@@ -74,7 +74,7 @@ export interface LessonFeedbackTally {
  *
  * Not called by any public page: the counts are an editor's signal, not a
  * social proof widget, and showing "3 of 47 found this helpful" under a lesson
- * would tell a learner to skip it. Phase 9's `/admin/learn/progress` is the
+ * would tell a learner to skip it. Phase 9's `/keystone/learn/progress` is the
  * consumer; it is written here because the table it reads is created here and
  * a rollup that lives with its model does not get reinvented as a raw query.
  */

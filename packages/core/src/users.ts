@@ -188,7 +188,7 @@ export async function assignRole(actor: Subject, userId: string, roleKey: string
     entityId: userId,
     changes: { after: { roleKey } },
   });
-  await notifyIfStaff(userId, "roleAssigned", role.name, "/admin/profile");
+  await notifyIfStaff(userId, "roleAssigned", role.name, "/keystone/profile");
   invalidateSubjectTag(userId);
 }
 
@@ -209,7 +209,7 @@ export async function removeRole(actor: Subject, userId: string, roleKey: string
     entityId: userId,
     changes: { before: { roleKey } },
   });
-  await notifyIfStaff(userId, "roleRemoved", role.name, "/admin/profile");
+  await notifyIfStaff(userId, "roleRemoved", role.name, "/keystone/profile");
   invalidateSubjectTag(userId);
 }
 

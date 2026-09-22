@@ -82,6 +82,14 @@ service; `@repo/email` stays the sending layer.
     route answers 500 to every caller. That is how `/api/cron/publish-due`
     was broken between ADR-071 and changes-21 F9. A route handler reading env
     and headers is dynamic already.
+14. **SendGrid is the `SENDGRID` driver, over HTTPS, not SMTP** (ADR-152).
+    Its API key lives in `passwordCipher`, so invariant #1 covers it. Sandbox
+    mode (`EmailTransport.sandboxMode`) sends
+    `mail_settings.sandbox_mode.enable`. SendGrid honours that on no SMTP path,
+    which is why the driver exists. A sandboxed send is logged as SENT with
+    `SANDBOX_REASON` rather than given a new status. Test a template without
+    reaching a real inbox this way: choose SendGrid, turn sandbox on, save,
+    then use Send test.
 
 ## Adding a template
 

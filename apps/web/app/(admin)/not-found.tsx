@@ -16,7 +16,7 @@ export default async function AdminNotFound() {
       title={t("title")}
       description={t("description")}
       action={
-        <Button variant="outline" render={<Link href="/admin" />}>
+        <Button variant="outline" render={<Link href="/keystone/dashboard" />}>
           {tAdmin("dashboard")}
         </Button>
       }

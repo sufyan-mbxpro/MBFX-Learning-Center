@@ -10,7 +10,7 @@
 // editor's keys had to go under `admin.glossaryEditor` — and CLAUDE.md records
 // it with the words "nothing static catches that collision". changes-25 hit it
 // again within the hour: `admin.market` was the sidebar label, a new
-// `admin.market.*` object shadowed it, every check passed, and `/admin/market`
+// `admin.market.*` object shadowed it, every check passed, and `/keystone/market`
 // crashed the whole shell on first load.
 //
 // So now something static does catch it. A source guard rather than a render
@@ -22,7 +22,7 @@ import { describe, expect, it } from "vitest";
 import en from "@repo/i18n/messages/en.json" with { type: "json" };
 
 const shellSource = readFileSync(
-  new URL("./(admin)/admin/_components/admin-shell.tsx", import.meta.url),
+  new URL("./(admin)/keystone/_components/admin-shell.tsx", import.meta.url),
   "utf8",
 );
 

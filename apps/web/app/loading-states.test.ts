@@ -20,8 +20,8 @@ const FILES = walk(APP).filter((file) => /\.tsx?$/.test(file) && !/\.test\.tsx?$
 const source = (file: string) => readFileSync(file, "utf8");
 
 /** Retained, hidden surfaces (ADR-038/042) are not brought up to conventions. */
-const RETAINED = /^\(admin\)\/admin\/(website|homepage|navigation)\//;
-const ADMIN_ROOT = join(APP, "(admin)", "admin");
+const RETAINED = /^\(admin\)\/keystone\/(website|homepage|navigation)\//;
+const ADMIN_ROOT = join(APP, "(admin)", "keystone");
 
 /** The nearest loading.tsx at or above a page, stopping at the admin root. */
 function nearestLoading(pageDir: string): string | null {
@@ -32,20 +32,20 @@ function nearestLoading(pageDir: string): string | null {
   return null;
 }
 
-const ADMIN_PAGES = FILES.filter((file) => rel(file).startsWith("(admin)/admin/"))
+const ADMIN_PAGES = FILES.filter((file) => rel(file).startsWith("(admin)/keystone/"))
   .filter((file) => file.endsWith(`${sep}page.tsx`))
   .filter((file) => !RETAINED.test(rel(file)));
 
 /**
  * Screens that fall back to the generic spinner on purpose: the specimen
- * board renders nothing it waits on, and `/admin/social` and `/admin/ai`
+ * board renders nothing it waits on, and `/keystone/social` and `/keystone/ai`
  * (changes-51) only redirect.
  */
 const GENERIC_FALLBACK_OK = new Set([
-  "(admin)/admin/design-system/page.tsx",
-  "(admin)/admin/social/page.tsx",
-  "(admin)/admin/ai/page.tsx",
-  "(admin)/admin/ai/[...path]/page.tsx",
+  "(admin)/keystone/design-system/page.tsx",
+  "(admin)/keystone/social/page.tsx",
+  "(admin)/keystone/ai/page.tsx",
+  "(admin)/keystone/ai/[...path]/page.tsx",
 ]);
 
 describe("admin pending states (changes-21 Phase A)", () => {
@@ -69,7 +69,7 @@ describe("admin pending states (changes-21 Phase A)", () => {
   });
 
   it("route skeletons come from @repo/ui's page archetypes, not an app-local copy", () => {
-    expect(FILES.some((file) => rel(file) === "(admin)/admin/_components/skeletons.tsx")).toBe(
+    expect(FILES.some((file) => rel(file) === "(admin)/keystone/_components/skeletons.tsx")).toBe(
       false,
     );
     const local = FILES.filter((file) => source(file).includes("_components/skeletons")).map(rel);

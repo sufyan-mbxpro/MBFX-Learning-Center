@@ -5,7 +5,7 @@
 // It exists for two reasons. The person reading the page must never mistake
 // it for their own account — they are seeing someone else's progress and
 // someone else's name in the header. And the way back must be one press: the
-// learner session is refused by the `/admin` gate, so without this strip the
+// learner session is refused by the `/keystone` gate, so without this strip the
 // only exit would be waiting out the hour.
 //
 // "Return to admin" posts to `/api/auth/staff-impersonation/stop`, which
@@ -35,7 +35,7 @@ export function ImpersonationBanner() {
     const restored =
       response?.ok === true &&
       ((await response.json().catch(() => null)) as { restored?: boolean } | null)?.restored;
-    window.location.assign(restored ? "/admin/users" : "/keystone");
+    window.location.assign(restored ? "/keystone/users" : "/keystone");
   };
 
   return (

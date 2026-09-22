@@ -47,7 +47,7 @@ import { siteOrigin } from "@repo/utils";
 
 // ─── The transport ───────────────────────────────────────────
 
-export type EmailDriver = "SMTP" | "LOG";
+export type EmailDriver = "SMTP" | "SENDGRID" | "LOG";
 export type SmtpSecurityValue = "NONE" | "STARTTLS" | "TLS";
 
 /**
@@ -62,6 +62,8 @@ export interface EmailTransportView {
   security: SmtpSecurityValue;
   username: string | null;
   hasPassword: boolean;
+  /** SendGrid sandbox mode (ADR-152): validated by SendGrid, delivered to nobody. */
+  sandboxMode: boolean;
   lastVerifiedAt: Date | null;
   lastError: string | null;
   /** False means a saved password cannot be opened — the seal's key is absent. */
@@ -81,6 +83,7 @@ export async function loadEmailTransportView(): Promise<EmailTransportView> {
       port: true,
       security: true,
       username: true,
+      sandboxMode: true,
       lastVerifiedAt: true,
       lastError: true,
       passwordCipher: true,
@@ -94,6 +97,7 @@ export async function loadEmailTransportView(): Promise<EmailTransportView> {
     security: row?.security ?? "STARTTLS",
     username: row?.username ?? null,
     hasPassword: Boolean(row?.passwordCipher),
+    sandboxMode: row?.sandboxMode ?? false,
     lastVerifiedAt: row?.lastVerifiedAt ?? null,
     lastError: row?.lastError ?? null,
     secretKeyPresent: hasEmailSecretKey(),
@@ -117,7 +121,14 @@ export async function saveEmailTransport(
 ): Promise<void> {
   const before = await db.emailTransport.findUnique({
     where: { id: TRANSPORT_ID },
-    select: { driver: true, host: true, port: true, security: true, username: true },
+    select: {
+      driver: true,
+      host: true,
+      port: true,
+      security: true,
+      username: true,
+      sandboxMode: true,
+    },
   });
 
   const password = input.password?.trim() ?? "";
@@ -133,9 +144,11 @@ export async function saveEmailTransport(
     port: input.port ?? null,
     security: input.security,
     username: input.username || null,
+    sandboxMode: input.sandboxMode ?? false,
     updatedBy: actor.id,
-    // A new host or username invalidates what the last verify proved.
+    // A new driver, host or username invalidates what the last verify proved.
     ...(before &&
+    before.driver === input.driver &&
     before.host === (input.host || null) &&
     before.username === (input.username || null)
       ? {}
@@ -162,6 +175,7 @@ export async function saveEmailTransport(
         port: input.port ?? null,
         security: input.security,
         username: input.username || null,
+        sandboxMode: input.sandboxMode ?? false,
         // The intent, never the value.
         passwordChanged: cipher !== undefined,
       },

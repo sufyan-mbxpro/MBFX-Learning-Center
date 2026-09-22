@@ -153,33 +153,34 @@ describe("resolveRedirect — the open-redirect guard", () => {
   });
 
   it("accepts a same-origin path the surface allows", () => {
-    withSearch("?redirect=%2Fadmin%2Fusers");
-    expect(resolveRedirect("/admin", isAdminPath)).toBe("/admin/users");
+    withSearch("?redirect=%2Fkeystone%2Fusers");
+    expect(resolveRedirect("/keystone/dashboard", isAdminPath)).toBe("/keystone/users");
   });
 
-  it("the PUBLIC form never sends anyone into /admin, whatever ?redirect= says (ADR-052 §2)", () => {
-    withSearch("?redirect=%2Fadmin%2Fusers");
+  it("the PUBLIC form never sends anyone into the portal, whatever ?redirect= says (ADR-052 §2)", () => {
+    withSearch("?redirect=%2Fkeystone%2Fusers");
     expect(resolveRedirect("/", (path) => !isAdminPath(path))).toBe("/");
   });
 
   it("the ADMIN form only ever goes into the portal", () => {
     withSearch("?redirect=%2Fnews");
-    expect(resolveRedirect("/admin", isAdminPath)).toBe("/admin");
+    expect(resolveRedirect("/keystone/dashboard", isAdminPath)).toBe("/keystone/dashboard");
   });
 });
 
 describe("isAdminPath", () => {
-  it.each(["/admin", "/admin/", "/admin/users", "/admin/sign-in"])(
+  it.each(["/keystone", "/keystone/", "/keystone/users", "/keystone/dashboard"])(
     "%s is an admin path",
     (path) => {
       expect(isAdminPath(path)).toBe(true);
     },
   );
 
-  // The prefix trap: a public path that merely STARTS with the five
-  // characters "/admin" is not the portal, and blocking it would be a bug
-  // in the public form's redirect guard rather than a safety win.
-  it.each(["/administrator", "/admins", "/adminy/x", "/news"])(
+  // The prefix trap: a public path that merely STARTS with the characters
+  // "/keystone" is not the portal, and blocking it would be a bug in the
+  // public form's redirect guard rather than a safety win. The old `/admin`
+  // prefix is not the portal any more either (ADR-151).
+  it.each(["/keystones", "/keystone-debug", "/admin", "/admin/users", "/news"])(
     "%s is NOT an admin path",
     (path) => {
       expect(isAdminPath(path)).toBe(false);

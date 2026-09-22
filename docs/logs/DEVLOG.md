@@ -24042,3 +24042,68 @@ against the dev server: the classes render on the page.
 
 **Tests:** `newsletter-consent.test.ts` and `radius-scale.test.ts` pass.
 ESLint is clean on `footer.tsx`.
+
+## 2026-09-22 — changes-52: the whole staff portal is served under /keystone (ADR-151, Modules 04/09/14)
+
+**What shipped:** the owner asked for every admin page to be prefixed with
+`keystone`, and for `admin` to be removed from the addresses.
+
+- The route folders are renamed: `app/(admin)/admin` → `app/(admin)/keystone`
+  and `app/(admin-auth)/admin` → `app/(admin-auth)/keystone`. Every screen and
+  every admin route handler (`/keystone/api/*`) is served under the new
+  prefix.
+- `/keystone` is still the staff sign-in (ADR-146). The dashboard moves from
+  the `(dashboard)` group to `/keystone/dashboard`, which is also where
+  sign-in sends staff by default.
+- The three credential screens are now ordinary files, not proxy rewrites.
+  `STAFF_PUBLIC_PATHS` in `proxy.ts` is the closed, exact-match set that
+  skips the gate.
+- `/admin` and `/admin/*` answer 404, whether or not a session exists, and
+  never redirect: a redirect would print the new address.
+- `robots.txt` no longer lists the portal, because the file is public.
+- `isAdminPath` (the redirect guard on both sign-in forms) now means
+  `/keystone`.
+- `NEXT_PUBLIC_ADMIN_URL` is documented as `…/keystone`. `adminPortalBase`
+  still accepts an old value ending in `/admin`.
+- Migration `20260922140000_portal_at_keystone_changes52` rewrites stored
+  `Notification.href` values.
+- Every internal link in the apps and packages was rewritten, including
+  notification hrefs, search results and e2e paths. Better Auth's own
+  `/api/auth/admin/*` endpoints are untouched. Internal names (the `(admin)`
+  group, the `admin.*` catalog, `userType`, permission keys) are unchanged.
+
+**Decisions:** ADR-151 (amends ADR-006, architecture.md #7 and ADR-146 #1).
+
+**Tests:** `apps/web` vitest 2,843 pass and 1 fails. The failure is
+`changes-50-fixes.test.ts`'s footer-band assertion, which also fails on a
+clean checkout: it went stale after the changes-51 footer strip. `proxy.test.ts` was
+rewritten for the new prefix and for the `/admin` 404s. `@repo/auth`
+reset-url passes 11, `@repo/ui` layout-anatomy 27 and `@repo/core` cms/paths 3. `tsc` is clean in `web` after `next typegen`, and ESLint is clean on the
+changed entry points. The migration has not been applied here, and the dev
+server has not been re-checked against it.
+
+## 2026-09-22 — changes-53: SendGrid sandbox mode (ADR-152, Module 17)
+
+**Shipped:** SendGrid is now its own transport driver (`EmailDriver.SENDGRID`,
+`sendgridDriver` in `@repo/email`). It uses the v3 Mail Send API instead of
+SMTP, because `mail_settings.sandbox_mode` exists only there. A new
+`EmailTransport.sandboxMode` column drives it. Settings → Email → Delivery
+shows a "Sandbox mode" switch for SendGrid only, plus a warning while sandbox
+mode is saved on. The read-only summary names it too. A sandboxed send is
+logged as SENT with the reason "SendGrid sandbox mode — validated, not
+delivered". "Test connection" checks the key's `mail.send` scope. The key
+stays in `passwordCipher`, so there is no new secret. Migration
+`20260922150000_sendgrid_sandbox_changes53` adds the enum value and the
+column, and moves changes-49's SendGrid-over-SMTP rows to the new driver.
+
+**Decisions:** ADR-152 (amends changes-49's provider-not-driver choice and
+ADR-078 #2).
+
+**Tests:** `@repo/email` `transport.test.ts` passes 15, with new body, send,
+error and scope cases (`fetch` is stubbed at the global).
+`transport-db.integration` passes 8, with two new SendGrid cases.
+`send.integration` passes, as does `@repo/core` `email-admin.integration` (18).
+`@repo/contracts` `email.test` passes 37. The `apps/web` email-admin and
+admin-form conventions pass 773. `tsc` is clean in email, contracts, core and
+web, and ESLint is clean on the changed files. The migration was applied to
+the local database. No real SendGrid call has been made.

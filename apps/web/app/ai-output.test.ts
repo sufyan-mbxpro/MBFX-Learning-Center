@@ -13,9 +13,9 @@ import { join, relative, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const APP_ROOT = resolve(process.cwd(), "app");
-const AI_ROOT = join(APP_ROOT, "(admin)", "admin", "ai");
-const AI_ROUTE = join(APP_ROOT, "(admin)", "admin", "api", "ai");
-const AI_ACTIONS = join(APP_ROOT, "(admin)", "admin", "_actions", "ai-actions.ts");
+const AI_ROOT = join(APP_ROOT, "(admin)", "keystone", "ai");
+const AI_ROUTE = join(APP_ROOT, "(admin)", "keystone", "api", "ai");
+const AI_ACTIONS = join(APP_ROOT, "(admin)", "keystone", "_actions", "ai-actions.ts");
 const AI_PACKAGE = resolve(process.cwd(), "..", "..", "packages", "ai", "src");
 
 const stripped = (path: string) =>
@@ -34,16 +34,11 @@ function filesUnder(dir: string): string[] {
 
 // The editor-side affordances too: every `ai-*.tsx` under _components renders a
 // suggestion somewhere, and ADR-126's review dialog previews whole pages of it.
-const AI_COMPONENTS = readdirSync(join(APP_ROOT, "(admin)", "admin", "_components"))
+const AI_COMPONENTS = readdirSync(join(APP_ROOT, "(admin)", "keystone", "_components"))
   .filter((entry) => entry.startsWith("ai-") && entry.endsWith(".tsx"))
-  .map((entry) => join(APP_ROOT, "(admin)", "admin", "_components", entry));
+  .map((entry) => join(APP_ROOT, "(admin)", "keystone", "_components", entry));
 
-const AI_FILES = [
-  ...filesUnder(AI_ROOT),
-  ...filesUnder(AI_ROUTE),
-  AI_ACTIONS,
-  ...AI_COMPONENTS,
-];
+const AI_FILES = [...filesUnder(AI_ROOT), ...filesUnder(AI_ROUTE), AI_ACTIONS, ...AI_COMPONENTS];
 
 describe("no AI path reaches dangerouslySetInnerHTML", () => {
   it("has files to check", () => {

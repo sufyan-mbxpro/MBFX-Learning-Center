@@ -27,7 +27,7 @@ const ARTICLE_SLUG = "risk-management-protect-your-trading-capital";
 
 /**
  * A LEARNER, for the cross-surface probe ADR-006 left as a launch-gate item:
- * "learner session vs every `/admin/*` route and admin handler → 403/404,
+ * "learner session vs every `/keystone/*` route and admin handler → 403/404,
  * never 200".
  *
  * It has to be a real learner rather than an anonymous visitor, because those

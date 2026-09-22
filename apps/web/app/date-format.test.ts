@@ -18,7 +18,12 @@ const ROOT = resolve(process.cwd(), "app");
 
 // The cancelled Website Builder (ADR-042) is retained, not maintained. The
 // tool widgets format CLOCK times and numbers, not dates.
-const OUT_OF_SCOPE = ["admin/website/", "admin\\website\\", "tools/_widgets/", "tools\\_widgets\\"];
+const OUT_OF_SCOPE = [
+  "keystone/website/",
+  "keystone\\website\\",
+  "tools/_widgets/",
+  "tools\\_widgets\\",
+];
 
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {

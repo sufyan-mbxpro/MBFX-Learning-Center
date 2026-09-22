@@ -23,10 +23,10 @@ test.describe.configure({ mode: "serial" });
 
 test.describe("the AI area", () => {
   test("is one tabbed section under Settings, and the old URL lands on Usage", async ({ page }) => {
-    // changes-51: the AI area is Settings → AI. `/admin/ai` was the Usage
+    // changes-51: the AI area is Settings → AI. `/keystone/ai` was the Usage
     // screen (P9), so a bookmark to it still opens Usage.
-    await openAdminScreen(page, "/admin/ai");
-    await expect(page).toHaveURL(/\/admin\/settings\/ai\/usage$/);
+    await openAdminScreen(page, "/keystone/ai");
+    await expect(page).toHaveURL(/\/keystone\/settings\/ai\/usage$/);
     await expect(page.getByRole("heading", { level: 1, name: "AI" })).toBeVisible();
 
     const subNav = page.getByRole("navigation", { name: "AI" });
@@ -60,7 +60,7 @@ test.describe("the AI area", () => {
       expect(aiFeature(key)?.isEnabled, `${key} must ship disabled`).toBe(false);
     }
 
-    await openAdminScreen(page, "/admin/settings/ai/limits");
+    await openAdminScreen(page, "/keystone/settings/ai/limits");
     await expect(page.getByRole("switch", { name: "Enable AI features" })).not.toBeChecked();
   });
 
@@ -68,7 +68,7 @@ test.describe("the AI area", () => {
     const stamp = Date.now() % 900;
     const budget = `${100 + stamp}.50`;
 
-    await openAdminScreen(page, "/admin/settings/ai/limits");
+    await openAdminScreen(page, "/keystone/settings/ai/limits");
     await fillField(page.getByLabel("Monthly budget (USD)"), budget);
     await fillField(page.getByLabel("Warn at (% of budget)"), "75");
     await page.getByRole("button", { name: "Save" }).click();
@@ -85,7 +85,7 @@ test.describe("the AI area", () => {
     const siblingBefore = aiFeature("writing_assistant");
     const instruction = `British spelling, never use the word delve (${Date.now()})`;
 
-    await openAdminScreen(page, "/admin/settings/ai/features");
+    await openAdminScreen(page, "/keystone/settings/ai/features");
     // Six cards, one per registry key — the set is code (§7.1).
     await expect(page.getByRole("button", { name: "Save" })).toHaveCount(6);
 
@@ -112,10 +112,10 @@ test.describe("the AI area", () => {
   });
 
   for (const path of [
-    "/admin/settings/ai/usage",
-    "/admin/settings/ai/features",
-    "/admin/settings/ai/limits",
-    "/admin/settings/ai/providers",
+    "/keystone/settings/ai/usage",
+    "/keystone/settings/ai/features",
+    "/keystone/settings/ai/limits",
+    "/keystone/settings/ai/providers",
   ]) {
     test(`${path} passes axe`, async ({ page }) => {
       await openAdminScreen(page, path);
@@ -133,19 +133,19 @@ test.describe("AI, denied — asserted at the database", () => {
 
     // `seo_manager` is a real seeded role holding `analysis.view` and no AI
     // key at all, so the refusal under test is the one production produces.
-    await signInAsStaff(page, VIEWER_EMAIL, VIEWER_PASSWORD, "/admin");
+    await signInAsStaff(page, VIEWER_EMAIL, VIEWER_PASSWORD, "/keystone/dashboard");
 
     // The area's layout gate is `requireAnyPermission` over the three AI keys,
     // so this subject cannot even reach the screen. Plain `goto`, not
     // `openAdminScreen`: the point is that this page does not render, so there
     // is nothing of it to wait for.
-    await page.goto("/admin/settings/ai/features");
+    await page.goto("/keystone/settings/ai/features");
     await expect(page.getByLabel("Extra instructions").first()).toHaveCount(0);
 
     // Now bypass the UI entirely, the way a hostile client would — a hidden
-    // form is not security (security.md #1). `POST /admin/api/ai/run` is the
+    // form is not security (security.md #1). `POST /keystone/api/ai/run` is the
     // one generation endpoint, and the only door to a provider.
-    const run = await page.request.post("/admin/api/ai/run", {
+    const run = await page.request.post("/keystone/api/ai/run", {
       data: { feature: "summarization", action: "summarize", input: { text: "probe" } },
     });
     expect(

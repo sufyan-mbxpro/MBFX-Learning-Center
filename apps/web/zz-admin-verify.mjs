@@ -14,34 +14,34 @@ mkdirSync(SHOTS, { recursive: true });
 
 const BASE = "http://localhost:3000";
 const ROUTES = [
-  "/admin",
-  "/admin/users",
-  "@/admin/users",
-  "/admin/roles",
-  "@/admin/roles",
-  "/admin/employees",
-  "@/admin/employees",
-  "/admin/articles",
-  "@/admin/articles",
-  "/admin/articles/categories",
-  "/admin/articles/tags",
-  "/admin/glossary",
-  "@/admin/glossary",
-  "/admin/glossary/topics",
-  "/admin/learn/courses",
-  "@/admin/learn/courses",
-  "/admin/learn/lessons",
-  "/admin/learn/quizzes",
-  "/admin/learn/videos",
-  "/admin/learn/progress",
-  "/admin/media",
-  "/admin/settings",
-  "@/admin/settings",
-  "/admin/settings/social",
-  "/admin/features",
-  "/admin/theme",
-  "/admin/profile",
-  "/admin/design-system",
+  "/keystone/dashboard",
+  "/keystone/users",
+  "@/keystone/users",
+  "/keystone/roles",
+  "@/keystone/roles",
+  "/keystone/employees",
+  "@/keystone/employees",
+  "/keystone/articles",
+  "@/keystone/articles",
+  "/keystone/articles/categories",
+  "/keystone/articles/tags",
+  "/keystone/glossary",
+  "@/keystone/glossary",
+  "/keystone/glossary/topics",
+  "/keystone/learn/courses",
+  "@/keystone/learn/courses",
+  "/keystone/learn/lessons",
+  "/keystone/learn/quizzes",
+  "/keystone/learn/videos",
+  "/keystone/learn/progress",
+  "/keystone/media",
+  "/keystone/settings",
+  "@/keystone/settings",
+  "/keystone/settings/social",
+  "/keystone/features",
+  "/keystone/theme",
+  "/keystone/profile",
+  "/keystone/design-system",
 ];
 
 const browser = await chromium.launch();
@@ -51,7 +51,7 @@ const errors = [];
 page.on("console", (m) => m.type() === "error" && errors.push(m.text().slice(0, 160)));
 page.on("pageerror", (e) => errors.push(`pageerror: ${String(e).slice(0, 160)}`));
 
-await page.goto(`${BASE}/admin/sign-in`, { waitUntil: "load", timeout: 120_000 });
+await page.goto(`${BASE}/keystone`, { waitUntil: "load", timeout: 120_000 });
 await page.fill('input[type="email"]', email);
 await page.fill('input[type="password"]', password);
 await page.click('button[type="submit"]');
@@ -75,25 +75,39 @@ const probe = () =>
     const wide = [...d.querySelectorAll("body *")]
       .filter((el) => {
         const b = el.getBoundingClientRect();
-        return b.right > vw + 1 && b.width > 0 && getComputedStyle(el).position !== "fixed" && !clips(el);
+        return (
+          b.right > vw + 1 && b.width > 0 && getComputedStyle(el).position !== "fixed" && !clips(el)
+        );
       })
       .slice(0, 2)
-      .map((el) => `${el.tagName}.${(el.getAttribute("class") ?? "").slice(0, 60)}@${Math.round(el.getBoundingClientRect().right)}`);
+      .map(
+        (el) =>
+          `${el.tagName}.${(el.getAttribute("class") ?? "").slice(0, 60)}@${Math.round(el.getBoundingClientRect().right)}`,
+      );
     // Text cut off inside an overflow-hidden box that is not a deliberate truncation.
     const clipped = [...d.querySelectorAll("main *")]
       .filter((el) => {
         const cs = getComputedStyle(el);
         if (!(cs.overflowX === "hidden" || cs.overflow === "hidden")) return false;
         if (el.scrollWidth <= el.clientWidth + 2 || el.clientWidth === 0) return false;
-        if (cs.textOverflow === "ellipsis" || /truncate|line-clamp|sr-only|no-scrollbar/.test(el.className)) return false;
+        if (
+          cs.textOverflow === "ellipsis" ||
+          /truncate|line-clamp|sr-only|no-scrollbar/.test(el.className)
+        )
+          return false;
         return (el.innerText ?? "").trim().length > 0;
       })
       .slice(0, 2)
-      .map((el) => `${el.tagName}.${String(el.className).slice(0, 50)} +${el.scrollWidth - el.clientWidth}px "${el.innerText.trim().slice(0, 30)}"`);
+      .map(
+        (el) =>
+          `${el.tagName}.${String(el.className).slice(0, 50)} +${el.scrollWidth - el.clientWidth}px "${el.innerText.trim().slice(0, 30)}"`,
+      );
     const cs = title ? getComputedStyle(title) : null;
     return {
       h1s: h1.length,
-      title: title ? `${title.tagName} ${cs.fontSize}/${cs.fontWeight} "${title.textContent.trim().slice(0, 30)}"` : "NO PAGE HEADER",
+      title: title
+        ? `${title.tagName} ${cs.fontSize}/${cs.fontWeight} "${title.textContent.trim().slice(0, 30)}"`
+        : "NO PAGE HEADER",
       desc: desc ? `${getComputedStyle(desc).fontSize}` : "none",
       overflow: d.documentElement.scrollWidth - vw,
       wide,

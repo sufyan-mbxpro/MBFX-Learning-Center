@@ -23,7 +23,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const ADMIN_ROOT = resolve(process.cwd(), "app/(admin)");
-const PANEL = resolve(ADMIN_ROOT, "admin/_components/editor/content-status-panel.tsx");
+const PANEL = resolve(ADMIN_ROOT, "keystone/_components/editor/content-status-panel.tsx");
 
 function tsxFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {

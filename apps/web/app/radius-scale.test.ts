@@ -18,8 +18,8 @@ const ROOTS = [resolve(process.cwd(), "app"), resolve(process.cwd(), "../../pack
 // The Website Builder and the paused surfaces (ADR-042/038) are not brought up
 // to design conventions — the same carve-out every other guard here carries.
 const OUT_OF_SCOPE = ["website", "homepage", "navigation"].flatMap((dir) => [
-  `admin\\${dir}\\`,
-  `admin/${dir}/`,
+  `keystone\\${dir}\\`,
+  `keystone/${dir}/`,
 ]);
 
 function sourceFiles(dir: string): string[] {

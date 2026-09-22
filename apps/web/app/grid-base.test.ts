@@ -18,7 +18,7 @@ const ROOTS = [resolve(process.cwd(), "app"), resolve(process.cwd(), "../../pack
 
 // The cancelled Website Builder (ADR-042) and paused homepage composer
 // (ADR-038) are retained, not maintained — the same exclusion as the lint.
-const OUT_OF_SCOPE = ["website", "homepage"].flatMap((d) => [`admin\\${d}\\`, `admin/${d}/`]);
+const OUT_OF_SCOPE = ["website", "homepage"].flatMap((d) => [`keystone\\${d}\\`, `keystone/${d}/`]);
 
 function tsxFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {

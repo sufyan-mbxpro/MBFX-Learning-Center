@@ -19,8 +19,8 @@ const UI_COMPONENTS = resolve(process.cwd(), "../../packages/ui/src/components")
 // and the lint rule share. The design-system page is a showcase of the
 // primitives themselves (it renders a bare Label on purpose).
 const OUT_OF_SCOPE = ["website", "homepage", "design-system"].flatMap((dir) => [
-  `admin\\${dir}\\`,
-  `admin/${dir}/`,
+  `keystone\\${dir}\\`,
+  `keystone/${dir}/`,
 ]);
 
 function tsxFiles(dir: string): string[] {

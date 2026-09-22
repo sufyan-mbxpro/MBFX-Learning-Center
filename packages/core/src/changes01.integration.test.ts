@@ -357,7 +357,7 @@ describe("notifications", () => {
       userId: alice.id,
       type: "roleAssigned",
       detail: "Editor",
-      href: "/admin/profile",
+      href: "/keystone/profile",
     });
     expect(await notifications.countUnreadNotifications(alice.id)).toBe(1);
     const [row] = await notifications.listNotifications(alice.id);

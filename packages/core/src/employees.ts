@@ -244,7 +244,7 @@ export async function setEmployeeStatus(
         userId: before.userId,
         type: "employeeStatus",
         detail: status,
-        href: "/admin/profile",
+        href: "/keystone/profile",
       });
     }
   }

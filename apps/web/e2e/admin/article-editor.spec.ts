@@ -25,7 +25,7 @@ test.describe("article editor v2", () => {
     page,
   }) => {
     const before = seededArticle();
-    await openAdminScreen(page, `/admin/articles/${before.articleId}`);
+    await openAdminScreen(page, `/keystone/articles/${before.articleId}`);
 
     const stamp = Date.now();
     const newSeoTitle = `Forex Risk Management Guide ${stamp}`;
@@ -86,7 +86,7 @@ test.describe("article editor v2", () => {
     // sticky header, leaving the save button covered and unclickable.
     // Every other check in the repo passed while this was broken.
     const article = seededArticle();
-    await openAdminScreen(page, `/admin/articles/${article.articleId}`);
+    await openAdminScreen(page, `/keystone/articles/${article.articleId}`);
     await page.mouse.wheel(0, 1200);
 
     const save = page.getByRole("button", { name: HEADER_SAVE });
@@ -102,7 +102,7 @@ test.describe("article editor v2", () => {
 
   test("criterion 16 — the row menu's Set Featured writes to the DB", async ({ page }) => {
     const before = seededArticle();
-    await openAdminScreen(page, "/admin/articles");
+    await openAdminScreen(page, "/keystone/articles");
 
     // The seeded article's OWN row, by its title. `.first()` was what this
     // said, and it happened to be the right row — the tools spec had the same
@@ -150,7 +150,12 @@ test.describe("criterion 15 — permission denied, asserted at the DB", () => {
 
     // The STAFF credential screen (ADR-052) — this subject IS staff, just
     // staff without article write permission.
-    await signInAsStaff(page, VIEWER_EMAIL, VIEWER_PASSWORD, `/admin/articles/${before.articleId}`);
+    await signInAsStaff(
+      page,
+      VIEWER_EMAIL,
+      VIEWER_PASSWORD,
+      `/keystone/articles/${before.articleId}`,
+    );
 
     // `seo_manager` holds `analysis.view`, and the page gate is
     // `requireAnyPermission(["analysis.view", "news.manage"])` — so the editor
@@ -158,7 +163,7 @@ test.describe("criterion 15 — permission denied, asserted at the DB", () => {
     // form fills, and `saveArticleAction`'s own
     // `requireAnyPermission(["analysis.update", "news.manage"])` is the thing
     // standing between this subject and the row (security.md #1).
-    await openAdminScreen(page, `/admin/articles/${before.articleId}`);
+    await openAdminScreen(page, `/keystone/articles/${before.articleId}`);
     // Anchored: a loose "Title" also matches "SEO title", and both fields are
     // in the DOM at once (the SEO panel is a tab, not a separate page). The
     // optional `*` is ADR-077's required marker, which lives in the label's
@@ -176,7 +181,7 @@ test.describe("criterion 15 — permission denied, asserted at the DB", () => {
     // the page renders. The database below is the assertion.
     await page.evaluate(async (articleId) => {
       try {
-        await fetch(`/admin/articles/${articleId}`, {
+        await fetch(`/keystone/articles/${articleId}`, {
           method: "POST",
           headers: { "Content-Type": "text/plain;charset=UTF-8" },
           body: JSON.stringify([{ articleId, meta: {}, translation: {} }]),

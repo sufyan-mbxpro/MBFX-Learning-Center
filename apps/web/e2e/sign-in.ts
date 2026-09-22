@@ -15,9 +15,9 @@ export async function signInAsStaff(
   page: Page,
   email: string,
   password: string,
-  redirectTo = "/admin",
+  redirectTo = "/keystone/dashboard",
 ): Promise<void> {
-  await page.goto(`/admin/sign-in?redirect=${encodeURIComponent(redirectTo)}`);
+  await page.goto(`/keystone?redirect=${encodeURIComponent(redirectTo)}`);
   await waitForHydration(page, "#admin-signin-email");
 
   await page.getByLabel("Email", { exact: true }).fill(email);

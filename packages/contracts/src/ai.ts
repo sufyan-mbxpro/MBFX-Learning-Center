@@ -1004,7 +1004,7 @@ export type AiFormSuggestion = Record<
 // ─── The run endpoint ────────────────────────────────────────
 
 /**
- * What `POST /admin/api/ai/run` accepts.
+ * What `POST /keystone/api/ai/run` accepts.
  *
  * The payload is `unknown` here on purpose: the handler resolves the feature
  * first and then parses the payload with that feature's own schema, which is

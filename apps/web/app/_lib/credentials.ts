@@ -190,9 +190,9 @@ export function resolveRedirect(fallback: string, isAllowed: (path: string) => b
   return isAllowed(target) ? target : fallback;
 }
 
-/** True for `/admin` and anything under it — the staff portal's own paths. */
+/** True for `/keystone` and anything under it — the staff portal's own paths (ADR-151). */
 export function isAdminPath(path: string): boolean {
-  return path === "/admin" || path.startsWith("/admin/");
+  return path === "/keystone" || path.startsWith("/keystone/");
 }
 
 // ─── Password recovery and verification (ADR-079) ────────────

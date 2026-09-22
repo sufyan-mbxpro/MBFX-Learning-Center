@@ -1,6 +1,7 @@
-// The transport seam (ADR-078 #2). Two implementations today — SMTP and the
-// log driver Module 04's `logEmail()` becomes — so a provider API driver, or
-// the changes-12 worker, replaces an implementation and nothing else.
+// The transport seam (ADR-078 #2). Three implementations today — SMTP,
+// SendGrid's v3 Web API (ADR-152) and the log driver Module 04's `logEmail()`
+// becomes — so another provider, or the changes-12 worker, replaces an
+// implementation and nothing else.
 import { createTransport } from "nodemailer";
 import { db } from "@repo/db";
 import { openSecret } from "./secret.ts";
@@ -19,9 +20,19 @@ export interface OutgoingEmail {
   headers?: Record<string, string> | undefined;
 }
 
+export interface SentEmail {
+  messageId: string;
+  /**
+   * True when the provider VALIDATED the message and delivered nothing
+   * (SendGrid sandbox mode, ADR-152). The delivery log says so, because a SENT
+   * row that reached no inbox is otherwise indistinguishable from one that did.
+   */
+  sandbox?: boolean;
+}
+
 export interface EmailTransportDriver {
-  readonly kind: "smtp" | "log" | "memory";
-  send(message: OutgoingEmail): Promise<{ messageId: string }>;
+  readonly kind: "smtp" | "sendgrid" | "log" | "memory";
+  send(message: OutgoingEmail): Promise<SentEmail>;
   /** Throws when the transport cannot be reached or authenticated. */
   verify(): Promise<void>;
 }
@@ -77,6 +88,95 @@ export function smtpDriver(config: SmtpConfig): EmailTransportDriver {
   };
 }
 
+// ─── SendGrid (ADR-152) ─────────────────────────────────────
+
+const SENDGRID_API = "https://api.sendgrid.com/v3";
+
+export interface SendgridConfig {
+  apiKey: string;
+  /** `mail_settings.sandbox_mode` — validated by SendGrid, delivered to nobody. */
+  sandbox: boolean;
+}
+
+/**
+ * The v3 Mail Send body, exported for its test. Pure: the whole reason this
+ * driver exists is one field in it, and that field is checked here rather
+ * than through a network call.
+ *
+ * `text/plain` must precede `text/html` — SendGrid rejects the other order.
+ * `reply_to` and `headers` are omitted rather than sent empty: SendGrid 400s
+ * on an empty `reply_to.email`.
+ */
+export function sendgridMailBody(message: OutgoingEmail, sandbox: boolean) {
+  return {
+    personalizations: [{ to: [{ email: message.to }] }],
+    from: { email: message.from.address, name: message.from.name },
+    ...(message.replyTo ? { reply_to: { email: message.replyTo } } : {}),
+    subject: message.subject,
+    content: [
+      { type: "text/plain", value: message.text },
+      { type: "text/html", value: message.html },
+    ],
+    ...(message.headers ? { headers: message.headers } : {}),
+    mail_settings: { sandbox_mode: { enable: sandbox } },
+  };
+}
+
+/**
+ * SendGrid over HTTPS rather than SMTP, because `sandbox_mode` exists on the
+ * v3 Mail Send API and nowhere else. Plain `fetch`: one POST does not earn an
+ * SDK in the dependency graph.
+ */
+export function sendgridDriver(config: SendgridConfig): EmailTransportDriver {
+  const headers = {
+    Authorization: `Bearer ${config.apiKey}`,
+    "Content-Type": "application/json",
+  };
+  return {
+    kind: "sendgrid",
+    async send(message) {
+      const response = await fetch(`${SENDGRID_API}/mail/send`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(sendgridMailBody(message, config.sandbox)),
+      });
+      // 202 = queued for delivery; 200 = accepted in sandbox mode.
+      if (!response.ok) throw new Error(await sendgridError(response));
+      const id = response.headers.get("x-message-id");
+      return config.sandbox
+        ? { messageId: id ?? `sandbox-${randomId()}`, sandbox: true }
+        : { messageId: id ?? `sendgrid-${randomId()}` };
+    },
+    async verify() {
+      // A key can authenticate and still be unable to send (a read-only key),
+      // so "Test connection" asks what the key may DO, not merely whether it
+      // is accepted. Sends nothing, so it is safe with sandbox mode off.
+      const response = await fetch(`${SENDGRID_API}/scopes`, { headers });
+      if (!response.ok) throw new Error(await sendgridError(response));
+      const body = (await response.json()) as { scopes?: unknown };
+      const scopes = Array.isArray(body.scopes) ? body.scopes : [];
+      if (!scopes.includes("mail.send")) {
+        throw new Error("SendGrid: this API key has no Mail Send permission.");
+      }
+    },
+  };
+}
+
+/** SendGrid's own message, never the raw body — it can echo the request. */
+async function sendgridError(response: Response): Promise<string> {
+  let detail = "";
+  try {
+    const body = (await response.json()) as { errors?: { message?: unknown }[] };
+    detail = (body.errors ?? [])
+      .map((error) => (typeof error.message === "string" ? error.message : ""))
+      .filter(Boolean)
+      .join("; ");
+  } catch {
+    // Not JSON — the status line is all there is.
+  }
+  return `SendGrid ${response.status}${detail ? `: ${detail}` : ""}`;
+}
+
 /**
  * What runs until SMTP is configured. It is how a developer reads a reset
  * link, and it is the reason an unconfigured install degrades to "no mail"
@@ -110,9 +210,14 @@ function randomId(): string {
  */
 export async function loadTransportDriver(): Promise<EmailTransportDriver> {
   const row = await db.emailTransport.findUnique({ where: { id: TRANSPORT_ID } });
-  // An incomplete SMTP row falls back to the log driver rather than throwing:
+  // An incomplete row falls back to the log driver rather than throwing:
   // a half-filled form must not take sign-up down with it.
-  if (!row || row.driver === "LOG" || !row.host || !row.port) return logDriver();
+  if (!row || row.driver === "LOG") return logDriver();
+  if (row.driver === "SENDGRID") {
+    if (!row.passwordCipher) return logDriver();
+    return sendgridDriver({ apiKey: openSecret(row.passwordCipher), sandbox: row.sandboxMode });
+  }
+  if (!row.host || !row.port) return logDriver();
   return smtpDriver({
     host: row.host,
     port: row.port,

@@ -11,7 +11,7 @@ import { ForgotPasswordForm } from "./forgot-password-form.tsx";
 //
 // The address typed here does NOT decide where the link points: `@repo/auth`'s
 // `sendResetPassword` routes by `user.userType`, so a staff member who types
-// their address into this form still receives an /admin link and a learner who
+// their address into this form still receives an /keystone link and a learner who
 // types theirs into the staff form still receives a public one (ADR-079 #2).
 // An attacker choosing the surface therefore chooses nothing.
 export async function generateMetadata({

@@ -1,6 +1,6 @@
 // CMS page/version/redirect contracts (ADR-021, ADR-032 §6). Every
 // mutation in packages/core/src/cms/* and every server action in
-// apps/web/app/(admin)/admin/website/* parses its input through these
+// apps/web/app/(admin)/keystone/website/* parses its input through these
 // before the service runs (security.md #6 — parse, don't spread).
 import { z } from "zod";
 import { featureVisibilitySchema, layoutTreeSchema } from "./layout.ts";

@@ -15,13 +15,13 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const ADMIN_ROOT = resolve(process.cwd(), "app/(admin)");
-const COMPONENTS = resolve(ADMIN_ROOT, "admin/_components");
+const COMPONENTS = resolve(ADMIN_ROOT, "keystone/_components");
 
 // The Website Builder (ADR-042), the homepage composer and the navigation
 // reorder screen (ADR-038) — the surfaces ADR-044 leaves out.
 const OUT_OF_SCOPE = ["website", "homepage", "navigation"].flatMap((dir) => [
-  `admin\\${dir}\\`,
-  `admin/${dir}/`,
+  `keystone\\${dir}\\`,
+  `keystone/${dir}/`,
 ]);
 
 function tsxFiles(dir: string): string[] {
@@ -116,7 +116,7 @@ describe("changes-20 Phase 5 — the admin frame is @repo/ui", () => {
 });
 
 describe("ADR-044 #5 — the breadcrumb never prints a record id", () => {
-  // Admin visual pass: /admin/users/<cuid> rendered "zwV2IP9bE6Ff…" as its
+  // Admin visual pass: /keystone/users/<cuid> rendered "zwV2IP9bE6Ff…" as its
   // last crumb. The record's name is the page's h1; the crumb says "Details".
   const src = readFileSync(resolve(COMPONENTS, "breadcrumbs.tsx"), "utf8");
 
@@ -134,7 +134,7 @@ describe("ADR-044 #5 — the breadcrumb never prints a record id", () => {
 });
 
 describe("the breadcrumb never links to a route that does not exist", () => {
-  // Admin visual pass: "Learning" linked to /admin/learn, which has no page.
+  // Admin visual pass: "Learning" linked to /keystone/learn, which has no page.
   // Every static admin folder with no page.tsx must be a GROUP segment
   // (rendered as text); a new such folder fails here until it is listed.
   const src = readFileSync(resolve(COMPONENTS, "breadcrumbs.tsx"), "utf8");
@@ -143,11 +143,11 @@ describe("the breadcrumb never links to a route that does not exist", () => {
       ...(src.match(/GROUP_SEGMENTS = new Set\(\[([^\]]*)\]\)/)?.[1] ?? "").matchAll(/"([^"]+)"/g),
     ].map((m) => m[1]),
   );
-  const ADMIN = resolve(ADMIN_ROOT, "admin");
+  const ADMIN = resolve(ADMIN_ROOT, "keystone");
   /**
    * Does this folder answer its own URL? Its own `page.tsx`, or one inside a
    * route GROUP it contains — `(group)` adds no URL segment, so
-   * `articles/(browse)/page.tsx` is what `/admin/articles` renders (ADR-106).
+   * `articles/(browse)/page.tsx` is what `/keystone/articles` renders (ADR-106).
    * Reading only the folder's own `page.tsx` called that a dead crumb.
    */
   const hasPage = (dir: string): boolean =>
@@ -166,12 +166,12 @@ describe("the breadcrumb never links to a route that does not exist", () => {
           // screens.
           !/^[_[(%]/.test(e.name) &&
           e.name !== "api" &&
-          !OUT_OF_SCOPE.some((f) => `admin/${rel}${e.name}/`.includes(f)),
+          !OUT_OF_SCOPE.some((f) => `keystone/${rel}${e.name}/`.includes(f)),
       )
       .flatMap((e) => {
         const path = resolve(dir, e.name);
         // Or a SIBLING group answers it: `glossary/topics/` holds only the
-        // `[id]` editor, and `/admin/glossary/topics` is the tab at
+        // `[id]` editor, and `/keystone/glossary/topics` is the tab at
         // `glossary/(browse)/topics/page.tsx` (changes-48 #3).
         const answered =
           hasPage(path) ||
@@ -197,7 +197,7 @@ describe("the breadcrumb never links to a route that does not exist", () => {
 
 describe("the design-system board has one h1", () => {
   const src = readFileSync(
-    resolve(ADMIN_ROOT, "admin/design-system/design-system-client.tsx"),
+    resolve(ADMIN_ROOT, "keystone/design-system/design-system-client.tsx"),
     "utf8",
   );
 
@@ -270,14 +270,14 @@ describe("ADR-140 §3 — an editor's heading is static, and its actions share t
   ];
 
   it.each(EDITORS)("%s portals its actions into the heading row", (file) => {
-    const src = readFileSync(resolve(ADMIN_ROOT, "admin", file), "utf8");
+    const src = readFileSync(resolve(ADMIN_ROOT, "keystone", file), "utf8");
     expect(src).toContain("<HeaderActions>");
     // The old free-standing sticky bar under the heading.
     expect(src).not.toMatch(/sticky top-\(--height-header\)/);
   });
 
   it.each(EDITORS)("%s's page renders the pinned EditorPage frame", (file) => {
-    const page = resolve(ADMIN_ROOT, "admin", file.replace(/[^/]+$/, "page.tsx"));
+    const page = resolve(ADMIN_ROOT, "keystone", file.replace(/[^/]+$/, "page.tsx"));
     expect(readFileSync(page, "utf8")).toContain("<EditorPage");
   });
 });

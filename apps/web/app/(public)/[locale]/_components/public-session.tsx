@@ -30,7 +30,7 @@
 // Putting "System Administrator" in the public header both advertises the
 // portal the public site deliberately hides and hands a visitor an identity
 // chip with nowhere to go. Display-only — the session is untouched, and
-// `/admin` still recognises it. Applied HERE, once, so every consumer inherits
+// `/keystone` still recognises it. Applied HERE, once, so every consumer inherits
 // it rather than each remembering to.
 //
 // ─── Refreshing after a change on the account page (ADR-125 §3) ──────────

@@ -4,12 +4,12 @@ import { waitForHydration } from "../hydration.ts";
 
 // The single-app cross-surface probe (ADR-006 consequence, testing.md #4,
 // hardening SKILL.md's launch gate): **a learner session against every
-// `/admin/*` route and admin handler → never 200.**
+// `/keystone/*` route and admin handler → never 200.**
 //
 // It was the one blocking launch-gate item with no test at all. ADR-006 put
 // the public site and the admin portal in ONE Next.js app on ONE origin, and
 // named this probe as the price of that: with two apps a learner simply cannot
-// reach `/admin`, and with one app the only thing standing between them is
+// reach `/keystone`, and with one app the only thing standing between them is
 // code we wrote.
 //
 // A LEARNER, not an anonymous visitor, on purpose. The two are refused by
@@ -24,7 +24,7 @@ import { waitForHydration } from "../hydration.ts";
 // inherit the admin storageState.
 
 /**
- * Every routed `/admin` page. Kept as a literal list rather than globbed at
+ * Every routed `/keystone` page. Kept as a literal list rather than globbed at
  * runtime: a probe that discovers its own targets stops covering a route the
  * moment the discovery breaks, and reads green while doing it. `admin-surface.
  * test.ts` is what fails when this list and the tree disagree.
@@ -53,57 +53,57 @@ const PROBE_PNG = {
 };
 
 const ADMIN_PAGES = [
-  "/admin",
-  "/admin/ai",
-  "/admin/settings/ai",
-  "/admin/settings/ai/usage",
-  "/admin/settings/ai/features",
-  "/admin/settings/ai/limits",
-  "/admin/settings/ai/providers",
-  "/admin/settings/ai/providers/new",
-  `/admin/settings/ai/providers/${PLACEHOLDER_ID}`,
-  "/admin/articles",
-  "/admin/articles/categories",
-  "/admin/articles/tags",
-  `/admin/articles/${PLACEHOLDER_ID}`,
-  "/admin/design-system",
-  "/admin/employees",
-  `/admin/employees/${PLACEHOLDER_ID}`,
-  "/admin/glossary",
-  "/admin/glossary/topics",
-  `/admin/glossary/${PLACEHOLDER_ID}`,
-  "/admin/homepage",
-  "/admin/learn/courses",
-  "/admin/learn/lessons",
-  "/admin/learn/progress",
-  "/admin/learn/quizzes",
-  "/admin/learn/videos",
-  "/admin/learn/videos/categories",
-  "/admin/market",
-  "/admin/market/provider",
-  "/admin/media",
-  "/admin/navigation",
-  "/admin/newsletter",
-  "/admin/profile",
-  "/admin/roles",
-  "/admin/settings",
-  "/admin/settings/email",
-  "/admin/settings/email/delivery",
-  "/admin/settings/email/newsletter",
-  "/admin/settings/email/log",
-  "/admin/settings/email/templates",
-  "/admin/settings/social",
-  "/admin/social",
-  "/admin/theme",
-  "/admin/tools",
-  "/admin/users",
-  "/admin/website",
-  "/admin/website/pages",
-  "/admin/website/redirects",
+  "/keystone/dashboard",
+  "/keystone/ai",
+  "/keystone/settings/ai",
+  "/keystone/settings/ai/usage",
+  "/keystone/settings/ai/features",
+  "/keystone/settings/ai/limits",
+  "/keystone/settings/ai/providers",
+  "/keystone/settings/ai/providers/new",
+  `/keystone/settings/ai/providers/${PLACEHOLDER_ID}`,
+  "/keystone/articles",
+  "/keystone/articles/categories",
+  "/keystone/articles/tags",
+  `/keystone/articles/${PLACEHOLDER_ID}`,
+  "/keystone/design-system",
+  "/keystone/employees",
+  `/keystone/employees/${PLACEHOLDER_ID}`,
+  "/keystone/glossary",
+  "/keystone/glossary/topics",
+  `/keystone/glossary/${PLACEHOLDER_ID}`,
+  "/keystone/homepage",
+  "/keystone/learn/courses",
+  "/keystone/learn/lessons",
+  "/keystone/learn/progress",
+  "/keystone/learn/quizzes",
+  "/keystone/learn/videos",
+  "/keystone/learn/videos/categories",
+  "/keystone/market",
+  "/keystone/market/provider",
+  "/keystone/media",
+  "/keystone/navigation",
+  "/keystone/newsletter",
+  "/keystone/profile",
+  "/keystone/roles",
+  "/keystone/settings",
+  "/keystone/settings/email",
+  "/keystone/settings/email/delivery",
+  "/keystone/settings/email/newsletter",
+  "/keystone/settings/email/log",
+  "/keystone/settings/email/templates",
+  "/keystone/settings/social",
+  "/keystone/social",
+  "/keystone/theme",
+  "/keystone/tools",
+  "/keystone/users",
+  "/keystone/website",
+  "/keystone/website/pages",
+  "/keystone/website/redirects",
 ];
 
 /**
- * Every `/admin/api` route handler, probed with the METHOD it actually
+ * Every `/keystone/api` route handler, probed with the METHOD it actually
  * implements and a body a permitted caller would be served for.
  *
  * Probing `GET` on a POST-only handler would score a 405 and prove nothing, so
@@ -119,37 +119,37 @@ const ADMIN_HANDLERS: {
   /** A multipart upload, which is how the three upload handlers are called. */
   multipart?: Record<string, string | { name: string; mimeType: string; buffer: Buffer }>;
 }[] = [
-  { path: "/admin/api/media?include=facets,recent", method: "GET" },
-  { path: "/admin/api/newsletter/export", method: "GET" },
+  { path: "/keystone/api/media?include=facets,recent", method: "GET" },
+  { path: "/keystone/api/newsletter/export", method: "GET" },
   // ADR-128: the idle watcher's two reads. STAFF-only, no permission key —
   // a learner's session must not learn its own expiry through the admin.
-  { path: "/admin/api/session", method: "GET" },
-  { path: "/admin/api/session/activity", method: "GET" },
+  { path: "/keystone/api/session", method: "GET" },
+  { path: "/keystone/api/session/activity", method: "GET" },
   {
     // POST, not GET — the body is an unsaved draft (ADR-078 #8).
-    path: "/admin/api/email/preview",
+    path: "/keystone/api/email/preview",
     method: "POST",
     body: { key: "password_reset", locale: "en" },
   },
   {
-    path: "/admin/api/ai/run",
+    path: "/keystone/api/ai/run",
     method: "POST",
     body: { feature: "writing_assistant", action: "improve", input: { text: "probe" } },
   },
   {
-    path: "/admin/api/uploads/image",
+    path: "/keystone/api/uploads/image",
     method: "POST",
     multipart: { purpose: "article", category: "news", file: PROBE_PNG },
   },
   {
-    path: "/admin/api/uploads/media",
+    path: "/keystone/api/uploads/media",
     method: "POST",
     multipart: { purpose: "content", category: "general", file: PROBE_PNG },
   },
   {
     // The replace endpoint. The id is a placeholder: a learner must be refused
     // before the route asks whether the asset exists.
-    path: `/admin/api/uploads/media/${PLACEHOLDER_ID}`,
+    path: `/keystone/api/uploads/media/${PLACEHOLDER_ID}`,
     method: "POST",
     multipart: { purpose: "content", category: "general", file: PROBE_PNG },
   },
@@ -177,7 +177,7 @@ test.describe("a learner session cannot reach the admin portal", () => {
     context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
     page = await context.newPage();
 
-    // The LEARNER screen (ADR-052) — the public site names no /admin path, and
+    // The LEARNER screen (ADR-052) — the public site names no /keystone path, and
     // a learner reaching the portal must not need to have visited one.
     await page.goto("/sign-in");
     await waitForHydration(page, "#signin-email");
@@ -193,7 +193,7 @@ test.describe("a learner session cannot reach the admin portal", () => {
     ]);
 
     // The probe is worthless without this: the whole point is a subject who IS
-    // signed in. An assertion that /admin refuses a session that does not
+    // signed in. An assertion that /keystone refuses a session that does not
     // exist tests nothing.
     const session = await page.request.get("/api/auth/get-session");
     expect(session.status(), "the learner must hold a real session").toBe(200);
@@ -223,7 +223,7 @@ test.describe("a learner session cannot reach the admin portal", () => {
       // here would be a 200 for the admin shell.
       await expect
         .poll(() => new URL(page.url()).pathname, { timeout: 15_000 })
-        .not.toMatch(/^\/admin(?!\/sign-in)/);
+        .not.toMatch(/^\/keystone\//);
 
       // And nothing of the portal rendered on the way. `AdminShell`'s primary
       // navigation is the tell.

@@ -18,7 +18,7 @@ import { describe, expect, it } from "vitest";
 
 const APP_ROOT = resolve(process.cwd(), "app");
 // changes-51: the AI screens are Settings → AI.
-const AI_ROOT = join(APP_ROOT, "(admin)", "admin", "settings", "ai");
+const AI_ROOT = join(APP_ROOT, "(admin)", "keystone", "settings", "ai");
 
 const raw = (path: string) => readFileSync(path, "utf8");
 
@@ -135,15 +135,15 @@ describe("the usage log holds no bodies, and the screen says so", () => {
 
 describe("B1 — the writing assistant is a PROP, not a flag", () => {
   const editor = readFileSync(
-    join(APP_ROOT, "(admin)", "admin", "_components", "rich-text-editor.tsx"),
+    join(APP_ROOT, "(admin)", "keystone", "_components", "rich-text-editor.tsx"),
     "utf8",
   );
   const assistant = readFileSync(
-    join(APP_ROOT, "(admin)", "admin", "_components", "ai-assistant.tsx"),
+    join(APP_ROOT, "(admin)", "keystone", "_components", "ai-assistant.tsx"),
     "utf8",
   );
   const articlePage = readFileSync(
-    join(APP_ROOT, "(admin)", "admin", "articles", "[id]", "page.tsx"),
+    join(APP_ROOT, "(admin)", "keystone", "articles", "[id]", "page.tsx"),
     "utf8",
   );
 
@@ -195,9 +195,11 @@ describe("B2 — auto-SEO reviews before it applies", () => {
   // `stripped`, not raw: the file's own comment has to NAME `ogImageUrl` in
   // order to explain why the dialog does not offer it, and a guard that trips
   // on its own explanation teaches the next reader to delete the explanation.
-  const dialog = stripped(join(APP_ROOT, "(admin)", "admin", "_components", "ai-seo-dialog.tsx"));
+  const dialog = stripped(
+    join(APP_ROOT, "(admin)", "keystone", "_components", "ai-seo-dialog.tsx"),
+  );
   const editor = readFileSync(
-    join(APP_ROOT, "(admin)", "admin", "articles", "[id]", "article-editor.tsx"),
+    join(APP_ROOT, "(admin)", "keystone", "articles", "[id]", "article-editor.tsx"),
     "utf8",
   );
 
@@ -228,7 +230,7 @@ describe("B2 — auto-SEO reviews before it applies", () => {
 
   it("appears per FEATURE, so SEO can be on while the assistant is off", () => {
     const page = readFileSync(
-      join(APP_ROOT, "(admin)", "admin", "articles", "[id]", "page.tsx"),
+      join(APP_ROOT, "(admin)", "keystone", "articles", "[id]", "page.tsx"),
       "utf8",
     );
     expect(page).toContain("availability.features.seo_generation");
@@ -236,7 +238,7 @@ describe("B2 — auto-SEO reviews before it applies", () => {
   });
 
   it("reaches the SEO section of every editor that has one, in the article's format", () => {
-    const admin = join(APP_ROOT, "(admin)", "admin");
+    const admin = join(APP_ROOT, "(admin)", "keystone");
     const editors: [string, string][] = [
       [join(admin, "learn", "courses", "[id]", "course-editor.tsx"), "courses.update"],
       [join(admin, "learn", "lessons", "[id]", "lesson-editor.tsx"), "lessons.update"],
@@ -263,14 +265,14 @@ describe("B2 — auto-SEO reviews before it applies", () => {
 
 describe("B3 — a machine translation says so until a human reads it", () => {
   const button = stripped(
-    join(APP_ROOT, "(admin)", "admin", "_components", "ai-translate-button.tsx"),
+    join(APP_ROOT, "(admin)", "keystone", "_components", "ai-translate-button.tsx"),
   );
   const editor = readFileSync(
-    join(APP_ROOT, "(admin)", "admin", "articles", "[id]", "article-editor.tsx"),
+    join(APP_ROOT, "(admin)", "keystone", "articles", "[id]", "article-editor.tsx"),
     "utf8",
   );
   const types = readFileSync(
-    join(APP_ROOT, "(admin)", "admin", "articles", "[id]", "editor-types.ts"),
+    join(APP_ROOT, "(admin)", "keystone", "articles", "[id]", "editor-types.ts"),
     "utf8",
   );
 
@@ -310,9 +312,11 @@ describe("B3 — a machine translation says so until a human reads it", () => {
 });
 
 describe("B4 — the takeaways list is an ordinary field", () => {
-  const field = stripped(join(APP_ROOT, "(admin)", "admin", "_components", "takeaways-field.tsx"));
+  const field = stripped(
+    join(APP_ROOT, "(admin)", "keystone", "_components", "takeaways-field.tsx"),
+  );
   const editor = readFileSync(
-    join(APP_ROOT, "(admin)", "admin", "articles", "[id]", "article-editor.tsx"),
+    join(APP_ROOT, "(admin)", "keystone", "articles", "[id]", "article-editor.tsx"),
     "utf8",
   );
   const articlePage = readFileSync(
@@ -351,9 +355,11 @@ describe("B4 — the takeaways list is an ordinary field", () => {
 });
 
 describe("B5 — alt text suggests, and the bulk screen writes nothing", () => {
-  const review = stripped(join(APP_ROOT, "(admin)", "admin", "media", "alt-text-review.tsx"));
-  const library = stripped(join(APP_ROOT, "(admin)", "admin", "_components", "media-library.tsx"));
-  const page = readFileSync(join(APP_ROOT, "(admin)", "admin", "media", "page.tsx"), "utf8");
+  const review = stripped(join(APP_ROOT, "(admin)", "keystone", "media", "alt-text-review.tsx"));
+  const library = stripped(
+    join(APP_ROOT, "(admin)", "keystone", "_components", "media-library.tsx"),
+  );
+  const page = readFileSync(join(APP_ROOT, "(admin)", "keystone", "media", "page.tsx"), "utf8");
   // Stripped: the service's own comments have to NAME `sharp` and
   // `Promise.all` in order to explain why neither is used, and a guard that
   // trips on its own explanation teaches the next reader to delete it.
@@ -411,13 +417,15 @@ describe("B5 — alt text suggests, and the bulk screen writes nothing", () => {
 });
 
 describe("B6 — a generated quiz is unsaved until somebody saves it", () => {
-  const dialog = stripped(join(APP_ROOT, "(admin)", "admin", "_components", "ai-quiz-dialog.tsx"));
+  const dialog = stripped(
+    join(APP_ROOT, "(admin)", "keystone", "_components", "ai-quiz-dialog.tsx"),
+  );
   const editor = readFileSync(
-    join(APP_ROOT, "(admin)", "admin", "learn", "quizzes", "[id]", "quiz-editor.tsx"),
+    join(APP_ROOT, "(admin)", "keystone", "learn", "quizzes", "[id]", "quiz-editor.tsx"),
     "utf8",
   );
   const page = readFileSync(
-    join(APP_ROOT, "(admin)", "admin", "learn", "quizzes", "[id]", "page.tsx"),
+    join(APP_ROOT, "(admin)", "keystone", "learn", "quizzes", "[id]", "page.tsx"),
     "utf8",
   );
 
@@ -479,7 +487,7 @@ describe("the sealed key reaches no screen", () => {
 });
 
 describe("ADR-126 — a brief fills the form, and nothing is saved until Save", () => {
-  const admin = join(APP_ROOT, "(admin)", "admin");
+  const admin = join(APP_ROOT, "(admin)", "keystone");
   const fill = stripped(join(admin, "_components", "ai-fill.tsx"));
   const editorAi = stripped(join(admin, "_lib", "editor-ai.ts"));
   const route = stripped(join(admin, "api", "ai", "run", "route.ts"));
@@ -544,7 +552,7 @@ describe("ADR-126 — a brief fills the form, and nothing is saved until Save", 
 });
 
 describe("the AI Writer (ADR-129)", () => {
-  const admin = join(APP_ROOT, "(admin)", "admin");
+  const admin = join(APP_ROOT, "(admin)", "keystone");
   const shell = stripped(join(admin, "_components", "admin-shell.tsx"));
   const writer = stripped(join(admin, "_components", "ai-writer.tsx"));
   const route = stripped(join(admin, "api", "ai", "run", "route.ts"));

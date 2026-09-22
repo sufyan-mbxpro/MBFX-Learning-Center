@@ -7,30 +7,33 @@ import { routing } from "@repo/i18n/routing";
 const intl = createMiddleware(routing);
 
 /**
- * The staff credential screens, and the address they are SERVED at
- * (changes-49, ADR-146).
+ * The staff portal's prefix (changes-52, ADR-151; ADR-146 for the sign-in).
  *
- * The files still live at `(admin-auth)/admin/{sign-in,forgot-password,
- * reset-password}`; the proxy rewrites `/keystone…` onto them and answers the
- * old `/admin/…` addresses with a 404. The point is that nothing on the
- * public internet names the staff entry point: an anonymous `/admin/*`
- * request is a 404 too (see `staffGate`), where it used to be a redirect that
- * printed the sign-in address in its `Location` header for anyone who asked.
- *
- * Membership is EXACT, never a prefix, in both maps. And this is still only a
- * gate — the `(admin)` layout's server-side STAFF re-check is the boundary
- * (security.md #3), and none of these three screens renders from that group.
+ * Every portal page and route handler is served from its own file under
+ * `/keystone`. `/keystone` itself is the sign-in screen, which is why the
+ * dashboard is `/keystone/dashboard`. The old `/admin` addresses are a
+ * 404, never a redirect: a redirect would print the portal's address for
+ * anyone who asked.
  */
 export const STAFF_SIGN_IN_PATH = "/keystone";
 
-const STAFF_AUTH_REWRITES = new Map([
-  [STAFF_SIGN_IN_PATH, "/admin/sign-in"],
-  ["/keystone/forgot-password", "/admin/forgot-password"],
-  ["/keystone/reset-password", "/admin/reset-password"],
+/**
+ * The closed set of `/keystone` paths reachable without a session: the
+ * three credential screens (`(admin-auth)`). Membership is EXACT, never a
+ * prefix. And this is still only a gate — the `(admin)` layout's
+ * server-side STAFF re-check is the boundary (security.md #3), and none of
+ * these three screens renders from that group.
+ */
+const STAFF_PUBLIC_PATHS = new Set([
+  STAFF_SIGN_IN_PATH,
+  "/keystone/forgot-password",
+  "/keystone/reset-password",
 ]);
 
-/** The internal addresses above. Reachable only through the rewrite. */
-const STAFF_AUTH_INTERNAL = new Set(STAFF_AUTH_REWRITES.values());
+/** `=== prefix || startsWith(prefix + "/")`, never a bare prefix. */
+function isUnder(pathname: string, prefix: string): boolean {
+  return pathname === prefix || pathname.startsWith(`${prefix}/`);
+}
 
 /**
  * Where a path that must not exist is rewritten to: `app/(not-found)`, a root
@@ -43,7 +46,7 @@ const STAFF_AUTH_INTERNAL = new Set(STAFF_AUTH_REWRITES.values());
 const NOT_FOUND_PATH = "/not-found-page";
 
 /**
- * The ONE /admin path that may be framed (ADR-078 #8).
+ * The ONE /keystone path that may be framed (ADR-078 #8).
  *
  * The email template editor renders its preview in a `sandbox=""` iframe, and a
  * frame the surrounding policy says `DENY` to renders nothing. The route sets
@@ -52,14 +55,14 @@ const NOT_FOUND_PATH = "/not-found-page";
  * same-origin access to the admin surface — the exception widens what may be
  * embedded, not what it can reach.
  *
- * Every other /admin path keeps `X-Frame-Options: DENY` and
+ * Every other /keystone path keeps `X-Frame-Options: DENY` and
  * `frame-ancestors 'none'`. Adding a second entry here needs its own reason.
  */
-const ADMIN_FRAMABLE_PATHS = new Set(["/admin/api/email/preview"]);
+const ADMIN_FRAMABLE_PATHS = new Set(["/keystone/api/email/preview"]);
 
 // ─── Security headers (Module 14, security.md #14) ───────────
 //
-// Per-path policy: stricter on /admin than public (ADR-006 — same origin,
+// Per-path policy: stricter on /keystone than public (ADR-006 — same origin,
 // two surfaces). The CSP shipped report-only for the Module 14 soak and is
 // ENFORCED since changes-49 (ADR-146); `baseCsp` says what each surface
 // allows and why.
@@ -75,7 +78,7 @@ function baseCsp(nonce: string | null): string {
   const devEval = process.env.NODE_ENV === "production" ? "" : " 'unsafe-eval'";
   // ENFORCED since changes-49 (it shipped report-only and never flipped).
   //
-  // - /admin: a per-request nonce plus 'strict-dynamic' — the only script
+  // - /keystone: a per-request nonce plus 'strict-dynamic' — the only script
   //   that runs is one Next stamped with the nonce, or one such a script
   //   loaded. Next reads the nonce from the REQUEST's CSP header, which
   //   `adminResponse` sets.
@@ -140,7 +143,7 @@ function applySecurityHeaders(
   response: NextResponse,
   surface: "admin" | "public",
   nonce: string | null,
-  /** ADR-078 #8 — the email preview, and nothing else on /admin. */
+  /** ADR-078 #8 — the email preview, and nothing else on /keystone. */
   framable = false,
 ) {
   response.headers.set("X-Content-Type-Options", "nosniff");
@@ -217,37 +220,37 @@ async function resolveUnownedPath(
  * Next.js 16 request proxy (the file formerly known as middleware.ts).
  *
  * This single proxy serves both surfaces of the app (ADR-006):
- *   - /admin/*  → STAFF gate. A fast, DB-free check via Better Auth's signed
- *                 cookie cache (packages/auth's session.cookieCache) — this
- *                 is a GATE, not the security boundary. The admin root
+ *   - /keystone/* → STAFF gate. A fast, DB-free check via Better Auth's
+ *                 signed cookie cache (packages/auth's session.cookieCache) —
+ *                 this is a GATE, not the security boundary. The admin root
  *                 layout re-verifies server-side against the database
  *                 (ADR-006 consequence #4: never assume the proxy ran).
- *                 An anonymous request is a 404 (ADR-146).
- *   - /keystone → the staff credential screens, rewritten onto their files
- *                 under /admin, which are themselves unreachable directly.
+ *                 An anonymous request is a 404 (ADR-146). The three
+ *                 credential screens skip the gate (ADR-151).
+ *   - /admin/*  → 404: the portal's old prefix (ADR-151).
  *   - everything else → next-intl locale routing (Module 06): default
  *                 locale unprefixed ("/"), others prefixed ("/es/..."),
  *                 after an unowned address has been checked for a real 404.
- *                 MUST NOT touch /admin or /api — the matcher below
- *                 excludes /admin from next-intl's own matching, and this
- *                 function checks /admin first and returns before intl()
+ *                 MUST NOT touch /keystone, /admin or /api — the matcher
+ *                 below excludes them from next-intl's own matching, and
+ *                 this function checks them first and returns before intl()
  *                 ever runs.
  */
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // The staff credential screens, at their public address (ADR-146).
-  const staffScreen = STAFF_AUTH_REWRITES.get(pathname);
-  if (staffScreen) return adminResponse(request, pathname, staffScreen);
+  // The old portal prefix (ADR-151): gone, and it says nothing about where
+  // the portal went. `/admin.json` and `/administrator` are PUBLIC addresses
+  // that happen to share letters, hence `isUnder`.
+  if (isUnder(pathname, "/admin")) return notFound(request, "admin");
 
-  // `=== "/admin" || startsWith("/admin/")`, never a bare prefix: `/admin.json`
-  // and `/administrator` are PUBLIC addresses that happen to share letters.
-  if (pathname === "/admin" || pathname.startsWith("/admin/")) {
-    // The old addresses of the three screens above, requested directly.
-    if (STAFF_AUTH_INTERNAL.has(pathname)) return notFound(request, "admin");
-    const gated = await staffGate(request);
-    if (gated) return gated;
-    return adminResponse(request, pathname, null);
+  if (isUnder(pathname, "/keystone")) {
+    // The credential screens skip exactly the gate — headers and nonce still apply.
+    if (!STAFF_PUBLIC_PATHS.has(pathname)) {
+      const gated = await staffGate(request);
+      if (gated) return gated;
+    }
+    return adminResponse(request, pathname);
   }
 
   const { locale, prefix, rest } = splitLocale(pathname);
@@ -278,24 +281,18 @@ export async function proxy(request: NextRequest) {
 }
 
 /**
- * An /admin-surface response: a per-request nonce, forwarded as REQUEST
+ * A /keystone-surface response: a per-request nonce, forwarded as REQUEST
  * headers so the (fully dynamic) admin layouts can attach it to
  * #brand-tokens via headers(), and so Next stamps it on its own scripts — it
  * reads the nonce from the request's `Content-Security-Policy`.
  */
-function adminResponse(request: NextRequest, pathname: string, rewriteTo: string | null) {
+function adminResponse(request: NextRequest, pathname: string) {
   const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
   const framable = ADMIN_FRAMABLE_PATHS.has(pathname);
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-nonce", nonce);
   requestHeaders.set("Content-Security-Policy", contentSecurityPolicy(nonce, framable));
-  const init = { request: { headers: requestHeaders } };
-  // The query rides along: a reset link's `?token=` and sign-in's
-  // `?redirect=` are read off the REWRITTEN url, and `new URL(path, base)`
-  // drops the base's search.
-  const target = rewriteTo ? new URL(rewriteTo, request.url) : null;
-  if (target) target.search = request.nextUrl.search;
-  const response = target ? NextResponse.rewrite(target, init) : NextResponse.next(init);
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
   return applySecurityHeaders(response, "admin", nonce, framable);
 }
 
@@ -345,7 +342,7 @@ async function staffGate(request: NextRequest): Promise<NextResponse | null> {
 
   // A 404, not a redirect to sign-in (changes-49, ADR-146): the redirect's
   // `Location` header was the staff entry point, handed to anyone who asked
-  // for `/admin`. Staff reach the screen by its address; a signed-in staff
+  // for a portal address. Staff reach the screen by its address; a signed-in staff
   // member whose session later lapses is sent there by the admin surface
   // itself (idle-timeout.tsx), which only ever runs for STAFF.
   if (userType !== "STAFF" && !hasSession && !isServerAction) {

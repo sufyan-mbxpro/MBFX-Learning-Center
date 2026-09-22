@@ -21,7 +21,12 @@ const ADMIN_ROOT = resolve(process.cwd(), "app/(admin)");
 // conventions; ADR-057 inherits that scope rather than widening it. The same
 // two paths are excluded from the lint rule in tooling/eslint-config/next.js —
 // keep the lists in step.
-const OUT_OF_SCOPE = ["admin\\website\\", "admin/website/", "admin\\homepage\\", "admin/homepage/"];
+const OUT_OF_SCOPE = [
+  "keystone\\website\\",
+  "keystone/website/",
+  "keystone\\homepage\\",
+  "keystone/homepage/",
+];
 
 function tsxFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {

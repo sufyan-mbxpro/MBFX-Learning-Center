@@ -73,22 +73,16 @@ function rewrittenTo(response: Response): string | null {
   return target ? new URL(target).pathname : null;
 }
 
-describe("proxy — the staff credential screens live at /keystone (changes-49, ADR-146)", () => {
-  it.each([
-    ["/keystone", "/admin/sign-in"],
-    ["/keystone/forgot-password", "/admin/forgot-password"],
-    ["/keystone/reset-password", "/admin/reset-password"],
-  ])("%s is served anonymously from %s", async (path, internal) => {
-    const response = await proxy(requestFor(path));
-    expect(response.status).not.toBe(307);
-    expect(response.headers.get("location")).toBeNull();
-    expect(rewrittenTo(response)).toBe(internal);
-  });
-
-  it("a reset link's ?token= survives the rewrite untouched", async () => {
-    const response = await proxy(requestFor("/keystone/reset-password?token=abc123"));
-    expect(new URL(response.headers.get("x-middleware-rewrite")!).search).toBe("?token=abc123");
-  });
+describe("proxy — the staff credential screens live at /keystone (ADR-146, ADR-151)", () => {
+  it.each(["/keystone", "/keystone/forgot-password", "/keystone/reset-password"])(
+    "%s is served anonymously from its own file — no gate, no redirect, no rewrite",
+    async (path) => {
+      const response = await proxy(requestFor(path));
+      expect(response.status).not.toBe(307);
+      expect(response.headers.get("location")).toBeNull();
+      expect(rewrittenTo(response)).toBeNull();
+    },
+  );
 
   it.each(["/keystone", "/keystone/forgot-password", "/keystone/reset-password"])(
     "%s gets the admin surface's headers and a per-request nonce",
@@ -101,60 +95,70 @@ describe("proxy — the staff credential screens live at /keystone (changes-49, 
     },
   );
 
-  it.each(["/admin/sign-in", "/admin/forgot-password", "/admin/reset-password"])(
-    "the OLD address %s is a 404, even with a session — only the rewrite reaches it",
-    async (path) => {
-      for (const cookie of [undefined, "better-auth.session_token=a-real-session-token"]) {
-        const response = await proxy(requestFor(path, cookie));
-        expect(response.headers.get("location")).toBeNull();
-        expect(rewrittenTo(response)).toBe("/not-found-page");
-      }
-    },
-  );
-
-  it.each(["/keystone-debug", "/keystone/sign-in", "/keystone/reset-password/extra"])(
-    "%s is not a staff screen — membership is exact, never a prefix",
+  it.each(["/keystone/dashboard", "/keystone/sign-in", "/keystone/reset-password/extra"])(
+    "an anonymous %s is gated — membership of the open set is exact, never a prefix",
     async (path) => {
       const response = await proxy(requestFor(path));
-      expect(rewrittenTo(response)).not.toBe("/admin/sign-in");
-      expect(rewrittenTo(response)).not.toBe("/admin/reset-password");
-    },
-  );
-});
-
-describe("proxy — /admin STAFF gate (security.md #3: the two-lock proxy gate)", () => {
-  it.each(["/admin", "/admin/users", "/admin/website", "/admin/forgot-password-debug"])(
-    "an anonymous %s is a 404, never a redirect that names the sign-in address",
-    async (path) => {
-      const response = await proxy(requestFor(path));
-      expect(response.status).not.toBe(307);
       expect(response.headers.get("location")).toBeNull();
       expect(rewrittenTo(response)).toBe("/not-found-page");
     },
   );
 
-  it("/admin is never routed through next-intl", async () => {
-    const response = await proxy(requestFor("/admin"));
+  it("/keystone-debug is not the portal at all", async () => {
+    const response = await proxy(requestFor("/keystone-debug"));
+    expect(response.headers.get("X-Frame-Options")).toBe("SAMEORIGIN");
+  });
+});
+
+describe("proxy — the old /admin prefix is gone (ADR-151)", () => {
+  it.each(["/admin", "/admin/users", "/admin/sign-in", "/admin/api/email/preview"])(
+    "%s is a 404 — anonymous or signed in — and never a redirect that names the new address",
+    async (path) => {
+      for (const cookie of [undefined, "better-auth.session_token=a-real-session-token"]) {
+        const response = await proxy(requestFor(path, cookie));
+        expect(response.status).not.toBe(307);
+        expect(response.headers.get("location")).toBeNull();
+        expect(rewrittenTo(response)).toBe("/not-found-page");
+      }
+    },
+  );
+});
+
+describe("proxy — /keystone STAFF gate (security.md #3: the two-lock proxy gate)", () => {
+  it.each([
+    "/keystone/dashboard",
+    "/keystone/users",
+    "/keystone/website",
+    "/keystone/forgot-password-debug",
+  ])("an anonymous %s is a 404, never a redirect that names the sign-in address", async (path) => {
+    const response = await proxy(requestFor(path));
+    expect(response.status).not.toBe(307);
+    expect(response.headers.get("location")).toBeNull();
+    expect(rewrittenTo(response)).toBe("/not-found-page");
+  });
+
+  it("/keystone is never routed through next-intl", async () => {
+    const response = await proxy(requestFor("/keystone/dashboard"));
     expect(rewrittenTo(response)).not.toMatch(/^\/(en|es|ar|ur)\//);
   });
 
   // changes-21 F5 / ADR-078 #8 — the email preview is framed by the template
   // editor, and a frame the surrounding policy says DENY to renders nothing.
-  it("the email preview is the one /admin path that may be framed", async () => {
+  it("the email preview is the one /keystone path that may be framed", async () => {
     const response = await proxy(
-      requestFor("/admin/api/email/preview", "better-auth.session_token=a-real-session-token"),
+      requestFor("/keystone/api/email/preview", "better-auth.session_token=a-real-session-token"),
     );
     expect(response.headers.get("X-Frame-Options")).toBe("SAMEORIGIN");
     expect(response.headers.get("Content-Security-Policy")).toContain("frame-ancestors 'self'");
   });
 
-  it("every other /admin path — its own siblings included — stays DENY", async () => {
+  it("every other /keystone path — its own siblings included — stays DENY", async () => {
     for (const path of [
-      "/admin",
-      "/admin/settings/email",
-      "/admin/settings/email/templates/auth.password_reset",
-      "/admin/api/email/preview-all",
-      "/admin/api/email",
+      "/keystone/dashboard",
+      "/keystone/settings/email",
+      "/keystone/settings/email/templates/auth.password_reset",
+      "/keystone/api/email/preview-all",
+      "/keystone/api/email",
     ]) {
       const response = await proxy(
         requestFor(path, "better-auth.session_token=a-real-session-token"),
@@ -168,7 +172,7 @@ describe("proxy — /admin STAFF gate (security.md #3: the two-lock proxy gate)"
 
   it("the admin CSP is ENFORCED, and Next is handed the nonce on the request", async () => {
     const response = await proxy(
-      requestFor("/admin", "better-auth.session_token=a-real-session-token"),
+      requestFor("/keystone/dashboard", "better-auth.session_token=a-real-session-token"),
     );
     expect(response.headers.get("Content-Security-Policy-Report-Only")).toBeNull();
     const csp = response.headers.get("Content-Security-Policy")!;
@@ -179,20 +183,22 @@ describe("proxy — /admin STAFF gate (security.md #3: the two-lock proxy gate)"
 
   it("a NAVIGATION carrying a session token but no fresh cookie cache is let through — the cache expires after 5 minutes and nothing rewrites it on a page view (changes-18 PR 1)", async () => {
     const response = await proxy(
-      requestFor("/admin/glossary", "better-auth.session_token=a-real-session-token"),
+      requestFor("/keystone/glossary", "better-auth.session_token=a-real-session-token"),
     );
     expect(response.headers.get("location")).toBeNull();
     expect(rewrittenTo(response)).toBeNull();
   });
 
   it("that fall-through is not a hole: the request reaches (admin)/layout.tsx, which loads the subject from the database and 404s a non-STAFF user (ADR-006 — the proxy is a gate, the layout is the boundary)", async () => {
-    const response = await proxy(requestFor("/admin", "better-auth.session_token=learner-token"));
+    const response = await proxy(
+      requestFor("/keystone/dashboard", "better-auth.session_token=learner-token"),
+    );
     expect(response.headers.get("X-Frame-Options")).toBe("DENY");
     expect(response.headers.get("location")).toBeNull();
   });
 
   it("a Server Action request with a stale/missing cookie cache is let through — rejecting it breaks the client's action-response parsing (regression: 'An unexpected response was received from the server' saving the theme)", async () => {
-    const request = requestFor("/admin/theme");
+    const request = requestFor("/keystone/theme");
     request.headers.set("next-action", "0123456789abcdef0123456789abcdef01234567");
     const response = await proxy(request);
     expect(response.headers.get("location")).toBeNull();

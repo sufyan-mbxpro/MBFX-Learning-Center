@@ -108,8 +108,8 @@ describe("subscribe bands are hidden for a signed-in reader (ADR-124 §3)", () =
 });
 
 describe("the admin's Resubscribe and Add subscriber (ADR-124 §2, §4)", () => {
-  const actions = read("(admin)/admin/_actions/newsletter-actions.ts");
-  const table = read("(admin)/admin/newsletter/subscribers-table.tsx");
+  const actions = read("(admin)/keystone/_actions/newsletter-actions.ts");
+  const table = read("(admin)/keystone/newsletter/subscribers-table.tsx");
 
   it.each(["resubscribeSubscriberAction", "addSubscriberAction"])(
     "%s checks newsletter.manage first, then parses",

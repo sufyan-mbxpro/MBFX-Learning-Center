@@ -457,12 +457,12 @@ describe("newsletterLink is a PUBLIC link in the subscriber's locale", () => {
     );
   });
 
-  it("never produces an /admin URL, unlike a password reset", () => {
+  it("never produces an /keystone URL, unlike a password reset", () => {
     // ADR-079 #2 routes a reset by `userType`; a subscription has none, and a
     // staff member who subscribes is a reader like any other.
     const link = service.newsletterLink("unsubscribe", "abc", "en", {
       site: "https://example.test",
     });
-    expect(link).not.toContain("/admin");
+    expect(link).not.toContain("/keystone");
   });
 });

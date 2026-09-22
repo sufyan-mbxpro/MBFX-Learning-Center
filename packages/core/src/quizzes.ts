@@ -669,7 +669,7 @@ export async function setQuizDeleted(
  *
  *  - **Attempts do not come with it.** They are learners' records against the
  *    quiz they actually sat; carrying them onto a copy would invent history
- *    and corrupt the analytics `/admin/learn/progress` reads.
+ *    and corrupt the analytics `/keystone/learn/progress` reads.
  *  - **`publishedAt` is cleared**, because the copy has never been published.
  *    `status: DRAFT` alone would leave a date claiming otherwise.
  *  - **Nothing points at it.** `Lesson.quizId` and `Course.finalQuizId` are

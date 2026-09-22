@@ -31,11 +31,11 @@ import { signInAsStaff } from "./sign-in.ts";
 setup("authenticate as the seeded admin", async ({ page }) => {
   // `?redirect=` hands the form its own destination; it navigates with
   // `window.location.assign` the moment the credential POST resolves.
-  await signInAsStaff(page, ADMIN_EMAIL, adminPassword(), "/admin/articles");
+  await signInAsStaff(page, ADMIN_EMAIL, adminPassword(), "/keystone/articles");
 
   // Arriving here proves both locks passed: a real session AND the STAFF gate
   // in proxy.ts (security.md #3).
-  await page.waitForURL("**/admin/articles", { timeout: 30_000 });
+  await page.waitForURL("**/keystone/articles", { timeout: 30_000 });
   await expect(page.getByRole("heading", { name: "News & Analysis", level: 1 })).toBeVisible();
 
   await page.context().storageState({ path: STORAGE_STATE });

@@ -104,31 +104,31 @@ export async function searchAdmin(subject: Subject, query: string): Promise<Admi
       id: u.id,
       label: u.name,
       sublabel: u.email,
-      href: `/admin/users/${u.id}`,
+      href: `/keystone/users/${u.id}`,
     })),
     roles: roles.map((r) => ({
       id: r.id,
       label: r.name,
       sublabel: r.key,
-      href: `/admin/roles/${r.key}`,
+      href: `/keystone/roles/${r.key}`,
     })),
     employees: employees.map((e) => ({
       id: e.id,
       label: `${e.firstName} ${e.lastName}`,
       sublabel: e.workEmail,
-      href: `/admin/employees/${e.id}`,
+      href: `/keystone/employees/${e.id}`,
     })),
     settings: settings.map((s) => ({
       id: s.key,
       label: s.label,
       sublabel: s.key,
-      href: `/admin/settings/${s.groupName}`,
+      href: `/keystone/settings/${s.groupName}`,
     })),
     glossary: glossary.map((g) => ({
       id: g.termId,
       label: g.term,
       sublabel: g.glossaryTerm.topic?.translations[0]?.name ?? null,
-      href: "/admin/glossary",
+      href: "/keystone/glossary",
     })),
   };
 }

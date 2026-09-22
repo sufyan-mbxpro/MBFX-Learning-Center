@@ -27,8 +27,8 @@ const ADMIN_ROOT = resolve(process.cwd(), "app/(admin)");
 // exclusions ADR-044's own guard carries, for the same reason: they are not
 // brought up to conventions.
 const OUT_OF_SCOPE = ["website", "homepage", "navigation"].flatMap((dir) => [
-  `admin\\${dir}\\`,
-  `admin/${dir}/`,
+  `keystone\\${dir}\\`,
+  `keystone/${dir}/`,
 ]);
 
 function tsxFiles(dir: string): string[] {
@@ -95,22 +95,22 @@ describe("ADR-140 §3 — a screen's primary action is on its title row", () => 
   );
 
   it("the News & Analysis layout leaves a slot for the tab's action", () => {
-    const src = readFileSync(resolve(ADMIN_ROOT, "admin/articles/(browse)/layout.tsx"), "utf8");
+    const src = readFileSync(resolve(ADMIN_ROOT, "keystone/articles/(browse)/layout.tsx"), "utf8");
     expect(src).toContain("<HeaderActionsProvider>");
     expect(src).toMatch(/\bactionsSlot\b/);
     // ADR-144 §5: the articles settings screen is gone, so nothing links to it.
-    expect(src).not.toContain("/admin/settings/articles");
+    expect(src).not.toContain("/keystone/settings/articles");
     for (const page of [
-      "admin/articles/(browse)/page.tsx",
-      "admin/articles/(browse)/categories/category-controls.tsx",
-      "admin/articles/(browse)/tags/tag-controls.tsx",
+      "keystone/articles/(browse)/page.tsx",
+      "keystone/articles/(browse)/categories/category-controls.tsx",
+      "keystone/articles/(browse)/tags/tag-controls.tsx",
     ]) {
       expect(readFileSync(resolve(ADMIN_ROOT, page), "utf8")).toContain("<HeaderActions>");
     }
   });
 
   it("an empty slot does not leave an empty action row behind", () => {
-    const src = readFileSync(resolve(ADMIN_ROOT, "admin/_components/admin-page.tsx"), "utf8");
+    const src = readFileSync(resolve(ADMIN_ROOT, "keystone/_components/admin-page.tsx"), "utf8");
     expect(src).toMatch(/header-actions\]:only-child:empty\)\]:hidden/);
   });
 });
@@ -133,19 +133,19 @@ describe("ADR-106 #2 — a section's tab strip is rendered by its layout", () =>
   });
 
   it("the News & Analysis strip is one, and it is the browse layout's", () => {
-    const layout = resolve(ADMIN_ROOT, "admin/articles/(browse)/layout.tsx");
+    const layout = resolve(ADMIN_ROOT, "keystone/articles/(browse)/layout.tsx");
     expect(existsSync(layout)).toBe(true);
     const src = readFileSync(layout, "utf8");
     expect(src).toContain("<ArticlesSubnav");
     // The editor is not a fourth tab.
-    const editor = readFileSync(resolve(ADMIN_ROOT, "admin/articles/[id]/page.tsx"), "utf8");
+    const editor = readFileSync(resolve(ADMIN_ROOT, "keystone/articles/[id]/page.tsx"), "utf8");
     expect(editor).not.toContain("Subnav");
   });
 });
 
 describe("ADR-106 #3 — an off-section destination is a header button, not a tab", () => {
   const src = readFileSync(
-    resolve(ADMIN_ROOT, "admin/articles/_components/subnav-items.ts"),
+    resolve(ADMIN_ROOT, "keystone/articles/_components/subnav-items.ts"),
     "utf8",
   );
   // The RETURNED list, not the file — the doc comment above it names both
@@ -155,13 +155,13 @@ describe("ADR-106 #3 — an off-section destination is a header button, not a ta
   );
 
   it("the News & Analysis strip names only its own screens", () => {
-    // `/admin/media` leaves the section, so an active state for it is a lie
+    // `/keystone/media` leaves the section, so an active state for it is a lie
     // about where you are; Media is in the sidebar. The articles settings
     // screen it once also listed is deleted (ADR-144 §5).
     expect(hrefs).toEqual([
-      "/admin/articles",
-      "/admin/articles/categories",
-      "/admin/articles/tags",
+      "/keystone/articles",
+      "/keystone/articles/categories",
+      "/keystone/articles/tags",
     ]);
   });
 });

@@ -90,7 +90,7 @@ describe("deriveInteractive", () => {
 });
 
 describe("the shipped defaults clear every floor they are checked against", () => {
-  // The regression test for a contrast bug axe found on `/admin/ai`
+  // The regression test for a contrast bug axe found on `/keystone/ai`
   // (testing.md #2), and the reason it went unnoticed for so long: the design
   // reference said textSecondary "must clear 4.5:1 on background AND on
   // muted", `validateMode` only checked the background, and

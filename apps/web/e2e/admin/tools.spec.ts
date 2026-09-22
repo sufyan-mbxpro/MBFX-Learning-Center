@@ -13,7 +13,7 @@ test.describe.configure({ mode: "serial" });
 
 test.describe("the tools admin", () => {
   test("lists all eleven, and each links to its editor", async ({ page }) => {
-    await openAdminScreen(page, "/admin/tools");
+    await openAdminScreen(page, "/keystone/tools");
     await expect(page.getByRole("heading", { level: 1, name: "Trading tools" })).toBeVisible();
 
     // Eleven cards (ADR-135), each with an Edit control. Counted from the page rather
@@ -34,7 +34,7 @@ test.describe("the tools admin", () => {
     const stamp = Date.now();
     const newTagline = `Work out the other two (${stamp})`;
 
-    await openAdminScreen(page, "/admin/tools/gain-loss");
+    await openAdminScreen(page, "/keystone/tools/gain-loss");
 
     // A per-TRANSLATION field …
     await fillField(page.getByLabel("Tagline"), newTagline);
@@ -58,7 +58,7 @@ test.describe("the tools admin", () => {
   test("the live switch runs on its own key and writes immediately", async ({ page }) => {
     const before = seededTool("gain-loss").isEnabled;
 
-    await openAdminScreen(page, "/admin/tools");
+    await openAdminScreen(page, "/keystone/tools");
 
     // Scoped to gain-loss's OWN card, by the one thing on it that names the
     // tool: its public path. `.first()` was what this said, and it flipped
@@ -83,7 +83,7 @@ test.describe("the tools admin", () => {
   }) => {
     const before = seededTool("risk-sentiment");
 
-    await openAdminScreen(page, "/admin/tools/risk-sentiment");
+    await openAdminScreen(page, "/keystone/tools/risk-sentiment");
     // Bands that cross are refused by the CONTRACT (ADR-088 #6), which the
     // form runs before the action does — so this never reaches the service.
     await page.getByLabel("Risk-off below").fill("90");
@@ -114,8 +114,8 @@ test.describe("permission denied, at the database", () => {
 
     // The proxy's STAFF gate (security.md #3) bounces a request with no
     // session before any action can run.
-    await page.goto("/admin/tools/gain-loss");
-    await expect(page).toHaveURL(/\/admin\/sign-in/);
+    await page.goto("/keystone/tools/gain-loss");
+    await expect(page).toHaveURL(/\/keystone\/sign-in/);
 
     const after = seededTool("gain-loss");
     expect(after.translations[0]?.tagline).toBe(before.translations[0]?.tagline);
@@ -128,7 +128,7 @@ test.describe("the market admin", () => {
     // ADR-087 #5. `MarketProviderView` has no key property, so this is the
     // TYPE holding at runtime: the field is empty and its placeholder says
     // which of the two states it is in.
-    await openAdminScreen(page, "/admin/market/provider");
+    await openAdminScreen(page, "/keystone/market/provider");
     const field = page.getByLabel("API key");
     await expect(field).toHaveValue("");
 
@@ -137,7 +137,7 @@ test.describe("the market admin", () => {
   });
 
   test("instruments list with their freshness", async ({ page }) => {
-    await openAdminScreen(page, "/admin/market");
+    await openAdminScreen(page, "/keystone/market");
     await expect(page.getByRole("heading", { level: 1, name: "Market data" })).toBeVisible();
     // The seeded provider is MANUAL and disabled, so every instrument reads
     // "Never synced" — the correct first-run state, not an error (T4).

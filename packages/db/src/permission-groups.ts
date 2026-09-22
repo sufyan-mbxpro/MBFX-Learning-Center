@@ -40,7 +40,7 @@ export const PERMISSION_GROUPS = [
   // Data & reach
   "market",
   // ADR-086 #6 — the FOURTEENTH group, and the first use of ADR-083's
-  // escape hatch. /admin/tools is its own screen, so its keys are its own.
+  // escape hatch. /keystone/tools is its own screen, so its keys are its own.
   // Instruments deliberately got NO new keys: market.* has been seeded since
   // Module 01 and had governed nothing.
   "tools",

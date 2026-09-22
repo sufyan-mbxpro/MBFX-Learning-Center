@@ -3,7 +3,7 @@ import { getSetting } from "@repo/settings";
 import { siteUrl } from "./_lib/site-url.ts";
 
 // ADR-090. `seo.robotsIndex` was seeded, typed and editable at
-// /admin/settings/seo, and read by nothing — an admin could turn "Allow
+// /keystone/settings/seo, and read by nothing — an admin could turn "Allow
 // search indexing" off and change not one byte of what crawlers saw. This is
 // the crawl-side half of that switch; the page-side half is the root layout's
 // `robots` directive, and both are needed: a `Disallow: /` alone stops the
@@ -27,9 +27,11 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
 
   return {
     rules: [
-      // /admin is noindex'd at the page level too — this is the crawl-side
-      // half (ADR-006: same origin, two surfaces).
-      { userAgent: "*", allow: "/", disallow: ["/admin", "/api"] },
+      // The staff portal is deliberately NOT listed (ADR-151): this file is
+      // public, and a `Disallow: /keystone` would name the portal's address
+      // for anyone who read it. An anonymous request there is a 404
+      // (ADR-146), and every portal page is `noindex` besides.
+      { userAgent: "*", allow: "/", disallow: ["/api"] },
     ],
     sitemap: `${base}/sitemap.xml`,
   };

@@ -18,10 +18,10 @@ import { describe, expect, it } from "vitest";
 const APP = resolve(process.cwd(), "app");
 const read = (relative: string) => readFileSync(resolve(APP, relative), "utf8");
 
-const ACTIONS = read("(admin)/admin/_actions/email-actions.ts");
+const ACTIONS = read("(admin)/keystone/_actions/email-actions.ts");
 // changes-51: the transport is the Delivery tab of the email section.
-const SETTINGS_PAGE = read("(admin)/admin/settings/email/(tabs)/delivery/page.tsx");
-const PREVIEW_ROUTE = read("(admin)/admin/api/email/preview/route.ts");
+const SETTINGS_PAGE = read("(admin)/keystone/settings/email/(tabs)/delivery/page.tsx");
+const PREVIEW_ROUTE = read("(admin)/keystone/api/email/preview/route.ts");
 const PROXY = readFileSync(resolve(process.cwd(), "proxy.ts"), "utf8");
 
 /** The body of each exported action, up to the next export. */
@@ -121,18 +121,18 @@ describe("the preview is isolated, and it is the only framable admin path (ADR-0
   });
 
   it("is the single entry in the proxy's framable allowlist", () => {
-    // The BEHAVIOUR — this path SAMEORIGIN, every other /admin path DENY — is
+    // The BEHAVIOUR — this path SAMEORIGIN, every other /keystone path DENY — is
     // asserted in `proxy.test.ts` against the real `proxy()`. This asserts what
     // behaviour cannot enumerate: that the allowlist has exactly one member, so
     // a second entry is a deliberate change rather than a quiet one.
     const list = PROXY.match(/ADMIN_FRAMABLE_PATHS = new Set\(\[([\s\S]*?)\]\)/);
     expect(list).not.toBeNull();
     const paths = [...(list?.[1] ?? "").matchAll(/"([^"]+)"/g)].map((match) => match[1]);
-    expect(paths).toEqual(["/admin/api/email/preview"]);
+    expect(paths).toEqual(["/keystone/api/email/preview"]);
   });
 
   it("the editor frames it with an empty sandbox and does not use srcDoc", () => {
-    const editor = read("(admin)/admin/settings/email/templates/[key]/template-editor.tsx");
+    const editor = read("(admin)/keystone/settings/email/templates/[key]/template-editor.tsx");
     expect(editor).toContain('sandbox=""');
     // Code only: the file's own comments explain why srcDoc is not used, and
     // they would otherwise fail this. srcDoc would inherit the admin surface's

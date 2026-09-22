@@ -1,5 +1,5 @@
 // The `Redirect` model exists already (ADR-015 #1); these are the new
-// service functions behind the /admin/website/redirects screen (PR 1.5).
+// service functions behind the /keystone/website/redirects screen (PR 1.5).
 import { ForbiddenError } from "@repo/rbac";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type * as RedirectsModule from "./redirects.ts";

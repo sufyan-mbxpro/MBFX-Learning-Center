@@ -6,7 +6,7 @@ import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { MariaDbContainer, type StartedMariaDbContainer } from "@testcontainers/mariadb";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { db as DbClient } from "@repo/db";
 import type * as TransportModule from "./transport.ts";
 import type * as SecretModule from "./secret.ts";
@@ -45,6 +45,7 @@ beforeAll(async () => {
 }, 180_000);
 
 afterEach(async () => {
+  vi.unstubAllGlobals();
   process.env.EMAIL_SECRET_KEY = KEY;
   await db.emailTransport.deleteMany();
 });
@@ -111,5 +112,38 @@ describe("loadTransportDriver", () => {
     });
     process.env.EMAIL_SECRET_KEY = OTHER_KEY;
     await expect(transport.loadTransportDriver()).rejects.toThrow(secret.EmailSecretInvalidError);
+  });
+
+  // ADR-152.
+  it("falls back to the log driver on a SendGrid row with no key", async () => {
+    await writeTransport({ driver: "SENDGRID" });
+    expect((await transport.loadTransportDriver()).kind).toBe("log");
+  });
+
+  it("builds a SendGrid driver that sends with the stored key and sandbox flag", async () => {
+    await writeTransport({
+      driver: "SENDGRID",
+      passwordCipher: secret.sealSecret("SG.stored"),
+      sandboxMode: true,
+    });
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
+      Promise.resolve(new Response(null, { status: 200 })),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const driver = await transport.loadTransportDriver();
+    expect(driver.kind).toBe("sendgrid");
+    const result = await driver.send({
+      to: "learner@example.com",
+      from: { name: "MBX", address: "no-reply@example.com" },
+      subject: "Hi",
+      html: "<p>hi</p>",
+      text: "hi",
+    });
+
+    expect(result.sandbox).toBe(true);
+    const init = fetchMock.mock.calls[0]?.[1];
+    expect((init?.headers as Record<string, string>).Authorization).toBe("Bearer SG.stored");
+    expect(JSON.parse(init?.body as string).mail_settings.sandbox_mode.enable).toBe(true);
   });
 });
