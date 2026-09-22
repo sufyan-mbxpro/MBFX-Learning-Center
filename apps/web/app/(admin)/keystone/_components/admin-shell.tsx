@@ -133,16 +133,6 @@ const ADMIN_NAV_GROUPS: {
         // IS glossary data), so this row covers both and is not `exact`.
         permission: "glossary.view",
       },
-      // Standalone media library (ADR-037 Decision #4's follow-up) — the
-      // same MediaLibrary component the paused Website Builder screen uses,
-      // reachable independent of it so News & Analysis and other content
-      // modules always have a working upload/reuse entry point.
-      {
-        href: "/keystone/media",
-        labelKey: "websiteMedia",
-        icon: "websiteMedia",
-        permission: "media.view",
-      },
       // News & Analysis (Module 15) — either key opens the section; each
       // action re-checks the kind-specific gate (ADR-015 #5).
       {
@@ -168,6 +158,19 @@ const ADMIN_NAV_GROUPS: {
         labelKey: "market",
         icon: "market",
         permission: "market.view",
+      },
+      // Standalone media library (ADR-037 Decision #4's follow-up) — the
+      // same MediaLibrary component the paused Website Builder screen uses,
+      // reachable independent of it so News & Analysis and other content
+      // modules always have a working upload/reuse entry point. After Market
+      // data since changes-51 (owner: "place media menu after the market
+      // data"): the library serves every section above it, so it closes the
+      // group rather than sitting between two of them.
+      {
+        href: "/keystone/media",
+        labelKey: "websiteMedia",
+        icon: "websiteMedia",
+        permission: "media.view",
       },
       // Website builder (Module 16) — paused, ADR-037. Kept in the array
       // (rather than deleted) so re-enabling is a one-line flip of
