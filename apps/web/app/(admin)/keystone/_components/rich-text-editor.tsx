@@ -305,7 +305,7 @@ export function RichTextEditor({
   // The assistant's result lives here rather than in the menu, because the
   // panel that renders it is a sibling of the toolbar, not a child of it.
   const [aiResult, setAiResult] = React.useState<AiResultState>(AI_RESULT_IDLE);
-  const upload = useUploadProgress<StoredImage>("/keystone/api/uploads/image", { autoResetMs: 2000 });
+  const upload = useUploadProgress<StoredImage>("/keystone/api/uploads/image");
 
   // The last HTML this component itself emitted. Used to tell the user
   // typing apart from the parent handing us a different document — the

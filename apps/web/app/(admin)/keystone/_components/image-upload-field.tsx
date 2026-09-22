@@ -110,7 +110,7 @@ export function ImageUploadField({
 }) {
   const t = useTranslations("admin");
   const inputRef = React.useRef<HTMLInputElement>(null);
-  const upload = useUploadProgress<StoredImage>("/keystone/api/uploads/image", { autoResetMs: 2500 });
+  const upload = useUploadProgress<StoredImage>("/keystone/api/uploads/image");
   const uploading = upload.status === "uploading";
   const [pickerOpen, setPickerOpen] = React.useState(false);
   const [sizeError, setSizeError] = React.useState<string | null>(null);

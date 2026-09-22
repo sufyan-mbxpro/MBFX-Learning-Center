@@ -354,12 +354,12 @@ describe("B4 — the takeaways list is an ordinary field", () => {
   });
 });
 
-describe("B5 — alt text suggests, and the bulk screen writes nothing", () => {
-  const review = stripped(join(APP_ROOT, "(admin)", "keystone", "media", "alt-text-review.tsx"));
-  const library = stripped(
-    join(APP_ROOT, "(admin)", "keystone", "_components", "media-library.tsx"),
-  );
-  const page = readFileSync(join(APP_ROOT, "(admin)", "keystone", "media", "page.tsx"), "utf8");
+describe("B5 — alt text is written by a person (ADR-153)", () => {
+  const keystone = join(APP_ROOT, "(admin)", "keystone");
+  const library = stripped(join(keystone, "_components", "media-library.tsx"));
+  const page = stripped(join(keystone, "media", "page.tsx"));
+  const actions = stripped(join(keystone, "_actions", "ai-actions.ts"));
+  const features = stripped(join(keystone, "settings", "ai", "(tabs)", "features", "page.tsx"));
   // Stripped: the service's own comments have to NAME `sharp` and
   // `Promise.all` in order to explain why neither is used, and a guard that
   // trips on its own explanation teaches the next reader to delete it.
@@ -367,23 +367,20 @@ describe("B5 — alt text suggests, and the bulk screen writes nothing", () => {
     resolve(process.cwd(), "..", "..", "packages", "core", "src", "ai-media.ts"),
   );
 
-  it("writes nothing itself — accepted rows go through the media action", () => {
-    // §2.2 #7's hardest case before B6: a background writer over 200 images is
-    // one `updateMany` away and would make the model an editor.
-    expect(review).not.toContain("updateMany");
-    expect(review).toContain("updateMediaMetaAction(");
+  it("offers no AI alt-text control anywhere in the media screens", () => {
+    // The owner withdrew it (2026-09-22). The service is retained, unreached.
+    expect(() => statSync(join(keystone, "media", "alt-text-review.tsx"))).toThrow();
+    for (const source of [library, page, actions]) {
+      expect(source).not.toMatch(/suggestAltText|AltTextReview|altTextFieldLabels/);
+    }
+  });
+
+  it("hides the alt_text switch, which would otherwise save and change nothing", () => {
+    expect(features).toContain('card.key !== "alt_text"');
+  });
+
+  it("the retained service still writes nothing itself", () => {
     expect(service).not.toContain("mediaAsset.update");
-  });
-
-  it("does not accept a row the model could not describe", () => {
-    // An image nothing could describe is information, not a blank to be saved.
-    expect(review).toContain("accepted: suggestion.altText !== null");
-  });
-
-  it("shows the estimated cost BEFORE the run", () => {
-    // The one AI control in the admin that spends N times.
-    expect(review).toContain("costNote");
-    expect(page).toContain("altTextCostNote");
   });
 
   it("reads bytes in core and never hands the model a URL", () => {
@@ -408,11 +405,6 @@ describe("B5 — alt text suggests, and the bulk screen writes nothing", () => {
   it("generates one at a time, so a bulk run cannot outrun the cap", () => {
     expect(service).not.toContain("Promise.all");
     expect(service).toContain("for (const asset of assets)");
-  });
-
-  it("puts the Generate button behind a present prop, not a disabled state", () => {
-    expect(library).toContain("labels.ai && (");
-    expect(library).not.toMatch(/disabled=\{[^}]*labels\.ai/);
   });
 });
 

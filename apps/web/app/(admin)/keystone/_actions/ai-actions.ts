@@ -27,9 +27,6 @@ import {
   aiUsageLimitsSchema,
 } from "@repo/contracts";
 import {
-  suggestAltText,
-  suggestAltTextForUndescribed,
-  type AltTextSuggestion,
   deleteAiModel,
   deleteAiProvider,
   discoverAiModels,
@@ -175,38 +172,4 @@ export async function resetAiBudgetPeriodAction(): Promise<void> {
   const subject = await requirePermission("ai.settings.manage");
   await resetAiBudget(subject);
   invalidateLimits();
-}
-
-// ─── Alt text (B5) ───────────────────────────────────────────
-//
-// Server actions rather than the run endpoint, because the bytes are read
-// SERVER-side through `readStoredFile` — `@repo/ai` never touches storage and
-// the browser never sends an image it already has on the server
-// (security.md #9).
-//
-// Gated on `ai.use` AND `media.update`: the first is the spend, the second is
-// what a suggestion may eventually be saved into. Neither of them writes
-// anything — the admin saves through `updateMediaMetaAction` as always.
-
-export async function suggestAltTextAction(assetId: unknown): Promise<AltTextSuggestion> {
-  const subject = await requirePermission("ai.use");
-  // The SURFACE key, checked here for the same reason the run endpoint checks
-  // it: the key that governs the entity governs the AI that writes into it.
-  requirePermissionOn(subject, "media.update");
-  return suggestAltText({ actorId: subject.id, assetId: id.parse(assetId) });
-}
-
-export async function suggestAltTextBulkAction(input: {
-  assetIds?: unknown;
-  limit?: unknown;
-}): Promise<AltTextSuggestion[]> {
-  const subject = await requirePermission("ai.use");
-  requirePermissionOn(subject, "media.update");
-  const assetIds = z.array(id).max(25).optional().parse(input.assetIds);
-  const limit = z.number().int().min(1).max(25).optional().parse(input.limit);
-  return suggestAltTextForUndescribed({
-    actorId: subject.id,
-    ...(assetIds ? { assetIds } : {}),
-    ...(limit ? { limit } : {}),
-  });
 }

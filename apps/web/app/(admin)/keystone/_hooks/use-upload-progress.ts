@@ -55,16 +55,24 @@ export function postWithProgress<T>(
 }
 
 /**
- * `url` is one of the `keystone/api/uploads/*` route handlers. `T` is that
- * route's JSON success shape (`StoredImage` / `StoredMediaAsset`).
- * `autoResetMs`, if given, returns the state to idle that long after a
- * successful upload — long enough for the success state to register as
- * "clearly shown" without leaving a stale panel around indefinitely.
+ * How long a finished upload's "Upload complete" row stays before it goes.
+ * Long enough to register as clearly shown, short enough not to leave a stale
+ * panel above the grid (owner, 2026-09-22). It is the hooks' DEFAULT rather
+ * than an option, because it was an option and two of the six upload
+ * surfaces (the library's batch upload and the media picker) never passed it — their success row stayed until a reload. A
+ * FAILED row is never dismissed: it holds the message and the Retry.
  */
-export function useUploadProgress<T>(url: string, options?: { autoResetMs?: number }) {
+export const UPLOAD_SUCCESS_DISMISS_MS = 3000;
+
+/**
+ * `url` is one of the `keystone/api/uploads/*` route handlers. `T` is that
+ * route's JSON success shape (`StoredImage` / `StoredMediaAsset`). A success
+ * returns to idle after `UPLOAD_SUCCESS_DISMISS_MS`; the stored result is
+ * what `upload()` resolves with, so nothing needs the state to linger.
+ */
+export function useUploadProgress<T>(url: string) {
   const [state, setState] = useState<UseUploadProgressState<T>>(IDLE_STATE);
   const pendingRef = useRef<{ file: File; fields?: Record<string, string> } | null>(null);
-  const autoResetMs = options?.autoResetMs;
 
   const upload = useCallback(
     (file: File, fields?: Record<string, string>): Promise<T | undefined> => {
@@ -111,10 +119,10 @@ export function useUploadProgress<T>(url: string, options?: { autoResetMs?: numb
   const reset = useCallback(() => setState(IDLE_STATE), []);
 
   useEffect(() => {
-    if (state.status !== "success" || !autoResetMs) return;
-    const timer = setTimeout(() => setState(IDLE_STATE), autoResetMs);
+    if (state.status !== "success") return;
+    const timer = setTimeout(() => setState(IDLE_STATE), UPLOAD_SUCCESS_DISMISS_MS);
     return () => clearTimeout(timer);
-  }, [state.status, autoResetMs]);
+  }, [state.status]);
 
   return { ...state, upload, retry, reset };
 }
@@ -149,6 +157,16 @@ export function useUploadQueue<T>(url: string, options?: { concurrency?: number 
   const concurrency = options?.concurrency ?? 2;
   const [items, setItems] = useState<QueuedUpload<T>[]>([]);
   const nextId = useRef(0);
+  // Each finished row leaves on its own timer, so a long batch clears as it
+  // goes rather than all at once at the end.
+  const dismissTimers = useRef(new Set<ReturnType<typeof setTimeout>>());
+
+  useEffect(() => {
+    const timers = dismissTimers.current;
+    return () => {
+      for (const timer of timers) clearTimeout(timer);
+    };
+  }, []);
 
   const patch = useCallback((id: string, changes: Partial<QueuedUpload<T>>) => {
     setItems((current) => current.map((item) => (item.id === id ? { ...item, ...changes } : item)));
@@ -165,6 +183,11 @@ export function useUploadQueue<T>(url: string, options?: { concurrency?: number 
           patch(id, { progress }),
         );
         patch(id, { status: "success", progress: 100, result });
+        const timer = setTimeout(() => {
+          dismissTimers.current.delete(timer);
+          setItems((current) => current.filter((item) => item.id !== id));
+        }, UPLOAD_SUCCESS_DISMISS_MS);
+        dismissTimers.current.add(timer);
         return result;
       } catch (error: unknown) {
         patch(id, {

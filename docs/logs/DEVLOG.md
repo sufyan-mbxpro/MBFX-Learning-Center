@@ -24107,3 +24107,43 @@ error and scope cases (`fetch` is stubbed at the global).
 admin-form conventions pass 773. `tsc` is clean in email, contracts, core and
 web, and ESLint is clean on the changed files. The migration was applied to
 the local database. No real SendGrid call has been made.
+
+## 2026-09-22 — Upload rows dismiss themselves; media sub-folder field removed (Module 11)
+
+**Shipped:** A finished upload's "Upload complete" row now disappears after
+3 seconds on every upload surface. `UPLOAD_SUCCESS_DISMISS_MS` in
+`use-upload-progress.ts` is the hooks' default rather than the old opt-in
+`autoResetMs` option, which the library's batch upload and the media picker
+never passed, so their rows stayed until a reload. The queued hook removes
+each finished row on its own timer. Failed rows stay, because they hold the
+message and the Retry. The media detail dialog loses its Sub-folder field
+(owner: categories are enough). An asset already filed under an ADR-066
+sub-path keeps it, because the dialog sends `folder` only when the category
+changes. The schema still accepts sub-paths. `mediaSubfolderLabel` and
+`mediaSubfolderHint` are removed from the catalog. Each input in that dialog
+(title, alt text, category, tags) now has a one-line hint under it that says
+what it does (dmin.mediaFieldHelp.*).
+
+**Decisions:** none (no ADR). The storage rule in ADR-066 is unchanged; only
+the editing control is gone.
+
+**Tests:** `@repo/contracts` `media.test` passes 20. `tsc` is clean in
+contracts and web, and ESLint is clean on the six changed files. Not yet
+exercised in a browser.
+## 2026-09-22 — AI alt text withdrawn; smaller media field hints (Modules 18, 11)
+
+**Shipped:** The media detail dialog's "Describe it" AI button and the
+Media page's bulk "Describe images with no alt text" panel are removed, along
+with `suggestAltTextAction`, `suggestAltTextBulkAction`, `alt-text-review.tsx`,
+their label builders and the twelve `admin.ai.altText*` strings. The
+`alt_text` switch is hidden in Settings → AI → Features, so no switch is left
+that saves and changes nothing. The registry key, prompt, core service and
+seeded config row are retained and unreached (ADR-153 #3). The dialog's
+field hints drop from 14px to 12px (`text-xs`).
+
+**Decisions:** ADR-153.
+
+**Tests:** `ai-degradation.test` now guards the absence instead of the button;
+with the admin form and dialog conventions it passes 876. `tsc` clean in web,
+ESLint clean on the changed files, `governance:check` and
+`check:phantom-deps` OK. Not yet exercised in a browser.

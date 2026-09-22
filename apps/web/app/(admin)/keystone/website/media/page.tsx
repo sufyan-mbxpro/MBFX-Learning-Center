@@ -59,8 +59,6 @@ export default async function WebsiteMediaPage() {
             brand: t("mediaCategory.brand"),
             general: t("mediaCategory.general"),
           },
-          subfolderLabel: t("mediaSubfolderLabel"),
-          subfolderHint: t("mediaSubfolderHint"),
           loading: t("loading"),
           loadMore: t("mediaLoadMore"),
           tagsLabel: t("mediaTagsLabel"),

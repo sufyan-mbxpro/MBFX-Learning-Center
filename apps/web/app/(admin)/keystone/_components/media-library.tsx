@@ -13,8 +13,8 @@
 // paused Website Builder's own media screen (ADR-037) — moved here rather
 // than duplicated so both stay in sync with one implementation.
 //
-// Deferred, named here rather than silently skipped: a folder TREE (this
-// pass edits `folder` as a plain path field, no tree nav or drag-to-move),
+// Deferred, named here rather than silently skipped: a folder TREE (an admin
+// files an asset by CATEGORY only, no tree nav or drag-to-move),
 // tag autocomplete, and the composer's `mode: "select"` picker host —
 // nothing consumes it yet (the composer is paused per ADR-037), so
 // building it now would be unverifiable. Upload/replace now show real
@@ -24,7 +24,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import Image from "next/image";
-import { Download, FileText, Music, Sparkles, Trash2, Upload, Video } from "lucide-react";
+import { Download, FileText, Music, Trash2, Upload, Video } from "lucide-react";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { ConfirmDialog } from "@repo/ui/components/confirm-dialog";
@@ -38,12 +38,11 @@ import {
 } from "@repo/ui/components/dialog";
 import { EmptyState, ErrorState } from "@repo/ui/components/empty";
 import { Skeleton } from "@repo/ui/components/skeleton";
-import { Spinner } from "@repo/ui/components/spinner";
 import { Input } from "@repo/ui/components/input";
 import { SearchInput } from "@repo/ui/components/search-input";
 import { ControlSizeProvider } from "@repo/ui/components/control-size";
 import { FilterBarRow } from "@repo/ui/components/filter-bar";
-import { Field, FieldError, FieldLabel } from "@repo/ui/components/field";
+import { Field, FieldDescription, FieldError, FieldLabel } from "@repo/ui/components/field";
 import { Tabs, TabsList, TabsTrigger } from "@repo/ui/components/tabs";
 import {
   ALL_MEDIA_CATEGORIES,
@@ -51,8 +50,6 @@ import {
   folderForCategory,
   updateMediaMetaSchema,
 } from "@repo/contracts";
-import { toast } from "sonner";
-import { suggestAltTextAction } from "../_actions/ai-actions.ts";
 import { deleteMediaAction, updateMediaMetaAction } from "../_actions/media-actions.ts";
 import { useFieldErrors } from "../_hooks/use-field-errors.ts";
 import {
@@ -82,23 +79,9 @@ interface MediaLabels {
   detailDescription: string;
   titleLabel: string;
   altTextLabel: string;
-  /**
-   * B5's half, or nothing.
-   *
-   * Its PRESENCE is the availability answer (ADR-097 #6): an AI-off install
-   * passes no `ai` key and the button does not exist.
-   */
-  ai?: {
-    generate: string;
-    generating: string;
-    failed: string;
-    reasons: Record<string, string>;
-  };
   categoryLabel: string;
   allCategories: string;
   categories: Record<MediaCategory, string>;
-  subfolderLabel: string;
-  subfolderHint: string;
   loading: string;
   loadMore: string;
   tagsLabel: string;
@@ -173,39 +156,35 @@ function AssetDetailDialog({
 }) {
   const [title, setTitle] = useState(asset.title ?? "");
   const [altText, setAltText] = useState(asset.altText ?? "");
-  // ADR-066: the folder is now a registered category plus an optional
-  // sub-path, so it is edited as those two things. A free-text path field
-  // could express a folder the schema refuses, which is a validation error
-  // presented as a typing exercise.
-  const [category, setCategory] = useState<MediaCategory>(asset.category ?? "general");
-  const [subfolder, setSubfolder] = useState(
-    asset.category ? asset.folder.slice(folderForCategory(asset.category).length + 1) : "",
-  );
+  // The category is the only folder an admin chooses (owner, 2026-09-22) —
+  // the sub-folder field is gone. ADR-066's sub-paths still parse, and an
+  // asset filed under one keeps it: the folder is sent only when the
+  // CATEGORY changes, so saving a title never moves a file.
+  const initialCategory: MediaCategory = asset.category ?? "general";
+  const [category, setCategory] = useState<MediaCategory>(initialCategory);
   const [tagsText, setTagsText] = useState(asset.tags.join(", "));
-  const [suggesting, setSuggesting] = useState(false);
   const { run, pending } = useServerAction();
   const router = useRouter();
   const replaceUpload = useUploadProgress<StoredMediaAsset>(
     `/keystone/api/uploads/media/${asset.id}`,
-    {
-      autoResetMs: 2500,
-    },
   );
   const replaceInputRef = useRef<HTMLInputElement>(null);
 
-  // Exactly the action's input. The folder is built from the category and
-  // the sub-path, so a folder issue is shown on the sub-path (the category is
-  // a closed list and cannot be wrong); a tag issue lands on `tags.<n>`.
+  // Exactly the action's input. The category is a closed list and cannot be
+  // wrong, so a tag issue (on `tags.<n>`) is the only one this form can show.
   const values = {
     title: title || null,
     altText: altText || null,
-    folder: [folderForCategory(category), subfolder.trim()].filter(Boolean).join("/"),
+    ...(category !== initialCategory || !asset.category
+      ? { folder: folderForCategory(category) }
+      : {}),
     tags: tagsText
       .split(",")
       .map((t) => t.trim())
       .filter(Boolean),
   };
   const form = useFieldErrors(updateMediaMetaSchema, values);
+  const tHelp = useTranslations("admin.mediaFieldHelp");
   const tagPaths = ["tags", ...values.tags.map((_, index) => `tags.${index}`)];
   const tagsInvalid = tagPaths.some((path) => form.invalid(path));
   const tagsError = tagPaths.map((path) => form.error(path)).find(Boolean);
@@ -265,51 +244,19 @@ function AssetDetailDialog({
           <Field invalid={form.invalid("title")}>
             <FieldLabel>{labels.titleLabel}</FieldLabel>
             <Input value={title} onChange={(e) => setTitle(e.target.value)} disabled={!canManage} />
+            <FieldDescription className="text-xs">{tHelp("title")}</FieldDescription>
             <FieldError>{form.error("title")}</FieldError>
           </Field>
           <Field invalid={form.invalid("altText")}>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <FieldLabel>{labels.altTextLabel}</FieldLabel>
-              {/* changes-29 B5. ABSENT when the feature is off — there is
-                  nothing to grey out. The suggestion lands in the field; this
-                  Save is what persists it, through the same action and the
-                  same `media.update` check as a hand-typed one. */}
-              {canManage && labels.ai && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="xs"
-                  onClick={() => {
-                    setSuggesting(true);
-                    void suggestAltTextAction(asset.id)
-                      .then((result) => {
-                        if (result.altText) {
-                          setAltText(result.altText);
-                          return;
-                        }
-                        const reason = result.reason ?? "provider_error";
-                        toast.error(
-                          `${labels.ai!.failed} — ${labels.ai!.reasons[reason] ?? reason}`,
-                        );
-                      })
-                      .catch(() => toast.error(labels.ai!.failed))
-                      .finally(() => setSuggesting(false));
-                  }}
-                >
-                  {suggesting ? (
-                    <Spinner size="xs" aria-label={labels.ai.generating} data-icon="inline-start" />
-                  ) : (
-                    <Sparkles aria-hidden data-icon="inline-start" />
-                  )}
-                  {labels.ai.generate}
-                </Button>
-              )}
-            </div>
+            {/* Written by a person only — the AI "Describe it" button is
+                withdrawn (ADR-153). */}
+            <FieldLabel>{labels.altTextLabel}</FieldLabel>
             <Input
               value={altText}
               onChange={(e) => setAltText(e.target.value)}
               disabled={!canManage}
             />
+            <FieldDescription className="text-xs">{tHelp("altText")}</FieldDescription>
             <FieldError>{form.error("altText")}</FieldError>
           </Field>
           <Field>
@@ -323,16 +270,7 @@ function AssetDetailDialog({
               }))}
               disabled={!canManage}
             />
-          </Field>
-          <Field invalid={form.invalid("folder")}>
-            <FieldLabel>{labels.subfolderLabel}</FieldLabel>
-            <Input
-              value={subfolder}
-              onChange={(e) => setSubfolder(e.target.value)}
-              placeholder={labels.subfolderHint}
-              disabled={!canManage}
-            />
-            <FieldError>{form.error("folder")}</FieldError>
+            <FieldDescription className="text-xs">{tHelp("category")}</FieldDescription>
           </Field>
           <Field invalid={tagsInvalid}>
             <FieldLabel>{labels.tagsLabel}</FieldLabel>
@@ -342,6 +280,7 @@ function AssetDetailDialog({
               placeholder={labels.tagsHint}
               disabled={!canManage}
             />
+            <FieldDescription className="text-xs">{tHelp("tags")}</FieldDescription>
             <FieldError>{tagsError}</FieldError>
           </Field>
           {canManage && (
@@ -438,8 +377,9 @@ export function MediaLibrary({
   // used to mean pick, wait, pick, wait.
   const upload = useUploadQueue<StoredMediaAsset>("/keystone/api/uploads/media");
   const replaceUpload = useUploadProgress<StoredMediaAsset>(
-    replaceTarget ? `/keystone/api/uploads/media/${replaceTarget.id}` : "/keystone/api/uploads/media",
-    { autoResetMs: 2500 },
+    replaceTarget
+      ? `/keystone/api/uploads/media/${replaceTarget.id}`
+      : "/keystone/api/uploads/media",
   );
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const replaceInputRef = useRef<HTMLInputElement>(null);
