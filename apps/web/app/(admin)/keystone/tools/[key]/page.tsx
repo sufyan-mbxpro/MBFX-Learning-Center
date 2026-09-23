@@ -158,6 +158,7 @@ export default async function ToolEditorPage({ params }: PageProps<"/keystone/to
     clearAll: t("toolsAdmin.config.clearAll"),
     filterInstruments: t("toolsAdmin.config.filterInstruments"),
     noInstrumentMatch: t("toolsAdmin.config.noInstrumentMatch"),
+    manageInstruments: t("toolsAdmin.config.manageInstruments"),
     // Related panel
     relatedType: t("toolsAdmin.related.type"),
     relatedItem: t("toolsAdmin.related.item"),

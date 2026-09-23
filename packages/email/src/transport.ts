@@ -132,16 +132,50 @@ export function sendgridDriver(config: SendgridConfig): EmailTransportDriver {
     Authorization: `Bearer ${config.apiKey}`,
     "Content-Type": "application/json",
   };
+  /**
+   * Refuse a key SendGrid cannot read as a Bearer token, rather than letting
+   * it answer. An empty token and one containing a space both come back as
+   * `400 authorization required` — the same words SendGrid uses for no
+   * `Authorization` header at all, and the reason a `Bearer SG.xyz` paste was
+   * unreadable as a diagnosis. A wrong but well-formed key still goes to
+   * SendGrid, because `401 unauthorized` is its answer to give.
+   *
+   * `normalizeSendgridApiKey` stops a new save from reaching here; this stops
+   * a row saved before it existed from reporting SendGrid's wording instead of
+   * its own fault.
+   */
+  const assertUsableKey = () => {
+    if (!config.apiKey) {
+      throw new Error("SendGrid: no API key is stored. Enter one and save.");
+    }
+    if (/\s/u.test(config.apiKey)) {
+      throw new Error(
+        "SendGrid: the stored API key contains a space or line break. " +
+          "Paste the key on its own — no `Bearer` prefix — and save it again.",
+      );
+    }
+  };
+  /**
+   * SendGrid's answer, plus the one thing it cannot see. Only on 401: a 403
+   * means the key authenticated, so its shape is not the fault and a note
+   * about it would send the admin after the wrong one.
+   */
+  const refusal = async (response: Response): Promise<Error> => {
+    const message = await sendgridError(response);
+    const note = response.status === 401 ? sendgridKeyShapeNote(config.apiKey) : null;
+    return new Error(note ? `${message} — ${note}` : message);
+  };
   return {
     kind: "sendgrid",
     async send(message) {
+      assertUsableKey();
       const response = await fetch(`${SENDGRID_API}/mail/send`, {
         method: "POST",
         headers,
         body: JSON.stringify(sendgridMailBody(message, config.sandbox)),
       });
       // 202 = queued for delivery; 200 = accepted in sandbox mode.
-      if (!response.ok) throw new Error(await sendgridError(response));
+      if (!response.ok) throw await refusal(response);
       const id = response.headers.get("x-message-id");
       return config.sandbox
         ? { messageId: id ?? `sandbox-${randomId()}`, sandbox: true }
@@ -151,8 +185,9 @@ export function sendgridDriver(config: SendgridConfig): EmailTransportDriver {
       // A key can authenticate and still be unable to send (a read-only key),
       // so "Test connection" asks what the key may DO, not merely whether it
       // is accepted. Sends nothing, so it is safe with sandbox mode off.
+      assertUsableKey();
       const response = await fetch(`${SENDGRID_API}/scopes`, { headers });
-      if (!response.ok) throw new Error(await sendgridError(response));
+      if (!response.ok) throw await refusal(response);
       const body = (await response.json()) as { scopes?: unknown };
       const scopes = Array.isArray(body.scopes) ? body.scopes : [];
       if (!scopes.includes("mail.send")) {
@@ -160,6 +195,41 @@ export function sendgridDriver(config: SendgridConfig): EmailTransportDriver {
       }
     },
   };
+}
+
+/**
+ * SendGrid's published key format: `SG.` + 22 + `.` + 43, 69 characters, and
+ * the shape every secret scanner matches on. It is a guess about a vendor's
+ * format, which is why nothing REFUSES on it — it only annotates a refusal
+ * SendGrid has already made.
+ */
+const SENDGRID_KEY_SHAPE = /^SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}$/u;
+const SENDGRID_KEY_LENGTH = 69;
+
+/**
+ * What we know about a refused key that SendGrid does not: its SHAPE.
+ * Exported for its test. Returns no part of the key — the LENGTH is the whole
+ * diagnosis, and a length is not a secret.
+ *
+ * `401 unauthorized` is the honest answer to a key SendGrid does not
+ * recognise, and it is the same answer for a revoked key, a key from another
+ * account, and a key eight characters longer than a key can be. Only the last
+ * is visible from here, and it is the one an admin can fix without leaving the
+ * screen: a paste that took in the neighbouring token, which
+ * `normalizeSendgridApiKey` welds onto the tail rather than leaving a space
+ * `assertUsableKey` could refuse. That welding is the cost of the ADR-152
+ * follow-up that stopped `Bearer SG.xyz` reading as a rejected key, and this
+ * is what pays it back — the artifact is still removed, and the key that comes
+ * out the wrong length now says so instead of quoting SendGrid at the admin.
+ */
+export function sendgridKeyShapeNote(apiKey: string): string | null {
+  if (SENDGRID_KEY_SHAPE.test(apiKey)) return null;
+  const detail = !apiKey.startsWith("SG.")
+    ? "the stored key does not begin with `SG.`"
+    : apiKey.length === SENDGRID_KEY_LENGTH
+      ? "the stored key is 69 characters but not the `SG.` + 22 + `.` + 43 shape"
+      : `the stored key is ${apiKey.length} characters and a SendGrid key is ${SENDGRID_KEY_LENGTH}`;
+  return `${detail}. Copy the key from SendGrid again — the whole key and nothing either side of it — and save it.`;
 }
 
 /** SendGrid's own message, never the raw body — it can echo the request. */

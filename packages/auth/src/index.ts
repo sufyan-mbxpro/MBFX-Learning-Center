@@ -15,6 +15,7 @@ import { adminSessionTimeoutMs, MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from 
 import { db } from "@repo/db";
 import { sendTemplatedEmail } from "@repo/email";
 import { getSetting } from "@repo/settings";
+import { siteOrigin } from "@repo/utils";
 import {
   emailChangeFromToken,
   passwordChangedBy,
@@ -92,12 +93,18 @@ function computeLockoutSeconds(failedLoginCount: number): number {
 const RESET_TOKEN_MINUTES = 30;
 const RESET_SENDS_PER_HOUR = 3;
 
-function siteOrigin(): string {
-  return process.env.NEXT_PUBLIC_SITE_URL ?? process.env.BETTER_AUTH_URL ?? "";
-}
-
+// The origin comes from `@repo/utils` (code-style.md #27), not from a copy of
+// the precedence kept here. The copy ended in `""`, and an empty origin makes
+// `resetPasswordPath` return a RELATIVE url — a reset link that resolves
+// against nothing in an inbox. `siteOrigin()` also reads the runtime
+// `SITE_URL`, which is the only one of the three a container can set without
+// a rebuild.
 function adminOrigin(): string {
-  return process.env.NEXT_PUBLIC_ADMIN_URL ?? siteOrigin();
+  // `ADMIN_URL` for the same reason `SITE_URL` leads in `siteOrigin()`: the
+  // `NEXT_PUBLIC_` one is frozen into the bundle at build time, and a stale
+  // one here wins over a correct site origin, so it is the value that decides
+  // where a STAFF reset link points.
+  return process.env.ADMIN_URL ?? process.env.NEXT_PUBLIC_ADMIN_URL ?? siteOrigin();
 }
 
 interface MailUser {

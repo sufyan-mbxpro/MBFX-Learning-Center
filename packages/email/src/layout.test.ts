@@ -132,6 +132,39 @@ describe("renderEmailShell", () => {
     expect(html).toContain(DEFAULT_LIGHT_SURFACE.background);
     expect(html).toContain(DEFAULT_LIGHT_SURFACE.textPrimary);
   });
+
+  it("does not paint the footer band in the PAGE's ground", () => {
+    // The page and the footer were both `surfaceMuted`, so the message had no
+    // visible bottom edge and the ground below it read as part of the footer.
+    // Asserted on a palette whose three surfaces differ, because the seeded
+    // themes happen to give `surface` and `background` the same value — the
+    // bug is invisible on those and the rule is not.
+    // Sentinels rather than colours: the shell interpolates whatever the token
+    // holds, so this asserts WHICH token the band reads — which is the rule —
+    // and keeps code-style #1's no-hex-literal rule intact in a test.
+    const distinct = {
+      ...palette,
+      surface: {
+        ...DEFAULT_LIGHT_SURFACE,
+        surface: "token-card-footer",
+        surfaceMuted: "token-page-ground",
+      },
+    };
+    const html = renderEmailShell({ ...base, palette: distinct });
+    const footerCell = html.slice(html.indexOf("border-top:1px solid"));
+    expect(footerCell).toContain("background-color:token-card-footer");
+    expect(footerCell).not.toContain("background-color:token-page-ground");
+  });
+
+  it("leaves no trailing margin under the last footer line", () => {
+    const html = renderEmailShell({
+      ...base,
+      footerText: "Because you have an account.",
+      postalAddress: "1 Example Street",
+    });
+    const lines = [...html.matchAll(/<p style="margin:([^;]+);font-size:12px/g)].map((m) => m[1]);
+    expect(lines).toEqual(["0 0 8px", "0"]);
+  });
 });
 
 describe("absoluteUrl", () => {

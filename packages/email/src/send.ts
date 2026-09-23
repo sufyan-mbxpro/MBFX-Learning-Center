@@ -11,6 +11,7 @@ import { EMAIL_TEMPLATES, type EmailBodyMode, type EmailTemplateKey } from "@rep
 import { db, emailTemplateDefault } from "@repo/db";
 import { loadSetting } from "@repo/settings";
 import { CURATED_FONTS, loadActiveThemeTokens } from "@repo/theme";
+import { siteOrigin } from "@repo/utils";
 import { absoluteUrl, type EmailPalette } from "./layout.ts";
 import { renderEmail } from "./render.ts";
 import { TRANSPORT_ID, loadTransportDriver } from "./transport.ts";
@@ -107,7 +108,11 @@ export interface EmailRenderContext {
 }
 
 export async function loadEmailRenderContext(): Promise<EmailRenderContext> {
-  const origin = process.env.NEXT_PUBLIC_SITE_URL || process.env.BETTER_AUTH_URL || "";
+  // `siteOrigin()` is the one owner of this precedence (code-style.md #27).
+  // A fourth copy of it lived here, with an EMPTY fallback — and an empty
+  // origin is what `absoluteUrl()` refuses, so a deploy that had set neither
+  // variable sent every message with no logo at all and `{{site.url}}` blank.
+  const origin = siteOrigin();
   const [tokens, siteName, emailLogo, brandLogo, footerText, postalAddress] = await Promise.all([
     loadActiveThemeTokens("web"),
     loadSetting("site.name"),

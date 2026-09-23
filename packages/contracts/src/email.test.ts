@@ -10,6 +10,7 @@ import {
   emailTemplateVariables,
   emailTestSendSchema,
   emailTransportSaveSchema,
+  normalizeSendgridApiKey,
   findTemplateVariables,
   isEmailTemplateKey,
   isUrlEmailVariable,
@@ -173,5 +174,24 @@ describe("emailTestSendSchema", () => {
     expect(
       emailTestSendSchema.safeParse({ key: "made.up", locale: "en", to: "x@e.com" }).success,
     ).toBe(false);
+  });
+});
+
+describe("normalizeSendgridApiKey", () => {
+  // SendGrid rejects a Bearer token holding a space with `400 authorization
+  // required` — its wording for NO key — so the paste is cleaned at the one
+  // write rather than decoded from the answer later.
+  it.each([
+    ["Bearer SG.abc.def", "SG.abc.def"],
+    ["bearer  SG.abc.def", "SG.abc.def"],
+    ["SG.abc.def\n", "SG.abc.def"],
+    ["  SG.abc\t.def  ", "SG.abc.def"],
+    ["SG.abc.def", "SG.abc.def"],
+  ])("turns %j into %j", (raw, expected) => {
+    expect(normalizeSendgridApiKey(raw)).toBe(expected);
+  });
+
+  it("does not weld the prefix onto the key", () => {
+    expect(normalizeSendgridApiKey("Bearer SG.x")).not.toContain("Bearer");
   });
 });

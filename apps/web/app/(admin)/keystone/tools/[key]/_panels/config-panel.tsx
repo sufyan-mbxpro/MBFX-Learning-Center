@@ -24,7 +24,7 @@ import { Checkbox } from "@repo/ui/components/checkbox";
 import { Field as UiField, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
 import { useState } from "react";
-import { CheckCheck, Plus, Search, Trash2, X } from "lucide-react";
+import { CheckCheck, ExternalLink, Plus, Search, Trash2, X } from "lucide-react";
 import { humanizeKey } from "@repo/utils";
 import { AdminCombobox } from "../../../_components/combobox.tsx";
 import { Field } from "../../../_components/editor/editor-section.tsx";
@@ -96,6 +96,7 @@ export interface ConfigPanelLabels {
   clearAll: string;
   filterInstruments: string;
   noInstrumentMatch: string;
+  manageInstruments: string;
 }
 
 type Config = Record<string, unknown>;
@@ -123,7 +124,12 @@ function InstrumentPicker({
   onChange: (next: string[]) => void;
   labels: Pick<
     ConfigPanelLabels,
-    "selectedSuffix" | "selectAll" | "clearAll" | "filterInstruments" | "noInstrumentMatch"
+    | "selectedSuffix"
+    | "selectAll"
+    | "clearAll"
+    | "filterInstruments"
+    | "noInstrumentMatch"
+    | "manageInstruments"
   >;
 }) {
   const [query, setQuery] = useState("");
@@ -170,6 +176,19 @@ function InstrumentPicker({
           >
             <X data-icon="inline-start" aria-hidden />
             {labels.clearAll}
+          </Button>
+          {/* The list itself is Market data's (changes-25 T5): a tool PICKS
+              from the instruments that exist, it does not create them. So the
+              picker links to where they are managed rather than growing a
+              second way to add one — and in a NEW TAB, because the editor
+              holds unsaved config state a same-tab navigation would drop. */}
+          <Button
+            variant="ghost"
+            size="sm"
+            render={<a href="/keystone/market" target="_blank" rel="noreferrer" />}
+          >
+            <ExternalLink data-icon="inline-start" aria-hidden />
+            {labels.manageInstruments}
           </Button>
         </div>
       }

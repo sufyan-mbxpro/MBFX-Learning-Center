@@ -282,6 +282,29 @@ export const emailTransportSaveSchema = z
 
 export type EmailTransportSaveInput = z.infer<typeof emailTransportSaveSchema>;
 
+/**
+ * What a pasted SendGrid key becomes before it is sealed.
+ *
+ * SendGrid issues a key with no whitespace in it, and a paste picks up what
+ * surrounds it: the word `Bearer` copied out of a curl example, a line break
+ * from a wrapped column, a trailing tab. SendGrid answers a request whose
+ * Bearer token holds a space with **`400 authorization required`** — the same
+ * status and wording it uses for no token at all — which names neither the
+ * field nor the character, and reads as "my key is rejected" rather than "my
+ * key has a space in it". An invalid-but-clean key says `401 unauthorized`,
+ * which is the honest answer we want a wrong key to get.
+ *
+ * So the artifacts are removed rather than refused: there is one thing a
+ * person means by pasting `Bearer SG.xyz` into a field labelled "SendGrid API
+ * key". What survives normalisation is either the key or plainly the wrong
+ * key, and the wrong key now gets told so.
+ */
+export function normalizeSendgridApiKey(raw: string): string {
+  // Order matters: strip the prefix first, or removing whitespace would weld
+  // it onto the key as `BearerSG.xyz`.
+  return raw.replace(/^\s*bearer\s+/i, "").replace(/\s+/gu, "");
+}
+
 export const emailTestSendSchema = z.object({
   key: z.string().refine(isEmailTemplateKey),
   locale: localeSchema,

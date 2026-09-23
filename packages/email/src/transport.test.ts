@@ -6,12 +6,19 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   logDriver,
   sendgridDriver,
+  sendgridKeyShapeNote,
   sendgridMailBody,
   smtpTransportOptions,
 } from "./transport.ts";
 import { memoryDriver } from "./testing.ts";
 
 const BASE = { host: "smtp.example.com", port: 587 };
+
+// Built from repeats rather than written out: these are the right LENGTHS and
+// obviously not keys, which is what a secret scanner should conclude too.
+const REAL_SHAPE_KEY = `SG.${"a".repeat(22)}.${"b".repeat(43)}`;
+/** What a paste that took in the neighbouring token leaves behind. */
+const TOO_LONG_KEY = `${REAL_SHAPE_KEY}${"c".repeat(8)}`;
 
 const message = {
   to: "learner@example.com",
@@ -120,6 +127,40 @@ describe("sendgridMailBody", () => {
   });
 });
 
+describe("sendgridKeyShapeNote", () => {
+  it("says nothing about a key of SendGrid's own shape", () => {
+    expect(sendgridKeyShapeNote(REAL_SHAPE_KEY)).toBeNull();
+  });
+
+  it("names the length, which is the whole diagnosis", () => {
+    expect(sendgridKeyShapeNote(TOO_LONG_KEY)).toContain(
+      "the stored key is 77 characters and a SendGrid key is 69",
+    );
+    expect(sendgridKeyShapeNote(`SG.${"a".repeat(22)}.${"b".repeat(30)}`)).toContain(
+      "the stored key is 56 characters",
+    );
+  });
+
+  it("names the prefix when that is what is wrong", () => {
+    expect(sendgridKeyShapeNote(`xkeysib-${"a".repeat(60)}`)).toContain(
+      "does not begin with `SG.`",
+    );
+  });
+
+  it("does not claim a length fault for a 69-character key of the wrong shape", () => {
+    const wrongShape = `SG.${"a".repeat(22)}.${"b".repeat(20)}.${"c".repeat(22)}`;
+    expect(wrongShape).toHaveLength(69);
+    expect(sendgridKeyShapeNote(wrongShape)).toContain("69 characters but not the");
+  });
+
+  it("never returns any part of the key — a note is read aloud and pasted into tickets", () => {
+    const note = sendgridKeyShapeNote(TOO_LONG_KEY) ?? "";
+    expect(note).not.toContain("a".repeat(22));
+    expect(note).not.toContain("b".repeat(43));
+    expect(note).not.toContain(TOO_LONG_KEY);
+  });
+});
+
 describe("sendgridDriver", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -159,6 +200,51 @@ describe("sendgridDriver", () => {
     await expect(
       sendgridDriver({ apiKey: "SG.test", sandbox: true }).send(message),
     ).rejects.toThrow("SendGrid 403: The from address does not match a verified Sender Identity.");
+  });
+
+  // The bug this guards: SendGrid answers a Bearer token containing a space
+  // with `400 authorization required`, the same words it uses for no key at
+  // all, so a pasted `Bearer SG.xyz` read as "my key is rejected". The request
+  // must not be made — SendGrid's wording is what made it undiagnosable.
+  it.each([
+    ["Bearer SG.test", "space or line break"],
+    ["SG.te st", "space or line break"],
+    ["SG.test\n", "space or line break"],
+    ["", "no API key is stored"],
+  ])("refuses the unusable key %j without asking SendGrid", async (apiKey, expected) => {
+    const fetchMock = stubFetch(Response.json({ scopes: ["mail.send"] }));
+    const driver = sendgridDriver({ apiKey, sandbox: false });
+
+    await expect(driver.verify()).rejects.toThrow(expected);
+    await expect(driver.send(message)).rejects.toThrow(expected);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  // The bug this guards: a key eight characters longer than a key can be gets
+  // `401 unauthorized` — the same answer as a revoked key and a key from
+  // another account — so a paste that took in the neighbouring token read as
+  // "my key is rejected". The length is the one fault visible from here.
+  it("says what SendGrid cannot about a 401'd key: its shape", async () => {
+    stubFetch(Response.json({ errors: [{ message: "unauthorized" }] }, { status: 401 }));
+    await expect(sendgridDriver({ apiKey: TOO_LONG_KEY, sandbox: false }).verify()).rejects.toThrow(
+      "SendGrid 401: unauthorized — the stored key is 77 characters and a SendGrid key is 69",
+    );
+  });
+
+  it("adds no shape note to a 401'd key that is the right shape", async () => {
+    // A revoked key, or one from another account. Its shape is not the fault,
+    // and a note about it would send the admin after the wrong one.
+    stubFetch(Response.json({ errors: [{ message: "unauthorized" }] }, { status: 401 }));
+    await expect(
+      sendgridDriver({ apiKey: REAL_SHAPE_KEY, sandbox: false }).verify(),
+    ).rejects.toThrow(/^SendGrid 401: unauthorized$/);
+  });
+
+  it("adds no shape note to a 403 — the key authenticated", async () => {
+    stubFetch(Response.json({ errors: [{ message: "access forbidden" }] }, { status: 403 }));
+    await expect(sendgridDriver({ apiKey: TOO_LONG_KEY, sandbox: false }).verify()).rejects.toThrow(
+      /^SendGrid 403: access forbidden$/,
+    );
   });
 
   it("verifies that the key may send, not merely that it authenticates", async () => {

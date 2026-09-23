@@ -19,6 +19,7 @@
     "@repo/secrets": "workspace:*",
     "@repo/settings": "workspace:*",
     "@repo/theme": "workspace:*",
+    "@repo/utils": "workspace:*",
     "nodemailer": "10.0.3",
     "sanitize-html": "2.17.7"
   },

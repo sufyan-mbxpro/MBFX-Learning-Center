@@ -24365,7 +24365,6 @@ was rendered with — and the dialog drops the dead cookies through
 `signOutSilently` (the proxy's 5-minute cookie cache would otherwise keep
 routing them inward) before a FULL load of `/keystone`.
 
-
 ## 2026-09-22 — A mistyped /keystone address showed the PUBLIC 404 (Module 09)
 
 **Bug:** nothing under `(admin)/keystone` matched an address no route owned, so
@@ -24429,3 +24428,251 @@ demoted staff member — gets a blank 404. `(admin)/layout.tsx` throws
 only; a production build may differ. The learner probe asserts the final URL
 leaves `/keystone/`, which ADR-146 already made false when it replaced that
 redirect with a 404, so the probe would not have caught it either.
+
+## 2026-09-22 — "SendGrid 400: authorization required" was a space in the key (Module 17)
+
+**Bug:** Settings → Email → Delivery reported `SendGrid 400: authorization
+required` from "Test connection", and the same words would have landed in the
+delivery log as a FAILED reason. The message is SendGrid's own, relayed by
+`sendgridError`, and it names neither a field nor a cause. Probing the live API
+settles what it means: `GET /v3/scopes` answers **400 `authorization required`
+only when the Bearer token is empty or contains a space** — the identical
+wording it uses for a request carrying no `Authorization` header at all. A key
+that is simply wrong answers **401 `unauthorized`**; a key without the scope
+answers 403. So the status was reporting the shape of the header, not the
+validity of the credential, and a key pasted as `Bearer SG.xyz` (or wrapped
+across a line, or carrying a stray tab) looked exactly like a rejected key.
+`saveEmailTransport` trims, and `trim()` cannot reach a space in the middle.
+
+**Fix:** two halves, because the bad value is already stored on any install
+that hit this.
+
+1. `normalizeSendgridApiKey` (`@repo/contracts`) strips a leading `Bearer `
+   and then all whitespace — prefix first, or the strip would weld it on as
+   `BearerSG.xyz`. `saveEmailTransport` applies it to the SENDGRID branch only.
+   The artifacts are removed rather than refused: there is one thing a person
+   means by pasting `Bearer SG.xyz` into a field labelled "SendGrid API key",
+   and what survives is either the key or plainly the wrong key — which now
+   gets SendGrid's honest 401 instead of a 400 about header syntax.
+2. `sendgridDriver` refuses an empty or whitespace-bearing key in `send()` and
+   `verify()` **without making the request**, naming the character and the
+   remedy. A row sealed before the normaliser existed cannot be repaired from
+   here (the key is write-only by design, ADR-078 #3), so the guard's job is to
+   say so instead of quoting SendGrid at the admin. A wrong-but-clean key still
+   goes to SendGrid, because 401 is its answer to give.
+
+**Decisions:** no ADR. ADR-152's driver is unchanged in what it sends; this is
+the same reasoning its own comment already applies to `reply_to` ("omitted
+rather than sent empty: SendGrid 400s on an empty `reply_to.email`"), applied
+to the header the body travels under. Normalisation sits at the one write, not
+at `loadTransportDriver` — silently repairing a stored secret on every read
+would hide a credential that is wrong in a way nobody chose. No new catalog
+key: the two guard messages are operator diagnostics in the same file and voice
+as the existing "SendGrid: this API key has no Mail Send permission."
+
+**Tests:** `packages/contracts/src/email.test.ts` — six cases over
+`normalizeSendgridApiKey`, including that the prefix is not welded on;
+`packages/email/src/transport.test.ts` — four unusable keys (`Bearer …`, an
+internal space, a trailing newline, empty) reject from both `send` and `verify`
+and `fetch` is asserted **not** to have been called, which is the half that
+matters: SendGrid's wording is what made this undiagnosable. And
+`packages/core/src/email-admin.integration.test.ts` against real MariaDB — a
+`Bearer SG.paste d-key\n` save opens from the seal as `SG.pasted-key`, which is
+the wiring the two unit files cannot see. contracts 46 pass, email transport 19
+pass, core email-admin 19 pass; `tsc` and ESLint clean on all six changed
+files.
+
+**Not reproduced locally:** `email_transport` is empty in this checkout's
+database, so the failing row lives in whichever install reported it. The
+diagnosis rests on the live API probe rather than on that row, and the fix is
+verified by the unit tests. **The affected install must re-enter the key** —
+Settings → Email → Delivery, the key alone, then Save, then Test connection.
+
+
+## 2026-09-22 — A tool's instrument picker links to Market data (Module 13)
+
+**Shipped:** every instrument and currency picker in a tool's Configuration
+section (`/keystone/tools/[key]`) now carries a **Manage instruments** link
+beside Select all / Clear all, opening `/keystone/market` in a new tab. One
+change to `InstrumentPicker` covers all of them — the account-currency lists
+three calculators share, the converter's currency list, the correlation and
+risk-meter instrument lists, and the pair lists — because they are one
+component, not eleven.
+
+**Decisions:** no ADR. The list a picker offers IS Market data's instrument
+table (changes-25 T5): a tool picks from what exists and never creates one, so
+the affordance is a LINK to where instruments are managed, not a second way to
+add one — adding an instrument from inside a tool editor would need its own
+kind, symbol and provider mapping, i.e. the Market screen in a dialog. A NEW
+TAB because the tool editor holds unsaved config state a same-tab navigation
+would drop, which is also the reason it is an `<a target="_blank">` rather than
+`Link` (the `article-editor` preview/view-live pattern). The label is
+`toolsAdmin.config.manageInstruments`, English-only like every `admin.*` value
+(ADR-043 #2).
+
+**Tests:** `tsc --noEmit` and ESLint clean on both changed files;
+`admin-form-conventions`, `admin-toolbar-conventions` and
+`admin-dialog-conventions` pass (887 tests) — the link sits in the Field's
+adornment row, so the form conventions the picker already met are unchanged.
+
+## 2026-09-23 — "SendGrid 401: unauthorized" was eight extra characters (Module 17)
+
+**Reported:** the transport still failed after yesterday's whitespace fix and a
+re-entered key. The row's own `lastError` said `SendGrid 401: unauthorized`,
+which is the honest answer and names nothing.
+
+**Diagnosed from the row, not from the key.** The stored secret opens from the
+seal (so `EMAIL_SECRET_KEY` and the seal are not the fault), holds no
+whitespace (so `assertUsableKey` is not the fault), and is
+`SG.` + 22 + `.` + **51** — 77 characters where a SendGrid key is 69. The
+paste took in the neighbouring token, and `normalizeSendgridApiKey` welded it
+onto the tail rather than leaving a space the guard could refuse. That welding
+is the price of yesterday's fix; this is what pays it back.
+
+**Shipped:** `sendgridKeyShapeNote()` (`@repo/email` `transport.ts`) — the one
+thing SendGrid cannot see about a key it refused. Appended to the error **only
+on 401**, because a 403 means the key authenticated and a note about its shape
+would send the admin after the wrong fault. It names the LENGTH and never any
+part of the key: a length is not a secret, and an error message is read aloud
+and pasted into tickets.
+
+**Decisions:** no ADR. Nothing REFUSES on the shape — a vendor's key format is
+a guess, and a hard reject would lock an admin out of their own integration the
+day SendGrid changes it. So the split is: `normalizeSendgridApiKey` removes
+what a paste picks up (the one thing a person plainly did not mean to type),
+`assertUsableKey` refuses what cannot be a Bearer token at all, and the shape
+note only annotates a refusal SendGrid has already made. Same reasoning as
+yesterday's entry, one status code further on.
+
+**Tests:** `packages/email/src/transport.test.ts` — five over the pure note
+(right shape ⇒ null, too long, too short, wrong prefix, and a 69-character key
+of the wrong shape that must not be reported as a length fault), one asserting
+the note contains no part of the key, and three through the driver (annotated
+on 401, silent on a well-shaped 401, silent on 403). 27 pass; `tsc` and ESLint
+clean on both files.
+
+**The affected install must re-copy the key** — Settings → Email → Delivery,
+the key alone, Save, then Test connection. Note `sandboxMode` is ON in that
+row: once the key is accepted, SendGrid will validate every message and deliver
+none of them, which is a SENT row with the ADR-152 sandbox reason on it.
+
+## 2026-09-23 — The email logo was absolute, and still unreachable (Modules 17, 04)
+
+**Reported:** the logo does not arrive with the message. Gmail drew the alt
+text where the mark should be.
+
+**Diagnosed, and the markup was never the fault.** `email.logo` holds
+`/uploads/brand/8bf2ce141b96908eb426b3e4.png`, `absoluteUrl()` made it
+absolute exactly as changes-46 #4 says, and the `<img>` went out with
+`http://localhost:3000/uploads/…`. Gmail does not fetch an image itself: it
+fetches through `googleusercontent.com`, and that proxy resolves `localhost`
+to its own machine. So the src was well formed, reachable from the machine
+that sent it, and unreachable from the one place it had to work. Making the
+url absolute was necessary and is not sufficient — what an inbox needs is an
+origin that exists outside this machine, which is configuration, not string
+handling.
+
+**Shipped:**
+
+1. **`siteOrigin()` reads `SITE_URL` first** (`@repo/utils`), then
+   `NEXT_PUBLIC_SITE_URL`, then `BETTER_AUTH_URL`, then localhost. The
+   `NEXT_PUBLIC_` one is INLINED INTO THE BUNDLE at build time, so an image
+   built once and run on a real domain keeps the build machine's origin —
+   which is the production shape of this same bug, and it would have shipped
+   silently because nothing about a stale origin throws. `SITE_URL` is read
+   from the process at call time, so a container sets it and nothing is
+   rebuilt. Server-only by design: a browser bundle cannot see it and falls
+   through to the `NEXT_PUBLIC_` value, which is the right answer on that side.
+2. **`@repo/email` lost its own copy of the precedence.** It was the fourth,
+   and its fallback was `""` — an empty origin is what `absoluteUrl()` refuses,
+   so an install that had set neither variable sent every message with no logo
+   at all and a blank `{{site.url}}`, which reads as "the template is broken"
+   rather than "the origin is unset".
+3. **`@repo/auth` lost its copy too**, whose `""` fallback made
+   `resetPasswordPath` return a RELATIVE url — a reset link that resolves
+   against nothing in an inbox. `adminOrigin()` gained `ADMIN_URL` for the same
+   reason as #1: the `NEXT_PUBLIC_ADMIN_URL` it prefers is frozen at build and
+   wins over a correct site origin, so it is the value that decides where a
+   STAFF reset link points.
+4. **`.env.example` says which pair is for the browser and which for the
+   server**, and why.
+
+**Decisions:** no ADR. This is code-style.md #27 ("the site's origin has one
+owner") applied to the two packages that had never been brought under it, plus
+one more source in the same ordered list. **The request's `Host` header is
+deliberately NOT a source**, which is the only thing here that would have made
+the origin truly automatic: it is attacker-controlled unless every proxy in
+front of the app overwrites it, and a poisoned `Host` on one request is how a
+reset link gets mailed to a real user pointing at someone else's server.
+Configuration is the trustworthy source; `SITE_URL` is what makes configuring
+it a deploy-time act rather than a build-time one. New edges `email → utils`
+and `auth → utils`: `@repo/utils` is the pure leaf `core` already reads, so it
+adds no cycle, no Next dependency and no weight to the session path.
+
+**Tests:** `site-origin.test.ts` gains the precedence case (a runtime
+`SITE_URL` beating a localhost `NEXT_PUBLIC_SITE_URL` and `BETTER_AUTH_URL`);
+`@repo/utils` 351, `@repo/email` 98 and `@repo/auth` 77 pass; `tsc --noEmit`
+and ESLint clean on all three; `governance:check` and `check:phantom-deps` OK.
+Verified end to end rather than inferred: with a public tunnel as `SITE_URL`,
+one newsletter confirmation was routed to Mailpit and read back — the body
+carries
+`<img src="https://…/uploads/brand/8bf2ce141b96908eb426b3e4.png" alt="MBX Pro">`
+and the confirm link on the same origin — and that url answers
+`200 image/png` to Gmail's own proxy User-Agent. The transport row was restored
+to SENDGRID with its sealed key untouched.
+
+**Note for the affected install:** `@repo/utils` does not declare
+`@types/node`, so `pnpm --filter @repo/utils typecheck` fails on `process` and
+`URLSearchParams` in this tree — at HEAD as well as here, unrelated to this
+change.
+
+## 2026-09-23 — The message had no bottom edge, and the preview was clipped (Modules 17, 09)
+
+**Reported:** the preview and the delivered message should match; the page
+ground and the footer should not be the same colour; and there is dead space.
+
+**Three surfaces, two colours.** The shell painted the PAGE behind the message
+and the FOOTER band both in `surfaceMuted`, so the message had no visible
+bottom edge — the ground below the card read as one enormous footer, and the
+"extra space" is what that looks like. `SurfacePalette` has a third token,
+`surface`, which the shell had never used. The footer takes it now: page is
+`surfaceMuted`, card is `background`, footer is `surface`. In every seeded
+theme `surface` equals `background`, so today the band renders as the card's
+own ground under its hairline, which is the correct reading of a footer — and
+a theme that tints `surface` gets a tinted band with no hex literal added here
+(code-style #1).
+
+**The preview frame was 600px for a 624px message.** The shell is a 600px
+table inside 12px of gutter, and the desktop frame was `w-150`. So the preview
+clipped the card's own margins and answered with a horizontal scrollbar — the
+one thing no inbox ever shows, and the reason it did not match what arrives.
+Desktop is `w-full` now: the message centres itself in its ground the way a
+mail client lets it, and because the inner table is `max-width:100%` a narrow
+column shrinks it rather than clipping it.
+
+**Spacing:** the body cell was `padding:32px`, which STACKS with the 16px
+margin a mail client gives the first and last `<p>` — 48px above the first
+line where 32 was meant. It is `16px 32px` now, and the last footer line
+carries no bottom margin (every line carried one, so 8px sat under the final
+one on top of the cell's padding).
+
+**Decisions:** no ADR. No token was added, no colour invented, and the rule
+this restores is the one ADR-078 #7 already implies — the shell describes
+roles in tokens and the theme decides what they look like. Nothing about the
+message's markup changed, so no stored body is affected.
+
+**Tests:** two new in `layout.test.ts` — the footer band reads the `surface`
+token and never the page's (asserted with SENTINEL strings, not colours, so it
+fails on the token rather than on a palette, and keeps code-style #1 intact in
+a test), and the last footer line's margin is `0` while earlier lines keep
+`0 0 8px`. `@repo/email` 100 pass, ESLint and `tsc` clean;
+`email-admin-conventions` and `grid-base` pass (24). Verified visually as
+well: the rendered shell screenshotted in Chromium for `newsletter.welcome`
+and `auth.password_reset` — white card, hairline, footer on the card's ground,
+clear edge against the page.
+
+**Also recorded, because it cost an hour to find:** the template editor's
+preview is a second column only at `xl` (1280px). Below that the page is one
+column and the preview is the LAST section on it, under Content, Variables and
+Sender — which on a laptop at 150% scaling reads as "the preview is not
+showing". Moving it to `lg` is a one-word change if that comes up again.

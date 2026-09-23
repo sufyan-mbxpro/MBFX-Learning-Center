@@ -2493,7 +2493,8 @@
         "selectAll": "Select all",
         "clearAll": "Clear all",
         "filterInstruments": "Filter by symbol or name",
-        "noInstrumentMatch": "Nothing matches that filter."
+        "noInstrumentMatch": "Nothing matches that filter.",
+        "manageInstruments": "Manage instruments"
       },
       "related": {
         "type": "Type",

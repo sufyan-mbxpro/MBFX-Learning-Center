@@ -19,6 +19,7 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   EMAIL_TEMPLATES,
   isEmailTemplateKey,
+  normalizeSendgridApiKey,
   type EmailAudience,
   type EmailBodyMode,
   type EmailDeliveryFilter,
@@ -131,7 +132,13 @@ export async function saveEmailTransport(
     },
   });
 
-  const password = input.password?.trim() ?? "";
+  // A SendGrid key is normalised, not merely trimmed: `trim()` cannot reach
+  // the space in a pasted `Bearer SG.xyz`, and SendGrid answers a Bearer token
+  // containing one with `400 authorization required` — indistinguishable from
+  // sending no key at all. This is the one write, so it is the one place the
+  // paste can be cleaned up (`normalizeSendgridApiKey` carries the reasoning).
+  const typed = input.password?.trim() ?? "";
+  const password = input.driver === "SENDGRID" ? normalizeSendgridApiKey(typed) : typed;
   const cipher: Prisma.EmailTransportUpdateInput["passwordCipher"] = input.clearPassword
     ? null
     : password

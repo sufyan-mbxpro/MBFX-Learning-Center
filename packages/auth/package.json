@@ -19,6 +19,7 @@
     "@repo/email": "workspace:*",
     "@repo/secrets": "workspace:*",
     "@repo/settings": "workspace:*",
+    "@repo/utils": "workspace:*",
     "better-auth": "1.7.2",
     "ioredis": "^5.4.1",
     "next": "16.3.3"

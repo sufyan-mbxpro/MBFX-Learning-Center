@@ -506,10 +506,16 @@ export function EmailTemplateEditor({
               // forms, no same-origin access. The route asserts the same thing
               // in its own CSP, so neither end is load-bearing alone.
               sandbox=""
+              // Desktop is the COLUMN's width, not 600px. The message is a
+              // 600px table inside 12px of gutter, so a 600px frame clipped it
+              // and answered with a horizontal scrollbar — the one thing a real
+              // inbox never shows, and the reason the preview did not match
+              // what arrives. Full width lets the shell centre itself in its
+              // own ground, which is what a mail client does.
               className={
                 previewWidth === "mobile"
                   ? "h-160 w-94 shrink-0 rounded-sm border bg-background"
-                  : "h-160 w-150 shrink-0 rounded-sm border bg-background"
+                  : "h-160 w-full rounded-sm border bg-background"
               }
             />
           </div>

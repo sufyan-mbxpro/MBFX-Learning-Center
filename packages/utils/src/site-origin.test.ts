@@ -2,6 +2,17 @@ import { describe, expect, it } from "vitest";
 import { siteOrigin } from "./site-origin.ts";
 
 describe("siteOrigin", () => {
+  it("prefers the runtime SITE_URL, which a deploy can set without a rebuild", () => {
+    expect(
+      siteOrigin({
+        SITE_URL: "https://mbx.example",
+        // What a build machine inlined, and what Better Auth was given:
+        NEXT_PUBLIC_SITE_URL: "http://localhost:3000",
+        BETTER_AUTH_URL: "http://localhost:3000",
+      }),
+    ).toBe("https://mbx.example");
+  });
+
   it("prefers the public site URL", () => {
     expect(
       siteOrigin({ NEXT_PUBLIC_SITE_URL: "https://mbx.example", BETTER_AUTH_URL: "http://x" }),
@@ -14,8 +25,8 @@ describe("siteOrigin", () => {
   });
 
   it("treats an EMPTY value as unset, and strips trailing slashes", () => {
-    expect(siteOrigin({ NEXT_PUBLIC_SITE_URL: "", BETTER_AUTH_URL: "https://a.example//" })).toBe(
-      "https://a.example",
-    );
+    expect(
+      siteOrigin({ SITE_URL: "", NEXT_PUBLIC_SITE_URL: "", BETTER_AUTH_URL: "https://a.example//" }),
+    ).toBe("https://a.example");
   });
 });

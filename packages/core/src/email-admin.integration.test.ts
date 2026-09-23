@@ -107,6 +107,23 @@ describe("the transport view never carries the password (ADR-078 #3)", () => {
     expect((await service.loadEmailTransportView()).hasPassword).toBe(true);
   });
 
+  // A pasted SendGrid key carries the word `Bearer` and whatever the copy
+  // wrapped; SendGrid answers a Bearer token holding a space with
+  // `400 authorization required`, its wording for NO key, so the artifacts
+  // come off at the one write. Asserted through the seal, because the sealed
+  // value is the only thing the driver will ever read.
+  it("seals a SendGrid key without the paste's Bearer prefix or whitespace", async () => {
+    const { openSecret } = await import("@repo/email");
+    await service.saveEmailTransport(actor, {
+      driver: "SENDGRID",
+      security: "STARTTLS",
+      password: "Bearer SG.paste d-key\n",
+    });
+
+    const row = await ctx.db.emailTransport.findUnique({ where: { id: "default" } });
+    expect(openSecret(row!.passwordCipher!)).toBe("SG.pasted-key");
+  });
+
   it("clearPassword is the only way to remove one", async () => {
     await service.saveEmailTransport(actor, {
       driver: "SMTP",

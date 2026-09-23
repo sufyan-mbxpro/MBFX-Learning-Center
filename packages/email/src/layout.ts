@@ -162,6 +162,15 @@ function escapeText(value: string): string {
 /**
  * A 600px table on a muted ground — the shape every mail client agrees on.
  * Deliberately not a flex or grid layout: Outlook renders neither.
+ *
+ * Three surfaces, three roles, and they must not collapse into two: the PAGE
+ * behind the message is `surfaceMuted`, the CARD is `background`, and the
+ * footer band is `surface`. The footer used to take `surfaceMuted` as well,
+ * which made it the same colour as the page — so the message had no visible
+ * bottom edge, and the page below it read as one enormous footer. In a theme
+ * where `surface` equals `background` the footer is simply the card's own
+ * ground under a hairline, which is correct; a theme that tints `surface`
+ * gets a tinted band for free, with no hex literal here (code-style #1).
  */
 export function renderEmailShell(input: EmailShellInput): string {
   const { palette, siteName } = input;
@@ -184,10 +193,13 @@ export function renderEmailShell(input: EmailShellInput): string {
   ].filter((line): line is string => line !== null);
 
   const footer = footerLines
-    .map(
-      (line) =>
-        `<p style="margin:0 0 8px;font-size:12px;line-height:18px;color:${surface.textMuted}">${line}</p>`,
-    )
+    .map((line, index) => {
+      // The LAST line carries no bottom margin. Every line carrying one put 8px
+      // of dead space under the final one, on top of the cell's own padding —
+      // which is what made the band look taller than it is.
+      const margin = index === footerLines.length - 1 ? "0" : "0 0 8px";
+      return `<p style="margin:${margin};font-size:12px;line-height:18px;color:${surface.textMuted}">${line}</p>`;
+    })
     .join("");
 
   return `<!doctype html>
@@ -203,10 +215,10 @@ ${preheader}
           <td style="padding:24px 32px;border-bottom:1px solid ${surface.borderLight}" align="center">${logo}</td>
         </tr>
         <tr>
-          <td style="padding:32px;font-size:16px;line-height:24px;color:${surface.textPrimary}">${input.bodyHtml}</td>
+          <td style="padding:16px 32px;font-size:16px;line-height:24px;color:${surface.textPrimary}">${input.bodyHtml}</td>
         </tr>
         <tr>
-          <td style="padding:20px 32px;border-top:1px solid ${surface.borderLight};background-color:${surface.surfaceMuted}">${footer}</td>
+          <td style="padding:20px 32px;border-top:1px solid ${surface.borderLight};background-color:${surface.surface}">${footer}</td>
         </tr>
       </table>
     </td>
