@@ -249,6 +249,25 @@ server {
   # above whatever Settings → Media says, or nginx answers 413 first.
   client_max_body_size 110m;
 
+  # Serve hashed build assets from disk, never through the app. Next does not
+  # answer a missing /_next/static/* file with a bare 404: the request falls
+  # through to the app router and renders the prerendered not-found page,
+  # which replies with THAT page's cache headers (`s-maxage=300` plus a year
+  # of `stale-while-revalidate`). One request landing in the build window —
+  # `next build` rewrites .next/static in place while the old process still
+  # serves traffic — therefore teaches the CDN that a chunk does not exist,
+  # and the edge keeps serving that 404 long after the file is back. It took
+  # the site down twice on 2026-09-23, both times on the stylesheet holding
+  # Tailwind. nginx answers a missing file with its own bare 404, which
+  # carries no cache headers for an edge to pin, so this closes the class
+  # rather than the instance. The hit also never reaches Node.
+  location /_next/static/ {
+    alias /srv/mbx/app/apps/web/.next/static/;
+    access_log off;
+    expires 1y;
+    add_header Cache-Control "public, max-age=31536000, immutable";
+  }
+
   location / {
     proxy_pass http://127.0.0.1:3003;
     proxy_http_version 1.1;
@@ -388,15 +407,34 @@ A purge does not reach browsers that already cached the 404 — Cloudflare hands
 it to them with a four-hour `max-age`, so a visitor from the broken window
 stays broken until that expires or they hard-reload. The durable fix is the
 release-directory swap above: with no window, nothing 404s and nothing is
-worth purging. The belt-and-braces version is a Cloudflare cache rule on
-`/_next/static/*` setting the 404 edge TTL to no-store.
+worth purging. Before that lands, the nginx `location /_next/static/` block
+in §6 is what actually closes it; a Cloudflare cache rule on
+`/_next/static/*` setting the 404 edge TTL to no-store is the same idea one
+hop further out.
 
-**The fix that needs no CDN credentials.** `scripts/deploy.sh` exports
-`NEXT_DEPLOYMENT_ID="$(git rev-parse --short HEAD)"` before the build, which
-is Next's own cache-busting hook: every static asset URL gains `?dpl=<sha>`,
-so each deploy asks for its assets under URLs the edge has never seen and a
-poisoned entry cannot outlive the deploy that created it. Deploying is then
-enough to clear a stale 404 even with nobody able to log in to Cloudflare.
+**The fix that needs no CDN credentials is the nginx `location
+/_next/static/` block in §6**, which serves hashed assets from disk so a
+missing one returns nginx's bare 404 — no cache headers, nothing for an edge
+to pin. Add it and the class is closed regardless of who can log in to
+Cloudflare.
+
+**`NEXT_DEPLOYMENT_ID` is a second layer, and it does not cover stylesheets.**
+`scripts/deploy.sh` exports `NEXT_DEPLOYMENT_ID="$(git rev-parse --short
+HEAD)"` before the build, which is Next's own cache-busting hook: static
+asset URLs gain `?dpl=<sha>`, so a deploy asks for those assets under URLs
+the edge has never seen. **Measured on 16.3.3, the `<link>` tags for CSS come
+out with no suffix** even with `deploymentId` present in
+`.next/required-server-files.json` — JS reads `config.deploymentId` while CSS
+reads `config.clientAssetToken` (`next/dist/build/index.js`), and only the
+first survived to the served HTML here. Since the stylesheet is the asset
+whose loss takes the whole site down, do not rely on this alone; it is worth
+keeping for JS and for skew protection, not as the answer. Check it rather
+than assume it:
+
+```bash
+curl -s https://example.com/ | grep -o '/_next/static/[^"]*\.css[^"]*'
+```
+
 Set it only in the environment — `deploymentId` in `next.config.ts` as well
 makes the build refuse on the mismatch. Two consequences worth knowing: the id
 is part of the `"use cache"` key, so every deploy starts those caches cold

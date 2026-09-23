@@ -24815,3 +24815,68 @@ process, which reports `online` while erroring.
 **Tests:** `bash -n scripts/deploy.sh` OK, `pnpm governance:check` OK,
 `pnpm format` clean. No application code changed — docs, the README and the
 deploy script only.
+
+## 2026-09-23 — nginx serves the build's own assets, and a correction (Module 14)
+
+**Correcting the entry three above.** It said the deployment id gives "every
+static asset URL" a `?dpl=<sha>` suffix, and that deploying is therefore
+enough to clear a poisoned edge entry without Cloudflare credentials. The
+first half is not true of stylesheets, which is the half that matters.
+Measured on the live install at `244672f`:
+`.next/required-server-files.json` holds `deploymentId: 244672f`, and the
+served HTML's `<link>` tags for both CSS chunks carry no suffix at all. In
+16.3.3 the two asset classes read different values —
+`clientAssetToken: config.supportsImmutableAssets ? '' : config.deploymentId`
+for CSS against `config.deploymentId` for JS
+(`next/dist/build/index.js`) — and only the JS half reached the output here.
+What the earlier entry actually verified was that Next _reads_
+`NEXT_DEPLOYMENT_ID`, not that a stylesheet URL carries it. Append-only, so
+that entry stands as written; this one is the correction. The id is kept for
+JS and skew protection, not as the defence.
+
+**So the defence moves to nginx, where it should have been.** The vhost had
+one `location /`, so every request for `/_next/static/*` was proxied to Node
+— and Next does not answer a missing chunk with a bare 404, it renders the
+prerendered not-found page and replies with _that page's_ headers
+(`s-maxage=300`, a year of `stale-while-revalidate`). That is the whole
+mechanism: one request inside the build window, and the edge has been taught
+a 404 it will serve for a year. §6 now carries a `location /_next/static/`
+block serving the files from disk with a year of `immutable`. A missing file
+then gets nginx's own 404, which carries no cache headers for an edge to pin,
+and the hit never reaches Node.
+
+**Why it took four rounds to find.** The app serves on :3003 and an unrelated
+Next instance holds :3000 on the same host, so every probe of "the origin"
+answered from the wrong application — 404s for files plainly on disk, HTML
+naming a chunk from no build in the checkout. Both true answers, both from
+somewhere else. The port is written down now (entry above); this is what it
+cost not to have it. Second lesson: Cloudflare caches per colo, so "the
+public site is fine now" and "the edge is still serving the 404" were both
+true at once — the server's curl exits through AMS, a browser elsewhere does
+not.
+
+**And a workaround, because the entries above do not reach what is already
+cached.** Nobody on the team can reach the Cloudflare dashboard, so the
+poisoned entry cannot be evicted, and every credential-free lever was checked
+and ruled out: `?dpl=` does not reach a `<link>` tag (above); a clean rebuild
+reproduces the same content hash BY DEFINITION, so `rm -rf .next` changes no
+filename and merely widens the window from seconds to minutes — it poisoned
+more chunks and took the public site down a second time; and `NEXT_HASH_SALT`
+is plumbed only into `build/webpack-config.js` while this build is Turbopack.
+What is left is to change the stylesheet's own bytes, so
+`packages/ui/src/styles/globals.css` gains `--asset-revision` at the top of
+`:root`. Bumping it renames the chunk, and a renamed chunk is a URL no edge
+has cached. A custom property rather than a comment, because the minifier
+strips comments and would leave the bytes identical. It is labelled a
+workaround in place, with the nginx block named as the thing that retires it.
+
+**Still owed:** the release-directory swap in §11 is the only change that
+removes the build window itself rather than making it survivable.
+
+**Tests:** `pnpm --filter @repo/ui test` 500 passed; `type-scale`,
+`radius-scale` and `grid-base` (the three guards that read `globals.css`) all
+pass; `governance:check` OK. `apps/web` has 6 pre-existing failures unrelated
+to this change — 5 in `site-url.test.ts`, where a `trycloudflare.com` tunnel
+URL in the local `.env` leaks into the test environment, and 1 in
+`changes-50-fixes.test.ts` about the footer subscribe strip. Both were
+confirmed identical with the change stashed.
