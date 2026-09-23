@@ -355,3 +355,38 @@ no gap, deploy each release to its own directory
 fresh directory. Migrations must stay backward compatible with the release
 still running while they apply. Keep one instance: `revalidateTag` and the
 in-process rate-limit fallback are per-process.
+
+`scripts/deploy.sh` is that whole sequence in one command
+(`bash /srv/mbx/app/scripts/deploy.sh`), so the order cannot drift between
+whoever deploys. It refuses to run against a dirty checkout or an `.env` that
+still has `SEED_ADMIN_PASSWORD` in it, and it never runs `db:migrate` or
+`db:reset`.
+
+**A CDN in front turns that gap into an outage.** Next does not answer a
+missing `/_next/static/*` file with a bare 404 — the request falls through to
+the app router and renders the prerendered not-found page, which replies with
+*that page's* cache headers (`s-maxage=300` plus a year of
+`stale-while-revalidate`). So a single request landing in the build window
+teaches the edge that a hashed chunk does not exist, and it keeps serving that
+404 long after the file is back. On 2026-09-23 the chunk was the one holding
+Tailwind, and every page on the site rendered unstyled while the origin was
+serving the file correctly the whole time. Diagnose it by asking the origin
+past the cache — if `?cb=1` on the same URL returns 200 and the clean URL
+returns `404` with `cf-cache-status: HIT`, this is what happened.
+
+Set `CF_API_TOKEN` and `CF_ZONE_ID` in `.env` and `scripts/deploy.sh` purges
+the zone after the restart, which closes it. The token needs one permission,
+Zone · Cache Purge · Purge. To purge by hand:
+
+```bash
+curl -sS -X POST "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/purge_cache" \
+  -H "Authorization: Bearer $CF_API_TOKEN" -H "Content-Type: application/json" \
+  --data '{"purge_everything":true}'
+```
+
+A purge does not reach browsers that already cached the 404 — Cloudflare hands
+it to them with a four-hour `max-age`, so a visitor from the broken window
+stays broken until that expires or they hard-reload. The durable fix is the
+release-directory swap above: with no window, nothing 404s and nothing is
+worth purging. The belt-and-braces version is a Cloudflare cache rule on
+`/_next/static/*` setting the 404 edge TTL to no-store.

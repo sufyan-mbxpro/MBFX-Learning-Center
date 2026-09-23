@@ -84,4 +84,42 @@ else
   exit 1
 fi
 
+
+# Cloudflare serves back whatever the origin told it to cache, 404s included.
+# `next build` rewrites .next/static IN PLACE while the old process is still
+# serving traffic, so a request for a hashed chunk that lands in that window
+# gets Next's not-found page instead of the file — and that page is a
+# prerendered route, so it answers with ITS cache headers (s-maxage=300 and a
+# year of stale-while-revalidate). The edge pins that 404 and keeps serving it
+# long after the file is back, which renders the whole site unstyled; it
+# happened to the one stylesheet holding Tailwind on 2026-09-23. Purging after
+# the restart is what closes the window. Optional, and never fatal: the build
+# is already live by this point, so a missing token skips the step and a failed
+# purge warns instead of failing the deploy.
+env_value() {
+  sed -n "s/^[[:space:]]*$1=//p" .env | head -n 1 | tr -d "'" | tr -d '"'
+}
+
+CF_API_TOKEN="${CF_API_TOKEN:-$(env_value CF_API_TOKEN)}"
+CF_ZONE_ID="${CF_ZONE_ID:-$(env_value CF_ZONE_ID)}"
+
+if [ -n "$CF_API_TOKEN" ] && [ -n "$CF_ZONE_ID" ]; then
+  log "Purging the Cloudflare cache"
+  PURGE="$(curl -sS --max-time 30 -X POST \
+    "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/purge_cache" \
+    -H "Authorization: Bearer $CF_API_TOKEN" \
+    -H "Content-Type: application/json" \
+    --data '{"purge_everything":true}' 2>&1)" || PURGE="request failed: $PURGE"
+  case "$PURGE" in
+    *'"success":true'*|*'"success": true'*)
+      echo "Purged." ;;
+    *)
+      echo "Cloudflare purge FAILED — purge by hand, or the edge may keep" >&2
+      echo "serving assets from before this deploy:" >&2
+      echo "  $PURGE" >&2 ;;
+  esac
+else
+  log "Skipping the Cloudflare purge (CF_API_TOKEN and CF_ZONE_ID are unset)"
+fi
+
 log "Deployed $(git rev-parse --short HEAD) on $BRANCH"

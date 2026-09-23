@@ -24676,3 +24676,54 @@ preview is a second column only at `xl` (1280px). Below that the page is one
 column and the preview is the LAST section on it, under Content, Variables and
 Sender — which on a laptop at 150% scaling reads as "the preview is not
 showing". Moving it to `lg` is a one-word change if that comes up again.
+
+## 2026-09-23 — The live site was unstyled, and the file was there the whole time (Module 14)
+
+**Reported:** `pnpm install --frozen-lockfile` refused to install on the
+server, and separately, learn.mbxpro.com rendered as unstyled HTML.
+
+**The lockfile had never been regenerated.** `packages/auth` and
+`packages/email` both import `@repo/utils` (`siteOrigin`) and both declare it,
+but `pnpm-lock.yaml` still held the importer entries from before. Frozen
+install compares importer SPECIFIERS, so it refused. The error named only
+`packages/auth` because it reports the first mismatch — `packages/email` had
+the identical gap and would have failed the retry. Both are workspace links,
+so the fix is two three-line entries and no resolved version moved. Checked
+the other seventeen importers against their `package.json` the same way; those
+two were the only drift.
+
+**The stylesheet was a cached 404, not a missing file.** Every page references
+two CSS chunks. The font one returned 200; the 215 KB Tailwind one returned
+404 — and so did nothing else, all 27 JS chunks included. The origin had the
+file: the same path with `?cb=` returned 200 and the full 215,203 bytes, three
+times over, while the clean path answered `404` with `cf-cache-status: HIT`
+and an `Age` past its own `s-maxage`.
+
+**Why a CDN can pin a 404 forever here.** `next build` rewrites
+`.next/static` IN PLACE while the old process still serves traffic, so a
+request for a hashed chunk can land in a window where the file does not exist.
+Next does not answer that with a bare 404 — the request falls through to the
+app router and renders the prerendered not-found page, which replies with THAT
+page's cache headers (`x-nextjs-prerender: 1` was on the 404, with
+`s-maxage=300` and a year of `stale-while-revalidate`). Turbopack names chunks
+by content, so the rebuild put the same filename back and the edge never asked
+again. One request in a few seconds of build window took the whole site's CSS
+down for as long as the cache held it.
+
+**Fixed:** `scripts/deploy.sh` purges the zone after the restart when
+`CF_API_TOKEN` and `CF_ZONE_ID` are in `.env`, and skips the step in silence
+when they are not — the build is already live by that point, so a failed purge
+warns rather than failing the deploy. Names added to `.env.example`, and
+`docs/ops/deploy.md` §11 now carries the failure mode, the one-line diagnosis
+(`?cb=1` returns 200, the clean URL is a `cf-cache-status: HIT` 404) and the
+manual purge.
+
+**What a purge does not reach:** Cloudflare handed that 404 to browsers with a
+four-hour `max-age`, so anyone who loaded the site during the window keeps it
+until it expires or they hard-reload. Only a new filename fixes those, and the
+real cure is the release-directory swap §11 already describes: with no window,
+nothing 404s and there is nothing to purge.
+
+**Tests:** `governance:check` OK, `check:phantom-deps` OK, `bash -n` on the
+deploy script OK. The new block was exercised both ways — no credentials skips
+quietly, an unreachable endpoint warns and leaves `set -e` intact (rc=0).
