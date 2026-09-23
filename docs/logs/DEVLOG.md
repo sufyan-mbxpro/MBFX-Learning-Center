@@ -24727,3 +24727,43 @@ nothing 404s and there is nothing to purge.
 **Tests:** `governance:check` OK, `check:phantom-deps` OK, `bash -n` on the
 deploy script OK. The new block was exercised both ways — no credentials skips
 quietly, an unreachable endpoint warns and leaves `set -e` intact (rc=0).
+
+## 2026-09-23 — A poisoned edge entry should not need a login to clear (Module 14)
+
+**Follow-on from the entry above.** The purge step only helps whoever holds
+Cloudflare credentials, and the person deploying did not have them to hand —
+with the site unstyled and the edge still answering 404 half an hour later
+(`Age: 1880`, climbing, `cf-cache-status: HIT`, origin serving all 215,203
+bytes the whole time). A year of `stale-while-revalidate` means it does not
+heal on its own either.
+
+**So the deploy now changes the URL instead of asking permission to forget
+it.** `scripts/deploy.sh` exports `NEXT_DEPLOYMENT_ID="$(git rev-parse
+--short HEAD)"` before the build. Next reads that straight from the
+environment and appends `?dpl=<sha>` to every static asset URL, so a deploy
+asks for its assets under URLs the edge has never seen. A 404 cached against
+the old URL is simply never consulted again, and no token is involved. Kept
+out of `next.config.ts` deliberately: setting both makes the build fail on
+the mismatch (`server/config.js` compares them), and the environment is the
+half that changes per deploy.
+
+**What it costs, so nobody re-discovers it:** the deployment id is part of the
+`"use cache"` key, so every deploy starts those caches cold — which a fresh
+build does regardless. And the pm2 process does not inherit the variable
+unless it is passed at restart, so the `x-nextjs-deployment-id` skew header is
+absent; the asset URLs are baked into the build, so the fix itself does not
+depend on it. Left as a documented option rather than adding `--update-env`
+to the reload, which would hand a live process the deploy shell's whole
+environment for a header.
+
+**Two independent defences now.** The purge (credentials, immediate, clears
+what is already poisoned) and the deployment id (no credentials, takes effect
+on the next deploy, makes poisoning survivable). Neither removes the build
+window itself — only the release-directory swap in `docs/ops/deploy.md` §11
+does that.
+
+**Tests:** `bash -n` on the deploy script, `governance:check` OK. Verified
+against the installed Next 16.3.3 source rather than from memory:
+`server/config.js` populates `deploymentId` from `NEXT_DEPLOYMENT_ID`, and
+`supportsImmutableAssets` — which would suppress the suffix — defaults to
+`false` for a self-hosted build.

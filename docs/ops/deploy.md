@@ -390,3 +390,17 @@ stays broken until that expires or they hard-reload. The durable fix is the
 release-directory swap above: with no window, nothing 404s and nothing is
 worth purging. The belt-and-braces version is a Cloudflare cache rule on
 `/_next/static/*` setting the 404 edge TTL to no-store.
+
+**The fix that needs no CDN credentials.** `scripts/deploy.sh` exports
+`NEXT_DEPLOYMENT_ID="$(git rev-parse --short HEAD)"` before the build, which
+is Next's own cache-busting hook: every static asset URL gains `?dpl=<sha>`,
+so each deploy asks for its assets under URLs the edge has never seen and a
+poisoned entry cannot outlive the deploy that created it. Deploying is then
+enough to clear a stale 404 even with nobody able to log in to Cloudflare.
+Set it only in the environment — `deploymentId` in `next.config.ts` as well
+makes the build refuse on the mismatch. Two consequences worth knowing: the id
+is part of the `"use cache"` key, so every deploy starts those caches cold
+(a fresh build does that anyway), and the running process does not have the
+variable unless you pass it at restart (`pm2 reload mbx --update-env` with it
+exported), which costs only the `x-nextjs-deployment-id` skew header — the
+asset URLs are baked into the build either way.

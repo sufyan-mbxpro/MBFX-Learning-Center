@@ -69,6 +69,19 @@ log "Seeding (idempotent upserts)"
 pnpm db:seed
 
 log "Building"
+# Every static asset URL gets `?dpl=<sha>` appended (Next reads
+# NEXT_DEPLOYMENT_ID straight from the environment — do NOT also set
+# `deploymentId` in next.config.ts, the build refuses on a mismatch). A CDN
+# caches by URL, so a chunk it stored as a 404 during a previous build window
+# stays 404 for as long as it holds the entry, whatever the origin now serves;
+# giving each deploy its own asset URLs means a poisoned entry cannot outlive
+# the deploy that created it, with no purge credentials involved. It is also
+# version-skew protection: a client still on the old deployment reloads
+# instead of mixing chunks from two builds. The cost is that the id is part of
+# the `"use cache"` key, so every deploy starts those caches cold — which is
+# what a fresh build does anyway.
+NEXT_DEPLOYMENT_ID="$(git rev-parse --short HEAD)"
+export NEXT_DEPLOYMENT_ID
 pnpm --filter web build
 
 log "Restarting"
