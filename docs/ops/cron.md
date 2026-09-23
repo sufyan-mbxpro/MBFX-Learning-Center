@@ -42,7 +42,7 @@ Load the token into a shell variable without echoing it:
 
 ```bash
 S=$(grep -E '^CRON_SECRET=' .env | cut -d= -f2- | tr -d '"\r')
-BASE=http://localhost:3000   # or https://example.com
+BASE=http://localhost:3003   # the server's app port; locally 3000, or https://example.com
 ```
 
 ### `market-sync`

@@ -18,6 +18,12 @@ set -euo pipefail
 APP_DIR="${APP_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 BRANCH="${BRANCH:-main}"
 SERVICE="${SERVICE:-mbx}"
+# This install serves on 3003; the host's :3000 is a different app. Next's own
+# default is 3000, so the port is always passed explicitly — in the pm2 args,
+# in the systemd unit, in nginx's proxy_pass, and here for the health check
+# below (docs/ops/deploy.md §5).
+PORT="${PORT:-3003}"
+export PORT
 
 cd "$APP_DIR"
 log() { printf '\n==> %s\n' "$*"; }
@@ -98,6 +104,29 @@ else
 fi
 
 
+# A reload that half-starts is invisible otherwise: pm2 reports `online` for a
+# process that is listening and erroring, and the CDN in front caches whatever
+# it gets — including a 404 with a year of stale-while-revalidate on it, which
+# is how one missing stylesheet took the site down on 2026-09-23. `localhost`,
+# never 127.0.0.1: on this host it resolves to ::1 and the server binds there
+# (docs/ops/deploy.md §5).
+log "Checking http://localhost:$PORT/"
+HEALTHY=0
+STATUS=""
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  STATUS="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "http://localhost:$PORT/" || true)"
+  case "$STATUS" in
+    2??|3??) HEALTHY=1; break ;;
+  esac
+  sleep 2
+done
+if [ "$HEALTHY" = 1 ]; then
+  echo "OK ($STATUS)"
+else
+  echo "The app is NOT answering on port $PORT (last status: ${STATUS:-no response})." >&2
+  echo "  pm2 logs $SERVICE --lines 50" >&2
+fi
+
 # Cloudflare serves back whatever the origin told it to cache, 404s included.
 # `next build` rewrites .next/static IN PLACE while the old process is still
 # serving traffic, so a request for a hashed chunk that lands in that window
@@ -135,4 +164,9 @@ else
   log "Skipping the Cloudflare purge (CF_API_TOKEN and CF_ZONE_ID are unset)"
 fi
 
-log "Deployed $(git rev-parse --short HEAD) on $BRANCH"
+if [ "$HEALTHY" = 1 ]; then
+  log "Deployed $(git rev-parse --short HEAD) on $BRANCH"
+else
+  log "Deployed $(git rev-parse --short HEAD) on $BRANCH, but it is not answering on :$PORT"
+  exit 1
+fi

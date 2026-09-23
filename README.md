@@ -163,10 +163,10 @@ created by `pnpm db:seed` from two lines in `.env`:
 
 With the `.env` from §2.3:
 
-| Role                  | Sign-in URL                           | Email              | Password          |
-| --------------------- | ------------------------------------- | ------------------ | ----------------- |
-| Super Admin (staff)   | <http://localhost:3000/keystone> | `admin@mbxpro.com` | `LocalAdmin#2026` |
-| Learner (public user) | <http://localhost:3000/en/sign-up>    | any email you type | any 8–128 chars   |
+| Role                  | Sign-in URL                        | Email              | Password          |
+| --------------------- | ---------------------------------- | ------------------ | ----------------- |
+| Super Admin (staff)   | <http://localhost:3000/keystone>   | `admin@mbxpro.com` | `LocalAdmin#2026` |
+| Learner (public user) | <http://localhost:3000/en/sign-up> | any email you type | any 8–128 chars   |
 
 - Learners register themselves at `/en/sign-up`. No email check is needed to
   sign in. The welcome/verification email appears in Mailpit.
@@ -445,7 +445,12 @@ module.exports = {
       name: "mbx",
       cwd: "/srv/mbx/app/apps/web",
       script: "node_modules/next/dist/bin/next",
-      args: "start -H 127.0.0.1 -p 3000",
+      // `-H localhost`, never `-H 127.0.0.1`: the proxy's next-intl rewrite
+      // treats a 127.0.0.1 origin as external and every public page then
+      // answers `307 -> itself`. Port 3003 — :3000 is a different app on this
+      // host, and Next's own default is 3000, so it is always passed.
+      args: "start -H localhost -p 3003",
+      exec_mode: "fork", // pm2 defaults to cluster when `instances` is set
       env: { NODE_ENV: "production" },
       instances: 1,
       max_memory_restart: "1500M",
@@ -584,7 +589,7 @@ rollback, so write migrations that the previous release can still work with.
 | Symptom                                                 | Cause and fix                                                                                                                           |
 | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | `SKIPPED admin user` during seed                        | `SEED_ADMIN_PASSWORD` was empty. Set it and run `pnpm db:seed` again                                                                    |
-| Admin sign-in says the credentials are wrong            | You may be on the learner page. Staff use `/keystone`                                                                              |
+| Admin sign-in says the credentials are wrong            | You may be on the learner page. Staff use `/keystone`                                                                                   |
 | Every page fails with a Redis or `ECONNREFUSED` error   | Redis is not running: `docker compose up -d` (local) or `systemctl status redis-server` (server)                                        |
 | `Can't reach database server`                           | Check `DATABASE_URL` and that MariaDB is up                                                                                             |
 | Changed `.env` but nothing happened                     | `.env` is read at startup. Restart the app. `NEXT_PUBLIC_*` values also need a rebuild                                                  |

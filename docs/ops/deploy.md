@@ -91,7 +91,7 @@ same care as the database.
 | `HOME_CONTENT_MODE`                                            | `real` hides the homepage's placeholder figures/quotes/partners (ADR-103). Default `demo`                                                |
 | `GOOGLE_CLIENT_ID` / `_SECRET`, `GITHUB_CLIENT_ID` / `_SECRET` | OAuth; there is no OAuth UI yet, leave empty                                                                                             |
 | `CAPTCHA_DISABLED`                                             | any value but `0`/`false` switches reCAPTCHA off whatever Settings → General → reCAPTCHA says (ADR-156). Break-glass for a Google outage |
-| `PORT`                                                         | `next start` port, default 3000                                                                                                          |
+| `PORT`                                                         | `next start` port. **This install serves on 3003** — the host's :3000 is a different app. Next's own default is 3000, so always pass it  |
 
 **Seed-time only** — present while seeding, then **removed from the file**:
 `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD`, and the `SEED_*` provider variables
@@ -163,11 +163,11 @@ deploy. It never runs on the server, and it refuses keys a sealed column owns.
 
 ```bash
 pnpm --filter web build     # next build → apps/web/.next
-pnpm --filter web start     # next start, listens on $PORT (default 3000)
+PORT=3003 pnpm --filter web start   # next start, listens on $PORT
 ```
 
 `start` runs with `apps/web` as its working directory. Bind it to loopback
-only and let nginx face the internet (`PORT=3000`, and `-H localhost` if you
+only and let nginx face the internet (`PORT=3003`, and `-H localhost` if you
 call `next start` directly).
 
 **`-H localhost`, never `-H 127.0.0.1`.** Found on the first live deploy: the
@@ -178,12 +178,12 @@ strip-the-default-prefix redirect back to `/`, so every public page answers
 `307 → itself` forever while `/admin` (which never reaches next-intl) works.
 Check after any change to the start command:
 `curl -s -o /dev/null -w '%{http_code}
-' http://localhost:3000/` must be 200.
+' http://localhost:3003/` must be 200.
 
 `localhost` may resolve to IPv6 only (`::1`) — it did on the first live host,
-so `curl http://127.0.0.1:3000/` answered `000` while `localhost` answered 200. nginx must then proxy to `http://[::1]:3000` (on CloudPanel: edit the
+so `curl http://127.0.0.1:3003/` answered `000` while `localhost` answered 200. nginx must then proxy to `http://[::1]:3003` (on CloudPanel: edit the
 site's Vhost, `proxy_pass http://[::1]:{{app_port}};`). Check which one the
-server bound: `ss -ltn | grep :3000`.
+server bound: `ss -ltn | grep :3003`.
 
 ### pm2
 
@@ -195,7 +195,7 @@ module.exports = {
       name: "mbx",
       cwd: "/srv/mbx/app/apps/web",
       script: "node_modules/next/dist/bin/next",
-      args: "start -H localhost -p 3000",
+      args: "start -H localhost -p 3003",
       exec_mode: "fork", // pm2 defaults to cluster when `instances` is set
       env: { NODE_ENV: "production" },
       instances: 1, // one process; see "zero downtime" below before raising this
@@ -220,8 +220,8 @@ After=network.target mariadb.service redis-server.service
 [Service]
 User=mbx
 WorkingDirectory=/srv/mbx/app/apps/web
-Environment=NODE_ENV=production PORT=3000
-ExecStart=/usr/bin/node node_modules/next/dist/bin/next start -H localhost -p 3000
+Environment=NODE_ENV=production PORT=3003
+ExecStart=/usr/bin/node node_modules/next/dist/bin/next start -H localhost -p 3003
 Restart=always
 RestartSec=5
 # The app reads /srv/mbx/app/.env itself (next.config.ts); no EnvironmentFile needed.
@@ -250,7 +250,7 @@ server {
   client_max_body_size 110m;
 
   location / {
-    proxy_pass http://127.0.0.1:3000;
+    proxy_pass http://127.0.0.1:3003;
     proxy_http_version 1.1;
     proxy_set_header Host              $host;
     proxy_set_header X-Real-IP         $remote_addr;
@@ -365,7 +365,7 @@ still has `SEED_ADMIN_PASSWORD` in it, and it never runs `db:migrate` or
 **A CDN in front turns that gap into an outage.** Next does not answer a
 missing `/_next/static/*` file with a bare 404 — the request falls through to
 the app router and renders the prerendered not-found page, which replies with
-*that page's* cache headers (`s-maxage=300` plus a year of
+_that page's_ cache headers (`s-maxage=300` plus a year of
 `stale-while-revalidate`). So a single request landing in the build window
 teaches the edge that a hashed chunk does not exist, and it keeps serving that
 404 long after the file is back. On 2026-09-23 the chunk was the one holding

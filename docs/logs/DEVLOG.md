@@ -24488,7 +24488,6 @@ diagnosis rests on the live API probe rather than on that row, and the fix is
 verified by the unit tests. **The affected install must re-enter the key** —
 Settings → Email → Delivery, the key alone, then Save, then Test connection.
 
-
 ## 2026-09-22 — A tool's instrument picker links to Market data (Module 13)
 
 **Shipped:** every instrument and currency picker in a tool's Configuration
@@ -24767,3 +24766,52 @@ against the installed Next 16.3.3 source rather than from memory:
 `server/config.js` populates `deploymentId` from `NEXT_DEPLOYMENT_ID`, and
 `supportsImmutableAssets` — which would suppress the suffix — defaults to
 `false` for a self-hosted build.
+
+## 2026-09-23 — The app serves on 3003, and now every script says so (Module 14)
+
+**Third entry on the same outage, and the first one with the port right.**
+The unstyled site was confirmed to be exactly what the two entries above
+describe: `/_next/static/chunks/3rblxkt29tmqd.css` (215,203 bytes, the one
+holding Tailwind) answered 200 at the origin and `404` at the edge, with
+`cf-cache-status: HIT`, `age: 5465` and Next's not-found headers
+(`s-maxage=300, stale-while-revalidate=31535700`) on it. Purge Everything
+cleared it; the deployment id keeps it from recurring.
+
+**What cost the diagnosis half an hour was a port.** Every probe of "the
+origin" went to `127.0.0.1:3000`, and the app does not live there — pm2 runs
+it as `next start -H localhost -p 3003`. An unrelated Next instance holds
+:3000 (and something holds :3001) on the same host. So the origin appeared to
+404 files that were plainly on disk, and to serve HTML naming a stylesheet
+from no build in the checkout. Both were true answers from the wrong
+application. The repo never recorded the port anywhere, so there was nothing
+to check it against.
+
+**Written down now, in every operational place.** `docs/ops/deploy.md`: the
+`PORT` table row, the §5 start command, the `-H localhost` 307-loop check,
+the `ss -ltn` grep, the pm2 `args`, the systemd unit and nginx's
+`proxy_pass`. `docs/ops/cron.md`: the verify snippet's `BASE` (its Local and
+Windows Task Scheduler sections stay on 3000, which is what they mean).
+`README.md` §6.7: its pm2 block was a second, drifted copy that still said
+`-H 127.0.0.1` — the exact binding deploy.md §5 warns makes every public page
+answer `307 -> itself` — and lacked `exec_mode: "fork"`, so pm2 would have
+run it in cluster mode off `instances: 1`. `scripts/deploy.sh` takes
+`PORT="${PORT:-3003}"` and exports it.
+
+**Local dev stays on 3000 deliberately.** `pnpm dev`, Playwright and the
+`.env.example` localhost fallbacks are unchanged: 3000 is Next's dev default,
+nothing collides on a laptop, and moving the E2E harness to chase a server's
+port conflict trades a real risk for a cosmetic one.
+
+**The deploy now checks the app answered.** After the restart, ten tries at
+`http://localhost:$PORT/`, two seconds apart, accepting 2xx/3xx. `localhost`
+rather than 127.0.0.1 for the reason §5 gives — on this host it resolves to
+::1 and the server binds there. It warns rather than aborting, so the
+Cloudflare purge still runs (an empty cache is never worse than a poisoned
+one), but the script exits 1 and the closing line says the app is not
+answering, because "Deployed" should not print over a site that is down. This
+is the check that would have caught a `pm2 reload` onto a half-started
+process, which reports `online` while erroring.
+
+**Tests:** `bash -n scripts/deploy.sh` OK, `pnpm governance:check` OK,
+`pnpm format` clean. No application code changed — docs, the README and the
+deploy script only.
