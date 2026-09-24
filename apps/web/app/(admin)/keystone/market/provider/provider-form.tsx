@@ -8,7 +8,7 @@
 // will not show it to you" — and the difference decides whether leaving it
 // alone is safe. Blank means UNCHANGED; the contract says so, the service
 // implements it, and an integration test pins it.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, Info, Plug, RefreshCw } from "lucide-react";
 import {
@@ -124,6 +124,21 @@ function intervalOptions(choices: readonly number[], current: string) {
   }));
 }
 
+/**
+ * The elapsed sweep time as a stopwatch reading.
+ *
+ * NOT `formatDurationSeconds`: that picks the largest unit the value divides
+ * into exactly, which is right for a picker option and wrong for a counter —
+ * it would read "1 minute", then "61 seconds", then "62 seconds". Digits and a
+ * colon are not a user-facing string (code-style.md #2), so this needs no
+ * catalog key.
+ */
+function stopwatch(seconds: number, locale = "en"): string {
+  const digits = new Intl.NumberFormat(locale, { useGrouping: false });
+  const rest = seconds % 60;
+  return `${digits.format(Math.floor(seconds / 60))}:${digits.format(rest).padStart(2, "0")}`;
+}
+
 /** Failed symbols keyed by their error, in the order each reason first appeared. */
 function groupFailures(failures: SyncResult["failures"]): [string, string[]][] {
   const groups = new Map<string, string[]>();
@@ -157,6 +172,21 @@ export function ProviderForm({
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [elapsed, setElapsed] = useState(0);
+
+  // A sweep is one paced provider request per instrument (1.2s apiece on the
+  // free tier) and a first run asks for full history, so a normal run is tens
+  // of seconds and a backfill is minutes. Ticking while it is in flight is
+  // what separates "still working" from "this button did nothing".
+  useEffect(() => {
+    if (!syncing) return;
+    // The zero is set by `sync()`, not here: a setState in an effect BODY
+    // renders twice for one state change, and the run's start is a fact the
+    // click already knows.
+    const startedAt = Date.now();
+    const timer = setInterval(() => setElapsed(Math.floor((Date.now() - startedAt) / 1000)), 1000);
+    return () => clearInterval(timer);
+  }, [syncing]);
 
   const values = {
     driver,
@@ -187,6 +217,7 @@ export function ProviderForm({
    * would be the wrong summary. Same shape as the test button beside it.
    */
   const sync = async () => {
+    setElapsed(0);
     setSyncing(true);
     setSyncError(null);
     try {
@@ -315,7 +346,7 @@ export function ProviderForm({
 
         {/* Save sits at the inline END of its section (ADR-044 #8). */}
         <div className="flex justify-end">
-          <Button onClick={save} disabled={pending}>
+          <Button onClick={save} loading={pending}>
             {labels.save}
           </Button>
         </div>
@@ -328,7 +359,10 @@ export function ProviderForm({
             <FieldLabel>{labels.testSymbolField}</FieldLabel>
             <Input value={testSymbol} onChange={(event) => setTestSymbol(event.target.value)} />
           </Field>
-          <Button variant="outline" onClick={test} disabled={testing}>
+          {/* `loading`, not `disabled`: the Button swaps its own icon for the
+              brand Spinner and sets aria-busy, so a request that takes a
+              second is visibly in flight rather than an inert grey box. */}
+          <Button variant="outline" onClick={test} loading={testing}>
             <Plug aria-hidden data-icon="inline-start" />
             {labels.testAction}
           </Button>
@@ -351,8 +385,24 @@ export function ProviderForm({
           records what happened. */}
       <AdminSection title={labels.syncTitle}>
         <p className="text-sm text-muted-foreground">{labels.syncDescription}</p>
-        <div className="flex justify-end">
-          <Button onClick={sync} disabled={syncing}>
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          {/* The elapsed count, not a progress bar: the sweep's length is a
+              function of how many instruments the budget reaches and how the
+              provider paces them, so there is no honest denominator. A number
+              that keeps moving is what says the wait is the sweep working
+              rather than the page having stopped.
+
+              It carries no word of its own: the button beside it already
+              reads "Syncing…", so a second one would be the same label twice.
+
+              No aria-live on it — a counter that ticks every second would be
+              read out every second. The button's `loading` sets aria-busy and
+              the result Alert carries role="alert", so both ends of the wait
+              are announced already. */}
+          {syncing && (
+            <p className="text-sm tabular-nums text-muted-foreground">{stopwatch(elapsed)}</p>
+          )}
+          <Button onClick={sync} loading={syncing}>
             <RefreshCw aria-hidden data-icon="inline-start" />
             {syncing ? labels.syncRunning : labels.syncAction}
           </Button>

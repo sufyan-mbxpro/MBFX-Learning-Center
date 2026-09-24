@@ -24880,3 +24880,84 @@ to this change — 5 in `site-url.test.ts`, where a `trycloudflare.com` tunnel
 URL in the local `.env` leaks into the test environment, and 1 in
 `changes-50-fixes.test.ts` about the footer subscribe strip. Both were
 confirmed identical with the change stashed.
+
+## 2026-09-23 — The sweep spent every run naming six instruments nothing can fix (Module 13)
+
+**Sync now looked inert, and it was the one honest part.** The button
+swapped its label to "Syncing…" and went grey. A sweep is one paced provider
+request per instrument — 1.2 s apiece on AlphaVantage's free tier — and a
+first run asks for full history, so the normal case is tens of seconds and a
+backfill is minutes, all of it behind a control that looks the same as a
+disabled one. The three buttons on the screen now use `Button loading`, which
+already owns this: it swaps its own icon for the brand Spinner, sets
+`aria-busy` and disables itself, so nothing new was written. Beside the sync
+button there is now an elapsed stopwatch, because the sweep's length is a
+function of how many instruments the budget reaches and how the provider
+paces them — there is no honest denominator for a progress bar, and a number
+that keeps moving is what distinguishes "still working" from "this did
+nothing". `formatDurationSeconds` is deliberately not used for it: it picks
+the largest unit that divides exactly, which is right for a picker option and
+reads "1 minute", then "61 seconds", then "62 seconds" on a counter. No
+`aria-live` on the ticker — a per-second counter would be announced every
+second, and both ends of the wait are already announced by `aria-busy` and
+the result `Alert`'s `role="alert"`.
+
+**Six instruments were seeded active that no shipped driver can ever fill.**
+`MANUAL` serves nothing; AlphaVantage has no physical-currency entry for XAU
+or XAG so `FX_DAILY` rejects them, prices gold, silver and WTI one number a
+day (a bar invented from one price claims a high and a low nobody measured,
+ADR-087 #2), and puts `INDEX_DATA` behind its paid tier. `supportsKind`
+already kept the sweep from spending a request on them, so this cost no
+quota — it cost the admin a "Not available from this provider" list on every
+single run that nothing they could do would shorten. They are seeded
+`isActive: false` now, and `20260923100000_unservable_instruments_off` moves
+an existing install, bounded to a row that still has NO BARS AT ALL so an
+instance that has loaded gold history from somewhere keeps its switch on.
+
+**Deactivated, not deleted, and the distinction is load-bearing.**
+`MARKET_BOARD_GROUPS.commodities` still names XAU/XAG/WTI for the live-rates
+frame, which reads TradingView's own tickers and is unaffected either way; an
+instance that buys a provider serving metals flips three switches rather than
+re-deriving the table. On the volatility board an inactive row lands in
+`missing` — exactly where an active row with no bars was already landing — so
+no reader-visible state changed.
+
+**The set grows where the provider can actually deliver.** Fifteen pairs
+become thirty: the crosses the eight majors make (EUR/AUD, EUR/CAD, EUR/NZD,
+GBP/CHF, GBP/AUD, GBP/CAD, AUD/CAD, AUD/CHF, AUD/NZD, NZD/JPY, CAD/JPY,
+CHF/JPY) and three more exotics (USD/SGD, USD/SEK, USD/NOK). Crypto goes from
+two to six (XRP, LTC, SOL, ADA) because `DIGITAL_CURRENCY_DAILY` answers with
+the same four prices a bar needs, which makes it the only non-FX kind that
+can carry history on a free key. Every addition is two AlphaVantage physical
+currencies or a listed digital one — that is the whole test for whether a row
+belongs in the table, and it is the test the six removed rows failed.
+`pairIds` feeds the five calculators, pivot points and correlation, so all of
+them widen with it; the correlation schema's cap is 60.
+
+**A cost worth stating: 43 fetchable instruments against a 25-a-day free
+tier.** A full rotation now takes about two days instead of one, and
+"Skipped" will be a large number on every manual run. That is the staleness
+order working as ADR-087 #9 designed it — whatever a run missed is at the
+front of the next one — not a failure, and the alert already prints the
+figure. A paid tier, a different driver, or switching rows off are the three
+levers.
+
+**The risk meter's basket was four-sevenths unfillable, so it is rebuilt.**
+It led on SPX, NDX, WTI and XAU. With those inactive it would have run on
+three components; it had in practice been running on three all along, since
+none of the four ever had a bar. It is now AUD/JPY · AUD/USD · NZD/USD ·
+BTC/USD against USD/ZAR · USD/MXN. The directions are also corrected:
+`direction: "risk-off"` means "rises when risk comes OFF" and has its rank
+flipped, and the yen strengthening on a risk-off day makes USD/JPY *fall* —
+so USD/JPY and USD/CHF were both labelled backwards from the start. The
+dollar against an emerging-market currency is the pair that actually rises.
+The tool's intro, body and FAQ are rewritten to name what is in the basket,
+since they described gold and equities. Create-only, like every seeded row,
+so an existing install keeps its configured basket until `db:reset` or an
+edit in the admin.
+
+**Tests:** `@repo/db` 41 passed (Testcontainers, 5 files); `@repo/contracts`
+market/market-boards/tools 47 passed; `@repo/core` `market.test.ts` 32
+passed; `apps/web` tools + `admin-form-conventions` 859 passed. `tsc
+--noEmit` clean on `@repo/db` and `apps/web`; eslint and prettier clean on
+both changed files.

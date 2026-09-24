@@ -4312,6 +4312,22 @@ export async function seed(db: PrismaClient) {
     ["GBP/JPY", "GBP", "JPY"],
     ["EUR/CHF", "EUR", "CHF"],
     ["AUD/JPY", "AUD", "JPY"],
+    // The rest of the crosses the eight majors make. Every one is two
+    // AlphaVantage physical currencies, so FX_DAILY serves them on the same
+    // free tier the majors come from — which is the whole test for whether a
+    // row belongs in this list (see OTHER_INSTRUMENTS below).
+    ["EUR/AUD", "EUR", "AUD"],
+    ["EUR/CAD", "EUR", "CAD"],
+    ["EUR/NZD", "EUR", "NZD"],
+    ["GBP/CHF", "GBP", "CHF"],
+    ["GBP/AUD", "GBP", "AUD"],
+    ["GBP/CAD", "GBP", "CAD"],
+    ["AUD/CAD", "AUD", "CAD"],
+    ["AUD/CHF", "AUD", "CHF"],
+    ["AUD/NZD", "AUD", "NZD"],
+    ["NZD/JPY", "NZD", "JPY"],
+    ["CAD/JPY", "CAD", "JPY"],
+    ["CHF/JPY", "CHF", "JPY"],
     // The Exotic group on /tools/live-rates and /tools/volatility (ADR-136 §4).
     // Seeded so the volatility board has rows to fill once a provider is
     // configured; with the MANUAL provider they report nothing, as every
@@ -4319,18 +4335,48 @@ export async function seed(db: PrismaClient) {
     ["USD/TRY", "USD", "TRY"],
     ["USD/ZAR", "USD", "ZAR"],
     ["USD/MXN", "USD", "MXN"],
+    ["USD/SGD", "USD", "SGD"],
+    ["USD/SEK", "USD", "SEK"],
+    ["USD/NOK", "USD", "NOK"],
   ];
 
-  const OTHER_INSTRUMENTS: [string, string, string, string, string][] = [
-    // symbol, name, kind, base, quote
-    ["XAU/USD", "Gold", "METAL", "XAU", "USD"],
-    ["XAG/USD", "Silver", "METAL", "XAG", "USD"],
-    ["BTC/USD", "Bitcoin", "CRYPTO", "BTC", "USD"],
-    ["ETH/USD", "Ethereum", "CRYPTO", "ETH", "USD"],
-    ["SPX/USD", "S&P 500", "INDEX", "SPX", "USD"],
-    ["NDX/USD", "Nasdaq 100", "INDEX", "NDX", "USD"],
-    ["WTI/USD", "Crude Oil (WTI)", "COMMODITY", "WTI", "USD"],
-    ["DXY/USD", "US Dollar Index", "INDEX", "DXY", "USD"],
+  // Everything that is not a currency or a currency pair.
+  //
+  // **The last column is `isActive`, and the METAL / INDEX / COMMODITY rows
+  // are seeded OFF.** Neither shipped driver can ever serve them: `MANUAL`
+  // serves nothing, and AlphaVantage's free tier has no physical-currency
+  // entry for XAU or XAG, prices gold, silver and WTI one number a day (a bar
+  // invented from one price claims a high and a low nobody measured, ADR-087
+  // #2), and puts `INDEX_DATA` behind its paid tier. `syncDailyBars` spends no
+  // request on them — `supportsKind` filters them out first — but it does name
+  // them under "Not available from this provider" on every single run, which
+  // is an admin being told to act on a list that nothing they do can shorten.
+  //
+  // Seeded OFF rather than DELETED, because the rows are not wrong, they are
+  // unreachable from HERE: `MARKET_BOARD_GROUPS.commodities` still names
+  // XAU/XAG/WTI for the live-rates frame (that board reads TradingView's
+  // tickers, so it is unaffected either way), and an instance that buys a
+  // provider which serves metals turns three switches back on instead of
+  // re-deriving this table. An inactive row reports nothing on the volatility
+  // board — which is exactly what an active row with no bars was already
+  // doing.
+  const OTHER_INSTRUMENTS: [string, string, string, string, string, boolean][] = [
+    // symbol, name, kind, base, quote, isActive
+    ["XAU/USD", "Gold", "METAL", "XAU", "USD", false],
+    ["XAG/USD", "Silver", "METAL", "XAG", "USD", false],
+    ["SPX/USD", "S&P 500", "INDEX", "SPX", "USD", false],
+    ["NDX/USD", "Nasdaq 100", "INDEX", "NDX", "USD", false],
+    ["WTI/USD", "Crude Oil (WTI)", "COMMODITY", "WTI", "USD", false],
+    ["DXY/USD", "US Dollar Index", "INDEX", "DXY", "USD", false],
+    // Crypto IS served, on `DIGITAL_CURRENCY_DAILY`, with the same four
+    // prices a bar needs — so these are the only non-FX rows that can carry
+    // history on a free key, and the set is widened to match.
+    ["BTC/USD", "Bitcoin", "CRYPTO", "BTC", "USD", true],
+    ["ETH/USD", "Ethereum", "CRYPTO", "ETH", "USD", true],
+    ["XRP/USD", "XRP", "CRYPTO", "XRP", "USD", true],
+    ["LTC/USD", "Litecoin", "CRYPTO", "LTC", "USD", true],
+    ["SOL/USD", "Solana", "CRYPTO", "SOL", "USD", true],
+    ["ADA/USD", "Cardano", "CRYPTO", "ADA", "USD", true],
   ];
 
   let instrumentOrder = 0;
@@ -4343,6 +4389,7 @@ export async function seed(db: PrismaClient) {
     base: string | null;
     quote: string | null;
     decimals: number;
+    isActive?: boolean;
   }) {
     const row = await db.marketInstrument.upsert({
       where: { symbol: input.symbol },
@@ -4354,6 +4401,7 @@ export async function seed(db: PrismaClient) {
         base: input.base,
         quote: input.quote,
         decimals: input.decimals,
+        isActive: input.isActive ?? true,
         sortOrder: instrumentOrder++,
       },
     });
@@ -4382,7 +4430,7 @@ export async function seed(db: PrismaClient) {
       decimals: quote === "JPY" ? 3 : 5,
     });
   }
-  for (const [symbol, displayName, kind, base, quote] of OTHER_INSTRUMENTS) {
+  for (const [symbol, displayName, kind, base, quote, isActive] of OTHER_INSTRUMENTS) {
     await seedInstrument({
       symbol,
       displayName,
@@ -4390,10 +4438,13 @@ export async function seed(db: PrismaClient) {
       base,
       quote,
       decimals: 2,
+      isActive,
     });
   }
+  const inactiveInstruments = OTHER_INSTRUMENTS.filter(([, , , , , active]) => !active).length;
   console.log(
     `  market instruments: ${MAJOR_CURRENCIES.length + PAIRS.length + OTHER_INSTRUMENTS.length}` +
+      ` (${inactiveInstruments} inactive: no shipped driver serves metals, indices or oil)` +
       " (provider: MANUAL, disabled)",
   );
 
@@ -5120,8 +5171,9 @@ export async function seed(db: PrismaClient) {
       intro:
         "<h2>What is risk-on and risk-off?</h2>" +
         "<p>Risk-on and risk-off describe which way money has been moving. When investors are " +
-        "willing to take risk, money moves toward equities and the commodity currencies; when they " +
-        "are not, it moves toward gold, the yen and the franc.</p>" +
+        "willing to take risk, money moves toward equities, the commodity currencies and the " +
+        "higher-yielding emerging markets; when they are not, it moves back toward the dollar, " +
+        "the yen and the franc.</p>" +
         "<p>The meter is a single score from 0 to 100 built from how a basket of those markets has " +
         "moved relative to its own recent history. High is risk-on; low is risk-off.</p>",
       body:
@@ -5136,9 +5188,10 @@ export async function seed(db: PrismaClient) {
         "<p>Each market in the basket is scored by where its latest move sits within its own recent " +
         "range — its percentile rank. A market that usually moves half a percent and has just moved " +
         "two ranks near the top of its own history, whatever the absolute number.</p>" +
-        "<p>Markets that rise when risk is being taken on — equity indices, commodity currencies — " +
-        "score as they rank. Markets that rise when risk is coming off — gold, the yen — have their " +
-        "rank flipped before it is counted. The weighted average of what is left is the score.</p>" +
+        "<p>Markets that rise when risk is being taken on — the commodity currencies, bitcoin — " +
+        "score as they rank. Markets that rise when risk is coming off — the dollar against the " +
+        "emerging-market currencies — have their rank flipped before it is counted. The weighted " +
+        "average of what is left is the score.</p>" +
         "<p>A market with too little history is left out and counted, never filled in with a zero. A " +
         "zero would be a claim that the market was neutral; leaving it out is the truth, which is " +
         "that we do not know.</p>" +
@@ -5153,11 +5206,11 @@ export async function seed(db: PrismaClient) {
             "risk-off moves have cancelled each other out.",
         },
         {
-          question: "Why are gold and the yen counted the other way round?",
+          question: "Why is the dollar against the rand and the peso counted the other way round?",
           answer:
-            "They tend to rise when investors are moving away from risk. A strong day for gold " +
-            "or the yen is therefore read as a risk-off signal, so its rank is flipped before it " +
-            "counts toward the score.",
+            "Those pairs tend to rise when investors are moving away from risk, because the " +
+            "emerging-market currency is the one being sold. A strong day for them is therefore " +
+            "read as a risk-off signal, so the rank is flipped before it counts toward the score.",
         },
         {
           question: "Should I trade based on this meter?",
@@ -5167,15 +5220,27 @@ export async function seed(db: PrismaClient) {
             "open a trade on its own.",
         },
       ],
+      // The basket is built only from instruments a shipped driver can
+      // actually fill. It used to lead on SPX, NDX, WTI and XAU, none of
+      // which AlphaVantage serves as bars, so four of its seven components
+      // could never report and the meter silently ran on the other three.
+      //
+      // `direction` says which way a market moves when risk comes OFF, and a
+      // `risk-off` component has its rank flipped before it counts. That is
+      // why the two former havens here are stated as PAIRS rather than as
+      // currencies: the yen strengthening on a risk-off day makes USD/JPY
+      // FALL, so USD/JPY is not a market that rises when risk comes off. The
+      // dollar against an emerging-market currency is.
       config: {
         components: [
-          { instrumentId: id("SPX/USD"), weight: 3, direction: "risk-on" },
-          { instrumentId: id("NDX/USD"), weight: 2, direction: "risk-on" },
+          // Rises when risk is being taken on.
+          { instrumentId: id("AUD/JPY"), weight: 3, direction: "risk-on" },
           { instrumentId: id("AUD/USD"), weight: 2, direction: "risk-on" },
-          { instrumentId: id("WTI/USD"), weight: 1, direction: "risk-on" },
-          { instrumentId: id("XAU/USD"), weight: 2, direction: "risk-off" },
-          { instrumentId: id("USD/JPY"), weight: 2, direction: "risk-off" },
-          { instrumentId: id("USD/CHF"), weight: 1, direction: "risk-off" },
+          { instrumentId: id("NZD/USD"), weight: 2, direction: "risk-on" },
+          { instrumentId: id("BTC/USD"), weight: 1, direction: "risk-on" },
+          // Rises when risk is coming off.
+          { instrumentId: id("USD/ZAR"), weight: 3, direction: "risk-off" },
+          { instrumentId: id("USD/MXN"), weight: 2, direction: "risk-off" },
         ].filter((c) => c.instrumentId !== ""),
         lookbackDays: 60,
         riskOffBelow: 35,
