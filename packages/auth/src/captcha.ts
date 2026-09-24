@@ -31,6 +31,8 @@ import {
   CAPTCHA_HEADER,
   DEFAULT_CAPTCHA_MIN_SCORE,
   type CaptchaAction,
+  type CaptchaClientConfig,
+  type CaptchaMode,
   type CaptchaSettingsSaveInput,
 } from "@repo/contracts";
 import { db } from "@repo/db";
@@ -58,6 +60,8 @@ const VERIFY_TIMEOUT_MS = 10_000;
 /** What the guard and the support form need, or `null` when the check is off. */
 export interface CaptchaRuntime {
   siteKey: string;
+  /** v3 score or v2 checkbox (ADR-158). */
+  mode: CaptchaMode;
   secretKey: string;
   minScore: number;
 }
@@ -70,6 +74,7 @@ export function captchaForcedOff(env: NodeJS.ProcessEnv = process.env): boolean 
 
 interface CaptchaRow {
   enabled: boolean;
+  mode: CaptchaMode;
   siteKey: string | null;
   secretKeyCipher: string | null;
   minScore: number;
@@ -94,7 +99,7 @@ export function resolveCaptchaRuntime(
   }
   if (!secretKey) return null;
   const minScore = row.minScore > 0 && row.minScore <= 1 ? row.minScore : DEFAULT_CAPTCHA_MIN_SCORE;
-  return { siteKey: row.siteKey, secretKey, minScore };
+  return { siteKey: row.siteKey, mode: row.mode, secretKey, minScore };
 }
 
 /** The ONE reader of the sealed secret. Uncached: the guard must see a switch-off at once. */
@@ -102,13 +107,14 @@ export async function loadCaptchaRuntime(): Promise<CaptchaRuntime | null> {
   if (captchaForcedOff()) return null;
   const row = await db.captchaConfig.findUnique({
     where: { id: CONFIG_ID },
-    select: { enabled: true, siteKey: true, secretKeyCipher: true, minScore: true },
+    select: { enabled: true, mode: true, siteKey: true, secretKeyCipher: true, minScore: true },
   });
   return resolveCaptchaRuntime(row, (sealed) => openSecret(sealed, CAPTCHA_SEAL_ENV));
 }
 
 /**
- * The site key a public form needs, or `null` when the check is off. Cached
+ * The site key and type a public form needs (ADR-158), or `null` when the
+ * check is off. Cached
  * and tagged, so a static page carries it and a save in the tab revalidates
  * it. It holds nothing secret: the site key is in the page by design.
  *
@@ -116,12 +122,12 @@ export async function loadCaptchaRuntime(): Promise<CaptchaRuntime | null> {
  * tokens the server would not check, or the reverse, beyond the moment
  * between a save and the revalidation.
  */
-export async function getCaptchaSiteKey(): Promise<string | null> {
+export async function getCaptchaClient(): Promise<CaptchaClientConfig | null> {
   "use cache";
   cacheTag(CAPTCHA_CACHE_TAG);
   cacheLife({ revalidate: 300 });
   const runtime = await loadCaptchaRuntime();
-  return runtime?.siteKey ?? null;
+  return runtime ? { siteKey: runtime.siteKey, mode: runtime.mode } : null;
 }
 
 // ─── Checking a token ─────────────────────────────────────────
@@ -134,15 +140,18 @@ export interface RecaptchaVerifyResponse {
 }
 
 /**
- * Pure: does this siteverify answer pass? All three must hold. Google says the
- * token is genuine, the score clears the bar, and the token was minted for THIS
- * form's action, so a support-form token replayed at sign-in fails here.
+ * Pure: does this siteverify answer pass? In SCORE mode all three must hold.
+ * Google says the token is genuine, the score clears the bar, and the token
+ * was minted for THIS form's action, so a support-form token replayed at
+ * sign-in fails here. A CHECKBOX (v2) answer has no score and no action, so
+ * Google's own verdict is the whole check there (ADR-158 #6).
  */
 export function recaptchaPasses(
   response: RecaptchaVerifyResponse,
-  expected: { action: CaptchaAction; minScore: number },
+  expected: { mode?: CaptchaMode; action: CaptchaAction; minScore: number },
 ): boolean {
   if (response.success !== true) return false;
+  if (expected.mode === "CHECKBOX") return true;
   if (typeof response.score !== "number" || response.score < expected.minScore) return false;
   return response.action === expected.action;
 }
@@ -151,6 +160,7 @@ export function recaptchaPasses(
 export async function checkRecaptchaToken(input: {
   secretKey: string;
   token: string | null | undefined;
+  mode?: CaptchaMode;
   action: CaptchaAction;
   minScore: number;
   remoteIp?: string | null;
@@ -168,7 +178,11 @@ export async function checkRecaptchaToken(input: {
     });
     if (!response.ok) return false;
     const data = (await response.json()) as RecaptchaVerifyResponse;
-    return recaptchaPasses(data, { action: input.action, minScore: input.minScore });
+    return recaptchaPasses(data, {
+      mode: input.mode,
+      action: input.action,
+      minScore: input.minScore,
+    });
   } catch {
     return false;
   }
@@ -189,6 +203,7 @@ export async function verifyCaptchaToken(input: {
   return checkRecaptchaToken({
     ...input,
     secretKey: runtime.secretKey,
+    mode: runtime.mode,
     minScore: runtime.minScore,
   });
 }
@@ -237,6 +252,7 @@ export function recaptchaGuard(): BetterAuthPlugin {
       const passed = await checkRecaptchaToken({
         secretKey: runtime.secretKey,
         token,
+        mode: runtime.mode,
         action: CAPTCHA_ACTIONS.auth,
         minScore: runtime.minScore,
         remoteIp: requestIp(request.headers),
@@ -251,6 +267,7 @@ export function recaptchaGuard(): BetterAuthPlugin {
 /** What the tab renders. No secret, only whether one is saved. */
 export interface CaptchaSettingsView {
   enabled: boolean;
+  mode: CaptchaMode;
   siteKey: string;
   hasSecretKey: boolean;
   minScore: number;
@@ -265,6 +282,7 @@ export async function loadCaptchaSettings(): Promise<CaptchaSettingsView> {
   const row = await db.captchaConfig.findUnique({ where: { id: CONFIG_ID } });
   return {
     enabled: row?.enabled ?? false,
+    mode: row?.mode ?? "SCORE",
     siteKey: row?.siteKey ?? "",
     hasSecretKey: Boolean(row?.secretKeyCipher),
     minScore: row?.minScore ?? DEFAULT_CAPTCHA_MIN_SCORE,
@@ -322,6 +340,7 @@ export async function saveCaptchaSettings(
     const passed = await checkRecaptchaToken({
       secretKey,
       token: input.checkToken,
+      mode: input.mode,
       action: CAPTCHA_ACTIONS.check,
       minScore: input.minScore,
       remoteIp: options.remoteIp,
@@ -329,13 +348,18 @@ export async function saveCaptchaSettings(
     });
     if (!passed) return { ok: false, reason: "checkFailed" };
     lastVerifiedAt = new Date();
-  } else if (siteKey !== (before?.siteKey ?? "") || typedSecret) {
+  } else if (
+    siteKey !== (before?.siteKey ?? "") ||
+    typedSecret ||
+    input.mode !== (before?.mode ?? "SCORE")
+  ) {
     // New keys that were never checked: what the last check proved is gone.
     lastVerifiedAt = null;
   }
 
   const data = {
     enabled: input.enabled,
+    mode: input.mode,
     siteKey: siteKey || null,
     minScore: input.minScore,
     lastVerifiedAt,
@@ -357,9 +381,19 @@ export async function saveCaptchaSettings(
       entityId: CONFIG_ID,
       changes: {
         before: before
-          ? { enabled: before.enabled, siteKey: before.siteKey, minScore: before.minScore }
+          ? {
+              enabled: before.enabled,
+              mode: before.mode,
+              siteKey: before.siteKey,
+              minScore: before.minScore,
+            }
           : null,
-        after: { enabled: input.enabled, siteKey: siteKey || null, minScore: input.minScore },
+        after: {
+          enabled: input.enabled,
+          mode: input.mode,
+          siteKey: siteKey || null,
+          minScore: input.minScore,
+        },
         secretKeyChanged: Boolean(typedSecret),
       },
     },

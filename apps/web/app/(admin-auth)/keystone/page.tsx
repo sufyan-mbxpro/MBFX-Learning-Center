@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
-import { getCaptchaSiteKey } from "@repo/auth";
+import { getCaptchaClient } from "@repo/auth";
 import { AdminAuthScreen } from "./_components/admin-auth-screen.tsx";
 import { AdminSignInForm } from "./admin-sign-in-form.tsx";
 
@@ -13,7 +13,7 @@ import { AdminSignInForm } from "./admin-sign-in-form.tsx";
 // (ADR-043 #2) — the surface is staff-facing, so no non-English value is
 // owed and `check:catalog-completeness` stays silent about it.
 export default async function AdminSignInPage() {
-  const [t, captchaSiteKey] = await Promise.all([getTranslations("admin"), getCaptchaSiteKey()]);
+  const [t, captcha] = await Promise.all([getTranslations("admin"), getCaptchaClient()]);
 
   return (
     <AdminAuthScreen
@@ -35,7 +35,7 @@ export default async function AdminSignInPage() {
       }
     >
       <AdminSignInForm
-        captchaSiteKey={captchaSiteKey}
+        captcha={captcha}
         labels={{
           email: t("signIn.email"),
           password: t("signIn.password"),
@@ -45,6 +45,7 @@ export default async function AdminSignInPage() {
           failed: t("signIn.failed"),
           notStaff: t("signIn.notStaff"),
           captcha: t("signIn.captcha"),
+          captchaRequired: t("signIn.captchaRequired"),
           resetDone: t("passwordReset.resetDone"),
           codeTitle: t("signIn.codeTitle"),
           codeHint: t("signIn.codeHint"),

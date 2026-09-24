@@ -10,13 +10,20 @@ import {
   resolveCaptchaRuntime,
 } from "./captcha.ts";
 
-const ROW = { enabled: true, siteKey: "site", secretKeyCipher: "sealed", minScore: 0.5 };
+const ROW = {
+  enabled: true,
+  mode: "SCORE" as const,
+  siteKey: "site",
+  secretKeyCipher: "sealed",
+  minScore: 0.5,
+};
 const open = (sealed: string) => (sealed === "sealed" ? "secret" : "");
 
 describe("resolveCaptchaRuntime — on only when switched on, complete and readable", () => {
   it("is on for a complete, switched-on row", () => {
     expect(resolveCaptchaRuntime(ROW, open)).toEqual({
       siteKey: "site",
+      mode: "SCORE",
       secretKey: "secret",
       minScore: 0.5,
     });
@@ -85,6 +92,26 @@ describe("recaptchaPasses", () => {
 
   it("fails a token minted for another action — no replaying a sign-in token here", () => {
     expect(recaptchaPasses({ success: true, score: 0.9, action: "auth" }, expected)).toBe(false);
+  });
+});
+
+// ADR-158: a v2 checkbox answer has no score and no action, so Google's own
+// verdict is the whole check. A v3-shaped bar applied to it would refuse
+// every person who ticked the box.
+describe("recaptchaPasses — CHECKBOX mode", () => {
+  const expected = { mode: "CHECKBOX", action: "auth", minScore: 0.9 } as const;
+
+  it("passes on Google's success with no score and no action", () => {
+    expect(recaptchaPasses({ success: true }, expected)).toBe(true);
+  });
+
+  it("still fails when Google says no", () => {
+    expect(recaptchaPasses({ success: false }, expected)).toBe(false);
+    expect(recaptchaPasses({}, expected)).toBe(false);
+  });
+
+  it("keeps the v3 rules when the mode is SCORE", () => {
+    expect(recaptchaPasses({ success: true }, { ...expected, mode: "SCORE" })).toBe(false);
   });
 });
 

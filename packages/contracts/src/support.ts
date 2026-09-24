@@ -35,10 +35,15 @@ import { z } from "zod";
  * the footer form should not thereby pass this one too, and the cost of a
  * second constant is one line.
  *
- * "company" is what a contact-form spam bot expects to find, which is the
- * property that makes a honeypot work — it has to look worth filling.
+ * It was "company" until 2026-09-24, and that name silently ate real
+ * messages: Chrome and Edge IGNORE `autocomplete="off"` for address autofill,
+ * so a visitor with a saved address that had a company in it got the hidden
+ * field filled for them, was treated as a bot, shown "sent", and nothing was
+ * delivered — not even a log row. The name must mean nothing to an autofill
+ * heuristic (no company/organization/website/url/phone/fax/address token);
+ * spam bots fill every text input regardless.
  */
-export const SUPPORT_HONEYPOT_FIELD = "company";
+export const SUPPORT_HONEYPOT_FIELD = "contact_ref";
 
 /** Matches the reference form's `rows={6}` textarea without being a novel. */
 export const SUPPORT_MESSAGE_MAX = 5000;

@@ -8,7 +8,9 @@ import { Label } from "@repo/ui/components/label";
 import { PasswordInput } from "@repo/ui/components/password-input";
 import { AuthInputIcon } from "../../_lib/auth-input-icon.tsx";
 import { useSearchParam } from "../../_lib/use-search-param.ts";
-import { useRecaptcha } from "../../_lib/recaptcha.ts";
+import type { CaptchaClientConfig } from "@repo/contracts";
+import { captchaAnswered, useRecaptcha } from "../../_lib/recaptcha.ts";
+import { RecaptchaCheckbox } from "../../_lib/recaptcha-checkbox.tsx";
 import {
   isAdminPath,
   resolveRedirect,
@@ -18,11 +20,12 @@ import {
   verifyTwoFactorSignIn,
 } from "../../_lib/credentials.ts";
 
-type Failure = "credentials" | "notStaff" | "captcha" | "invalidCode" | "codeExpired";
+type Failure =
+  "credentials" | "notStaff" | "captcha" | "captchaRequired" | "invalidCode" | "codeExpired";
 
 export function AdminSignInForm({
   labels,
-  captchaSiteKey,
+  captcha,
 }: {
   labels: {
     email: string;
@@ -33,6 +36,7 @@ export function AdminSignInForm({
     failed: string;
     notStaff: string;
     captcha: string;
+    captchaRequired: string;
     resetDone: string;
     codeTitle: string;
     codeHint: string;
@@ -42,8 +46,8 @@ export function AdminSignInForm({
     codeExpired: string;
     back: string;
   };
-  /** Settings → General → reCAPTCHA's site key, or `null` while it is off (ADR-156). */
-  captchaSiteKey: string | null;
+  /** Settings → General → reCAPTCHA's key and type, or `null` while it is off (ADR-156, ADR-158). */
+  captcha: CaptchaClientConfig | null;
 }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -52,8 +56,8 @@ export function AdminSignInForm({
   const [step, setStep] = useState<"credentials" | "code">("credentials");
   const [code, setCode] = useState("");
   const [pending, startTransition] = useTransition();
-  // ADR-156: load reCAPTCHA v3 now, so its token is ready at submit.
-  useRecaptcha(captchaSiteKey);
+  // ADR-156/158: register reCAPTCHA now, so its token is ready at submit.
+  useRecaptcha(captcha);
 
   // `?reset=1` — where the staff reset screen sends someone once every session
   // has been revoked and the lockout cleared (ADR-079 #6).
@@ -62,6 +66,11 @@ export function AdminSignInForm({
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
     setFailure(null);
+    // ADR-158 #4: an unticked box is named here, before any request.
+    if (!captchaAnswered()) {
+      setFailure("captchaRequired");
+      return;
+    }
     startTransition(async () => {
       const result = await signInWithPassword(email, password);
       if (result.status === "captcha") {
@@ -128,11 +137,13 @@ export function AdminSignInForm({
       ? labels.notStaff
       : failure === "captcha"
         ? labels.captcha
-        : failure === "invalidCode"
-          ? labels.invalidCode
-          : failure === "codeExpired"
-            ? labels.codeExpired
-            : labels.failed;
+        : failure === "captchaRequired"
+          ? labels.captchaRequired
+          : failure === "invalidCode"
+            ? labels.invalidCode
+            : failure === "codeExpired"
+              ? labels.codeExpired
+              : labels.failed;
 
   if (step === "code") {
     return (
@@ -225,6 +236,7 @@ export function AdminSignInForm({
           />
         </AuthInputIcon>
       </div>
+      <RecaptchaCheckbox captcha={captcha} />
       {failure && (
         <p id="admin-signin-error" role="alert" className="text-sm text-destructive-interactive">
           {failureText}

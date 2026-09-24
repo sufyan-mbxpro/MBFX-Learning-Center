@@ -751,11 +751,18 @@
     },
     "captcha": {
       "section": "Google reCAPTCHA",
-      "sectionDescription": "Checks that sign-in, sign-up and the support form are used by a person, not a script. Uses Google reCAPTCHA v3, which has no checkbox.",
+      "sectionDescription": "Checks that sign-in, sign-up and the support form are used by a person, not a script, with Google reCAPTCHA: invisible, or a checkbox in the form.",
       "enabled": "Turn on reCAPTCHA",
       "enabledHint": "Staff sign-in, learner sign-in and sign-up, and the support form. When you save with this on, your browser runs a check with these keys first. Keys that fail are not saved.",
+      "mode": "Type",
+      "modeHint": "Invisible scores each visit in the background and shows Google's badge in the corner. Checkbox shows \"I'm not a robot\" inside each form. Each type needs its own keys from Google.",
+      "modes": {
+        "SCORE": "Invisible (v3, score based)",
+        "CHECKBOX": "Checkbox in the form (v2)"
+      },
+      "checkboxProof": "Tick the box to prove these keys work. The keys are saved only if Google accepts it.",
       "siteKey": "Site key",
-      "siteKeyHint": "From google.com/recaptcha/admin. Create a \"Score based (v3)\" key and add every domain this site uses.",
+      "siteKeyHint": "From google.com/recaptcha/admin. Create a \"Score based (v3)\" key for Invisible, or a \"Challenge (v2)\" key with \"I'm not a robot\" for Checkbox, and add every domain this site uses.",
       "secretKey": "Secret key",
       "secretKeyHint": "Shown once, next to the site key, in Google's admin console. It is stored encrypted and never shown again.",
       "secretKeySaved": "A secret key is saved. Leave this blank to keep it, or enter a new one to replace it.",
@@ -770,8 +777,9 @@
       "refusals": {
         "sealKeyMissing": "The server cannot encrypt the secret key. CAPTCHA_SECRET_KEY is not set.",
         "secretRequired": "Enter the secret key to turn reCAPTCHA on.",
-        "checkFailed": "Google did not accept a check with these keys. Make sure both keys come from the same v3 key and that this domain is listed on it.",
-        "tokenUnavailable": "Your browser could not run the reCAPTCHA check. Check the site key, and turn off any content blocker for this site."
+        "checkFailed": "Google did not accept a check with these keys. Make sure both keys come from the same Google key, that its type matches the Type above, and that this domain is listed on it.",
+        "tokenUnavailable": "Your browser could not run the reCAPTCHA check. Check the site key, and turn off any content blocker for this site.",
+        "unchecked": "Tick the reCAPTCHA box below the keys, then save again."
       }
     },
     "settingsGroupDesc": {
@@ -1561,6 +1569,7 @@
       "failed": "Sign-in failed. Check your email and password.",
       "notStaff": "That account does not have access to the admin portal.",
       "captcha": "We couldn't confirm this request came from a person. Reload the page and try again. If it keeps happening, turn off any content blocker for this site.",
+      "captchaRequired": "Tick \"I'm not a robot\", then try again.",
       "userSignIn": "Go to User Login",
       "codeTitle": "Two-factor authentication",
       "codeHint": "Enter the 6-digit code from your authenticator app, or one of your backup codes.",
@@ -3382,6 +3391,7 @@
     "signUpFailed": "We couldn't create your account. Check your details and try again.",
     "emailTaken": "An account with this email already exists.",
     "captchaFailed": "We couldn't confirm this request came from a person. Reload the page and try again. If it keeps happening, turn off any content blocker for this site.",
+    "captchaRequired": "Tick \"I'm not a robot\", then try again.",
     "haveAccount": "Already have an account?",
     "newsletterOptIn": "Send me news, market analysis and platform updates by email",
     "newsletterOptInHint": "Optional. You can unsubscribe from any email we send.",
@@ -4812,6 +4822,7 @@
       "invalid": "Please check the form and try again.",
       "limited": "That is several messages in a short time. Wait a little and try again.",
       "captcha": "We couldn't confirm this request came from a person. Reload the page and try again. If it keeps happening, turn off any content blocker for this site.",
+      "captchaRequired": "Tick \"I'm not a robot\", then try again.",
       "failed": "We could not send your message just now. Please try again later."
     },
     "moreHelp": {

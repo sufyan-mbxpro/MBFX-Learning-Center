@@ -113,6 +113,13 @@ export default async function SettingsGroupPage({
                         sectionDescription: t("captcha.sectionDescription"),
                         enabled: t("captcha.enabled"),
                         enabledHint: t("captcha.enabledHint"),
+                        mode: t("captcha.mode"),
+                        modeHint: t("captcha.modeHint"),
+                        modes: {
+                          SCORE: t("captcha.modes.SCORE"),
+                          CHECKBOX: t("captcha.modes.CHECKBOX"),
+                        },
+                        checkboxProof: t("captcha.checkboxProof"),
                         siteKey: t("captcha.siteKey"),
                         siteKeyHint: t("captcha.siteKeyHint"),
                         secretKey: t("captcha.secretKey"),
@@ -135,6 +142,7 @@ export default async function SettingsGroupPage({
                           secretRequired: t("captcha.refusals.secretRequired"),
                           checkFailed: t("captcha.refusals.checkFailed"),
                           tokenUnavailable: t("captcha.refusals.tokenUnavailable"),
+                          unchecked: t("captcha.refusals.unchecked"),
                         },
                       }}
                     />

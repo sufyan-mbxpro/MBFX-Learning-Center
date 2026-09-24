@@ -143,7 +143,7 @@ describe("guard 2 — the honeypot", () => {
   it("sends nothing, and says SENT anyway", async () => {
     const result = await sendSupportRequestAction(
       { status: "idle" },
-      form({ ...VALID, company: "bot" }),
+      form({ ...VALID, contact_ref: "bot" }),
     );
 
     // The success message is the point: telling a bot it was detected is how
@@ -155,7 +155,7 @@ describe("guard 2 — the honeypot", () => {
   it("lets a human through when the field is present but empty", async () => {
     const result = await sendSupportRequestAction(
       { status: "idle" },
-      form({ ...VALID, company: "  " }),
+      form({ ...VALID, contact_ref: "  " }),
     );
     expect(result).toEqual({ status: "sent" });
     expect(sendSupportRequest).toHaveBeenCalled();

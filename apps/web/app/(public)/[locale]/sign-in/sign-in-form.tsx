@@ -9,7 +9,9 @@ import { PasswordInput } from "@repo/ui/components/password-input";
 import { AuthInputIcon } from "../../../_lib/auth-input-icon.tsx";
 import { useSearchParam } from "../../../_lib/use-search-param.ts";
 import { rememberSession } from "../../../_lib/session-hint.ts";
-import { useRecaptcha } from "../../../_lib/recaptcha.ts";
+import type { CaptchaClientConfig } from "@repo/contracts";
+import { captchaAnswered, useRecaptcha } from "../../../_lib/recaptcha.ts";
+import { RecaptchaCheckbox } from "../../../_lib/recaptcha-checkbox.tsx";
 import {
   isAdminPath,
   resolveRedirect,
@@ -19,12 +21,13 @@ import {
   verifyTwoFactorSignIn,
 } from "../../../_lib/credentials.ts";
 
-type Failure = "credentials" | "learnersOnly" | "invalidCode" | "codeExpired" | "captcha";
+type Failure =
+  "credentials" | "learnersOnly" | "invalidCode" | "codeExpired" | "captcha" | "captchaRequired";
 
 export function SignInForm({
   labels,
   homeHref,
-  captchaSiteKey,
+  captcha,
 }: {
   labels: {
     email: string;
@@ -35,6 +38,7 @@ export function SignInForm({
     failed: string;
     learnersOnly: string;
     captcha: string;
+    captchaRequired: string;
     resetDone: string;
     verifiedDone: string;
     codeTitle: string;
@@ -47,8 +51,8 @@ export function SignInForm({
   };
   /** Localized "/" for this render's locale — where a learner lands by default. */
   homeHref: string;
-  /** Settings → General → reCAPTCHA's site key, or `null` while it is off (ADR-156). */
-  captchaSiteKey: string | null;
+  /** Settings → General → reCAPTCHA's key and type, or `null` while it is off (ADR-156, ADR-158). */
+  captcha: CaptchaClientConfig | null;
 }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -57,8 +61,8 @@ export function SignInForm({
   const [step, setStep] = useState<"credentials" | "code">("credentials");
   const [code, setCode] = useState("");
   const [pending, startTransition] = useTransition();
-  // ADR-156: load reCAPTCHA v3 now, so its token is ready at submit.
-  useRecaptcha(captchaSiteKey);
+  // ADR-156/158: register reCAPTCHA now, so its token is ready at submit.
+  useRecaptcha(captcha);
 
   // `?reset=1` after a completed password reset, `?verified=1` after Better
   // Auth's verification callback. Read from the live URL, not through
@@ -73,6 +77,11 @@ export function SignInForm({
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
     setFailure(null);
+    // ADR-158 #4: an unticked box is named here, before any request.
+    if (!captchaAnswered()) {
+      setFailure("captchaRequired");
+      return;
+    }
     startTransition(async () => {
       const result = await signInWithPassword(email, password);
       if (result.status === "failed" || result.status === "captcha") {
@@ -136,7 +145,9 @@ export function SignInForm({
           ? labels.codeExpired
           : failure === "captcha"
             ? labels.captcha
-            : labels.failed;
+            : failure === "captchaRequired"
+              ? labels.captchaRequired
+              : labels.failed;
 
   if (step === "code") {
     return (
@@ -231,6 +242,7 @@ export function SignInForm({
           />
         </AuthInputIcon>
       </div>
+      <RecaptchaCheckbox captcha={captcha} />
       {failure && (
         <p id="signin-error" role="alert" className="text-sm text-destructive-interactive">
           {failureText}

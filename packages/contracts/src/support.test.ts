@@ -7,6 +7,7 @@
 // property the sender downstream is entitled to assume.
 import { describe, expect, it } from "vitest";
 
+import { NEWSLETTER_HONEYPOT_FIELD } from "./newsletter.ts";
 import { SUPPORT_HONEYPOT_FIELD, SUPPORT_MESSAGE_MAX, supportRequestSchema } from "./support.ts";
 
 const VALID = {
@@ -106,6 +107,15 @@ describe("supportRequestSchema", () => {
   // one. The test states the intent so a later "tidy-up" cannot merge them
   // without reading it.
   it("uses its own honeypot field name", () => {
-    expect(SUPPORT_HONEYPOT_FIELD).toBe("company");
+    expect(SUPPORT_HONEYPOT_FIELD).not.toBe(NEWSLETTER_HONEYPOT_FIELD);
+  });
+
+  // Regression (2026-09-24): "company" was autofilled by Chrome/Edge despite
+  // autocomplete="off", so real visitors hit the honeypot and their message was
+  // dropped while the form said "sent".
+  it("names the honeypot nothing a browser autofills", () => {
+    expect(SUPPORT_HONEYPOT_FIELD).not.toMatch(
+      /company|organi[sz]ation|website|url|phone|tel|fax|address|name|email|city|zip|postal/i,
+    );
   });
 });

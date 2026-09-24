@@ -39,13 +39,14 @@
 // fifth. In particular there is no "we already have a message from you" —
 // that would make the form a disclosure oracle for anybody's address, the
 // same trap ADR-080 #1 named for signup.
-import { startTransition, useActionState, useEffect, useId, useRef } from "react";
+import { startTransition, useActionState, useEffect, useId, useRef, useState } from "react";
 import { CircleAlert, CircleCheckBig, Send, UserCheck } from "lucide-react";
 import {
   CAPTCHA_ACTIONS,
   CAPTCHA_FIELD,
   SUPPORT_HONEYPOT_FIELD,
   SUPPORT_MESSAGE_MAX,
+  type CaptchaClientConfig,
 } from "@repo/contracts";
 import { Alert, AlertDescription, AlertTitle } from "@repo/ui/components/alert";
 import { Button } from "@repo/ui/components/button";
@@ -53,7 +54,8 @@ import { Field, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
 import { Textarea } from "@repo/ui/components/textarea";
 import { sendSupportRequestAction, type SupportRequestState } from "../../_actions/support.ts";
-import { getCaptchaToken, useRecaptcha } from "../../../../_lib/recaptcha.ts";
+import { captchaAnswered, getCaptchaToken, useRecaptcha } from "../../../../_lib/recaptcha.ts";
+import { RecaptchaCheckbox } from "../../../../_lib/recaptcha-checkbox.tsx";
 import { usePublicSession } from "../../_components/public-session.tsx";
 
 export interface SupportFormLabels {
@@ -74,18 +76,19 @@ export interface SupportFormLabels {
   invalid: string;
   limited: string;
   captcha: string;
+  captchaRequired: string;
   failed: string;
 }
 
 export function SupportForm({
   labels,
   locale,
-  captchaSiteKey,
+  captcha,
 }: {
   labels: SupportFormLabels;
   locale: string;
-  /** Settings → General → reCAPTCHA's site key, or `null` while it is off (ADR-156). */
-  captchaSiteKey: string | null;
+  /** Settings → General → reCAPTCHA's key and type, or `null` while it is off (ADR-156, ADR-158). */
+  captcha: CaptchaClientConfig | null;
 }) {
   const [state, formAction, pending] = useActionState<SupportRequestState, FormData>(
     sendSupportRequestAction,
@@ -103,8 +106,13 @@ export function SupportForm({
     if (sent) sentRef.current?.focus();
   }, [sent, state]);
 
-  const error =
-    state.status === "invalid"
+  // ADR-158 #4: an unticked checkbox, caught before the action runs. Local
+  // state, because no request was made for the action's state to answer.
+  const [captchaMissing, setCaptchaMissing] = useState(false);
+
+  const error = captchaMissing
+    ? labels.captchaRequired
+    : state.status === "invalid"
       ? labels.invalid
       : state.status === "limited"
         ? labels.limited
@@ -125,16 +133,19 @@ export function SupportForm({
   // before hydration. With it on, a submit needs JavaScript, because a
   // token does. No token (a blocker) still posts, and the action answers
   // `captcha`, so there is one refusal path and not two.
-  useRecaptcha(captchaSiteKey);
+  useRecaptcha(captcha);
   const submitWithCaptcha = async (formData: FormData) => {
-    const captcha = await getCaptchaToken(CAPTCHA_ACTIONS.support);
-    if (captcha.ok && captcha.token) formData.set(CAPTCHA_FIELD, captcha.token);
+    const answered = captchaAnswered();
+    setCaptchaMissing(!answered);
+    if (!answered) return;
+    const result = await getCaptchaToken(CAPTCHA_ACTIONS.support);
+    if (result.ok && result.token) formData.set(CAPTCHA_FIELD, result.token);
     startTransition(() => formAction(formData));
   };
 
   return (
     <form
-      action={captchaSiteKey ? submitWithCaptcha : formAction}
+      action={captcha ? submitWithCaptcha : formAction}
       className="flex flex-col gap-6 rounded-xl bg-card p-6 ring-1 ring-foreground/10 sm:p-8"
     >
       <input type="hidden" name="locale" value={locale} />
@@ -146,10 +157,12 @@ export function SupportForm({
         `aria-hidden` plus `tabIndex={-1}` takes it out of the accessibility
         tree and the tab order, so a screen-reader user never meets it. It is
         never `required`, so no browser can block a human on a field they
-        cannot see.
+        cannot see. Its name and label must mean nothing to browser autofill,
+        which ignores `autoComplete="off"`: a "Company" label got real visitors
+        autofilled into it and their messages silently dropped.
       */}
       <div className="sr-only" aria-hidden="true">
-        <label htmlFor={`${messageId}-hp`}>Company</label>
+        <label htmlFor={`${messageId}-hp`}>Reference</label>
         <input
           id={`${messageId}-hp`}
           type="text"
@@ -221,6 +234,8 @@ export function SupportForm({
           className="resize-y"
         />
       </Field>
+
+      <RecaptchaCheckbox captcha={captcha} />
 
       {error && (
         // `Alert`'s destructive variant already uses the interactive ink

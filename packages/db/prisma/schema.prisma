@@ -2185,21 +2185,31 @@ model EmailTransport {
 /// `secretKeyCipher` is AES-256-GCM under CAPTCHA_SECRET_KEY, write-only in
 /// the UI, and `loadCaptchaRuntime()` (@repo/auth) is its ONE reader.
 model CaptchaConfig {
-  id              String    @id @default("default")
-  enabled         Boolean   @default(false)
+  id              String      @id @default("default")
+  enabled         Boolean     @default(false)
   /// Google's site key. Public by design: Google puts it in the page.
-  siteKey         String?   @db.VarChar(100)
-  secretKeyCipher String?   @db.Text
+  siteKey         String?     @db.VarChar(100)
+  secretKeyCipher String?     @db.Text
+  /// SCORE = v3, invisible; CHECKBOX = v2 "I'm not a robot" in the form
+  /// (ADR-158). Each needs its own kind of key from Google.
+  mode            CaptchaMode @default(SCORE)
   /// The v3 score a request must reach, 0.1-0.9. Google suggests 0.5.
-  minScore        Float     @default(0.5)
+  /// Ignored in CHECKBOX mode: a v2 answer has no score.
+  minScore        Float       @default(0.5)
   /// When a browser token last passed with the saved keys: the check that
   /// has to succeed before `enabled` may be switched on.
   lastVerifiedAt  DateTime?
   updatedBy       String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
 
   @@map("captcha_config")
+}
+
+/// Which Google reCAPTCHA a CaptchaConfig row runs (ADR-158).
+enum CaptchaMode {
+  SCORE
+  CHECKBOX
 }
 
 /// The row is the CONTENT of a template whose KEY is declared in code

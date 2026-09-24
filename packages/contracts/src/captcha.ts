@@ -1,4 +1,4 @@
-// Google reCAPTCHA v3 (ADR-156). The names both halves have to agree on — the
+// Google reCAPTCHA v3 or v2 checkbox (ADR-156, ADR-158). The names both halves have to agree on — the
 // browser that asks Google for a token and the server that checks it — and
 // the shape of the Settings → General → reCAPTCHA save.
 //
@@ -33,6 +33,24 @@ export const CAPTCHA_MIN_SCORES = [0.3, 0.5, 0.7, 0.9] as const;
 export const DEFAULT_CAPTCHA_MIN_SCORE = 0.5;
 
 /**
+ * Which reCAPTCHA runs (ADR-158). `SCORE` is v3: invisible, Google's badge,
+ * a score and an action. `CHECKBOX` is v2: "I'm not a robot" inside the form,
+ * no score and no action. Each needs its own kind of key from Google.
+ */
+export const CAPTCHA_MODES = ["SCORE", "CHECKBOX"] as const;
+
+export type CaptchaMode = (typeof CAPTCHA_MODES)[number];
+
+/**
+ * What a guarded page hands its form: the public site key and the type, or
+ * `null` while the check is off. Nothing secret.
+ */
+export interface CaptchaClientConfig {
+  siteKey: string;
+  mode: CaptchaMode;
+}
+
+/**
  * Settings → General → reCAPTCHA. `secretKey` blank means "keep the saved
  * one", the SMTP password's rule (ADR-078). `checkToken` is a token the
  * browser minted with THIS site key for the `check` action. Switching the
@@ -42,6 +60,7 @@ export const DEFAULT_CAPTCHA_MIN_SCORE = 0.5;
 export const captchaSettingsSaveSchema = z
   .object({
     enabled: z.boolean(),
+    mode: z.enum(CAPTCHA_MODES),
     siteKey: z.string().trim().max(100),
     secretKey: z.string().trim().max(100).optional(),
     minScore: z.literal([...CAPTCHA_MIN_SCORES]),

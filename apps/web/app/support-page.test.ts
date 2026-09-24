@@ -140,8 +140,8 @@ describe("the contact form accepts submissions", () => {
   // posts the action directly and works before hydration. With a key it has to
   // mint a token first, which needs JavaScript.
   it("submits through a form action, so it works before hydration when reCAPTCHA is off", () => {
-    expect(source).toContain("action={captchaSiteKey ? submitWithCaptcha : formAction}");
-    expect(read(PAGE)).toContain("captchaSiteKey={captchaSiteKey}");
+    expect(source).toContain("action={captcha ? submitWithCaptcha : formAction}");
+    expect(read(PAGE)).toContain("captcha={captcha}");
     expect(source).toContain("useActionState");
   });
 

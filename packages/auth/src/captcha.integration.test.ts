@@ -70,7 +70,7 @@ afterEach(async () => {
   await db.captchaConfig.deleteMany();
 });
 
-const ON = { enabled: true, siteKey: "site-key", minScore: 0.5 } as const;
+const ON = { enabled: true, mode: "SCORE", siteKey: "site-key", minScore: 0.5 } as const;
 
 describe("saveCaptchaSettings", () => {
   it("switching on needs a secret", async () => {

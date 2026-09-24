@@ -9,16 +9,18 @@ import { Label } from "@repo/ui/components/label";
 import { PasswordInput } from "@repo/ui/components/password-input";
 import { AuthInputIcon } from "../../../_lib/auth-input-icon.tsx";
 import { signUpWithPassword } from "../../../_lib/credentials.ts";
-import { useRecaptcha } from "../../../_lib/recaptcha.ts";
+import type { CaptchaClientConfig } from "@repo/contracts";
+import { captchaAnswered, useRecaptcha } from "../../../_lib/recaptcha.ts";
+import { RecaptchaCheckbox } from "../../../_lib/recaptcha-checkbox.tsx";
 import { rememberSession } from "../../../_lib/session-hint.ts";
 import { optInToNewsletterAction } from "../_actions/newsletter-opt-in.ts";
 
-type Failure = "taken" | "captcha" | "failed";
+type Failure = "taken" | "captcha" | "captchaRequired" | "failed";
 
 export function SignUpForm({
   labels,
   homeHref,
-  captchaSiteKey,
+  captcha,
   verifiedHref,
   minPasswordLength,
   locale,
@@ -35,6 +37,7 @@ export function SignUpForm({
     failed: string;
     taken: string;
     captcha: string;
+    captchaRequired: string;
     newsletterOptIn: string;
     newsletterOptInHint: string;
   };
@@ -51,8 +54,8 @@ export function SignUpForm({
   verifiedHref: string;
   /** Mirrors @repo/auth's emailAndPassword.minPasswordLength. */
   minPasswordLength: number;
-  /** Settings → General → reCAPTCHA's site key, or `null` while it is off (ADR-156). */
-  captchaSiteKey: string | null;
+  /** Settings → General → reCAPTCHA's key and type, or `null` while it is off (ADR-156, ADR-158). */
+  captcha: CaptchaClientConfig | null;
 }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -61,12 +64,17 @@ export function SignUpForm({
   const [newsletter, setNewsletter] = useState(false);
   const [failure, setFailure] = useState<Failure | null>(null);
   const [pending, startTransition] = useTransition();
-  // ADR-156: load reCAPTCHA v3 now, so its token is ready at submit.
-  useRecaptcha(captchaSiteKey);
+  // ADR-156/158: register reCAPTCHA now, so its token is ready at submit.
+  useRecaptcha(captcha);
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
     setFailure(null);
+    // ADR-158 #4: an unticked box is named here, before any request.
+    if (!captchaAnswered()) {
+      setFailure("captchaRequired");
+      return;
+    }
     startTransition(async () => {
       const result = await signUpWithPassword({ name, email, password, callbackURL: verifiedHref });
       if (result.status !== "ok") {
@@ -177,13 +185,16 @@ export function SignUpForm({
           </div>
         </div>
       )}
+      <RecaptchaCheckbox captcha={captcha} />
       {failure && (
         <p id="signup-error" role="alert" className="text-sm text-destructive-interactive">
           {failure === "taken"
             ? labels.taken
             : failure === "captcha"
               ? labels.captcha
-              : labels.failed}
+              : failure === "captchaRequired"
+                ? labels.captchaRequired
+                : labels.failed}
         </p>
       )}
       <Button type="submit" size="lg" loading={pending} className="w-full">

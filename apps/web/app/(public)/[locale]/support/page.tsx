@@ -12,7 +12,7 @@ import {
   Phone,
 } from "lucide-react";
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { getCaptchaSiteKey } from "@repo/auth";
+import { getCaptchaClient } from "@repo/auth";
 
 import { learnTrackVideosPath, ROUTE_PATHS } from "@repo/contracts";
 import { Link } from "@repo/i18n/navigation";
@@ -131,7 +131,7 @@ export default async function SupportPage({ params }: PageProps<"/[locale]/suppo
   const { locale } = await params;
   setRequestLocale(locale);
 
-  const [t, supportEmailSetting, visibility, captchaSiteKey] = await Promise.all([
+  const [t, supportEmailSetting, visibility, captcha] = await Promise.all([
     getTranslations({ locale, namespace: "support" }),
     // The one inbox both the Email Support card and the form use (ADR-131).
     // Public on purpose — the card prints it — so security.md #12 holds.
@@ -140,7 +140,7 @@ export default async function SupportPage({ params }: PageProps<"/[locale]/suppo
       MORE_HELP.map((entry) => (entry.feature ? isFeatureVisible(entry.feature, null) : true)),
     ),
     // ADR-156: cached and tagged, so this static page carries the key.
-    getCaptchaSiteKey(),
+    getCaptchaClient(),
   ]);
   const supportEmail = supportEmailSetting ?? "";
 
@@ -280,7 +280,7 @@ export default async function SupportPage({ params }: PageProps<"/[locale]/suppo
             <Reveal variant="up" delay={80}>
               <SupportForm
                 locale={locale}
-                captchaSiteKey={captchaSiteKey}
+                captcha={captcha}
                 labels={{
                   nameLabel: t("contact.nameLabel"),
                   namePlaceholder: t("contact.namePlaceholder"),
@@ -299,6 +299,7 @@ export default async function SupportPage({ params }: PageProps<"/[locale]/suppo
                   invalid: t("contact.invalid"),
                   limited: t("contact.limited"),
                   captcha: t("contact.captcha"),
+                  captchaRequired: t("contact.captchaRequired"),
                   failed: t("contact.failed"),
                 }}
               />

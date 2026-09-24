@@ -24961,3 +24961,88 @@ market/market-boards/tools 47 passed; `@repo/core` `market.test.ts` 32
 passed; `apps/web` tools + `admin-form-conventions` 859 passed. `tsc
 --noEmit` clean on `@repo/db` and `apps/web`; eslint and prettier clean on
 both changed files.
+
+## 2026-09-24 — reCAPTCHA never loaded on a public page reached by a click (Module 04)
+
+Reported on the live server: with keys saved in Settings → General →
+reCAPTCHA, the staff sign-in showed Google's badge and the public sign-in,
+sign-up and support pages did not. The pages were right — the live HTML
+carried the site key and each page's own CSP named Google. The bug is the
+CSP SCOPE of ADR-156 #9 meeting client-side navigation: a browser keeps the
+policy of the document it LOADED, so a visitor who arrived on `/` and clicked
+"Sign in" was running `/sign-in` under `/`'s policy, which names no Google
+origin and blocked the script. A direct load or a refresh worked, which is
+why it looked intermittent; `/keystone` is always a full load.
+
+**Fixed in the browser, not by widening the CSP.** ADR-156 #9's rule — Google
+on those pages and no others — stands. `useRecaptcha` now compares the
+navigation entry's path with the current one (`reachedBySoftNavigation`,
+pure) and, when they differ and the check is on, reloads the page once at
+mount, before anyone has typed. A sessionStorage mark caps it at one reload
+per path and is cleared by a real load, so a policy that still blocks cannot
+loop and a later click-through in the same tab reloads again. No ADR: it
+implements ADR-156 #9 as written rather than deviating from it.
+
+Separately, the save refusal "CAPTCHA_SECRET_KEY is not set" on the live
+server was configuration, not code: the key was added to the server's `.env`
+and pm2 restarted with `--update-env`, as `docs/ops/deploy.md` §2 lists.
+
+**Tests:** `apps/web` recaptcha (new, regression) + credentials +
+support-page + proxy 153 passed. `tsc --noEmit` clean on `apps/web`; eslint
+and prettier clean on both changed files.
+
+## 2026-09-24 — reCAPTCHA can be a checkbox in the form (Module 04, ADR-158)
+
+The owner asked for "I'm not a robot" inside the forms instead of Google's
+floating v3 badge, and chose to make it selectable rather than replace v3.
+ADR-158 amends ADR-156; the sealed secret, the proved switch-on, the two
+failure directions, the CSP scope and `CAPTCHA_DISABLED` are unchanged.
+
+- **`CaptchaConfig.mode`** — `SCORE` (v3, default, every existing row) or
+  `CHECKBOX` (v2). Migration `20260924100000_captcha_mode_adr158` adds the
+  column with `SCORE` as its default, so a live install keeps running v3.
+- **`getCaptchaSiteKey()` → `getCaptchaClient()`**, `{ siteKey, mode } |
+  null`, same cache and tag. The four guarded forms take `captcha` instead of
+  `captchaSiteKey`.
+- **`RecaptchaCheckbox`** (`app/_lib/recaptcha-checkbox.tsx`) draws Google's
+  widget above each form's submit button in CHECKBOX mode and nothing in
+  SCORE mode. `recaptcha.ts` loads `?render=explicit` for it, reads the answer
+  at submit and resets the widget, because an answer is single-use.
+- **An unticked box is named before any request** (`captchaAnswered()`), with
+  a new `captchaRequired` message on staff sign-in, learner sign-in and
+  sign-up, and the support form. The server still refuses a missing answer.
+- **Verification by type**: a v2 answer has no score and no action, so
+  `recaptchaPasses` takes `mode` and in CHECKBOX mode checks Google's
+  `success` alone.
+- **The settings tab** gains a Type select, hides the minimum score for
+  Checkbox, and draws the box for the key being typed (debounced) as the
+  switch-on proof. It reloads once at mount when reached by a click from
+  another admin page, the same CSP reason as the public fix above.
+
+**Tests:** `@repo/auth` captcha 28 passed (new CHECKBOX cases);
+`@repo/contracts` 505 passed; `apps/web` 2918 passed, 6 failed in two files
+this change does not touch (`site-url.test.ts` reads the shell's own
+`NEXT_PUBLIC_SITE_URL`, and a footer band assertion from the global CSS
+commit). `tsc --noEmit` clean on auth, contracts and web; eslint and prettier
+clean on every changed file; `check:catalog-completeness` OK. Not run: the
+Testcontainers integration suite (its fixture gained `mode` only).
+
+## 2026-09-24 — Module 12: support form messages silently dropped (honeypot autofill)
+
+Owner report: messages from `/support` never reached the Settings → General
+contact email. The delivery log had no `support.request` row since
+2026-09-17, which rules out routing and transport — every path through
+`sendTemplatedEmail` writes a row. The one silent path is the honeypot: it
+was named `company` with a visible-to-autofill "Company" label, and Chrome
+and Edge ignore `autocomplete="off"` for address autofill. A visitor with a
+saved address containing a company got the hidden field filled, was treated
+as a bot, shown "sent", and nothing was sent or logged.
+
+- `SUPPORT_HONEYPOT_FIELD` is now `contact_ref`, the hidden label
+  "Reference". ADR-113's rule (its own field, distinct from the newsletter's)
+  is unchanged; only the name moved, so no ADR.
+- Regression test in `@repo/contracts` `support.test.ts` fails if the name
+  carries an autofill token (company, url, phone, address, …).
+
+**Tests:** `@repo/contracts` `support.test.ts` 11 passed; `apps/web` support
+action + page tests 57 passed.

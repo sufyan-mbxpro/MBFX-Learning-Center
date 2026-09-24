@@ -41,7 +41,7 @@ export { isStaffTwoFactorPending, staffTwoFactorPending } from "./two-factor.ts"
 // ADR-156: reCAPTCHA. The guard below covers sign-in and sign-up; the support
 // form checks its own token; the settings tab reads and saves the config here.
 export {
-  getCaptchaSiteKey,
+  getCaptchaClient,
   loadCaptchaSettings,
   saveCaptchaSettings,
   verifyCaptchaToken,
