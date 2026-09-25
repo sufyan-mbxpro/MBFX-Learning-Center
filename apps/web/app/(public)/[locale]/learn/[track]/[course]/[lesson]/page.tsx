@@ -1,5 +1,12 @@
 import type { Metadata } from "next";
-import { alternatesFor, descriptionFrom, shareMetadata } from "../../../../../../_lib/seo.ts";
+import {
+  alternatesFor,
+  descriptionFrom,
+  shareMetadata,
+  titleTemplate,
+  titleFrom,
+  siteName,
+} from "../../../../../../_lib/seo.ts";
 import { notFound, permanentRedirect } from "next/navigation";
 import Image from "next/image";
 import { getTranslations, setRequestLocale } from "next-intl/server";
@@ -9,7 +16,7 @@ import { isLearnTrack, learnTrackPath, LEARN_TRACKS } from "@repo/contracts";
 import { getServableLocales } from "@repo/i18n";
 import { Link } from "@repo/i18n/navigation";
 import { routing } from "@repo/i18n/routing";
-import { getSetting, isFeatureVisible } from "@repo/settings";
+import { isFeatureVisible } from "@repo/settings";
 import { formatBytes, parseVideoUrl } from "@repo/utils";
 import { Button } from "@repo/ui/components/button";
 import { Container } from "@repo/ui/components/container";
@@ -56,7 +63,7 @@ export async function generateMetadata({
   const readingLocale = readingLocaleFrom(await searchParams);
   const [view, template] = await Promise.all([
     getLessonBySlug(locale, courseSlug, lessonSlug, readingLocale),
-    getSetting("seo.titleTemplate"),
+    titleTemplate(),
   ]);
   if (!view) return {};
 
@@ -85,10 +92,10 @@ export async function generateMetadata({
     view.courseSlug,
     view.slug,
   );
-  const tCommon = await getTranslations({ locale, namespace: "common" });
+  const brand = await siteName();
 
   return {
-    title: (template ?? "%s").replace("%s", view.seoTitle ?? view.title),
+    title: titleFrom(template, view.seoTitle?.trim() || view.title),
     ...descriptionFrom(view.seoDescription, view.summary),
     alternates: await alternatesFor({ canonical: ownPath, languages }),
     // ADR-127 #4: a `?lang=` reading view is never indexed. A conditional
@@ -96,10 +103,10 @@ export async function generateMetadata({
     ...(view.readingLocale ? { robots: { index: false, follow: true } } : {}),
     ...(await shareMetadata({
       locale,
-      siteName: tCommon("siteName"),
+      siteName: brand,
       url: ownPath,
       type: "article",
-      title: view.seoTitle ?? view.title,
+      title: view.seoTitle?.trim() || view.title,
       description: view.seoDescription ?? view.summary,
       image: view.heroUrl,
       modifiedTime: view.updatedAt.toISOString(),

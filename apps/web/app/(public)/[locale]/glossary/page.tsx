@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { localizedPath } from "../../../_lib/seo.ts";
+import { localizedPath, titleTemplate, titleFrom } from "../../../_lib/seo.ts";
 import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { BookOpen } from "lucide-react";
@@ -9,7 +9,7 @@ import {
   getTermOfTheDay,
   getTopicOfTheDay,
 } from "@repo/core";
-import { getSetting, isFeatureVisible } from "@repo/settings";
+import { isFeatureVisible } from "@repo/settings";
 import { Container } from "@repo/ui/components/container";
 import { Empty, EmptyDescription, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
 import { Section } from "@repo/ui/components/section";
@@ -38,12 +38,9 @@ export async function generateMetadata({
 }: PageProps<"/[locale]/glossary">): Promise<Metadata> {
   const { locale } = await params;
   setRequestLocale(locale);
-  const [t, template] = await Promise.all([
-    getTranslations("glossary"),
-    getSetting("seo.titleTemplate"),
-  ]);
+  const [t, template] = await Promise.all([getTranslations("glossary"), titleTemplate()]);
   return {
-    title: (template ?? "%s").replace("%s", t("title")),
+    title: titleFrom(template, t("title")),
     description: t("intro"),
     alternates: { canonical: localizedPath(locale, GLOSSARY_PATH) },
   };

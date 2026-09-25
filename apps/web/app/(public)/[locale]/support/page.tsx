@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { ReviewsBand } from "../_components/reviews-band.tsx";
-import { jsonLd, localizedPath } from "../../../_lib/seo.ts";
+import { jsonLd, localizedPath, titleTemplate, titleFrom } from "../../../_lib/seo.ts";
 import {
   ArrowRight,
   BookOpen,
@@ -116,10 +116,10 @@ export async function generateMetadata({
   setRequestLocale(locale);
   const [t, template] = await Promise.all([
     getTranslations({ locale, namespace: "support" }),
-    getSetting("seo.titleTemplate"),
+    titleTemplate(),
   ]);
   return {
-    title: (template ?? "%s").replace("%s", t("meta.title")),
+    title: titleFrom(template, t("meta.title")),
     description: t("meta.description"),
     alternates: { canonical: localizedPath(locale, ROUTE_PATHS.support) },
     // No `robots` key at all — a present one replaces the root layout's

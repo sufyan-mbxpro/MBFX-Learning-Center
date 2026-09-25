@@ -441,7 +441,7 @@ const SOCIAL_LINKS = [
 
 const SETTINGS = [
   // General
-  ["general", "site.name", "MBX Pro", "STRING", "Site name", true],
+  ["general", "site.name", "MBX Learning Center", "STRING", "Site name", true],
   ["general", "site.tagline", "Learn to trade the markets", "STRING", "Tagline", true],
   [
     "general",
@@ -495,10 +495,10 @@ const SETTINGS = [
   ],
 
   // SEO
-  ["seo", "seo.titleTemplate", "%s | MBX Pro", "STRING", "Title template", true],
+  ["seo", "seo.titleTemplate", "%s | %site%", "STRING", "Title template", true],
   ["seo", "seo.defaultOgImage", "/og-default.png", "IMAGE", "Default share image", true],
   ["seo", "seo.robotsIndex", true, "BOOLEAN", "Allow search indexing", false],
-  ["seo", "seo.googleSiteVerification", "", "STRING", "Google verification token", false],
+  ["seo", "seo.googleSiteVerification", "", "STRING", "Google Search Console verification", false],
 
   // Layout — homepage sections, ordered and toggleable without a deploy
   [

@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import { localizedPath } from "../../../../_lib/seo.ts";
+import { localizedPath, titleTemplate, titleFrom } from "../../../../_lib/seo.ts";
 import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { CalendarClock, Gauge, Rocket, Scale } from "lucide-react";
 import { ROUTE_PATHS } from "@repo/contracts";
 import { getVolatilityBoard } from "@repo/core";
-import { getSetting, isFeatureVisible } from "@repo/settings";
+import { isFeatureVisible } from "@repo/settings";
 import { AmbientMotif } from "@repo/ui/components/ambient-motif";
 import { Badge } from "@repo/ui/components/badge";
 import { Card, CardContent } from "@repo/ui/components/card";
@@ -26,10 +26,10 @@ export async function generateMetadata({
   setRequestLocale(locale);
   const [t, template] = await Promise.all([
     getTranslations({ locale, namespace: "volatility" }),
-    getSetting("seo.titleTemplate"),
+    titleTemplate(),
   ]);
   return {
-    title: (template ?? "%s").replace("%s", t("title")),
+    title: titleFrom(template, t("title")),
     description: t("lead"),
     alternates: { canonical: localizedPath(locale, ROUTE_PATHS.volatility) },
   };

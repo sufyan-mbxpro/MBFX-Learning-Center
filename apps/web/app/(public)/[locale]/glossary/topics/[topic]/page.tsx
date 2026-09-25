@@ -1,5 +1,10 @@
 import type { Metadata } from "next";
-import { alternatesFor, descriptionFrom } from "../../../../../_lib/seo.ts";
+import {
+  alternatesFor,
+  descriptionFrom,
+  titleTemplate,
+  titleFrom,
+} from "../../../../../_lib/seo.ts";
 import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { ChevronRight } from "lucide-react";
@@ -7,7 +12,7 @@ import { getGlossaryTopicBySlug, getGlossaryTopics } from "@repo/core";
 import { ROUTE_PATHS } from "@repo/contracts";
 import { Link } from "@repo/i18n/navigation";
 import { routing } from "@repo/i18n/routing";
-import { getSetting, isFeatureVisible } from "@repo/settings";
+import { isFeatureVisible } from "@repo/settings";
 import { AmbientMotif } from "@repo/ui/components/ambient-motif";
 import { Badge } from "@repo/ui/components/badge";
 import { Container } from "@repo/ui/components/container";
@@ -43,7 +48,7 @@ export async function generateMetadata({
   setRequestLocale(locale);
   const [view, template] = await Promise.all([
     getGlossaryTopicBySlug(locale, slug),
-    getSetting("seo.titleTemplate"),
+    titleTemplate(),
   ]);
   if (!view) return {};
 
@@ -51,7 +56,7 @@ export async function generateMetadata({
   // locale. An hreflang pointing at a URL that 404s is worse than a missing
   // pair, the same rule the course and lesson pages follow.
   return {
-    title: (template ?? "%s").replace("%s", view.seoTitle ?? view.name),
+    title: titleFrom(template, view.seoTitle?.trim() || view.name),
     ...descriptionFrom(view.seoDescription, view.description),
     alternates: await alternatesFor({
       canonical: topicPath(locale, view.slug),

@@ -5,6 +5,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ADMIN_SESSION_TIMEOUTS,
+  googleVerificationToken,
   adminSessionTimeoutMs,
   dataBudgetSchema,
   HOME_SECTION_BUILT_KEYS,
@@ -263,5 +264,34 @@ describe("media upload caps as megabytes (changes-46)", () => {
     expect(megabyteChoices("media.maxBytes.image", null)).toHaveLength(8);
     expect(megabyteChoices("media.maxBytes.image", 0)).toHaveLength(8);
     expect(megabyteChoices("media.maxBytes.image", 1.5)).toHaveLength(8);
+  });
+});
+
+describe("seo.googleSiteVerification", () => {
+  const schema = SETTINGS_SCHEMAS["seo.googleSiteVerification"];
+
+  it("stores the code out of the whole tag Search Console hands out", () => {
+    const tag = '<meta name="google-site-verification" content="aB3_x-9Yz" />';
+    expect(googleVerificationToken(tag)).toBe("aB3_x-9Yz");
+    expect(schema.parse(tag)).toBe("aB3_x-9Yz");
+  });
+
+  it("takes a bare code, trimmed, and still allows empty", () => {
+    expect(schema.parse("  aB3_x-9Yz \n")).toBe("aB3_x-9Yz");
+    expect(schema.parse("")).toBe("");
+  });
+
+  it("refuses anything that is not a code rather than printing it into <head>", () => {
+    expect(schema.safeParse('"><script>alert(1)</script>').success).toBe(false);
+    expect(schema.safeParse("google-site-verification: abc.html").success).toBe(false);
+  });
+});
+
+describe("seo.titleTemplate", () => {
+  const schema = SETTINGS_SCHEMAS["seo.titleTemplate"];
+
+  it("needs %s, or every page would share one title", () => {
+    expect(schema.safeParse("%s | %site%").success).toBe(true);
+    expect(schema.safeParse("MBX Pro").success).toBe(false);
   });
 });

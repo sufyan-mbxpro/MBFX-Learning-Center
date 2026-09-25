@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { getSetting } from "@repo/settings";
 import { AuthScreen } from "../../_components/auth-screen.tsx";
 import { unsubscribeAction } from "../../_actions/newsletter.ts";
 import { TokenAction } from "../_components/token-action.tsx";
+import { titleTemplate, titleFrom } from "../../../../_lib/seo.ts";
 
 // Where the unsubscribe link in every newsletter email lands (ADR-080 #4).
 //
@@ -16,12 +16,9 @@ export async function generateMetadata({
 }: PageProps<"/[locale]/newsletter/unsubscribe">): Promise<Metadata> {
   const { locale } = await params;
   setRequestLocale(locale);
-  const [t, template] = await Promise.all([
-    getTranslations("newsletter"),
-    getSetting("seo.titleTemplate"),
-  ]);
+  const [t, template] = await Promise.all([getTranslations("newsletter"), titleTemplate()]);
   return {
-    title: (template ?? "%s").replace("%s", t("unsubscribeTitle")),
+    title: titleFrom(template, t("unsubscribeTitle")),
     robots: { index: false, follow: false },
   };
 }

@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { getCaptchaClient } from "@repo/auth";
-import { getSetting } from "@repo/settings";
 import { getPathname, Link } from "@repo/i18n/navigation";
 import { AuthScreen } from "../_components/auth-screen.tsx";
 import { SignInForm } from "./sign-in-form.tsx";
+import { titleTemplate, titleFrom } from "../../../_lib/seo.ts";
 
 // LEARNER sign-in (ADR-052). The staff credential screen is a separate
 // surface at /keystone and is never linked from here — the public site
@@ -17,11 +17,8 @@ export async function generateMetadata({
 }: PageProps<"/[locale]/sign-in">): Promise<Metadata> {
   const { locale } = await params;
   setRequestLocale(locale);
-  const [t, template] = await Promise.all([
-    getTranslations("auth"),
-    getSetting("seo.titleTemplate"),
-  ]);
-  return { title: (template ?? "%s").replace("%s", t("signInTitle")), robots: { index: false } };
+  const [t, template] = await Promise.all([getTranslations("auth"), titleTemplate()]);
+  return { title: titleFrom(template, t("signInTitle")), robots: { index: false } };
 }
 
 export default async function SignInPage({ params }: PageProps<"/[locale]/sign-in">) {

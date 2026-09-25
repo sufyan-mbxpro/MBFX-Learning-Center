@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
-import { localizedPath } from "../../../../_lib/seo.ts";
+import { localizedPath, titleTemplate, titleFrom } from "../../../../_lib/seo.ts";
 import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { ChevronRight, Tag } from "lucide-react";
 import { getGlossaryTopics } from "@repo/core";
 import { ROUTE_PATHS } from "@repo/contracts";
 import { Link } from "@repo/i18n/navigation";
-import { getSetting, isFeatureVisible } from "@repo/settings";
+import { isFeatureVisible } from "@repo/settings";
 import { AmbientMotif } from "@repo/ui/components/ambient-motif";
 import { Badge } from "@repo/ui/components/badge";
 import { Container } from "@repo/ui/components/container";
@@ -37,12 +37,9 @@ export async function generateMetadata({
 }: PageProps<"/[locale]/glossary/topics">): Promise<Metadata> {
   const { locale } = await params;
   setRequestLocale(locale);
-  const [t, template] = await Promise.all([
-    getTranslations("glossary"),
-    getSetting("seo.titleTemplate"),
-  ]);
+  const [t, template] = await Promise.all([getTranslations("glossary"), titleTemplate()]);
   return {
-    title: (template ?? "%s").replace("%s", t("topicsTitle")),
+    title: titleFrom(template, t("topicsTitle")),
     description: t("topicsIntro"),
     alternates: { canonical: localizedPath(locale, GLOSSARY_TOPICS_PATH) },
   };

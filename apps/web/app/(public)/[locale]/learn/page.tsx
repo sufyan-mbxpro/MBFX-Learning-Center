@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import { localizedPath } from "../../../_lib/seo.ts";
+import { localizedPath, titleTemplate, titleFrom } from "../../../_lib/seo.ts";
 import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { getFeaturedVideoTopics, getLearnIndex } from "@repo/core";
 import { ROUTE_PATHS } from "@repo/contracts";
-import { getSetting, isFeatureVisible } from "@repo/settings";
+import { isFeatureVisible } from "@repo/settings";
 import { Link } from "@repo/i18n/navigation";
 import { Button } from "@repo/ui/components/button";
 import { Container } from "@repo/ui/components/container";
@@ -45,10 +45,10 @@ export async function generateMetadata({
   setRequestLocale(locale);
   const [t, template] = await Promise.all([
     getTranslations({ locale, namespace: "learn" }),
-    getSetting("seo.titleTemplate"),
+    titleTemplate(),
   ]);
   return {
-    title: (template ?? "%s").replace("%s", t("meta.indexTitle")),
+    title: titleFrom(template, t("meta.indexTitle")),
     description: t("meta.indexDescription"),
     alternates: { canonical: localizedPath(locale, ROUTE_PATHS.learn) },
   };

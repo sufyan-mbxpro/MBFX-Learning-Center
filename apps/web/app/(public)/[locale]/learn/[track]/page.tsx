@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { localizedPath } from "../../../../_lib/seo.ts";
+import { localizedPath, titleTemplate, titleFrom } from "../../../../_lib/seo.ts";
 import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { getLearnIndex } from "@repo/core";
@@ -10,7 +10,7 @@ import {
   LEARN_TRACKS,
   ROUTE_PATHS,
 } from "@repo/contracts";
-import { getSetting, isFeatureVisible } from "@repo/settings";
+import { isFeatureVisible } from "@repo/settings";
 import { Link } from "@repo/i18n/navigation";
 import { Button } from "@repo/ui/components/button";
 import { Container } from "@repo/ui/components/container";
@@ -44,10 +44,10 @@ export async function generateMetadata({
 
   const [t, template] = await Promise.all([
     getTranslations({ locale, namespace: "learn" }),
-    getSetting("seo.titleTemplate"),
+    titleTemplate(),
   ]);
   return {
-    title: (template ?? "%s").replace("%s", t(LEARN_TRACKS[track].titleKey)),
+    title: titleFrom(template, t(LEARN_TRACKS[track].titleKey)),
     description: t(LEARN_TRACKS[track].descriptionKey),
     alternates: { canonical: localizedPath(locale, learnTrackPath(track)) },
   };

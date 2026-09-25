@@ -25046,3 +25046,112 @@ as a bot, shown "sent", and nothing was sent or logged.
 
 **Tests:** `@repo/contracts` `support.test.ts` 11 passed; `apps/web` support
 action + page tests 57 passed.
+
+## 2026-09-24 — Module 14: reCAPTCHA's `clr` request blocked by the enforced CSP
+
+Live `/support` submissions after 09:37 UTC wrote no `support.request`
+delivery row, and the server's CSP report log showed
+`https://www.google.com/recaptcha/api2/clr` blocked on `/support`. That is
+a fetch from the page, so it falls under `connect-src`, which the reCAPTCHA
+pages (ADR-156) had left at `'self'` while widening only `script-src` and
+`frame-src`. `connect-src` now adds `https://www.google.com/recaptcha/` on
+exactly the same pages, and nowhere else.
+
+**Tests:** `apps/web` `proxy.test.ts` 59 passed (the reCAPTCHA-page case now
+asserts `connect-src`; the no-Google-origin case still covers `/`, `/news`
+and the other admin paths).
+
+## 2026-09-24 — Module 12: the sitemap stops submitting redirecting legal URLs
+
+An external SEO check of learn.mbxpro.com found 165 of 168 sitemap URLs
+answering 200 and three answering 307: `/legal/terms`, `/legal/privacy`,
+`/legal/agreement`. Production points all three settings at committed files
+under `public/`, and ADR-110 has that branch redirect to the file. A
+sitemap URL that redirects is a Search Console "Page with redirect". The
+sitemap now lists a legal document only when its setting is an upload
+(`STORED_UPLOAD_PREFIX`), the one branch the route serves inline. The route
+and the footer are unchanged, so the documents are still linked and crawlable.
+No ADR: ADR-110 says nothing about `sitemap.xml`, and this applies the rule
+the file already follows (list only what answers).
+
+Found and deliberately NOT changed: a missing public page answers 200 with
+`<meta name="robots" content="noindex">`. `[locale]/loading.tsx` streams
+the shell before `notFound()` runs, so the status is already sent. That is
+Next's documented behaviour, and the injected noindex keeps these pages out
+of the index. A real 404 would mean dropping every public skeleton or adding
+DB lookups to the proxy.
+
+**Tests:** `apps/web` `seo-metadata.test.ts` + `legal-documents.test.ts` +
+`locale-serving.test.ts` 45 passed (new case: legal URLs gated on the upload
+prefix); `tsc --noEmit` and eslint clean on the touched files.
+
+## 2026-09-24 — Module 12: one site name, Search Console verification, SEO of content pages
+
+**One site name.** `<title>`, `og:site_name` and every JSON-LD `name`/
+`publisher` read the catalog's `common.siteName` ("MBX Learning Center"),
+while `seo.titleTemplate` was seeded `%s | MBX Pro` and the header and footer
+read `site.name`. Live, the home page said one brand and every other page
+another. All of them now go through `siteName()` (`_lib/seo.ts`), which reads
+`site.name` and falls back to the catalog only for an unseeded row. The
+template gains a `%site%` placeholder, resolved by `titleTemplate()`. The seed
+writes `%s | %site%`, and `20260924120000_title_template_site_name` moves an
+existing install still on the seeded `%s | MBX Pro` (bounded, idempotent).
+`titleFrom()` replaces the 36 inline `.replace("%s", …)` calls with a
+function replacer, because a string replacer reads `$&`/`$$` in an
+admin-typed title as patterns. A template with no `%s` is now refused by the
+schema. The staff and learner sign-in wordmarks read `site.name` too.
+
+**Search Console verification.** The field existed (Settings → SEO) but took
+only the bare code. It now also accepts the whole `<meta>` tag Search Console
+hands out, stores only the code (`googleVerificationToken`), and refuses
+anything that is not a code instead of printing it into every `<head>`. The
+admin screen now has help text for both SEO fields.
+
+**Content pages (from a read-only audit of every dynamic route).**
+- The glossary term's meta description, `og:description` and
+  `DefinedTerm.description` were the WHOLE rich article (changes-46 made
+  `simpleExplanation` one body). Now `htmlLead()`, which is 160 characters for
+  the meta description.
+- Course and video JSON-LD used relative URLs. `metadataBase` resolves the
+  `Metadata` object only, never a JSON-LD body. Both now build absolute URLs
+  from `siteUrl()`. The video `url` also lacked its locale prefix.
+- `Course` gains the `provider` Google requires (the home page's Organization
+  by `@id`), and its sections move from `hasPart` to `syllabusSections`.
+- `VideoObject.uploadDate` was `updatedAt`, so it moved on every edit. It is
+  now `publishedAt`, newly on `VideoTopicView`. The description falls back to
+  the topic's own lead, because Google requires one.
+- Seven JSON-LD scripts used a raw `JSON.stringify`, so `</script>` in a title
+  would close the element. All now use `jsonLd()`.
+- `NewsArticle.headline` is capped at 110 characters (`truncateHeadline`).
+- A whitespace-only `seoTitle` stored as `""` gave an empty `<title>`. Every
+  `seoTitle ?? x` is now `seoTitle?.trim() || x`.
+
+Audit findings NOT done here and still open: pages that fall back to another
+language are indexable duplicates (moot while only `en` is served, ADR-091);
+CMS pages have no default canonical or editable robots; video categories'
+SEO fields have no UI; glossary topic and lesson pages carry no JSON-LD; tags
+and quizzes have no SEO fields.
+
+**Tests:** `apps/web` 2927 passed, 6 failed. All six are unrelated and fail
+the same way without this change: `site-url.test.ts` ×5 read a tunnel URL
+from the local environment, and `changes-50-fixes.test.ts` ×1 asserts on the
+footer, which this change does not touch. New cases: `seo.test.ts`
+(`titleFrom` keeps `$`, `truncateHeadline`) and `seo-metadata.test.ts` (no
+raw template, no catalog site name, no raw `JSON.stringify`, absolute
+course/video URLs). `@repo/contracts` 510 passed (verification-tag parsing,
+`%s` required). `tsc` clean for web and core; eslint clean;
+`check:catalog-completeness` and `governance:check` OK.
+
+## 2026-09-25 — Module 05: `site.name` seeds "MBX Learning Center"
+
+The owner's brand is "MBX Learning Center"; `site.name` was seeded "MBX Pro".
+Since yesterday's SEO pass that setting is the one name every title,
+`og:site_name` and JSON-LD organization prints, so the seed now writes
+"MBX Learning Center" (`seed.ts`, and `seed-live/defaults.json`, which
+overwrites on a fresh server). `20260925090000_site_name_learning_center`
+moves an existing install still holding the seeded "MBX Pro", and leaves a
+name an admin has chosen untouched (bounded, idempotent). Theme preset name
+and logo alt text are unchanged: the preset is a theme's label, and the
+header and footer already take the logo's alt from `site.name`.
+
+**Tests:** no test asserted the old value; `governance:check` OK.

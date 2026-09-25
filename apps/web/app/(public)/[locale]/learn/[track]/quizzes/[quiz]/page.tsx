@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { descriptionFrom } from "../../../../../../_lib/seo.ts";
+import { descriptionFrom, titleTemplate, titleFrom } from "../../../../../../_lib/seo.ts";
 import { notFound, permanentRedirect } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { getQuizBySlug, getRedirect } from "@repo/core";
@@ -12,7 +12,7 @@ import {
 } from "@repo/contracts";
 import { getServableLocales } from "@repo/i18n";
 import { routing } from "@repo/i18n/routing";
-import { getSetting, isFeatureVisible } from "@repo/settings";
+import { isFeatureVisible } from "@repo/settings";
 import { Container } from "@repo/ui/components/container";
 import { Section } from "@repo/ui/components/section";
 import { ReadingLanguageMenu } from "../../../../_components/reading-language-menu.tsx";
@@ -46,12 +46,12 @@ export async function generateMetadata({
   const readingLocale = readingLocaleFrom(await searchParams);
   const [view, template] = await Promise.all([
     getQuizBySlug(locale, slug, readingLocale),
-    getSetting("seo.titleTemplate"),
+    titleTemplate(),
   ]);
   if (!view) return {};
 
   return {
-    title: (template ?? "%s").replace("%s", view.title),
+    title: titleFrom(template, view.title),
     ...descriptionFrom(view.description),
     alternates: { canonical: quizPath(locale, view.track, view.slug) },
     // A quiz page is interactive, not reference material, and an indexed quiz

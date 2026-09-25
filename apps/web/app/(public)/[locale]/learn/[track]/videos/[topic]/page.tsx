@@ -1,15 +1,23 @@
 import type { Metadata } from "next";
-import { descriptionFrom, localizedPath, shareMetadata } from "../../../../../../_lib/seo.ts";
+import {
+  descriptionFrom,
+  localizedPath,
+  shareMetadata,
+  titleTemplate,
+  titleFrom,
+  siteName,
+} from "../../../../../../_lib/seo.ts";
 import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { getVideoTopicBySlug, getVideoTopics } from "@repo/core";
 import { isLearnTrack, learnTrackPath, learnTrackVideosPath, LEARN_TRACKS } from "@repo/contracts";
 import { getServableLocales } from "@repo/i18n";
-import { getSetting, isFeatureVisible } from "@repo/settings";
+import { isFeatureVisible } from "@repo/settings";
 import { Badge } from "@repo/ui/components/badge";
 import { Container } from "@repo/ui/components/container";
 import { RichText } from "@repo/ui/components/rich-text";
 import { Section } from "@repo/ui/components/section";
+import { htmlLead } from "@repo/utils";
 import { LearnBreadcrumb } from "../../../_components/learn-breadcrumb.tsx";
 import { VideoJsonLd } from "../../../_components/video-json-ld.tsx";
 import { VideoLinks } from "../../../_components/video-links.tsx";
@@ -42,17 +50,17 @@ export async function generateMetadata({
   if (!isLearnTrack(track)) return {};
 
   const readingLocale = readingLocaleFrom(await searchParams);
-  const [template, view, tCommon] = await Promise.all([
-    getSetting("seo.titleTemplate"),
+  const [template, view, brand] = await Promise.all([
+    titleTemplate(),
     getVideoTopicBySlug(locale, track, topic, readingLocale),
-    getTranslations({ locale, namespace: "common" }),
+    siteName(),
   ]);
   if (!view) return {};
 
   const canonical = localizedPath(locale, `${learnTrackVideosPath(track)}/${view.slug}`);
 
   return {
-    title: (template ?? "%s").replace("%s", view.seoTitle || view.title),
+    title: titleFrom(template, view.seoTitle?.trim() || view.title),
     ...descriptionFrom(view.seoDescription, view.summary),
     alternates: { canonical },
     // changes-46 SEO check: no share card of its own, so Open Graph fell
@@ -60,9 +68,9 @@ export async function generateMetadata({
     // is its card image, as a course's is.
     ...(await shareMetadata({
       locale,
-      siteName: tCommon("siteName"),
+      siteName: brand,
       url: canonical,
-      title: view.seoTitle || view.title,
+      title: view.seoTitle?.trim() || view.title,
       description: view.seoDescription || view.summary,
       image: view.coverUrl,
     })),
@@ -124,9 +132,16 @@ export default async function VideoTopicPage({
       {firstVideo && (
         <VideoJsonLd
           name={view.title}
-          description={view.seoDescription ?? view.summary}
-          url={`${videosPath}/${view.slug}`}
-          uploadDate={view.updatedAt.toISOString()}
+          // Google requires a description: the topic's own words when no SEO
+          // or summary line was written, rather than no rich result at all.
+          description={
+            view.seoDescription?.trim() ||
+            view.summary?.trim() ||
+            htmlLead(view.content ?? "", 160) ||
+            null
+          }
+          path={localizedPath(locale, `${videosPath}/${view.slug}`)}
+          uploadDate={(view.publishedAt ?? view.updatedAt).toISOString()}
           thumbnailUrl={
             firstVideo.kind === "embed" ? firstVideo.thumbnailUrl : firstVideo.posterUrl
           }

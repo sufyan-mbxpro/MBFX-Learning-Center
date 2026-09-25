@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { getSetting } from "@repo/settings";
 import { Container } from "@repo/ui/components/container";
 import { Section } from "@repo/ui/components/section";
 import { Skeleton, SkeletonAvatar, SkeletonCard } from "@repo/ui/components/skeleton";
 import { ProgressContent } from "./_components/progress-content.tsx";
+import { titleTemplate, titleFrom } from "../../../../_lib/seo.ts";
 
 // `/account/progress` — the learner's courses, quiz attempts and reading
 // (ADR-125 §1). The same shape as `/account` (ADR-123 §1): a static shell, and
@@ -18,10 +18,10 @@ export async function generateMetadata({
   setRequestLocale(locale);
   const [t, template] = await Promise.all([
     getTranslations({ locale, namespace: "account" }),
-    getSetting("seo.titleTemplate"),
+    titleTemplate(),
   ]);
   return {
-    title: (template ?? "%s").replace("%s", t("progressMetaTitle")),
+    title: titleFrom(template, t("progressMetaTitle")),
     // A private page: nothing to index, and nothing on it to follow either.
     robots: { index: false, follow: false },
   };

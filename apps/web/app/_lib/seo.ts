@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { publicPagePath } from "@repo/contracts";
+import { getTranslations } from "next-intl/server";
+import { publicPagePath, SITE_NAME_PLACEHOLDER, TITLE_PLACEHOLDER } from "@repo/contracts";
 import { getServableLocales } from "@repo/i18n";
 import { routing } from "@repo/i18n/routing";
 import { getSetting } from "@repo/settings";
@@ -11,6 +12,46 @@ import { getSetting } from "@repo/settings";
 // hreflang listed whatever translation rows existed, and a blank SEO
 // description went out as a present-but-undefined key. The helpers below are
 // small on purpose — each one is a rule a page would otherwise re-derive.
+
+/**
+ * The site's name as search engines and share cards see it: the admin-set
+ * `site.name` (Settings → General), the same value the header and footer
+ * print. The catalog's `common.siteName` is only the fallback for a database
+ * that has no row — it had been the ONLY source for titles and JSON-LD, so
+ * renaming the site in admin changed the header and left every `<title>`,
+ * `og:site_name` and `publisher` on the old name.
+ */
+export async function siteName(): Promise<string> {
+  const stored = (await getSetting("site.name"))?.trim();
+  if (stored) return stored;
+  const t = await getTranslations("common");
+  return t("siteName");
+}
+
+/** What a missing, blank or `%s`-less `seo.titleTemplate` means. */
+export const DEFAULT_TITLE_TEMPLATE = `${TITLE_PLACEHOLDER} | ${SITE_NAME_PLACEHOLDER}`;
+
+/**
+ * `seo.titleTemplate` with `%site%` already resolved to {@link siteName}, so
+ * the brand in every page title follows the site name instead of being typed
+ * into the template a second time (it was seeded `%s | MBX Pro`). A template
+ * without `%s` would give every page the same title, so it is treated as
+ * unset rather than obeyed.
+ */
+export async function titleTemplate(): Promise<string> {
+  const [stored, name] = await Promise.all([getSetting("seo.titleTemplate"), siteName()]);
+  const template = stored?.includes(TITLE_PLACEHOLDER) ? stored : DEFAULT_TITLE_TEMPLATE;
+  return template.split(SITE_NAME_PLACEHOLDER).join(name);
+}
+
+/**
+ * A page title through the template. A function replacer, never a string one:
+ * `String.replace` reads `$&`, `$$` and `` $` `` in a replacement STRING as
+ * patterns, and a title is admin-typed text that can hold a dollar sign.
+ */
+export function titleFrom(template: string, title: string): string {
+  return template.replace(TITLE_PLACEHOLDER, () => title);
+}
 
 /** A default-locale path (`/tools/x`) as the given locale's URL (`/es/tools/x`). */
 export function localizedPath(locale: string, path: string): string {
@@ -172,6 +213,17 @@ export async function shareMetadata({
       ...(cardImage ? { images: [cardImage] } : {}),
     },
   };
+}
+
+/**
+ * An `Article.headline` Google will accept: at most 110 characters, cut on a
+ * word boundary with an ellipsis. The page's `<h1>` keeps the full title.
+ */
+export function truncateHeadline(title: string, max = 110): string {
+  if (title.length <= max) return title;
+  const cut = title.slice(0, max - 1);
+  const space = cut.lastIndexOf(" ");
+  return `${(space > max / 2 ? cut.slice(0, space) : cut).trimEnd()}…`;
 }
 
 /** A `<script type="application/ld+json">` body, safe inside an HTML document. */

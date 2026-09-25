@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { localizedPath } from "../../../_lib/seo.ts";
+import { localizedPath, titleTemplate, titleFrom } from "../../../_lib/seo.ts";
 import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import {
@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { ROUTE_PATHS } from "@repo/contracts";
 import { Link } from "@repo/i18n/navigation";
-import { getSetting, isFeatureVisible } from "@repo/settings";
+import { isFeatureVisible } from "@repo/settings";
 import { AmbientMotif } from "@repo/ui/components/ambient-motif";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardContent } from "@repo/ui/components/card";
@@ -39,12 +39,9 @@ export async function generateMetadata({
 }: PageProps<"/[locale]/economic-calendar">): Promise<Metadata> {
   const { locale } = await params;
   setRequestLocale(locale);
-  const [t, template] = await Promise.all([
-    getTranslations("economicCalendar"),
-    getSetting("seo.titleTemplate"),
-  ]);
+  const [t, template] = await Promise.all([getTranslations("economicCalendar"), titleTemplate()]);
   return {
-    title: (template ?? "%s").replace("%s", t("title")),
+    title: titleFrom(template, t("title")),
     description: t("intro"),
     alternates: { canonical: localizedPath(locale, ROUTE_PATHS["economic-calendar"]) },
   };

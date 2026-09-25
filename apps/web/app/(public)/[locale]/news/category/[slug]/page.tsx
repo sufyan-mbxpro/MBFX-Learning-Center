@@ -1,5 +1,11 @@
 import type { Metadata } from "next";
-import { alternatesFor, descriptionFrom, pagedCanonical } from "../../../../../_lib/seo.ts";
+import {
+  alternatesFor,
+  descriptionFrom,
+  pagedCanonical,
+  titleTemplate,
+  titleFrom,
+} from "../../../../../_lib/seo.ts";
 import { notFound, permanentRedirect } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import {
@@ -26,7 +32,7 @@ export async function generateMetadata({
   setRequestLocale(locale);
   const [view, template] = await Promise.all([
     getArticleCategoryBySlug(locale, slug),
-    getSetting("seo.titleTemplate"),
+    titleTemplate(),
   ]);
   if (!view) return {};
   const alternates = await alternatesFor({
@@ -37,7 +43,7 @@ export async function generateMetadata({
     })),
   });
   return {
-    title: (template ?? "%s").replace("%s", view.seoTitle ?? view.name),
+    title: titleFrom(template, view.seoTitle?.trim() || view.name),
     ...descriptionFrom(view.seoDescription, view.description),
     alternates,
   };

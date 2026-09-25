@@ -1,10 +1,16 @@
 import type { Metadata } from "next";
-import { descriptionFrom, shareMetadata } from "../../../_lib/seo.ts";
+import {
+  descriptionFrom,
+  shareMetadata,
+  titleTemplate,
+  titleFrom,
+  siteName,
+  jsonLd,
+} from "../../../_lib/seo.ts";
 import { draftMode } from "next/headers";
 import { notFound, permanentRedirect } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { buildPageSeo, getMediaUrls, resolvePublicPage } from "@repo/core";
-import { getSetting } from "@repo/settings";
 import { renderTree } from "@repo/blocks/render";
 import { layoutTreeSchema } from "@repo/contracts";
 import { buildRenderContext, flattenSearchParams } from "../../../_cms/render-context.ts";
@@ -47,10 +53,7 @@ export async function generateMetadata({
   const resolved = await resolvePublicPage(locale, pathFromSlug(slug), { draft });
   if (resolved.kind !== "page") return {};
 
-  const [template, tCommon] = await Promise.all([
-    getSetting("seo.titleTemplate"),
-    getTranslations({ locale, namespace: "common" }),
-  ]);
+  const [template, brand] = await Promise.all([titleTemplate(), siteName()]);
   const seo = buildPageSeo(resolved.page, locale);
   // Suggestions (plan §9/§12 PR 3.6) come from the page's own first
   // heading/paragraph/image — same fallback chain as the article route's
@@ -61,7 +64,7 @@ export async function generateMetadata({
   const ogImage = seo.ogImageId ? (ogImageUrls[seo.ogImageId] ?? null) : null;
 
   return {
-    title: (template ?? "%s").replace("%s", seo.title),
+    title: titleFrom(template, seo.title),
     ...descriptionFrom(seo.description),
     // Conditional spreads, never a key holding `undefined` (ADR-090).
     ...(seo.canonicalUrl ? { alternates: { canonical: seo.canonicalUrl } } : {}),
@@ -70,7 +73,7 @@ export async function generateMetadata({
     ...(seo.robots?.includes("noindex") ? { robots: { index: false, follow: false } } : {}),
     ...(await shareMetadata({
       locale,
-      siteName: tCommon("siteName"),
+      siteName: brand,
       title: seo.title,
       description: seo.description,
       image: ogImage,
@@ -93,7 +96,7 @@ export default async function CmsPage({ params, searchParams }: PageProps<"/[loc
   // `PageTranslation.schemaType` an admin set — same inline-`<script>`
   // pattern as `news/[slug]/page.tsx`, not a separate rendering helper.
   const seo = buildPageSeo(resolved.page, locale);
-  const jsonLd = {
+  const pageGraph = {
     "@context": "https://schema.org",
     "@type": seo.schemaType,
     name: seo.title,
@@ -107,7 +110,7 @@ export default async function CmsPage({ params, searchParams }: PageProps<"/[loc
       <main className="flex flex-col">
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+          dangerouslySetInnerHTML={{ __html: jsonLd(pageGraph) }}
         />
         <section className="mx-auto flex w-full max-w-3xl flex-col gap-2 px-4 py-16">
           <h1 className="text-3xl font-semibold">{resolved.page.title}</h1>
@@ -126,10 +129,7 @@ export default async function CmsPage({ params, searchParams }: PageProps<"/[loc
   const elements = await renderTree(layout.data, ctx);
   return (
     <main className="flex flex-col">
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-      />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(pageGraph) }} />
       {elements}
     </main>
   );

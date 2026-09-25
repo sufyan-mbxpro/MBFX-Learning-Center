@@ -1,3 +1,6 @@
+import { jsonLd } from "../../../../_lib/seo.ts";
+import { siteUrl } from "../../../../_lib/site-url.ts";
+
 // `VideoObject` structured data (changes-16 PR 8).
 //
 // Same discipline as `CourseJsonLd` and the About section's `Organization`
@@ -18,7 +21,11 @@
 // the topic's publication date, not the recording's, and those genuinely
 // differ. That is the honest reading available to us — the page is what was
 // published — and it is stated here so it is not "corrected" to a recording
-// date the schema has no column for.
+// date the schema has no column for. It was `updatedAt` until the SEO pass of
+// 2026-09-24, which moved the "upload" every time an editor fixed a typo.
+//
+// Every URL is ABSOLUTE: `metadataBase` resolves the `Metadata` object only,
+// never a JSON-LD body, and an uploaded file or poster is stored as `/uploads/…`.
 //
 // ─── One graph, or none ────────────────────────────────────────────────────
 //
@@ -28,7 +35,7 @@
 export function VideoJsonLd({
   name,
   description,
-  url,
+  path,
   uploadDate,
   thumbnailUrl,
   embedUrl,
@@ -36,8 +43,8 @@ export function VideoJsonLd({
 }: {
   name: string;
   description: string | null;
-  /** Path, not an absolute URL — Next resolves it against `metadataBase`. */
-  url: string;
+  /** The topic page's own path, locale prefix included; made absolute here. */
+  path: string;
   /** ISO 8601. The TOPIC's publication date — see the header note. */
   uploadDate: string;
   thumbnailUrl?: string | null;
@@ -49,22 +56,19 @@ export function VideoJsonLd({
   // Neither URL means there is nothing to describe — see the header note.
   if (!embedUrl && !contentUrl) return null;
 
+  const origin = siteUrl();
+  const absolute = (url: string) => (/^https?:\/\//.test(url) ? url : `${origin}${url}`);
   const graph = {
     "@context": "https://schema.org",
     "@type": "VideoObject",
     name,
     ...(description ? { description } : {}),
-    url,
+    url: absolute(path),
     uploadDate,
-    ...(thumbnailUrl ? { thumbnailUrl } : {}),
-    ...(embedUrl ? { embedUrl } : {}),
-    ...(contentUrl ? { contentUrl } : {}),
+    ...(thumbnailUrl ? { thumbnailUrl: absolute(thumbnailUrl) } : {}),
+    ...(embedUrl ? { embedUrl: absolute(embedUrl) } : {}),
+    ...(contentUrl ? { contentUrl: absolute(contentUrl) } : {}),
   };
 
-  return (
-    <script
-      type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(graph) }}
-    />
-  );
+  return <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(graph) }} />;
 }

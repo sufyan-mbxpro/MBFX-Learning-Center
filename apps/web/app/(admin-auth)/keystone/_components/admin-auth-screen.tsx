@@ -38,7 +38,9 @@ export async function AdminAuthScreen({
     getSetting("site.name"),
     getBrandAssets(),
   ]);
-  const wordmark = common("siteName");
+  // `site.name`, the brand every other surface prints; the catalog's is the
+  // fallback for an unseeded row.
+  const wordmark = siteName?.trim() || common("siteName");
 
   return (
     <main className="relative flex min-h-dvh flex-1 items-center justify-center bg-muted/50 p-4 sm:p-8">

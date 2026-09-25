@@ -7,6 +7,9 @@ import {
   jsonLd,
   localizedPath,
   shareMetadata,
+  titleTemplate,
+  titleFrom,
+  siteName,
 } from "../../../../_lib/seo.ts";
 import Image from "next/image";
 import { notFound, permanentRedirect } from "next/navigation";
@@ -19,11 +22,11 @@ import {
   glossaryTermPath,
 } from "@repo/core";
 import { ROUTE_PATHS } from "@repo/contracts";
-import { htmlToText } from "@repo/utils";
+import { htmlLead } from "@repo/utils";
 import { getServableLocales } from "@repo/i18n";
 import { LOCALE_DIRECTION, routing } from "@repo/i18n/routing";
 import { Link } from "@repo/i18n/navigation";
-import { getSetting, isFeatureVisible } from "@repo/settings";
+import { isFeatureVisible } from "@repo/settings";
 import { AmbientMotif } from "@repo/ui/components/ambient-motif";
 import { Badge } from "@repo/ui/components/badge";
 import { Container } from "@repo/ui/components/container";
@@ -67,23 +70,26 @@ export async function generateMetadata({
   const { locale, slug } = await params;
   setRequestLocale(locale);
   const readingLocale = readingLocaleFrom(await searchParams);
-  const [view, template, tCommon] = await Promise.all([
+  const [view, template, brand] = await Promise.all([
     getGlossaryTermBySlug(locale, slug, readingLocale),
-    getSetting("seo.titleTemplate"),
-    getTranslations({ locale, namespace: "common" }),
+    titleTemplate(),
+    siteName(),
   ]);
   if (!view) return {};
 
   const canonical = glossaryTermPath(locale, routing.defaultLocale, slug);
-  const shareTitle = view.seoTitle ?? view.term;
-  const shareDescription = view.seoDescription ?? htmlToText(view.simpleExplanation);
+  const shareTitle = view.seoTitle?.trim() || view.term;
+  // The LEAD, never the whole body: since changes-46 `simpleExplanation` is
+  // the term's entire rich article, and a description is a snippet.
+  const lead = htmlLead(view.simpleExplanation, 160);
+  const shareDescription = view.seoDescription?.trim() || lead;
 
   return {
-    title: (template ?? "%s").replace("%s", view.seoTitle ?? view.term),
+    title: titleFrom(template, shareTitle),
     // The plain-language line when no SEO description was written: most terms
     // never get one, and a term page with no meta description at all hands the
     // snippet to whatever the crawler picks.
-    ...descriptionFrom(view.seoDescription, htmlToText(view.simpleExplanation)),
+    ...descriptionFrom(view.seoDescription, lead),
     // ADR-127 #4: a `?lang=` reading view is never indexed, and its canonical
     // is the term's own URL — which is every view's canonical.
     alternates: await alternatesFor({
@@ -101,7 +107,7 @@ export async function generateMetadata({
     // image, since a term has no picture).
     ...(await shareMetadata({
       locale,
-      siteName: tCommon("siteName"),
+      siteName: brand,
       url: canonical,
       title: shareTitle,
       description: shareDescription,
@@ -195,9 +201,7 @@ export default async function GlossaryTermPage({
     name: view.term,
     url: `${origin}${glossaryTermPath(locale, routing.defaultLocale, view.slug)}`,
     inLanguage: view.contentLocale,
-    ...(htmlToText(view.simpleExplanation)
-      ? { description: htmlToText(view.simpleExplanation) }
-      : {}),
+    ...(htmlLead(view.simpleExplanation) ? { description: htmlLead(view.simpleExplanation) } : {}),
     inDefinedTermSet: {
       "@type": "DefinedTermSet",
       name: t("title"),

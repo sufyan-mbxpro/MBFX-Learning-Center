@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { localizedPath } from "../../../_lib/seo.ts";
+import { localizedPath, titleTemplate, titleFrom } from "../../../_lib/seo.ts";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { ExternalLink } from "lucide-react";
 
@@ -46,10 +46,10 @@ export async function generateMetadata({
   setRequestLocale(locale);
   const [t, template] = await Promise.all([
     getTranslations({ locale, namespace: "public" }),
-    getSetting("seo.titleTemplate"),
+    titleTemplate(),
   ]);
   return {
-    title: (template ?? "%s").replace("%s", t("sitemap.title")),
+    title: titleFrom(template, t("sitemap.title")),
     description: t("sitemap.lead"),
     alternates: { canonical: localizedPath(locale, ROUTE_PATHS.sitemap) },
     // Deliberately NO `robots` key, not even `{ index: true }`: a present key

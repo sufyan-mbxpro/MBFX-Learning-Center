@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import { localizedPath } from "../../../../../_lib/seo.ts";
+import { localizedPath, titleTemplate, titleFrom } from "../../../../../_lib/seo.ts";
 import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { BookOpen } from "lucide-react";
 import { getPublishedGlossary } from "@repo/core";
 import { isLearnTrack, learnTrackGlossaryPath, LEARN_TRACKS, ROUTE_PATHS } from "@repo/contracts";
-import { getSetting, isFeatureVisible } from "@repo/settings";
+import { isFeatureVisible } from "@repo/settings";
 import { Link } from "@repo/i18n/navigation";
 import { AmbientMotif } from "@repo/ui/components/ambient-motif";
 import { Button } from "@repo/ui/components/button";
@@ -41,11 +41,11 @@ export async function generateMetadata({
   const [t, learn, template] = await Promise.all([
     getTranslations({ locale, namespace: "glossary" }),
     getTranslations({ locale, namespace: "learn" }),
-    getSetting("seo.titleTemplate"),
+    titleTemplate(),
   ]);
   const title = `${learn(LEARN_TRACKS[track].titleKey)} — ${t("title")}`;
   return {
-    title: (template ?? "%s").replace("%s", title),
+    title: titleFrom(template, title),
     description: t("intro"),
     alternates: { canonical: localizedPath(locale, learnTrackGlossaryPath(track)) },
   };

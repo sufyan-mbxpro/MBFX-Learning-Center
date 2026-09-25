@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { defaultShareImage } from "../../_lib/seo.ts";
+import { defaultShareImage, siteName } from "../../_lib/seo.ts";
 import { hasLocale, NextIntlClientProvider } from "next-intl";
 import { getMessages, getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
@@ -47,9 +47,10 @@ export async function generateMetadata({ params }: LayoutProps<"/[locale]">): Pr
   if (!hasLocale(routing.locales, locale)) return {};
   setRequestLocale(locale);
 
-  const [brandAssets, t, allowIndexing, googleVerification, shareImage] = await Promise.all([
+  const [brandAssets, t, name, allowIndexing, googleVerification, shareImage] = await Promise.all([
     getBrandAssets(),
     getTranslations("common"),
+    siteName(),
     getSetting("seo.robotsIndex"),
     getSetting("seo.googleSiteVerification"),
     defaultShareImage(),
@@ -60,7 +61,7 @@ export async function generateMetadata({ params }: LayoutProps<"/[locale]">): Pr
     // Without it Next falls back to localhost, which neither throws nor warns
     // in production: it just ships share cards nobody can load.
     metadataBase: new URL(siteUrl()),
-    title: t("siteName"),
+    title: name,
     description: t("siteDescription"),
     icons: faviconIcons(brandAssets.favicon),
     // The share card every page inherits unless it builds its own
@@ -68,7 +69,7 @@ export async function generateMetadata({ params }: LayoutProps<"/[locale]">): Pr
     // title and description, and the Twitter card copies the image from here.
     openGraph: {
       type: "website",
-      siteName: t("siteName"),
+      siteName: name,
       locale,
       ...(shareImage ? { images: [{ url: shareImage }] } : {}),
     },

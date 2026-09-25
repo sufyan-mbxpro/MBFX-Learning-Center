@@ -122,7 +122,10 @@ function baseCsp(nonce: string | null, recaptcha = false): string {
     `img-src 'self' data: blob: https:`,
     `media-src 'self' blob: https:`,
     `font-src 'self'`,
-    `connect-src 'self'`,
+    // reCAPTCHA also POSTs to google.com/recaptcha/api2/clr from the page
+    // itself, not from its frame; without this the live CSP report log filled
+    // with `clr` violations on /support and the challenge never completed.
+    `connect-src 'self'${recaptcha ? " https://www.google.com/recaptcha/" : ""}`,
     // The third parties we frame, and the only ones.
     //
     // - The economic calendar widget (ADR-050).

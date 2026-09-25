@@ -271,8 +271,8 @@ describe("share cards", () => {
 describe("the home title is the brand once", () => {
   it("does not run the site name through the title template", () => {
     const home = code(resolve(APP, "(public)/[locale]/page.tsx"));
-    expect(home).not.toContain('getSetting("seo.titleTemplate")');
-    expect(home).toContain("title: siteName");
+    expect(home).not.toContain("titleTemplate()");
+    expect(home).toContain("title: name");
   });
 });
 
@@ -299,7 +299,57 @@ describe("the sitemap lists only pages that answer", () => {
     }
   });
 
+  it("lists a legal document only when the route serves it rather than redirecting", () => {
+    // A `public/` file answers 307 (ADR-110); a redirecting sitemap URL is a
+    // Search Console "Page with redirect". Only an upload is served inline.
+    expect(src()).toMatch(/legalStored\[index\]\?\.startsWith\(STORED_UPLOAD_PREFIX\)/);
+  });
+
   it("does not submit the noindex quiz runners", () => {
     expect(src()).not.toMatch(/quizEntries|quizPages/);
+  });
+});
+
+describe("the site name is the admin setting everywhere", () => {
+  const files = readdirSync(resolve(APP, "(public)/[locale]"), {
+    recursive: true,
+    encoding: "utf8",
+  })
+    .filter((file) => /\.tsx?$/.test(file) && !/\.test\./.test(file))
+    .map((file) => resolve(APP, "(public)/[locale]", file));
+
+  it("builds no title from the raw template, whose %site% only titleTemplate() resolves", () => {
+    for (const file of files) {
+      expect(code(file), file).not.toContain('getSetting("seo.titleTemplate")');
+      expect(code(file), relative(file)).not.toContain('.replace("%s"');
+    }
+  });
+
+  it("takes titles, og:site_name and JSON-LD names from siteName(), not the catalog", () => {
+    const withMetadata = files.filter((file) => /generateMetadata|ld\+json/.test(read(file)));
+    expect(withMetadata.length).toBeGreaterThan(20);
+    for (const file of withMetadata) {
+      expect(code(file), relative(file)).not.toMatch(/\b\w+\("siteName"\)/);
+    }
+    expect(code(PUBLIC_ROOT_LAYOUT)).toContain("siteName()");
+  });
+});
+
+describe("structured data is escaped and absolute", () => {
+  // A raw JSON.stringify lets `</script>` in an admin-typed title close the
+  // element early; `jsonLd()` escapes `<`.
+  it("goes through jsonLd(), never a raw JSON.stringify", () => {
+    const offenders = publicSources()
+      .filter((path) => /__html:\s*JSON\.stringify/.test(code(path)))
+      .map(relative);
+    expect(offenders).toEqual([]);
+  });
+
+  it("builds course and video URLs from siteUrl(), which metadataBase never reaches", () => {
+    for (const file of ["course-json-ld.tsx", "video-json-ld.tsx"]) {
+      expect(code(resolve(APP, "(public)/[locale]/learn/_components", file))).toContain(
+        "siteUrl()",
+      );
+    }
   });
 });

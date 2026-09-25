@@ -16,6 +16,7 @@ import {
   LEGAL_DOCUMENT_KEYS,
   LEGAL_DOCUMENT_SETTING,
   ROUTE_PATHS,
+  STORED_UPLOAD_PREFIX,
   toolPath,
   publicPagePath,
 } from "@repo/contracts";
@@ -135,12 +136,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // Both pages behind `market_data` (changes-40): the live board and the
     // headline feed share the flag because both are the vendor's market feed
     // under our chrome.
-    ...(flags.market_data
-      ? [ROUTE_PATHS["live-rates"], ROUTE_PATHS["market-news"]]
-      : []),
-    ...LEGAL_DOCUMENT_KEYS.filter((_, index) => Boolean(legalStored[index])).map(
-      (key) => `/legal/${key}`,
-    ),
+    ...(flags.market_data ? [ROUTE_PATHS["live-rates"], ROUTE_PATHS["market-news"]] : []),
+    // Only a document the route SERVES. One pointing at a committed file under
+    // `public/` answers 307 (ADR-110), and a sitemap URL that redirects is
+    // reported by Search Console as "Page with redirect" — the crawl hint names
+    // a URL Google will not index. The footer still links it; a crawler finds
+    // the PDF from there.
+    ...LEGAL_DOCUMENT_KEYS.filter((_, index) =>
+      Boolean(legalStored[index]?.startsWith(STORED_UPLOAD_PREFIX)),
+    ).map((key) => `/legal/${key}`),
   ];
   const staticPages: MetadataRoute.Sitemap = servableLocales.flatMap((locale) => {
     const prefix = locale === routing.defaultLocale ? "" : `/${locale}`;

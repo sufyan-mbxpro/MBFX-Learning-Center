@@ -957,6 +957,7 @@ export async function loadVideoTopicBySlug(
       id: true,
       track: true,
       coverAssetId: true,
+      publishedAt: true,
       updatedAt: true,
       translations: {
         select: {
@@ -1029,6 +1030,7 @@ export async function loadVideoTopicBySlug(
     }),
     seoTitle: words.seoTitle,
     seoDescription: words.seoDescription,
+    publishedAt: row.publishedAt,
     updatedAt: row.updatedAt,
     ...reading,
   };

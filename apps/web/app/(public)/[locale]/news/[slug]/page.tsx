@@ -1,5 +1,14 @@
 import type { Metadata } from "next";
-import { alternatesFor, descriptionFrom, shareMetadata } from "../../../../_lib/seo.ts";
+import {
+  alternatesFor,
+  descriptionFrom,
+  shareMetadata,
+  titleTemplate,
+  titleFrom,
+  siteName,
+  jsonLd,
+  truncateHeadline,
+} from "../../../../_lib/seo.ts";
 import { siteUrl } from "../../../../_lib/site-url.ts";
 import Image from "next/image";
 import { notFound, permanentRedirect } from "next/navigation";
@@ -47,10 +56,10 @@ export async function generateMetadata({
   const { locale, slug } = await params;
   setRequestLocale(locale);
   const readingLocale = readingLocaleFrom(await searchParams);
-  const [view, template, tCommon] = await Promise.all([
+  const [view, template, brand] = await Promise.all([
     getArticleBySlug(locale, slug, readingLocale),
-    getSetting("seo.titleTemplate"),
-    getTranslations({ locale, namespace: "common" }),
+    titleTemplate(),
+    siteName(),
   ]);
   if (!view) return {};
 
@@ -60,11 +69,12 @@ export async function generateMetadata({
   const ownPath = articlePath(locale, routing.defaultLocale, slug);
   // changes-07: OG/Twitter overrides fall back through the SEO fields to the
   // article itself — a null override means "inherit", never "render empty".
-  const ogTitle = view.ogTitle ?? view.seoTitle ?? view.title;
-  const ogDescription = view.ogDescription ?? view.seoDescription ?? view.excerpt ?? undefined;
+  const ogTitle = view.ogTitle?.trim() || view.seoTitle?.trim() || view.title;
+  const ogDescription =
+    view.ogDescription?.trim() || view.seoDescription?.trim() || view.excerpt?.trim() || undefined;
 
   return {
-    title: (template ?? "%s").replace("%s", view.seoTitle ?? view.title),
+    title: titleFrom(template, view.seoTitle?.trim() || view.title),
     ...descriptionFrom(view.seoDescription, view.excerpt),
     alternates: await alternatesFor({
       // ADR-127 #4: a reading view points back at the article's own URL. An
@@ -95,7 +105,7 @@ export async function generateMetadata({
         : {}),
     ...(await shareMetadata({
       locale,
-      siteName: tCommon("siteName"),
+      siteName: brand,
       url: ownPath,
       type: "article",
       title: ogTitle,
@@ -160,17 +170,19 @@ export default async function ArticlePage({
   const video = view.videoUrl ? parseVideoUrl(view.videoUrl) : null;
   const backHref = view.kind === "NEWS" ? "/news" : "/analysis";
 
-  const tCommon = await getTranslations({ locale, namespace: "common" });
+  const brand = await siteName();
   const origin = siteUrl();
   const absolute = (url: string) => (url.startsWith("http") ? url : `${origin}${url}`);
   const articleUrl = `${origin}${articlePath(locale, routing.defaultLocale, view.slug)}`;
 
   // JSON-LD (ADR-015 #11): NewsArticle for news, AnalysisNewsArticle for
   // analysis/trade ideas — values are our own sanitized/plain columns.
-  const jsonLd = {
+  const articleGraph = {
     "@context": "https://schema.org",
     "@type": view.kind === "NEWS" ? "NewsArticle" : "AnalysisNewsArticle",
-    headline: view.title,
+    // Google shows at most 110 characters and flags a longer headline; the
+    // title itself allows 255.
+    headline: truncateHeadline(view.title),
     ...descriptionFrom(view.seoDescription, view.excerpt),
     // The article's own address, and the page it is the main entity of — the
     // two fields Google's article guidance asks for first.
@@ -182,7 +194,7 @@ export default async function ArticlePage({
     ...(view.ogImageUrl || view.coverImageUrl
       ? { image: [absolute(view.ogImageUrl ?? view.coverImageUrl ?? "")] }
       : {}),
-    publisher: { "@type": "Organization", name: tCommon("siteName"), url: `${origin}/` },
+    publisher: { "@type": "Organization", name: brand, url: `${origin}/` },
     ...(showAuthor !== false && view.authorName
       ? { author: [{ "@type": "Person", name: view.authorName }] }
       : {}),
@@ -212,12 +224,12 @@ export default async function ArticlePage({
       <ReadBeacon articleId={view.articleId} />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: jsonLd(articleGraph) }}
       />
       {faqJsonLd && (
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
+          dangerouslySetInnerHTML={{ __html: jsonLd(faqJsonLd) }}
         />
       )}
 

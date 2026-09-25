@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { hasLocale } from "next-intl";
 import { routing } from "@repo/i18n/routing";
 import { siteUrl } from "../../_lib/site-url.ts";
-import { alternatesFor, jsonLd, localizedPath, shareMetadata } from "../../_lib/seo.ts";
+import { alternatesFor, jsonLd, localizedPath, shareMetadata, siteName } from "../../_lib/seo.ts";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { getSetting } from "@repo/settings";
 import { getBrandAssets } from "@repo/core";
@@ -55,19 +55,18 @@ export async function generateMetadata({ params }: PageProps<"/[locale]">): Prom
   if (!hasLocale(routing.locales, locale)) notFound();
   setRequestLocale(locale);
 
-  const [t, tCommon, servable] = await Promise.all([
+  const [t, name, servable] = await Promise.all([
     getTranslations("home"),
-    getTranslations("common"),
+    siteName(),
     getServableLocales(),
   ]);
-  const siteName = tCommon("siteName");
 
   return {
     // The site name ALONE, never through `seo.titleTemplate`: the template's
     // job is to append the brand to a page's own title, and the home page's
     // title IS the brand — "MBX Learning Center | MBX Pro" said it twice, in
-    // two different names.
-    title: siteName,
+    // two different names. Both halves now read `site.name` (`siteName()`).
+    title: name,
     description: t("heroBody"),
     alternates: await alternatesFor({
       canonical: localizedPath(locale, "/"),
@@ -75,9 +74,9 @@ export async function generateMetadata({ params }: PageProps<"/[locale]">): Prom
     }),
     ...(await shareMetadata({
       locale,
-      siteName,
+      siteName: name,
       url: localizedPath(locale, "/"),
-      title: siteName,
+      title: name,
       description: t("heroBody"),
     })),
   };
@@ -111,9 +110,9 @@ export default async function Home({ params }: PageProps<"/[locale]">) {
   if (!hasLocale(routing.locales, locale)) notFound();
   setRequestLocale(locale);
 
-  const [sectionSetting, tCommon, brandAssets] = await Promise.all([
+  const [sectionSetting, brand, brandAssets] = await Promise.all([
     getSetting("home.sections"),
-    getTranslations("common"),
+    siteName(),
     getBrandAssets(),
   ]);
   const sections = sectionSetting ?? [];
@@ -132,14 +131,14 @@ export default async function Home({ params }: PageProps<"/[locale]">) {
       {
         "@type": "Organization",
         "@id": `${origin}/#organization`,
-        name: tCommon("siteName"),
+        name: brand,
         url: `${origin}/`,
         ...(logo ? { logo: logo.startsWith("http") ? logo : `${origin}${logo}` } : {}),
       },
       {
         "@type": "WebSite",
         "@id": `${origin}/#website`,
-        name: tCommon("siteName"),
+        name: brand,
         url: `${origin}${localizedPath(locale, "/")}`,
         inLanguage: locale,
         publisher: { "@id": `${origin}/#organization` },

@@ -1,5 +1,10 @@
 import type { Metadata } from "next";
-import { alternatesFor, pagedCanonical } from "../../../../../_lib/seo.ts";
+import {
+  alternatesFor,
+  pagedCanonical,
+  titleTemplate,
+  titleFrom,
+} from "../../../../../_lib/seo.ts";
 import { notFound, permanentRedirect } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import {
@@ -24,10 +29,7 @@ export async function generateMetadata({
   const search = await searchParams;
   const page = Math.max(0, Number.parseInt(String(search.page ?? "0"), 10) || 0);
   setRequestLocale(locale);
-  const [view, template] = await Promise.all([
-    getArticleTagBySlug(locale, slug),
-    getSetting("seo.titleTemplate"),
-  ]);
+  const [view, template] = await Promise.all([getArticleTagBySlug(locale, slug), titleTemplate()]);
   if (!view) return {};
   const alternates = await alternatesFor({
     canonical: pagedCanonical(articleTagPath(locale, routing.defaultLocale, slug), page),
@@ -38,7 +40,7 @@ export async function generateMetadata({
   });
   const t = await getTranslations("news");
   return {
-    title: (template ?? "%s").replace("%s", view.name),
+    title: titleFrom(template, view.name),
     description: t("archiveLatestTitle", { name: view.name }),
     alternates,
   };

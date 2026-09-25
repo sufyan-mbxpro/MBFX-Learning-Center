@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { listingMetadata } from "../../../_lib/seo.ts";
+import { listingMetadata, titleTemplate, titleFrom } from "../../../_lib/seo.ts";
 import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { publicArticleSearchSchema } from "@repo/contracts";
@@ -23,15 +23,12 @@ export async function generateMetadata({
 }: PageProps<"/[locale]/analysis">): Promise<Metadata> {
   const { locale } = await params;
   setRequestLocale(locale);
-  const [t, template] = await Promise.all([
-    getTranslations("news"),
-    getSetting("seo.titleTemplate"),
-  ]);
+  const [t, template] = await Promise.all([getTranslations("news"), titleTemplate()]);
   const search = await searchParams;
   const parsed = publicArticleSearchSchema.safeParse({ q: search.q, page: search.page });
   const { q, page = 0 } = parsed.success ? parsed.data : {};
   return {
-    title: (template ?? "%s").replace("%s", t("analysisTitle")),
+    title: titleFrom(template, t("analysisTitle")),
     description: t("analysisIntro"),
     ...listingMetadata(locale, "/analysis", page, q),
   };

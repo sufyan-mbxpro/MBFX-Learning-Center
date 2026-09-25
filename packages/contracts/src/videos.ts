@@ -277,5 +277,7 @@ export interface VideoTopicView {
   links: VideoTopicLinkView[];
   seoTitle: string | null;
   seoDescription: string | null;
+  /** When the topic went public; `VideoObject.uploadDate` (null only for legacy rows). */
+  publishedAt: Date | null;
   updatedAt: Date;
 }

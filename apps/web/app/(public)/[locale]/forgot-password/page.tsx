@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { getSetting } from "@repo/settings";
 import { Link } from "@repo/i18n/navigation";
 import { AuthScreen } from "../_components/auth-screen.tsx";
 import { ForgotPasswordForm } from "./forgot-password-form.tsx";
+import { titleTemplate, titleFrom } from "../../../_lib/seo.ts";
 
 // LEARNER password recovery (ADR-079). The staff equivalent is a separate
 // surface at /keystone/forgot-password and is never linked from here — the public
@@ -19,12 +19,9 @@ export async function generateMetadata({
 }: PageProps<"/[locale]/forgot-password">): Promise<Metadata> {
   const { locale } = await params;
   setRequestLocale(locale);
-  const [t, template] = await Promise.all([
-    getTranslations("auth"),
-    getSetting("seo.titleTemplate"),
-  ]);
+  const [t, template] = await Promise.all([getTranslations("auth"), titleTemplate()]);
   return {
-    title: (template ?? "%s").replace("%s", t("forgotTitle")),
+    title: titleFrom(template, t("forgotTitle")),
     // A recovery screen has nothing to index and everything to lose by being
     // crawled, the same reason sign-in carries this.
     robots: { index: false, follow: false },

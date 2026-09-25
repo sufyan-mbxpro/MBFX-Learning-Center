@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import { localizedPath } from "../../../../../_lib/seo.ts";
+import { localizedPath, titleTemplate, titleFrom } from "../../../../../_lib/seo.ts";
 import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { getVideoCategories, getVideoTopics } from "@repo/core";
 import { isLearnTrack, learnTrackVideosPath, LEARN_TRACKS } from "@repo/contracts";
-import { getSetting, isFeatureVisible } from "@repo/settings";
+import { isFeatureVisible } from "@repo/settings";
 import { VideoMasthead } from "../../_components/video-masthead.tsx";
 import { VideoShelf } from "../../_components/video-shelf.tsx";
 
@@ -30,11 +30,11 @@ export async function generateMetadata({
 
   const [t, template] = await Promise.all([
     getTranslations({ locale, namespace: "learn" }),
-    getSetting("seo.titleTemplate"),
+    titleTemplate(),
   ]);
   const title = `${t(LEARN_TRACKS[track].titleKey)} — ${t("videos.metaTitle")}`;
   return {
-    title: (template ?? "%s").replace("%s", title),
+    title: titleFrom(template, title),
     description: t("videos.metaDescription"),
     alternates: { canonical: localizedPath(locale, learnTrackVideosPath(track)) },
   };

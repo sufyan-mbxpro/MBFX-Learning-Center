@@ -268,6 +268,23 @@ export function adminSessionTimeoutMs(value: AdminSessionTimeout): number | null
   return value === "never" ? null : Number(value) * 60_000;
 }
 
+/** `seo.titleTemplate`'s slot for the page's own title. */
+export const TITLE_PLACEHOLDER = "%s";
+/** `seo.titleTemplate`'s slot for `site.name`. */
+export const SITE_NAME_PLACEHOLDER = "%site%";
+
+/**
+ * The verification code out of whatever was pasted: the bare code, or the
+ * full `<meta name="google-site-verification" content="…">` tag Search Console
+ * shows. Anything else comes back trimmed and is refused by the schema's
+ * pattern, rather than being printed into every page's `<head>`.
+ */
+export function googleVerificationToken(input: string): string {
+  const trimmed = input.trim();
+  const content = /content\s*=\s*["']([^"']*)["']/i.exec(trimmed);
+  return (content?.[1] ?? trimmed).trim();
+}
+
 export const SETTINGS_SCHEMAS = {
   "site.name": z.string().min(1).max(150),
   "site.tagline": z.string().max(200),
@@ -303,10 +320,27 @@ export const SETTINGS_SCHEMAS = {
   // lockout: the enrolment endpoints themselves stay open.
   "security.requireStaffTwoFactor": z.boolean(),
 
-  "seo.titleTemplate": z.string().max(100),
+  // `%s` is the page's own title and is required — a template without it gives
+  // every page the same title. `%site%` is `site.name`, so renaming the site
+  // renames every title with it.
+  "seo.titleTemplate": z
+    .string()
+    .max(100)
+    .refine((value) => value.includes(TITLE_PLACEHOLDER), `must contain ${TITLE_PLACEHOLDER}`),
   "seo.defaultOgImage": z.string().regex(/^(\/|https?:\/\/)/, "must be a path or URL"),
   "seo.robotsIndex": z.boolean(),
-  "seo.googleSiteVerification": z.string().max(200),
+  // Search Console hands out a whole `<meta>` tag; an admin pastes either
+  // that or the code inside it, and only the code is stored.
+  "seo.googleSiteVerification": z
+    .string()
+    .max(500)
+    .transform(googleVerificationToken)
+    .pipe(
+      z
+        .string()
+        .max(200)
+        .regex(/^[\w-]*$/, "must be the verification code from Google Search Console"),
+    ),
 
   "home.sections": z.array(homeSectionSchema),
   "layout.containerWidth": z.string().regex(/^\d+(px|rem|%)$/, "must be a CSS length"),

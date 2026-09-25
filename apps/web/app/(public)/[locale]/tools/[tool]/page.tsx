@@ -1,5 +1,13 @@
 import type { Metadata } from "next";
-import { descriptionFrom, jsonLd, localizedPath, shareMetadata } from "../../../../_lib/seo.ts";
+import {
+  descriptionFrom,
+  jsonLd,
+  localizedPath,
+  shareMetadata,
+  titleTemplate,
+  titleFrom,
+  siteName,
+} from "../../../../_lib/seo.ts";
 import { siteUrl } from "../../../../_lib/site-url.ts";
 import Image from "next/image";
 import { notFound } from "next/navigation";
@@ -23,7 +31,7 @@ import {
   listActiveInstruments,
 } from "@repo/core";
 import type { OhlcInterval } from "@repo/core";
-import { getSetting, isFeatureVisible } from "@repo/settings";
+import { isFeatureVisible } from "@repo/settings";
 import { RelatedStrip } from "../_components/related-strip.tsx";
 import { ReviewsBand } from "../../_components/reviews-band.tsx";
 import { ToolShell } from "../_components/tool-shell.tsx";
@@ -53,24 +61,24 @@ export async function generateMetadata({
   setRequestLocale(locale);
   if (!isToolKey(tool)) return {};
 
-  const [page, template, tCommon] = await Promise.all([
+  const [page, template, brand] = await Promise.all([
     getToolPage(locale, tool),
-    getSetting("seo.titleTemplate"),
-    getTranslations({ locale, namespace: "common" }),
+    titleTemplate(),
+    siteName(),
   ]);
   if (!page) return {};
 
   const ownPath = localizedPath(locale, toolPath(tool));
   return {
-    title: (template ?? "%s").replace("%s", page.seoTitle || page.title),
+    title: titleFrom(template, page.seoTitle?.trim() || page.title),
     ...descriptionFrom(page.seoDescription, page.tagline),
     alternates: { canonical: ownPath },
     // The editor's Cover image is the masthead AND the share card.
     ...(await shareMetadata({
       locale,
-      siteName: tCommon("siteName"),
+      siteName: brand,
       url: ownPath,
-      title: page.seoTitle || page.title,
+      title: page.seoTitle?.trim() || page.title,
       description: page.seoDescription ?? page.tagline,
       image: page.coverUrl,
     })),

@@ -1051,10 +1051,18 @@
       },
       "site": {
         "contactEmail": "Messages sent through the contact form on the Support page are delivered to this address.",
-        "supportEmail": "Shown to readers on the Support page and in the footer. The contact form sends here only when no contact email is set."
+        "supportEmail": "Shown to readers on the Support page and in the footer. The contact form sends here only when no contact email is set.",
+        "name": "Your brand name. Shown in the header and footer, in every page title, in link previews, and to Google as the site name."
+      },
+      "seo": {
+        "titleTemplate": "How page titles are built. %s is the page's own title and %site% is the site name from General, so \"%s | %site%\" gives \"Pip Calculator | Your Site\". The home page shows the site name alone.",
+        "googleSiteVerification": "In Google Search Console, add this site as a URL-prefix property and choose the HTML tag method. Paste the whole meta tag or just the code, save, then press Verify in Search Console. Keep it here after verifying: Google checks it again from time to time."
       }
     },
     "settingLabels": {
+      "seo": {
+        "googleSiteVerification": "Google Search Console verification"
+      },
       "media": {
         "maxBytes": {
           "image": "Largest image upload",

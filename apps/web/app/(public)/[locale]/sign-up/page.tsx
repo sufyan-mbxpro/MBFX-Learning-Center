@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { getCaptchaClient } from "@repo/auth";
-import { getSetting, isFeatureVisible } from "@repo/settings";
+import { isFeatureVisible } from "@repo/settings";
 import { MIN_PASSWORD_LENGTH } from "@repo/contracts";
 import { getPathname, Link } from "@repo/i18n/navigation";
 import { AuthScreen } from "../_components/auth-screen.tsx";
 import { SignUpForm } from "./sign-up-form.tsx";
+import { titleTemplate, titleFrom } from "../../../_lib/seo.ts";
 
 // Public self-registration (ADR-052) — the learner account the whole
 // platform is for. Posts to Better Auth's /api/auth/sign-up/email, whose
@@ -16,11 +17,8 @@ export async function generateMetadata({
 }: PageProps<"/[locale]/sign-up">): Promise<Metadata> {
   const { locale } = await params;
   setRequestLocale(locale);
-  const [t, template] = await Promise.all([
-    getTranslations("auth"),
-    getSetting("seo.titleTemplate"),
-  ]);
-  return { title: (template ?? "%s").replace("%s", t("signUpTitle")), robots: { index: false } };
+  const [t, template] = await Promise.all([getTranslations("auth"), titleTemplate()]);
+  return { title: titleFrom(template, t("signUpTitle")), robots: { index: false } };
 }
 
 export default async function SignUpPage({ params }: PageProps<"/[locale]/sign-up">) {

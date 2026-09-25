@@ -30,12 +30,13 @@ export async function AuthScreen({
     getSetting("site.name"),
     getBrandAssets(),
   ]);
-  // The wordmark is the site's full name from the catalog ("MBX Learning
-  // Center"), not the short `site.name` setting the logo's alt text uses.
+  // The wordmark is `site.name`, the one brand name every other surface
+  // prints; the catalog's is only the fallback for an unseeded row.
+  const name = siteName?.trim() || common("siteName");
   const { panel, mark } = authBrand({
-    logoAlt: siteName ?? common("siteName"),
+    logoAlt: name,
     brandAssets,
-    wordmark: common("siteName"),
+    wordmark: name,
     tagline: t("panelTagline"),
   });
 

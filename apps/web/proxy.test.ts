@@ -317,6 +317,8 @@ describe("proxy — Google reCAPTCHA origins in the CSP (ADR-156)", () => {
       const csp = await cspOf(path);
       expect(csp).toMatch(/script-src [^;]*https:\/\/www\.gstatic\.com\/recaptcha\//);
       expect(csp).toMatch(/frame-src [^;]*https:\/\/www\.google\.com\/recaptcha\//);
+      // Regression (2026-09-24): its api2/clr request is a fetch from the page.
+      expect(csp).toMatch(/connect-src [^;]*https:\/\/www\.google\.com\/recaptcha\//);
     },
   );
 

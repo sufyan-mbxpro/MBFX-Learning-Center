@@ -1,5 +1,13 @@
 import type { Metadata } from "next";
-import { alternatesFor, descriptionFrom, shareMetadata } from "../../../../../_lib/seo.ts";
+import {
+  alternatesFor,
+  descriptionFrom,
+  jsonLd,
+  shareMetadata,
+  titleTemplate,
+  titleFrom,
+  siteName,
+} from "../../../../../_lib/seo.ts";
 import { notFound, permanentRedirect } from "next/navigation";
 import Image from "next/image";
 import { getTranslations, setRequestLocale } from "next-intl/server";
@@ -15,7 +23,7 @@ import { isLearnTrack, learnTrackPath, LEARN_TRACKS, type LearnTrackKey } from "
 import { getServableLocales } from "@repo/i18n";
 import { Link } from "@repo/i18n/navigation";
 import { routing } from "@repo/i18n/routing";
-import { getSetting, isFeatureVisible } from "@repo/settings";
+import { isFeatureVisible } from "@repo/settings";
 import { AmbientMotif } from "@repo/ui/components/ambient-motif";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
@@ -61,16 +69,16 @@ export async function generateMetadata({
   const { locale, course: courseSlug } = await params;
   setRequestLocale(locale);
   const readingLocale = readingLocaleFrom(await searchParams);
-  const [view, template, tCommon] = await Promise.all([
+  const [view, template, brand] = await Promise.all([
     getCourseBySlug(locale, courseSlug, readingLocale),
-    getSetting("seo.titleTemplate"),
-    getTranslations({ locale, namespace: "common" }),
+    titleTemplate(),
+    siteName(),
   ]);
   if (!view) return {};
 
   const ownPath = coursePath(locale, routing.defaultLocale, view.track, view.slug);
   return {
-    title: (template ?? "%s").replace("%s", view.seoTitle ?? view.title),
+    title: titleFrom(template, view.seoTitle?.trim() || view.title),
     ...descriptionFrom(view.seoDescription, view.summary),
     alternates: await alternatesFor({
       canonical: ownPath,
@@ -84,9 +92,9 @@ export async function generateMetadata({
     ...(view.readingLocale ? { robots: { index: false, follow: true } } : {}),
     ...(await shareMetadata({
       locale,
-      siteName: tCommon("siteName"),
+      siteName: brand,
       url: ownPath,
-      title: view.seoTitle ?? view.title,
+      title: view.seoTitle?.trim() || view.title,
       description: view.seoDescription ?? view.summary,
       image: view.coverUrl,
     })),
@@ -179,6 +187,7 @@ export default async function CoursePage({
         };
       }),
   );
+  const providerName = await siteName();
   const lessons = view.sections.flatMap((section) => section.lessons);
   const firstLesson = lessons[0];
   const isExternal = view.externalUrl !== null;
@@ -217,8 +226,9 @@ export default async function CoursePage({
     <ProgressProvider courseId={view.id}>
       <CourseJsonLd
         name={view.title}
-        description={view.seoDescription ?? view.summary}
-        url={coursePath(locale, routing.defaultLocale, view.track, view.slug)}
+        description={view.seoDescription?.trim() || view.summary?.trim() || null}
+        path={coursePath(locale, routing.defaultLocale, view.track, view.slug)}
+        providerName={providerName}
         sections={view.sections.map((section) => ({
           name: section.title,
           lessonCount: section.lessons.length,
@@ -231,7 +241,7 @@ export default async function CoursePage({
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
-            __html: JSON.stringify({
+            __html: jsonLd({
               "@context": "https://schema.org",
               "@type": "FAQPage",
               mainEntity: view.faq.map((item) => ({

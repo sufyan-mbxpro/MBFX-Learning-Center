@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { getSetting } from "@repo/settings";
 import { getPathname, Link } from "@repo/i18n/navigation";
 import { MIN_PASSWORD_LENGTH } from "@repo/contracts";
 import { AuthScreen } from "../_components/auth-screen.tsx";
 import { ResetPasswordForm } from "./reset-password-form.tsx";
+import { titleTemplate, titleFrom } from "../../../_lib/seo.ts";
 
 // Where a learner's reset link lands (ADR-079 #2).
 //
@@ -18,12 +18,9 @@ export async function generateMetadata({
 }: PageProps<"/[locale]/reset-password">): Promise<Metadata> {
   const { locale } = await params;
   setRequestLocale(locale);
-  const [t, template] = await Promise.all([
-    getTranslations("auth"),
-    getSetting("seo.titleTemplate"),
-  ]);
+  const [t, template] = await Promise.all([getTranslations("auth"), titleTemplate()]);
   return {
-    title: (template ?? "%s").replace("%s", t("resetTitle")),
+    title: titleFrom(template, t("resetTitle")),
     // The URL carries a live reset token. It must never reach an index.
     robots: { index: false, follow: false },
   };

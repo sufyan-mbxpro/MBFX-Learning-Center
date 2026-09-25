@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { getSetting } from "@repo/settings";
 import { Container } from "@repo/ui/components/container";
 import { Section } from "@repo/ui/components/section";
 import { Skeleton, SkeletonAvatar, SkeletonCard } from "@repo/ui/components/skeleton";
 import { ProfileContent } from "./_components/profile-content.tsx";
+import { titleTemplate, titleFrom } from "../../../_lib/seo.ts";
 
 // `/account` — the learner's profile and security page (ADR-123, split by
 // ADR-125: progress and history live at `/account/progress`).
@@ -31,10 +31,10 @@ export async function generateMetadata({
   setRequestLocale(locale);
   const [t, template] = await Promise.all([
     getTranslations({ locale, namespace: "account" }),
-    getSetting("seo.titleTemplate"),
+    titleTemplate(),
   ]);
   return {
-    title: (template ?? "%s").replace("%s", t("metaTitle")),
+    title: titleFrom(template, t("metaTitle")),
     // A private page: nothing to index, and nothing on it to follow either.
     robots: { index: false, follow: false },
   };
