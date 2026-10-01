@@ -16,6 +16,7 @@
   "dependencies": {
     "@repo/contracts": "workspace:*",
     "@repo/db": "workspace:*",
+    "@repo/i18n": "workspace:*",
     "@repo/secrets": "workspace:*",
     "@repo/settings": "workspace:*",
     "@repo/theme": "workspace:*",

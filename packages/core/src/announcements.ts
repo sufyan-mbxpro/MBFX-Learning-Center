@@ -36,7 +36,8 @@ import {
   announcementUnsubscribeUrls,
   createSendSession,
   hasLinkSecret,
-  loadEmailRenderContext,
+  loadLocalizedEmailContext,
+  type EmailScheme,
   renderEmail,
   sanitizeEmailHtml,
   signUnsubscribeToken,
@@ -1083,7 +1084,7 @@ export async function sendAnnouncementTest(
  */
 export async function renderAnnouncementPreview(
   actor: Subject,
-  input: { campaignId: string; locale: string },
+  input: { campaignId: string; locale: string; scheme?: EmailScheme | undefined },
   now: Date = new Date(),
 ): Promise<RenderedEmail | null> {
   requireKey(actor, "announcements.view");
@@ -1112,7 +1113,9 @@ export async function renderAnnouncementPreview(
   const subject = campaign.subject ?? stored?.subject ?? fallback?.subject;
   if (!bodyHtml || !subject) return null;
 
-  const context = await loadEmailRenderContext();
+  const context = await loadLocalizedEmailContext(words.locale, undefined, {
+    scheme: input.scheme,
+  });
   const placeholder = `${siteOrigin().replace(/\/+$/, "")}/email/unsubscribe?t=preview`;
   const label = (await catalogMessage(words.locale, "announcements.unsubscribe.footerLink")) ?? "";
   return renderEmail({

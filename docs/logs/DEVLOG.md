@@ -27239,3 +27239,215 @@ form, dialog and toolbar convention suites 1102 passed. Checked in the dev
 server with Playwright: the switches render on all rows; Spanish opens the
 checklist (1,052 strings, 2 legal lines); Arabic asks "Switch Arabic off?"
 (cancelled, so it stays live).
+
+## 2026-10-01 — Module 17: Email templates gallery, campaign screens and the branded email shell (ADR-179, changes-59)
+
+**What shipped.** Presentation only: no template, campaign, permission or
+send rule changed, and nothing the old screens showed was removed.
+
+- **Every email's header and footer** (`@repo/email` `layout.ts`) are two
+  brand bands: `brand.secondary` with a `brand.primary` rule, inks derived
+  against the band. The footer prints the site name, tagline, Log in ·
+  Contact support · Privacy policy (privacy only when a document is set),
+  the contact address and website, the copyright and "sent to", then the
+  existing footer text, postal address and unsubscribe link. Each line is
+  data and disappears with its value. The words are a new public
+  `emailShell.*` namespace (en + ar), read through a new `email → i18n`
+  edge. The card is fluid to 600px with an Outlook ghost table, so it
+  narrows on a phone. The logo prefers `email.logo`, then the theme's
+  `logo_dark`, then `logo_light`; the setting gained a hint saying it sits
+  on the dark band.
+- **Settings → Email → Templates** is a gallery: tabs with counts (Your
+  designs, then one per template category from the key's first segment:
+  Account & security, Newsletter, Support, Announcements) and a search box
+  on the same row; one card per email with a live half-size render, tonal
+  Active/Inactive, audience and Critical badges, each language's state, the
+  last edit, View, Edit and the on/off switch. Design cards keep their
+  menu. `templates-table.tsx` and `designs-table.tsx` are deleted.
+- **One preview** (`_components/email-preview.tsx`): Desktop/Mobile,
+  Light/Dark, Preview/HTML, still a POST into a named `sandbox=""` frame
+  (ADR-078 #8). The HTML view fetches the same route and shows the markup as
+  text. The route gained `scheme` and a saved-design-by-id branch. Used by
+  the gallery, both campaign editors and the dialog.
+- **Email campaigns list**: a status tab strip with counts replaces the
+  status dropdown; tonal status badges with a dot; the date says what it is
+  (Created / Scheduled for / Finished); Recipients, Sent (with %) and Failed
+  columns; the author moved onto the name's subline.
+- **Campaign editors**: an Inbox preview card beside the message, audience
+  cards with dark count pills and a selected tint plus an Estimated
+  recipients card, and a Review step with an itemised pre-send checklist
+  (course, subject, sender, content, tags, audience, test) above the
+  server's own refusals, with Send a test and Send in a side column.
+
+**Decisions.** ADR-179: the bands, derived inks, catalog words, the
+`email → i18n` edge, and a dark preview that real sends never use.
+`StatusBadge` gained `appearance="tonal"`; the default stays outline so no
+other screen changed.
+
+**Tests.** `tsc` clean on email, contracts, core and web; ESLint and
+Prettier clean on touched files. `@repo/email` unit 128 passed (new
+`shell-words.test.ts`; `layout.test.ts` rewritten for the bands, derived
+inks, absent lines, and brace escaping), `send.integration` 15/15 on
+MariaDB. Core `email-admin`, `announcements`, `custom-emails` integration
+66/66. Contracts 650/650. Web app suites 3369 passed; 6 failures are
+pre-existing and unrelated (`site-url.test.ts` reads a tunnel URL from the
+local env; `changes-50-fixes` footer band). `check:catalog-completeness`
+has no `ar` gaps; `check:phantom-deps` and `check:email-templates` OK.
+Checked in an isolated dev server (:3011) with Playwright: gallery tabs,
+thumbnails, preview in light/dark/mobile/HTML, the campaign list and all
+four editor steps. The shared :3000 server was not restarted, and it still
+served the old `@repo/email` until it reloads.
+
+## 2026-10-01 — Module 17: email footer matches the reference (changes-59 follow-up)
+
+**What shipped.** The footer band now follows the owner's reference
+(changes-59 image-18) on every rich email: site name, tagline, the three
+links, Email · Website, a short centred rule, then ONE line holding the
+copyright and "This email was sent to …", then the sentence "If you no
+longer wish to receive these emails, click to unsubscribe." with only the
+last words linked (new `emailShell.unsubscribeLine`, `{link}` marking the
+anchor; each half is escaped on its own). Sizes follow the reference (name
+17px, tagline 14, links 15, contacts 14, legal 13/22). Link words are now
+"Login to Account / Contact Support / Privacy Policy" in `en`, with `ar`
+updated alongside.
+
+**Decisions.** The bands derive their inks from the LIGHT surfaces in both
+schemes (`EmailPalette.band`), so the dark preview changes the card and
+nothing around it; ADR-179's derived-ink rule is unchanged, only its input.
+Transactional templates still carry no unsubscribe sentence — they have no
+token to unsubscribe with, and an opt-out link on a password reset would be
+a promise the system cannot keep.
+
+**Tests.** `@repo/email` unit 153/153 (new: sentence placement + escaping,
+identical band inks across schemes, one-line legal). `tsc` clean on email
+and core; Prettier clean; `check:catalog-completeness` OK with no `ar` gaps.
+
+## 2026-10-01 — Module 01/06: Arabic seed for email templates, news and the demo courses (ADR-166)
+
+**What shipped.** Three create-only seed files beside `seed-menu-ar.ts`,
+each keyed by the English it translates and wired into `seed.ts` after the
+English rows: `seed-email-ar.ts` (the seven learner-facing templates;
+`support.request` stays English because its reader is our inbox, ADR-113),
+`seed-articles-ar.ts` (six of the twelve corpus articles — both featured
+stories, `/news` and `/analysis` pieces and the trade idea — with their FAQ,
+plus Arabic names for the four categories and seven tags) and
+`seed-learn-ar.ts` (both demo courses WHOLE: course, six sections, thirteen
+lessons).
+
+**Decisions.** Courses are translated completely or not at all: Arabic has
+no fallback locale, so an untranslated lesson is a hole in the curriculum,
+not an English page. Article and lesson rows keep the English slug, the
+same choice `translateArticleJob` makes. Rows are `TRANSLATED` (a person's
+words) with `sourceHash` NULL (unknown, ADR-161 #4), as every seeded
+translation is — the hashes live in `@repo/core`, which `@repo/db` cannot
+import. `ar` is still not switched on; this is content waiting for it.
+
+**Tests.** New `packages/db/src/arabic-seed.test.ts` 36/36: every Arabic
+email uses the same `{{variables}}`, hrefs and markup outline as its English
+default (`check:email-templates` reads only the English); every article keeps
+its links, heading outline and FAQ count and fits the SEO columns; the course
+maps cover exactly the demo courses, sections and lessons in `seed.ts`.
+`tsc`, ESLint and Prettier clean on `@repo/db`. Seed run on the local
+MariaDB: 7 templates, 2 courses, 13 lessons, 6 articles created (6 sections,
+4 categories, 7 tags, 4 FAQ items); a second run created nothing.
+
+## 2026-10-01 — Module 12: a translated (non-ASCII) slug 404'd on the public site
+
+**What shipped.** `/ar/news/كيفية-حساب-…` answered the not-found page for a
+published article with a saved Arabic translation, while its `<title>` came
+out correct. `generateMetadata` received the decoded slug; the page's
+prefetch render received it percent-encoded (`%D9%83…`), matched no
+`ArticleTranslation.slug`, and called `notFound()`. Nothing in the public
+routes decoded params, so every route that looks up a translated slug was
+exposed. New `[locale]/_lib/route-params.ts` (`decodeParams` /
+`decodeSegment`) now wraps `await params` in all eleven: news article,
+category and tag; glossary term and topic; course, lesson, quiz, video topic
+and video category; and the `[...slug]` catch-all. Decoding is a no-op on a
+decoded value (slugs carry no `%`), and a malformed escape is returned
+unchanged so it still reaches the route's own not-found.
+
+**Decisions.** The fix is in the app, not `@repo/core`: how a URL segment
+arrives is routing, and the services keep taking the stored spelling.
+`[track]`, `[tool]` and `news/preview/[id]` are code keys or ids and are not
+wrapped.
+
+**Tests.** New `route-params.test.ts` 16/16: decoding, idempotence,
+malformed input, catch-all arrays, a source guard that every listed route
+reads EVERY `await params` through `decodeParams`, and one that fails when a
+new dynamic-segment page is in neither list. ESLint clean on the touched
+files; `tsc` reports nothing in them. Verified on the running dev server:
+the Arabic URL renders the article (no 404 marker), English is unchanged.
+
+## 2026-10-01 — Module 17: seeded email campaigns
+
+**What shipped.** People → Email campaigns had no seed, so a fresh install
+opened onto empty status tabs and nothing to edit. New
+`packages/db/prisma/seed-email-campaigns.ts`, called from `seed.ts` after the
+promotions: two COURSE announcement drafts (Forex Fundamentals, Crypto
+Foundations; template subject, an optional note), one CUSTOM email draft
+with its English words in `EmailCampaignContent`, and — outside production
+only — a SENT custom email and a CANCELLED course announcement so the Sent
+and Cancelled tabs and the counters render.
+
+**Decisions.** Nothing seeded can send: no campaign is SCHEDULED or SENDING
+and no `EmailCampaignRecipient` row is written, so the announcements cron
+has nothing to claim. The SENT row is dated 120 days back, past the 90-day
+recipient purge, which is the state where only aggregates exist — no
+addresses are invented. History is skipped in production because a "sent to
+1,284" row there would record mail that never went out. The custom draft is
+not marked tested, so ADR-172 #2 applies to it as to any admin draft.
+`create`-only on fixed ids; a course announcement whose course is missing is
+skipped. No ADR: seed data only, no behaviour change.
+
+**Tests.** `tsc` and ESLint clean on `@repo/db`. Seed run on the local
+MariaDB: `email campaigns: 5 created`.
+
+## 2026-10-01 — Module 15: the language switcher 404'd a translated article
+
+**What shipped.** Choosing Arabic on `/news/how-to-calculate-forex-margin-…`
+went to `/ar/news/how-to-calculate-forex-margin-…` (the header switcher swaps
+only the locale prefix), and `loadArticleBySlug` matches (locale, slug)
+exactly, so an article that HAS an Arabic version — under its own slug —
+answered 404. New `loadArticleSlugTarget` / `getArticleSlugTarget`
+(`@repo/core`, `public-articles.ts`): when a slug belongs to another
+language's row of a PUBLIC article, it returns that article's URL in the
+requested locale, or the same fallback pick a listing card links to when
+that locale has no row. The article page tries it before the slug-history
+301 and `notFound()`.
+
+**Decisions.** A temporary `redirect`, not `permanentRedirect`: the target
+moves when a translation is added or its slug edited, and a cached 308 would
+pin the old one. Fixed at the route rather than the switcher, because the
+switcher lives in the shared header and cannot know a page's per-locale
+slug, and a shared or bookmarked cross-language link needs the same answer.
+Articles only: they are the one entity whose translations take their own
+slug today (the seeded Arabic courses, lessons, categories and tags keep the
+English one, ADR-166).
+
+**Tests.** `articles.integration.test.ts` (Testcontainers MariaDB) new case
+passes: fallback to the English URL before a translation exists, the
+translated URL after, the reverse direction to the unprefixed default
+locale, and null for an unknown slug and for a drafted article. `tsc` clean
+on `@repo/core`; ESLint and Prettier clean on the touched files. Live:
+`/ar/news/how-to-calculate-forex-margin-…` now redirects to the Arabic slug.
+
+## 2026-10-01 — Module 17: emails carry the Branding logos (ADR-180)
+
+**What shipped.** The email header showed `email.logo`, a separate upload the
+live seed filled with its own PNG, so emails wore a different mark from the
+site. `loadEmailRenderContext` now reads only the Branding logos, and the new
+`pickEmailLogo` (`layout.ts`) chooses between them by the band: `logo_dark` on
+the seeded near-black `brand.secondary` band, `logo_light` when a theme makes
+it pale, the other as fallback. `email.logo` is deleted from the settings
+registry, `seed.ts`, `seed-live/defaults.json` (with its image) and the
+catalog hint; migration `20261001180000_email_logo_retired_adr180` deletes the
+row from existing databases.
+
+**Decisions.** ADR-180, superseding ADR-179 #3 only. The pick follows the
+site footer, which puts `logo_dark` on the same secondary ground. Light and
+dark previews share one band (ADR-179 #5), so they share one logo.
+
+**Tests.** `layout.test.ts` +3 (`pickEmailLogo`: dark band, pale band,
+fallbacks); `@repo/email` 157/157, `@repo/contracts` 650/650,
+`@repo/settings` 38/38, `@repo/db` 88/88; `tsc` clean on `@repo/email`.
+Migration applied to the local MariaDB.

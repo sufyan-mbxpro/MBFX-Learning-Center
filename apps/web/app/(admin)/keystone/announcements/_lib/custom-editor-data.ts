@@ -2,6 +2,7 @@
 // steps need, through `@repo/core` (never Prisma — architecture.md #2). Shared
 // by `new?kind=custom` and `[id]`, like `editor-data.ts` for announcements.
 import {
+  announcementComposeContext,
   announcementCourseTitles,
   announcementUsersById,
   getCustomEmailDraft,
@@ -36,7 +37,7 @@ export async function loadCustomEditorProps(
   const audience = detail?.audience ?? null;
   const canPickUsers = can(subject, "users.view");
 
-  const [draft, designs, activeLocales, courseTitles, users, summary, testAddress] =
+  const [draft, designs, activeLocales, courseTitles, users, summary, testAddress, compose] =
     await Promise.all([
       detail ? getCustomEmailDraft(subject, detail.id) : null,
       listEmailDesigns(subject),
@@ -45,6 +46,9 @@ export async function loadCustomEditorProps(
       canPickUsers ? announcementUsersById(subject, audience?.userIds ?? []) : [],
       summariseAudience(subject, null, audience, new Date(), "CUSTOM"),
       ownTestAddress(subject),
+      // The site-wide sender a custom email goes out as (changes-59: the
+      // inbox preview and the checklist's Sender row).
+      announcementComposeContext(subject),
     ]);
 
   // The default language first: it is the one every reader falls back to.
@@ -94,6 +98,7 @@ export async function loadCustomEditorProps(
     canPickUsers,
     canPickStaff: can(subject, "employees.view"),
     testAddress,
+    sender: { name: compose.fromName, email: compose.fromEmail },
     editorLabels: options.editorLabels,
   };
 }

@@ -16,9 +16,11 @@ import {
 import { db, emailTemplateDefault } from "@repo/db";
 import { loadSetting } from "@repo/settings";
 import { CURATED_FONTS, loadActiveThemeTokens } from "@repo/theme";
+import { catalogMessage } from "@repo/i18n";
+import { routing } from "@repo/i18n/routing";
 import { siteOrigin } from "@repo/utils";
-import { absoluteUrl, type EmailPalette } from "./layout.ts";
-import { renderEmail, type RenderableEmailKey } from "./render.ts";
+import { absoluteUrl, pickEmailLogo, type EmailPalette } from "./layout.ts";
+import { renderEmail, type EmailShellOptions, type RenderableEmailKey } from "./render.ts";
 import {
   TRANSPORT_ID,
   classifySendError,
@@ -118,6 +120,9 @@ async function record(input: {
   };
 }
 
+/** Which palette a render uses. A real send is always light (ADR-179 #5). */
+export type EmailScheme = "light" | "dark";
+
 /**
  * Everything a render needs that is not the template row: the palette, the
  * shell's surrounding copy, and the global variables.
@@ -129,55 +134,220 @@ async function record(input: {
  */
 export interface EmailRenderContext {
   palette: EmailPalette;
-  shell: { siteName: string; logoUrl?: string; footerText?: string; postalAddress?: string };
+  /** The language-free half of the shell; `localizeEmailShell` adds the words. */
+  shell: EmailShellOptions;
+  /** Where the footer's links and contact rows point (ADR-179 #2). */
+  site: { origin: string; contactEmail?: string; privacyPath?: string };
   /** The globals, minus `recipient.*`, which only a send knows. */
   globals: Record<string, string>;
 }
 
-export async function loadEmailRenderContext(): Promise<EmailRenderContext> {
+export async function loadEmailRenderContext(
+  options: { scheme?: EmailScheme } = {},
+): Promise<EmailRenderContext> {
   // `siteOrigin()` is the one owner of this precedence (code-style.md #27).
   // A fourth copy of it lived here, with an EMPTY fallback — and an empty
   // origin is what `absoluteUrl()` refuses, so a deploy that had set neither
   // variable sent every message with no logo at all and `{{site.url}}` blank.
   const origin = siteOrigin();
-  const [tokens, siteName, emailLogo, brandLogo, footerText, postalAddress] = await Promise.all([
+  const [
+    tokens,
+    siteName,
+    brandLogos,
+    footerText,
+    postalAddress,
+    tagline,
+    contactEmail,
+    privacyDocument,
+  ] = await Promise.all([
     loadActiveThemeTokens("web"),
     loadSetting("site.name"),
-    loadSetting("email.logo"),
-    // The site's own light-ground logo, when no email-specific one is set:
-    // an email is always read on a light ground (the palette below), and the
-    // brand an admin uploaded in the theme editor should not need uploading
-    // twice to appear in a message (changes-46 #4).
-    db.brandAsset.findUnique({ where: { key: "logo_light" }, select: { url: true } }),
+    // The logos uploaded in Branding, and nothing else: the email carries the
+    // same marks as the site. A separate `email.logo` upload drifted from them
+    // and was retired (ADR-180).
+    db.brandAsset.findMany({
+      where: { key: { in: ["logo_dark", "logo_light"] } },
+      select: { key: true, url: true },
+    }),
     loadSetting("email.footerText"),
     loadSetting("email.postalAddress"),
+    loadSetting("site.tagline"),
+    loadSetting("site.contactEmail"),
+    loadSetting("legal.privacyDocument"),
   ]);
-  const fromless = origin;
+  const palette: EmailPalette = {
+    brand: tokens.brand,
+    // Light surfaces for every send: an email is read on the client's
+    // ground. Dark is a PREVIEW of a client's dark treatment (ADR-179 #5).
+    surface: options.scheme === "dark" ? tokens.dark : tokens.light,
+    // The bands are the brand's, not the client's: one set of inks in both
+    // schemes, so a dark preview changes the card and nothing around it.
+    band: tokens.light,
+    fontFamily: fontFamilyFor(tokens.layout.fontSans),
+  };
+  const brandLogo = pickEmailLogo(palette, {
+    light: brandLogos.find((row) => row.key === "logo_light")?.url,
+    dark: brandLogos.find((row) => row.key === "logo_dark")?.url,
+  });
   // ABSOLUTE, because a message has no page for a relative path to resolve
   // against — the stored value is the upload path (`/uploads/…`).
-  const logo = absoluteUrl(emailLogo || brandLogo?.url || "", origin) ?? "";
+  const logo = absoluteUrl(brandLogo, origin) ?? "";
   const resolvedSiteName = siteName ?? "";
   return {
-    palette: {
-      brand: tokens.brand,
-      // Light surfaces always: an email is read on the client's ground, and
-      // a dark-mode email is a different design problem.
-      surface: tokens.light,
-      fontFamily: fontFamilyFor(tokens.layout.fontSans),
-    },
+    palette,
     shell: {
       siteName: resolvedSiteName,
       ...(logo ? { logoUrl: logo } : {}),
+      ...(tagline ? { tagline } : {}),
       ...(footerText ? { footerText } : {}),
       ...(postalAddress ? { postalAddress } : {}),
     },
+    site: {
+      origin,
+      ...(contactEmail ? { contactEmail } : {}),
+      // A link to a legal page with no file behind it is a link to a 404, so
+      // the row is absent until a document is chosen (ADR-110).
+      ...(privacyDocument ? { privacyPath: "/legal/privacy" } : {}),
+    },
     globals: {
       "site.name": resolvedSiteName,
-      "site.url": fromless,
-      "logo.url": logo || fromless,
+      "site.url": origin,
+      "logo.url": logo || origin,
       year: String(new Date().getFullYear()),
     },
   };
+}
+
+/** The shell's words in one language (ADR-179 #4), from `emailShell.*`. */
+export interface EmailShellWords {
+  login: string;
+  support: string;
+  privacy: string;
+  email: string;
+  website: string;
+  copyright: string;
+  sentTo: string;
+  unsubscribeLine: string;
+}
+
+const SHELL_WORD_KEYS: Record<keyof EmailShellWords, string> = {
+  login: "emailShell.loginLink",
+  support: "emailShell.supportLink",
+  privacy: "emailShell.privacyLink",
+  email: "emailShell.emailLabel",
+  website: "emailShell.websiteLabel",
+  copyright: "emailShell.copyright",
+  sentTo: "emailShell.sentTo",
+  unsubscribeLine: "emailShell.unsubscribeLine",
+};
+
+/**
+ * Reads the words, falling back to English inside `catalogMessage`. A catalog
+ * that cannot be read leaves every word empty, and an empty word removes its
+ * line: a message must still go out when its footer cannot be translated.
+ */
+export async function loadEmailShellWords(locale: string): Promise<EmailShellWords> {
+  const entries = await Promise.all(
+    (Object.entries(SHELL_WORD_KEYS) as [keyof EmailShellWords, string][]).map(
+      async ([name, key]) => {
+        try {
+          return [name, (await catalogMessage(locale, key)) ?? ""] as const;
+        } catch {
+          return [name, ""] as const;
+        }
+      },
+    ),
+  );
+  return Object.fromEntries(entries) as unknown as EmailShellWords;
+}
+
+/** `{name}` arguments only — the catalog's ICU here is plain substitution. */
+function fillArguments(message: string, values: Readonly<Record<string, string>>): string {
+  return message.replace(/\{(\w+)\}/g, (match, name: string) => values[name] ?? match);
+}
+
+/** A site path in the reader's language: `as-needed` prefixes all but the default. */
+function localizedUrl(origin: string, locale: string, path: string): string {
+  const base = origin.replace(/\/+$/, "");
+  const prefix = locale === routing.defaultLocale ? "" : `/${locale}`;
+  return `${base}${prefix}${path}`;
+}
+
+function hostOf(origin: string): string {
+  try {
+    return new URL(origin).host;
+  } catch {
+    return origin;
+  }
+}
+
+/**
+ * The full shell for one message: the context's data, the reader's words, and
+ * the recipient's address. Pure, so the preview and the send compose it the
+ * same way.
+ */
+export function localizeEmailShell(
+  context: Pick<EmailRenderContext, "shell" | "site" | "globals">,
+  words: EmailShellWords,
+  locale: string,
+  recipientEmail?: string,
+): EmailShellOptions {
+  const { origin, contactEmail, privacyPath } = context.site;
+  const links = origin
+    ? [
+        words.login ? { url: localizedUrl(origin, locale, "/sign-in"), label: words.login } : null,
+        words.support
+          ? { url: localizedUrl(origin, locale, "/support"), label: words.support }
+          : null,
+        words.privacy && privacyPath
+          ? { url: localizedUrl(origin, locale, privacyPath), label: words.privacy }
+          : null,
+      ].filter((link): link is { url: string; label: string } => link !== null)
+    : [];
+  const contacts = [
+    words.email && contactEmail
+      ? { label: words.email, value: contactEmail, url: `mailto:${contactEmail}` }
+      : null,
+    words.website && origin ? { label: words.website, value: hostOf(origin), url: origin } : null,
+  ].filter((row): row is { label: string; value: string; url: string } => row !== null);
+  const values = {
+    year: context.globals.year ?? String(new Date().getFullYear()),
+    siteName: context.shell.siteName,
+    email: recipientEmail ?? "",
+  };
+  // Copyright and "sent to" share ONE line, the unsubscribe sentence the next.
+  const legalLine = [
+    words.copyright && context.shell.siteName ? fillArguments(words.copyright, values) : null,
+    words.sentTo && recipientEmail ? fillArguments(words.sentTo, values) : null,
+  ]
+    .filter((line): line is string => line !== null)
+    .join(" ");
+  return {
+    ...context.shell,
+    // An empty path, not "/": `/ar/` is a trailing-slash redirect away from
+    // the page, and the default locale's home is the bare origin.
+    ...(origin ? { homeUrl: localizedUrl(origin, locale, "") } : {}),
+    links,
+    contacts,
+    legalLines: legalLine ? [legalLine] : [],
+    ...(words.unsubscribeLine ? { unsubscribeLine: words.unsubscribeLine } : {}),
+  };
+}
+
+/**
+ * The context, the words and the recipient in one call — for a PREVIEW, which
+ * renders one message in one language and has no session to cache in.
+ */
+export async function loadLocalizedEmailContext(
+  locale: string,
+  recipientEmail: string | undefined,
+  options: { scheme?: EmailScheme } = {},
+): Promise<EmailRenderContext> {
+  const [context, words] = await Promise.all([
+    loadEmailRenderContext(options),
+    loadEmailShellWords(locale),
+  ]);
+  return { ...context, shell: localizeEmailShell(context, words, locale, recipientEmail) };
 }
 
 function findTemplate(key: string) {
@@ -334,6 +504,8 @@ export async function createSendSession(
   // session whose every message is suppressed never opens a connection.
   let sender: Promise<SenderSettings> | undefined;
   let driver: Promise<EmailTransportDriver> | undefined;
+  // One catalog read per language per session, like the sender (ADR-171).
+  const shellWords = new Map<string, Promise<EmailShellWords>>();
   let closed = false;
 
   async function send(input: SessionSendInput): Promise<DeliveryResult> {
@@ -385,6 +557,12 @@ export async function createSendSession(
 
     sender ??= loadSender();
     const { context, fromName, fromEmail, replyTo } = await sender;
+    let words = shellWords.get(locale);
+    if (!words) {
+      words = loadEmailShellWords(locale);
+      shellWords.set(locale, words);
+    }
+    const shell = localizeEmailShell(context, await words, locale, input.to);
 
     const resolvedSiteName = context.shell.siteName;
     const variables: Record<string, string> = {
@@ -406,7 +584,7 @@ export async function createSendSession(
         variables,
         palette: context.palette,
         shell: {
-          ...context.shell,
+          ...shell,
           unsubscribe: input.unsubscribe
             ? { url: input.unsubscribe.url, label: input.unsubscribe.label }
             : undefined,

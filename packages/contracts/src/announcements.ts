@@ -10,6 +10,7 @@
 // No words live here (code-style #2). Card labels, descriptions and every
 // refusal an admin reads come from the catalog.
 import { z } from "zod";
+import { emailPreviewSchemeSchema } from "./email.ts";
 
 const idSchema = z.string().min(1).max(191);
 
@@ -185,6 +186,7 @@ export const announcementIdSchema = z.object({ id: idSchema });
 export const announcementPreviewSchema = z.object({
   campaignId: idSchema,
   locale: z.string().min(2).max(10),
+  scheme: emailPreviewSchemeSchema.optional(),
 });
 
 /** The admin's "Select users" search box. */

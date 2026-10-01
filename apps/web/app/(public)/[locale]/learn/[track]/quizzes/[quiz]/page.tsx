@@ -19,6 +19,7 @@ import { ReadingLanguageMenu } from "../../../../_components/reading-language-me
 import { readingLanguageOptions, readingLocaleFrom } from "../../../../_lib/reading-language.ts";
 import { LearnBreadcrumb } from "../../../_components/learn-breadcrumb.tsx";
 import { QuizRunner } from "../../../_components/quiz-runner.tsx";
+import { decodeParams } from "../../../../_lib/route-params.ts";
 
 // The quiz runner's page (Phase 6, ADR-058).
 //
@@ -39,7 +40,7 @@ export async function generateMetadata({
   params,
   searchParams,
 }: PageProps<"/[locale]/learn/[track]/quizzes/[quiz]">): Promise<Metadata> {
-  const { locale, track, quiz: slug } = await params;
+  const { locale, track, quiz: slug } = decodeParams(await params);
   setRequestLocale(locale);
   if (!isLearnTrack(track)) return {};
 
@@ -66,7 +67,7 @@ export default async function QuizPage({
   params,
   searchParams,
 }: PageProps<"/[locale]/learn/[track]/quizzes/[quiz]">) {
-  const { locale, track, quiz: slug } = await params;
+  const { locale, track, quiz: slug } = decodeParams(await params);
   setRequestLocale(locale);
   if (!isLearnTrack(track)) notFound();
 

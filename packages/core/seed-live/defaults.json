@@ -104,9 +104,6 @@
     "email.footerText": "You are receiving this because you have an account with MBX Learning Center.",
     "email.fromEmail": "no-reply@mbxpro.com",
     "email.fromName": "MBX Learning Center",
-    "email.logo": {
-      "$file": "defaults/setting-email-logo.png"
-    },
     "email.postalAddress": "",
     "email.replyTo": "",
     "footer.appLinks": [],

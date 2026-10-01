@@ -5,14 +5,39 @@
 // Colours are the ACTIVE theme's values, loaded through
 // `loadActiveThemeTokens` — a re-brand reaches email without anyone editing a
 // template, and there is no hex literal in this package (code-style #1).
-import { deriveTonalInk, type BrandColors, type SurfacePalette } from "@repo/theme";
+import {
+  contrastRatio,
+  deriveInteractive,
+  deriveTonalInk,
+  type BrandColors,
+  type SurfacePalette,
+} from "@repo/theme";
 import { sanitizeEmailHtmlWith } from "./sanitize.ts";
 
 export interface EmailPalette {
   brand: BrandColors;
   surface: SurfacePalette;
+  /**
+   * The surfaces the brand BANDS derive their inks from. The light set in
+   * every scheme, so header and footer read identically in a light and a dark
+   * preview and only the card between them changes. Absent ⇒ `surface`.
+   */
+  band?: SurfacePalette | undefined;
   /** A real family list — an email client cannot fetch a web font. */
   fontFamily: string;
+}
+
+/** A labelled link in the footer band ("Contact support"). */
+export interface EmailShellLink {
+  url: string;
+  label: string;
+}
+
+/** A "Label: value" pair in the footer band ("Email: info@…"). */
+export interface EmailShellContact {
+  label: string;
+  value: string;
+  url: string;
 }
 
 export interface EmailShellInput {
@@ -21,10 +46,26 @@ export interface EmailShellInput {
   preheader?: string | undefined;
   logoUrl?: string | undefined;
   siteName: string;
+  /** The site's home page in the reader's language; the footer's name links to it. */
+  homeUrl?: string | undefined;
+  /** Printed under the site name in the footer band (ADR-179). */
+  tagline?: string | undefined;
+  /** Log in · Contact support · Privacy policy — whichever resolve. */
+  links?: readonly EmailShellLink[] | undefined;
+  /** Email · Website. */
+  contacts?: readonly EmailShellContact[] | undefined;
+  /** Copyright and "sent to", already in the reader's language. */
+  legalLines?: readonly string[] | undefined;
   footerText?: string | undefined;
   postalAddress?: string | undefined;
   /** URL and label together: a package may not invent the word for it. */
   unsubscribe?: { url: string; label: string } | undefined;
+  /**
+   * The sentence the unsubscribe link sits in, with `{link}` where the link
+   * goes ("If you no longer wish to receive these emails, {link}."). Absent ⇒
+   * the link stands alone.
+   */
+  unsubscribeLine?: string | undefined;
 }
 
 /** The `ed-*` vocabulary, as inline styles. */
@@ -160,47 +201,174 @@ function escapeText(value: string): string {
 }
 
 /**
- * A 600px table on a muted ground — the shape every mail client agrees on.
- * Deliberately not a flex or grid layout: Outlook renders neither.
+ * Text the shell prints from DATA, made inert to the substitution pass that
+ * runs after it (ADR-179 #6): `{{` in an address or a setting would otherwise
+ * be read as a variable.
+ */
+function escapeShellText(value: string): string {
+  return escapeText(value).replace(/\{/g, "&#123;").replace(/\}/g, "&#125;");
+}
+
+/** The inks a brand band needs, all derived against the band (ADR-179 #1). */
+export interface EmailBandInks {
+  band: string;
+  rule: string;
+  text: string;
+  muted: string;
+  link: string;
+}
+
+export function emailBandInks(palette: EmailPalette): EmailBandInks {
+  const { brand } = palette;
+  const surface = palette.band ?? palette.surface;
+  const band = brand.secondary;
+  // Whichever of the two surface texts reads on the band — light on the
+  // seeded near-black, dark on a theme whose secondary is pale.
+  const text =
+    contrastRatio(surface.background, band) >= contrastRatio(surface.textPrimary, band)
+      ? surface.background
+      : surface.textPrimary;
+  return {
+    band,
+    rule: brand.primary,
+    text,
+    muted: deriveInteractive(surface.textMuted, band),
+    link: deriveTonalInk(brand.primary, band),
+  };
+}
+
+/**
+ * Which of the Branding logos the header band carries. The band is the
+ * site's own `--secondary` treatment, so it takes the logo the site's footer
+ * puts on that same ground: `logo_dark` (the mark drawn for a dark ground)
+ * when the band reads dark, `logo_light` when a theme's secondary is pale.
+ * The other one is the fallback, because a logo that reads poorly is still
+ * closer to the brand than the site name in plain text.
+ */
+export function pickEmailLogo(
+  palette: EmailPalette,
+  logos: { light?: string | null | undefined; dark?: string | null | undefined },
+): string {
+  const surface = palette.band ?? palette.surface;
+  const bandIsDark = emailBandInks(palette).text === surface.background;
+  const [first, second] = bandIsDark ? [logos.dark, logos.light] : [logos.light, logos.dark];
+  return first || second || "";
+}
+
+/**
+ * A table up to 600px wide on a muted ground — the shape every mail client
+ * agrees on. Deliberately not a flex or grid layout: Outlook renders neither.
+ * Fluid (`width:100%;max-width:600px`) so a phone narrows it, with a fixed
+ * 600px ghost table for Outlook, which ignores `max-width`.
  *
- * Three surfaces, three roles, and they must not collapse into two: the PAGE
- * behind the message is `surfaceMuted`, the CARD is `background`, and the
- * footer band is `surface`. The footer used to take `surfaceMuted` as well,
- * which made it the same colour as the page — so the message had no visible
- * bottom edge, and the page below it read as one enormous footer. In a theme
- * where `surface` equals `background` the footer is simply the card's own
- * ground under a hairline, which is correct; a theme that tints `surface`
- * gets a tinted band for free, with no hex literal here (code-style #1).
+ * Header and footer are BRAND BANDS (ADR-179): `brand.secondary` with a
+ * `brand.primary` rule on the edge that meets the card. The card itself is
+ * `background` on a `surfaceMuted` page, so the message keeps its own edges.
+ * Every line in the footer is optional and disappears with its value.
  */
 export function renderEmailShell(input: EmailShellInput): string {
   const { palette, siteName } = input;
-  const { surface, brand } = palette;
+  const { surface } = palette;
+  const inks = emailBandInks(palette);
 
   const preheader = input.preheader
     ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0">${escapeText(input.preheader)}</div>`
     : "";
 
   const logo = input.logoUrl
-    ? `<img src="${escapeAttribute(input.logoUrl)}" alt="${escapeAttribute(siteName)}" height="40" style="height:40px;max-width:200px" />`
-    : `<span style="font-size:20px;font-weight:700;color:${brand.primary}">${escapeText(siteName)}</span>`;
+    ? `<img src="${escapeAttribute(input.logoUrl)}" alt="${escapeAttribute(siteName)}" height="44" style="height:44px;max-width:220px;display:inline-block" />`
+    : `<span style="font-size:22px;font-weight:700;letter-spacing:0.5px;color:${inks.text}">${escapeShellText(siteName)}</span>`;
 
-  const footerLines = [
-    input.footerText ? escapeText(input.footerText) : null,
-    input.postalAddress ? escapeText(input.postalAddress) : null,
-    input.unsubscribe
-      ? `<a href="${escapeAttribute(input.unsubscribe.url)}" style="color:${surface.textMuted};text-decoration:underline">${escapeText(input.unsubscribe.label)}</a>`
-      : null,
-  ].filter((line): line is string => line !== null);
+  // The footer's type scale, one step per job, taken from the owner's
+  // reference footer (changes-60): the name is a heading, links and contacts
+  // are what a reader acts on, and the legal small print is the floor.
+  const footerType = {
+    name: "font-size:16px;line-height:22px",
+    tagline: "font-size:13px;line-height:18px",
+    links: "font-size:14px;line-height:22px",
+    contacts: "font-size:13px;line-height:20px",
+    legal: "font-size:11px;line-height:18px",
+  };
 
-  const footer = footerLines
-    .map((line, index) => {
-      // The LAST line carries no bottom margin. Every line carrying one put 8px
-      // of dead space under the final one, on top of the cell's own padding —
-      // which is what made the band look taller than it is.
-      const margin = index === footerLines.length - 1 ? "0" : "0 0 8px";
-      return `<p style="margin:${margin};font-size:12px;line-height:18px;color:${surface.textMuted}">${line}</p>`;
-    })
+  const separator = `<span style="color:${inks.muted};padding:0 10px;opacity:0.6">|</span>`;
+  // Every footer line states its own centring: the cell's `align` reaches
+  // inline content in most clients, but Outlook's Word engine applies a
+  // paragraph's own alignment and defaults it to the start edge.
+  const paragraph = (html: string, style: string) =>
+    `<p style="margin:0 0 4px;text-align:center;${style}">${html}</p>`;
+
+  const links = (input.links ?? [])
+    .map(
+      (link) =>
+        `<a href="${escapeAttribute(link.url)}" style="color:${inks.link};font-weight:600;text-decoration:none;white-space:nowrap">${escapeShellText(link.label)}</a>`,
+    )
+    .join(separator);
+
+  const contacts = (input.contacts ?? [])
+    .map(
+      (contact) =>
+        `<span style="color:${inks.muted}">${escapeShellText(contact.label)}:</span> <a href="${escapeAttribute(contact.url)}" style="color:${inks.text};text-decoration:none;white-space:nowrap">${escapeShellText(contact.value)}</a>`,
+    )
+    .join(separator);
+
+  const small = `${footerType.legal};color:${inks.muted}`;
+  const unsubscribeLink = input.unsubscribe
+    ? `<a href="${escapeAttribute(input.unsubscribe.url)}" style="color:${inks.text};text-decoration:underline">${escapeShellText(input.unsubscribe.label)}</a>`
+    : "";
+  // The sentence is split around `{link}` and each half escaped on its own,
+  // so the anchor is the only markup in the line.
+  const unsubscribe =
+    unsubscribeLink && input.unsubscribeLine?.includes("{link}")
+      ? input.unsubscribeLine
+          .split("{link}")
+          .map((part) => escapeShellText(part))
+          .join(unsubscribeLink)
+      : unsubscribeLink;
+  // Two lines, not one per item: who sent it (copyright, recipient, reason),
+  // then where from and how to stop it. Four separate paragraphs each wrapped
+  // on a phone and turned the band into a column of fragments.
+  const legal = [
+    [
+      ...(input.legalLines ?? []).map((line) => escapeShellText(line)),
+      ...(input.footerText ? [escapeShellText(input.footerText)] : []),
+    ],
+    [
+      ...(input.postalAddress ? [escapeShellText(input.postalAddress)] : []),
+      ...(unsubscribe ? [unsubscribe] : []),
+    ],
+  ]
+    .filter((group) => group.length > 0)
+    .map((group) => group.join(" "));
+
+  const footerTop = [
+    paragraph(
+      // The colour is repeated on the anchor: a mail client paints a bare link
+      // its own blue, which on the band is neither the brand nor readable.
+      input.homeUrl
+        ? `<a href="${escapeAttribute(input.homeUrl)}" style="color:${inks.text};text-decoration:none">${escapeShellText(siteName)}</a>`
+        : escapeShellText(siteName),
+      `${footerType.name};font-weight:700;color:${inks.text}`,
+    ),
+    input.tagline
+      ? paragraph(escapeShellText(input.tagline), `${footerType.tagline};color:${inks.muted}`)
+      : "",
+    links ? `<p style="margin:12px 0 4px;text-align:center;${footerType.links}">${links}</p>` : "",
+    contacts ? paragraph(contacts, footerType.contacts) : "",
+  ].join("");
+
+  const footerBottom = legal
+    .map(
+      (line, index) =>
+        // The LAST line carries no bottom margin, or the band looks taller than
+        // its padding says.
+        `<p style="margin:${index === legal.length - 1 ? "0" : "0 0 4px"};text-align:center;${small}">${line}</p>`,
+    )
     .join("");
+
+  const divider =
+    footerTop && footerBottom
+      ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="padding:12px 0 14px" align="center"><div style="width:300px;max-width:70%;margin:0 auto;height:1px;line-height:1px;font-size:0;background-color:${inks.muted};opacity:0.4">&nbsp;</div></td></tr></table>`
+      : "";
 
   return `<!doctype html>
 <html>
@@ -210,17 +378,19 @@ ${preheader}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:${surface.surfaceMuted};padding:24px 12px">
   <tr>
     <td align="center">
-      <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:100%;background-color:${surface.background};border:1px solid ${surface.borderLight};border-radius:8px">
+      <!--[if mso]><table role="presentation" width="600" align="center" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;background-color:${surface.background};border-radius:12px;overflow:hidden">
         <tr>
-          <td style="padding:24px 32px;border-bottom:1px solid ${surface.borderLight}" align="center">${logo}</td>
+          <td style="padding:32px;background-color:${inks.band};border-bottom:2px solid ${inks.rule};border-radius:12px 12px 0 0" align="center">${logo}</td>
         </tr>
         <tr>
-          <td style="padding:16px 32px;font-size:16px;line-height:24px;color:${surface.textPrimary}">${input.bodyHtml}</td>
+          <td style="padding:28px 32px;font-size:16px;line-height:24px;color:${surface.textPrimary};background-color:${surface.background}">${input.bodyHtml}</td>
         </tr>
         <tr>
-          <td style="padding:20px 32px;border-top:1px solid ${surface.borderLight};background-color:${surface.surface}">${footer}</td>
+          <td style="padding:28px 48px 24px;text-align:center;background-color:${inks.band};border-top:2px solid ${inks.rule};border-radius:0 0 12px 12px" align="center">${footerTop}${divider}${footerBottom}</td>
         </tr>
       </table>
+      <!--[if mso]></td></tr></table><![endif]-->
     </td>
   </tr>
 </table>

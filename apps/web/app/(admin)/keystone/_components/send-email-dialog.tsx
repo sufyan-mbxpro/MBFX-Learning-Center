@@ -46,9 +46,9 @@ import { useFieldErrors } from "../_hooks/use-field-errors.ts";
 import { useServerAction } from "../_hooks/use-server-action.ts";
 import { AdminCombobox } from "./combobox.tsx";
 import { Field } from "./editor/editor-section.tsx";
+import { EmailPreviewFrame } from "./email-preview.tsx";
 import { RichTextEditor, type RichTextLabels } from "./rich-text-editor.tsx";
 
-const PREVIEW_URL = "/keystone/api/email/preview";
 const BLANK = "__blank__";
 /** The design every install is seeded with (ADR-172 #3): the dialog's default. */
 const DEFAULT_DESIGN_ID = "design_plain_message";
@@ -77,7 +77,6 @@ export function SendEmailDialog({
   const t = useTranslations("admin.announcements.direct");
   const tAdmin = useTranslations("admin");
   const { run, pending } = useServerAction();
-  const previewFrame = React.useId().replace(/:/g, "");
 
   const [loaded, setLoaded] = React.useState<Loaded>({ state: "loading" });
   const [designId, setDesignId] = React.useState<string>(BLANK);
@@ -86,7 +85,6 @@ export function SendEmailDialog({
   const [bodyHtml, setBodyHtml] = React.useState("");
   const [replyToSelf, setReplyToSelf] = React.useState(false);
   const [showPreview, setShowPreview] = React.useState(false);
-  const previewFormRef = React.useRef<HTMLFormElement>(null);
 
   const refuse = React.useCallback(
     (reason: string) =>
@@ -267,34 +265,16 @@ export function SendEmailDialog({
                 variant="outline"
                 size="sm"
                 className="self-start"
-                onClick={() => {
-                  setShowPreview((value) => !value);
-                  window.setTimeout(() => previewFormRef.current?.requestSubmit(), 0);
-                }}
+                onClick={() => setShowPreview((value) => !value)}
               >
                 {showPreview ? t("hidePreview") : t("showPreview")}
               </Button>
               {/* The design mode of the isolated preview route renders the
                   words on screen, on its own sandboxed origin (ADR-078 #8). */}
-              <form
-                ref={previewFormRef}
-                action={PREVIEW_URL}
-                method="post"
-                target={previewFrame}
-                className="hidden"
-              >
-                <input type="hidden" name="preview" value="design" />
-                <input type="hidden" name="name" value="direct" />
-                <input type="hidden" name="mode" value={mode} />
-                <input type="hidden" name="subject" value={subject} />
-                <input type="hidden" name="bodyHtml" value={bodyHtml} />
-              </form>
               {showPreview && (
-                <iframe
-                  name={previewFrame}
-                  title={t("previewFrame")}
-                  sandbox=""
-                  className="h-120 w-full rounded-sm border bg-background"
+                <EmailPreviewFrame
+                  size="compact"
+                  fields={{ preview: "design", name: "direct", mode, subject, bodyHtml }}
                 />
               )}
             </div>

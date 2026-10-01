@@ -1169,7 +1169,8 @@
       "ai": "Connect a provider, watch usage and spend, and set features, budget, and limits",
       "emailTemplates": "Subjects, bodies, and senders for every email the site sends",
       "emailLog": "Every email sent or attempted, with its delivery status",
-      "market": "The market data API, its key, and how often rates refresh"
+      "market": "The market data API, its key, and how often rates refresh",
+      "translation": "Languages, interface and site text, machine translation, and the review queue"
     },
     "socialAdd": "Add social link",
     "socialTitle": "Title",
@@ -2573,10 +2574,6 @@
       "inheritHint": "Blank means the site-wide setting.",
       "previewSection": "Preview",
       "previewDescription": "The draft on the left, rendered with example values.",
-      "previewRefresh": "Refresh",
-      "previewFrame": "Email preview",
-      "widthDesktop": "Desktop",
-      "widthMobile": "Phone",
       "testSend": "Send test",
       "testSendTitle": "Send a test email",
       "testSendDescription": "Sends this template with example values. It works even while the template is switched off, but not while email is off site-wide.",
@@ -2648,6 +2645,35 @@
         "fieldSubject": "Suggested subject",
         "fieldSubjectHint": "Copied into the email, where it can be changed. Optional.",
         "saved": "Design saved"
+      },
+      "gallery": {
+        "tabsLabel": "Template categories",
+        "designsTab": "Your designs",
+        "active": "Active",
+        "inactive": "Inactive",
+        "view": "View",
+        "language": "Preview language",
+        "edited": "Edited {when}",
+        "editedBy": "Edited {when} by {name}",
+        "noMatches": "No email in this category matches the search.",
+        "categories": {
+          "auth": {
+            "label": "Account & security",
+            "description": "Sent by sign-in and account changes: password reset, email verification and change notices."
+          },
+          "newsletter": {
+            "label": "Newsletter",
+            "description": "The double opt-in confirmation and the welcome a new subscriber receives."
+          },
+          "support": {
+            "label": "Support",
+            "description": "Messages from the support form, delivered to your team."
+          },
+          "announcement": {
+            "label": "Announcements",
+            "description": "The layout every course announcement campaign is sent with."
+          }
+        }
       }
     },
     "passwordReset": {
@@ -2834,8 +2860,8 @@
       "sendTest": "Send me a test",
       "testSent": "Test sent to {to}",
       "testNotSent": "The test was not sent ({status}). Check the delivery log.",
-      "testDialogTitle": "Send a test email",
-      "testDialogDescription": "Sends this email once to the address below. It is filled with yours; change it to send the test to someone else.",
+      "previewEmail": "Preview email",
+      "previewEmailDescription": "The saved email, exactly as recipients will get it.",
       "testRecipient": "Send to",
       "testSend": "Send test",
       "scheduleLabel": "Send later",
@@ -2997,7 +3023,6 @@
         "suppressedNotice": "This person has unsubscribed from campaign emails. Send only if this is about their account.",
         "showPreview": "Show preview",
         "hidePreview": "Hide preview",
-        "previewFrame": "Email preview",
         "send": "Send email",
         "sent": "Email on its way to {email}",
         "refusals": {
@@ -3011,6 +3036,55 @@
           "body_empty": "Write a message first.",
           "body_too_large": "This message is too large to send."
         }
+      },
+      "byAuthor": "by {name}",
+      "columnSent": "Sent",
+      "columnFailed": "Failed",
+      "datePrefix": {
+        "finished": "Finished {date}",
+        "scheduled": "Scheduled for {date}",
+        "created": "Created {date}"
+      },
+      "statusTabs": {
+        "DRAFT": "Drafts",
+        "SCHEDULED": "Scheduled",
+        "WAITING": "Waiting",
+        "SENDING": "Sending",
+        "SENT": "Sent",
+        "CANCELLED": "Cancelled"
+      },
+      "estimate": {
+        "title": "Estimated recipients",
+        "duplicates": "Duplicates removed",
+        "suppressed": "Unsubscribed, excluded",
+        "note": "Every address is counted once. The final list is captured when sending starts, so people who join before then are included."
+      },
+      "inbox": {
+        "title": "Inbox preview",
+        "noSender": "No sender set",
+        "noSubject": "Subject line",
+        "noPreheader": "Preview text…"
+      },
+      "checklistProgress": "{passed} of {total} checks passed",
+      "recheck": "Re-check",
+      "checks": {
+        "course": "Course",
+        "courseMissing": "Choose the course to announce",
+        "subject": "Subject line",
+        "subjectMissing": "Add a subject line in the first step",
+        "sender": "Sender",
+        "senderMissing": "Set a sender address in Email settings",
+        "content": "Email content",
+        "contentReady": "The email has content",
+        "contentMissing": "The email has no content yet",
+        "tags": "Personalisation tags",
+        "tagsValid": "All tags are valid",
+        "audience": "Audience",
+        "test": "Test email"
+      },
+      "testCard": {
+        "title": "Send a test",
+        "description": "See exactly what recipients will get, in your own inbox."
       }
     },
     "newsletterDescription": "Everyone who has asked for the newsletter, and how far they got through double opt-in.",
@@ -4182,6 +4256,29 @@
         "SUPPRESSED": "Not sent: unsubscribed",
         "SKIPPED": "Not sent: cancelled"
       }
+    },
+    "emailPreview": {
+      "title": "Design preview",
+      "description": "How this email arrives, on a desktop or a phone, in light or dark mode.",
+      "device": "Device",
+      "desktop": "Desktop",
+      "mobile": "Mobile",
+      "scheme": "Colour mode",
+      "light": "Light",
+      "dark": "Dark",
+      "view": "View",
+      "rendered": "Preview",
+      "source": "HTML",
+      "copy": "Copy HTML",
+      "copied": "HTML copied",
+      "copyFailed": "The HTML could not be copied.",
+      "refresh": "Refresh preview",
+      "frameTitle": "Email preview",
+      "thumbnailTitle": "Preview of {name}",
+      "sourceLoading": "Loading the HTML…",
+      "sourceFailed": "The HTML could not be loaded.",
+      "lightNote": "Every email is sent in light mode. Header, footer and unsubscribe link are added automatically.",
+      "darkNote": "Dark mode is an approximation: each mail app applies its own dark theme to the light email."
     }
   },
   "glossary": {
@@ -5340,7 +5437,7 @@
     "unsubscribe": {
       "title": "Emails from us",
       "description": "Choose whether we email you about new courses and other news.",
-      "footerLink": "Unsubscribe from these emails",
+      "footerLink": "click to unsubscribe",
       "body": "Press the button to stop emails about new courses and other news at this address.",
       "action": "Unsubscribe",
       "pending": "Updating…",
@@ -5972,5 +6069,15 @@
     "endsIn": "Ends in {time}",
     "until": "Until {date}",
     "recording": "Recording"
+  },
+  "emailShell": {
+    "loginLink": "Login to Account",
+    "supportLink": "Contact Support",
+    "privacyLink": "Privacy Policy",
+    "emailLabel": "Email",
+    "websiteLabel": "Website",
+    "copyright": "© {year} {siteName}. All rights reserved.",
+    "sentTo": "This email was sent to {email}.",
+    "unsubscribeLine": "If you no longer wish to receive these emails, {link}."
   }
 }

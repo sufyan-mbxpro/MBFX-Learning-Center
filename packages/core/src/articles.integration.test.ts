@@ -556,6 +556,37 @@ describe("visibility rule (status × isActive × category × deletion)", () => {
       expect(view?.readingLocale).toBeNull();
     }
   });
+
+  // The header's language switcher swaps only the prefix: /news/x → /es/news/x.
+  it("sends another language's slug to the article's own URL in that locale", async () => {
+    const id = await publishedArticle();
+    const { slug: enSlug } = await db.articleTranslation.findUniqueOrThrow({
+      where: { articleId_locale: { articleId: id, locale: "en" } },
+      select: { slug: true },
+    });
+    // No Spanish row yet: the fallback pick, the English URL a card links to.
+    expect(await publicArticles.loadArticleSlugTarget("es", enSlug)).toBe(`/news/${enSlug}`);
+
+    await articles.saveArticleTranslation(editor, {
+      articleId: id,
+      locale: "es",
+      title: "Cómo calcular el margen",
+      body: "<p>margen</p>",
+    });
+    const { slug: esSlug } = await db.articleTranslation.findUniqueOrThrow({
+      where: { articleId_locale: { articleId: id, locale: "es" } },
+      select: { slug: true },
+    });
+    expect(esSlug).not.toBe(enSlug);
+    expect(await publicArticles.loadArticleBySlug("es", enSlug)).toBeNull();
+    expect(await publicArticles.loadArticleSlugTarget("es", enSlug)).toBe(`/es/news/${esSlug}`);
+    // And back the other way, to the unprefixed default-locale URL.
+    expect(await publicArticles.loadArticleSlugTarget("en", esSlug)).toBe(`/news/${enSlug}`);
+    // A slug nobody owns, or one on an unpublished article, stays a 404.
+    expect(await publicArticles.loadArticleSlugTarget("es", "no-such-article")).toBeNull();
+    await articles.transitionArticle(editor, id, "DRAFT");
+    expect(await publicArticles.loadArticleSlugTarget("es", enSlug)).toBeNull();
+  });
 });
 
 describe("categories & tags", () => {

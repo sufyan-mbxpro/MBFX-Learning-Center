@@ -410,7 +410,6 @@ export const SETTINGS_SCHEMAS = {
   "email.fromName": z.string().min(1).max(120),
   "email.fromEmail": z.email(),
   "email.replyTo": z.email().or(z.literal("")),
-  "email.logo": z.string().max(500),
   "email.footerText": z.string().max(500),
   // CAN-SPAM and its equivalents want a postal address on bulk mail.
   "email.postalAddress": z.string().max(300),
@@ -520,7 +519,6 @@ export const SETTING_GROUPS: Record<SettingKey, string> = {
   "email.fromName": "email",
   "email.fromEmail": "email",
   "email.replyTo": "email",
-  "email.logo": "email",
   "email.footerText": "email",
   "email.postalAddress": "email",
   "newsletter.placements.footer": "email",

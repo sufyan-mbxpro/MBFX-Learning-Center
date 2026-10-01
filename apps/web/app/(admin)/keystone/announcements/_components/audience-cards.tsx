@@ -27,6 +27,7 @@ import {
 } from "@repo/contracts";
 import type { AnnouncementUserOption, AudienceSummary } from "@repo/core";
 import { Badge } from "@repo/ui/components/badge";
+import { Card, CardContent } from "@repo/ui/components/card";
 import { cn } from "@repo/ui/lib/utils";
 import { Field } from "../../_components/editor/editor-section.tsx";
 import { CourseMultiPicker, type CourseChip } from "./course-picker.tsx";
@@ -79,21 +80,26 @@ export function AudienceCards(props: AudienceCardsProps) {
               aria-pressed={selected}
               onClick={() => props.onToggle(key)}
               className={cn(
-                "flex items-start gap-3 rounded-lg border p-3 text-start transition-colors hover:bg-muted/60",
-                selected && "border-primary ring-1 ring-primary",
+                "flex items-start gap-3 rounded-lg border bg-card p-4 text-start transition-colors hover:border-primary/50 hover:bg-muted/40",
+                selected && "border-primary bg-primary/5 ring-1 ring-primary hover:bg-primary/10",
               )}
             >
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted">
+              <span
+                className={cn(
+                  "flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground",
+                  selected && "bg-primary/15 text-primary-interactive",
+                )}
+              >
                 <Icon aria-hidden className="size-4" />
               </span>
               <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                 <span className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-medium">{t(`audiences.${key}.label`)}</span>
-                  {count !== undefined && (
-                    <Badge variant="outline" className="tabular-nums">
-                      {count}
-                    </Badge>
-                  )}
+                  <span className="text-sm font-semibold">{t(`audiences.${key}.label`)}</span>
+                  {/* The reference's dark count pill; "–" while a picker's
+                      count waits for its first pick. */}
+                  <Badge variant="secondary" className="tabular-nums">
+                    {count !== undefined ? count.toLocaleString("en") : "–"}
+                  </Badge>
                 </span>
                 <span className="text-xs text-muted-foreground">
                   {t(`audiences.${key}.description`)}
@@ -126,5 +132,40 @@ export function AudienceCards(props: AudienceCardsProps) {
         </Field>
       )}
     </>
+  );
+}
+
+/**
+ * The Audience step's side card (changes-59): the de-duplicated count the send
+ * will queue, from the same resolver, with what was taken out and why.
+ */
+export function RecipientEstimate({ summary }: { summary: AudienceSummary | null }) {
+  const t = useTranslations("admin.announcements");
+  const selection = summary?.selection ?? null;
+  return (
+    <Card className="self-start">
+      <CardContent className="flex flex-col gap-4">
+        <div className="flex items-center gap-3">
+          <span className="flex size-11 items-center justify-center rounded-lg bg-primary/10 text-primary-interactive">
+            <Users aria-hidden className="size-5" />
+          </span>
+          <div className="flex flex-col">
+            <span className="text-sm text-muted-foreground">{t("estimate.title")}</span>
+            <span className="text-3xl font-semibold tabular-nums">
+              {selection ? selection.unique.toLocaleString("en") : "–"}
+            </span>
+          </div>
+        </div>
+        {selection && (
+          <dl className="grid grid-cols-(--grid-fill-auto) gap-x-4 gap-y-1 text-sm">
+            <dt className="text-muted-foreground">{t("estimate.duplicates")}</dt>
+            <dd className="text-end tabular-nums">{selection.duplicates.toLocaleString("en")}</dd>
+            <dt className="text-muted-foreground">{t("estimate.suppressed")}</dt>
+            <dd className="text-end tabular-nums">{selection.suppressed.toLocaleString("en")}</dd>
+          </dl>
+        )}
+        <p className="text-xs text-muted-foreground">{t("estimate.note")}</p>
+      </CardContent>
+    </Card>
   );
 }

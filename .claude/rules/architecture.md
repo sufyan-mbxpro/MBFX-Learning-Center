@@ -61,6 +61,11 @@ rules named below.
    configuration, because the guard that applies it runs inside Better Auth's
    handler, and it seals Google's secret key through the one shared seal
    rather than a copy.
+   ADR-179 adds `email → i18n`: the email shell's footer words
+   (`emailShell.*`) come from the catalog in the reader's language, and the
+   transactional path (`auth → email`) has no `core` above it to pass them
+   down. `i18n` spends nothing and calls no vendor, the bar ADR-097 set for
+   the session path.
    ADR-160 adds `core → translate` and `translate → secrets`:
    `@repo/translate` is a domain package owning its own tables (provider,
    usage, jobs) and depending on `db / contracts / secrets`. It

@@ -49,6 +49,7 @@ import { CourseJsonLd } from "../../_components/course-json-ld.tsx";
 import { ReadingLanguageMenu } from "../../../_components/reading-language-menu.tsx";
 import { readingLanguageOptions, readingLocaleFrom } from "../../../_lib/reading-language.ts";
 import { INTERACTIVE_CARD } from "@repo/ui/lib/surfaces";
+import { decodeParams } from "../../../_lib/route-params.ts";
 
 // Course detail (changes-11 PR 4.2 + its share of 4.4).
 //
@@ -66,7 +67,7 @@ export async function generateMetadata({
   params,
   searchParams,
 }: PageProps<"/[locale]/learn/[track]/[course]">): Promise<Metadata> {
-  const { locale, course: courseSlug } = await params;
+  const { locale, course: courseSlug } = decodeParams(await params);
   setRequestLocale(locale);
   const readingLocale = readingLocaleFrom(await searchParams);
   const [view, template, brand] = await Promise.all([
@@ -106,7 +107,7 @@ export default async function CoursePage({
   params,
   searchParams,
 }: PageProps<"/[locale]/learn/[track]/[course]">) {
-  const { locale, track, course: courseSlug } = await params;
+  const { locale, track, course: courseSlug } = decodeParams(await params);
   setRequestLocale(locale);
   if (!isLearnTrack(track)) notFound();
 

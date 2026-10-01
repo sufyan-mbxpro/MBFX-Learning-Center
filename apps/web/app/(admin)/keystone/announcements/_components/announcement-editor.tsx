@@ -11,12 +11,12 @@
 // **Nothing here sends.** Send writes the recipient rows and the queue does
 // the rest (owner, D8); the numbers the Review step confirms come from the
 // same resolver the send uses, so the count confirmed is the count queued.
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
-import { CalendarClock, CircleCheck, CircleX, Send } from "lucide-react";
+import { CalendarClock, CircleCheck, CircleX, Eye, Send, TestTube } from "lucide-react";
 import {
   ANNOUNCEMENT_MESSAGE_MAX,
   announcementAudienceSchema,
@@ -49,16 +49,16 @@ import {
   type AnnouncementRefused,
 } from "../../_actions/announcement-actions.ts";
 import { AdminCombobox } from "../../_components/combobox.tsx";
+import { EmailPreviewDialog, EmailPreviewFrame } from "../../_components/email-preview.tsx";
 import { EditorSection, Field } from "../../_components/editor/editor-section.tsx";
 import { useFieldErrors } from "../../_hooks/use-field-errors.ts";
 import { useServerAction } from "../../_hooks/use-server-action.ts";
-import { AudienceCards } from "./audience-cards.tsx";
+import { AudienceCards, RecipientEstimate } from "./audience-cards.tsx";
+import { InboxPreview, PreSendChecklist, type ChecklistItem } from "./send-review.tsx";
 import { CourseSearch, type CourseChip } from "./course-picker.tsx";
-import { TestSendDialog } from "./test-send-dialog.tsx";
+import { TestSendForm } from "./test-send-form.tsx";
 import { ANNOUNCEMENT_STEPS, type AnnouncementStep } from "../_lib/steps.ts";
 
-const PREVIEW_URL = "/keystone/api/email/preview";
-const PREVIEW_FRAME = "announcement-preview";
 const COUNT_DELAY_MS = 400;
 
 /** Where each refusal is fixed (plan §8.1: every check has a fix-it link). */
@@ -135,7 +135,9 @@ export function AnnouncementEditor(props: AnnouncementEditorProps) {
   const [previewLocale, setPreviewLocale] = useState(props.locales[0] ?? "en");
   const [scheduleAt, setScheduleAt] = useState("");
   const [confirmSend, setConfirmSend] = useState(false);
-  const previewFormRef = useRef<HTMLFormElement>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  // Bumped after a save: the preview renders the SAVED draft (the route reads it).
+  const [previewNonce, setPreviewNonce] = useState(0);
 
   const audience = useMemo(() => {
     if (keys.length === 0) return undefined;
@@ -182,12 +184,6 @@ export function AnnouncementEditor(props: AnnouncementEditorProps) {
     };
   }, [targetId, audienceKey]);
 
-  // The preview shows the SAVED draft (the route reads it), so it refreshes
-  // when the language changes and after every save.
-  useEffect(() => {
-    if (step === "message" && props.initial.id) previewFormRef.current?.requestSubmit();
-  }, [step, previewLocale, props.initial.id]);
-
   function refusalMessage(result: AnnouncementRefused): string {
     return t(`refusals.${result.reason}`);
   }
@@ -205,7 +201,7 @@ export function AnnouncementEditor(props: AnnouncementEditorProps) {
           return;
         }
         if (next) setStep(next);
-        previewFormRef.current?.requestSubmit();
+        setPreviewNonce((n) => n + 1);
       },
       { successMessage: t("saved") },
     );
@@ -279,6 +275,46 @@ export function AnnouncementEditor(props: AnnouncementEditorProps) {
   }
 
   const cards = audiencesForKind("COURSE").filter((key) => key !== "custom" || props.canPickUsers);
+
+  const sender = props.compose.fromEmail
+    ? `${props.compose.fromName} <${props.compose.fromEmail}>`
+    : "";
+  const checklist: ChecklistItem[] = [
+    {
+      key: "course",
+      state: course && course.availability !== "unavailable" ? "ok" : "failed",
+      title: t("checks.course"),
+      detail: course
+        ? course.availability === "unavailable"
+          ? t("refusals.target_unavailable")
+          : course.title
+        : t("checks.courseMissing"),
+    },
+    {
+      key: "subject",
+      state: subject || props.compose.templateSubject ? "ok" : "failed",
+      title: t("checks.subject"),
+      detail: subject || props.compose.templateSubject || t("checks.subjectMissing"),
+    },
+    {
+      key: "sender",
+      state: sender ? "ok" : "failed",
+      title: t("checks.sender"),
+      detail: sender || t("checks.senderMissing"),
+      fixHref: "/keystone/settings/email",
+    },
+    {
+      key: "audience",
+      state: unique > 0 || course?.availability === "scheduled" ? "ok" : "failed",
+      title: t("checks.audience"),
+      detail:
+        keys.length === 0
+          ? t("pickAudience")
+          : `${t("recipientCount", { count: unique })} · ${keys
+              .map((key) => t(`audiences.${key}.label`))
+              .join(", ")}`,
+    },
+  ];
 
   return (
     <Tabs value={step} onValueChange={(value) => setStep(value as AnnouncementStep)}>
@@ -356,86 +392,84 @@ export function AnnouncementEditor(props: AnnouncementEditorProps) {
 
       {/* ─── 2. Subject & message ───────────────────────────── */}
       <TabsContent value="message" className="flex flex-col gap-4">
-        <EditorSection title={t("messageTitle")} description={t("messageDescription")}>
-          <Field
-            label={t("fieldSubject")}
-            hint={t("fieldSubjectHint")}
-            error={form.error("subject")}
-          >
-            <Input
-              value={subject}
-              maxLength={200}
-              placeholder={props.compose.templateSubject}
-              onChange={(event) => setSubject(event.target.value)}
-            />
-          </Field>
-          <Field
-            label={t("fieldMessage")}
-            hint={t("fieldMessageHint")}
-            error={form.error("message")}
-            adornment={
-              <span className="text-xs text-muted-foreground tabular-nums">
-                {message.length}/{ANNOUNCEMENT_MESSAGE_MAX}
-              </span>
-            }
-          >
-            <Textarea
-              value={message}
-              rows={4}
-              maxLength={ANNOUNCEMENT_MESSAGE_MAX}
-              onChange={(event) => setMessage(event.target.value)}
-            />
-          </Field>
-          <p className="text-sm text-muted-foreground">
-            {t("senderLine", {
-              name: props.compose.fromName,
-              email: props.compose.fromEmail,
-            })}{" "}
-            <Link
-              href="/keystone/settings/email"
-              className="font-medium text-primary-interactive underline-offset-4 hover:underline"
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-(--grid-main-aside-wide)">
+          <EditorSection title={t("messageTitle")} description={t("messageDescription")}>
+            <Field
+              label={t("fieldSubject")}
+              hint={t("fieldSubjectHint")}
+              error={form.error("subject")}
+              adornment={
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  {subject.length}/200
+                </span>
+              }
             >
-              {t("senderChange")}
-            </Link>
-          </p>
-        </EditorSection>
-
-        <EditorSection
-          title={t("previewTitle")}
-          description={t("previewDescription")}
-          actions={
-            props.locales.length > 1 ? (
-              <AdminCombobox
-                aria-label={t("previewLanguage")}
-                className="w-36"
-                value={previewLocale}
-                onValueChange={setPreviewLocale}
-                options={props.locales.map((code) => ({ value: code, label: code.toUpperCase() }))}
+              <Input
+                value={subject}
+                maxLength={200}
+                placeholder={props.compose.templateSubject}
+                onChange={(event) => setSubject(event.target.value)}
               />
-            ) : undefined
-          }
-        >
-          {saved ? (
-            <>
-              {/* A real form POST at a named sandboxed frame: the rendered
-                  message lands on its own opaque origin (ADR-078 #8). */}
-              <form
-                ref={previewFormRef}
-                action={PREVIEW_URL}
-                method="post"
-                target={PREVIEW_FRAME}
-                className="hidden"
+            </Field>
+            <Field
+              label={t("fieldMessage")}
+              hint={t("fieldMessageHint")}
+              error={form.error("message")}
+              adornment={
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  {message.length}/{ANNOUNCEMENT_MESSAGE_MAX}
+                </span>
+              }
+            >
+              <Textarea
+                value={message}
+                rows={4}
+                maxLength={ANNOUNCEMENT_MESSAGE_MAX}
+                onChange={(event) => setMessage(event.target.value)}
+              />
+            </Field>
+            <p className="text-sm text-muted-foreground">
+              {t("senderLine", {
+                name: props.compose.fromName,
+                email: props.compose.fromEmail,
+              })}{" "}
+              <Link
+                href="/keystone/settings/email"
+                className="font-medium text-primary-interactive underline-offset-4 hover:underline"
               >
-                <input type="hidden" name="campaignId" value={props.initial.id ?? ""} />
-                <input type="hidden" name="locale" value={previewLocale} />
-              </form>
-              <iframe
-                name={PREVIEW_FRAME}
-                title={t("previewTitle")}
-                sandbox=""
-                className="h-160 w-full rounded-sm border bg-background"
-              />
-            </>
+                {t("senderChange")}
+              </Link>
+            </p>
+          </EditorSection>
+          <InboxPreview
+            fromName={props.compose.fromName}
+            subject={subject || props.compose.templateSubject}
+            preheader={message}
+          />
+        </div>
+
+        <EditorSection title={t("previewTitle")} description={t("previewDescription")}>
+          {saved ? (
+            // A real form POST at a named sandboxed frame: the rendered message
+            // lands on its own opaque origin (ADR-078 #8).
+            <EmailPreviewFrame
+              fields={{ campaignId: props.initial.id ?? "", locale: previewLocale }}
+              refreshKey={previewNonce}
+              toolbarStart={
+                props.locales.length > 1 ? (
+                  <AdminCombobox
+                    aria-label={t("previewLanguage")}
+                    className="w-36"
+                    value={previewLocale}
+                    onValueChange={setPreviewLocale}
+                    options={props.locales.map((code) => ({
+                      value: code,
+                      label: code.toUpperCase(),
+                    }))}
+                  />
+                ) : undefined
+              }
+            />
           ) : (
             <p className="text-sm text-muted-foreground">{t("previewNeedsSave")}</p>
           )}
@@ -445,24 +479,27 @@ export function AnnouncementEditor(props: AnnouncementEditorProps) {
 
       {/* ─── 3. Audience ────────────────────────────────────── */}
       <TabsContent value="audience" className="flex flex-col gap-4">
-        <EditorSection title={t("audienceTitle")} description={t("audienceDescription")}>
-          <AudienceCards
-            cards={cards}
-            keys={keys}
-            onToggle={toggleKey}
-            summary={summary}
-            courses={audienceCourses}
-            onCoursesChange={setAudienceCourses}
-            users={audienceUsers}
-            onUsersChange={setAudienceUsers}
-            errors={{
-              keys: form.error("audience.keys"),
-              courseIds: form.error("audience.courseIds"),
-              userIds: form.error("audience.userIds"),
-            }}
-          />
-          <p className="text-xs text-muted-foreground">{t("audienceFootnote")}</p>
-        </EditorSection>
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-(--grid-main-aside-wide)">
+          <EditorSection title={t("audienceTitle")} description={t("audienceDescription")}>
+            <AudienceCards
+              cards={cards}
+              keys={keys}
+              onToggle={toggleKey}
+              summary={summary}
+              courses={audienceCourses}
+              onCoursesChange={setAudienceCourses}
+              users={audienceUsers}
+              onUsersChange={setAudienceUsers}
+              errors={{
+                keys: form.error("audience.keys"),
+                courseIds: form.error("audience.courseIds"),
+                userIds: form.error("audience.userIds"),
+              }}
+            />
+            <p className="text-xs text-muted-foreground">{t("audienceFootnote")}</p>
+          </EditorSection>
+          <RecipientEstimate summary={summary} />
+        </div>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p role="status" aria-live="polite" className="text-sm font-medium">
             {summary?.selection
@@ -481,103 +518,126 @@ export function AnnouncementEditor(props: AnnouncementEditorProps) {
 
       {/* ─── 4. Review & send ───────────────────────────────── */}
       <TabsContent value="review" className="flex flex-col gap-4">
-        <EditorSection title={t("reviewTitle")} description={t("reviewDescription")}>
-          <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
-            <dt className="text-muted-foreground">{t("fieldCourse")}</dt>
-            <dd>{course?.title ?? "—"}</dd>
-            <dt className="text-muted-foreground">{t("fieldSubject")}</dt>
-            <dd>{subject || props.compose.templateSubject}</dd>
-            <dt className="text-muted-foreground">{t("audienceTitle")}</dt>
-            <dd className="flex flex-wrap gap-1">
-              {keys.map((key) => (
-                <Badge key={key} variant="outline">
-                  {t(`audiences.${key}.label`)}
-                </Badge>
-              ))}
-            </dd>
-            <dt className="text-muted-foreground">{t("columnRecipients")}</dt>
-            <dd className="tabular-nums">{t("recipientCount", { count: unique })}</dd>
-          </dl>
-        </EditorSection>
-
-        <EditorSection title={t("checklistTitle")} description={t("checklistDescription")}>
-          <ul className="flex flex-col gap-2 text-sm">
-            {props.blockers.length === 0 && (
-              <li className="flex items-center gap-2">
-                <CircleCheck aria-hidden className="size-4 text-success-interactive" />
-                {t("checklistReady")}
-              </li>
-            )}
-            {props.blockers.map((reason) => (
-              <li key={reason} className="flex flex-wrap items-center gap-2">
-                <CircleX aria-hidden className="size-4 text-destructive" />
-                <span>{t(`refusals.${reason}`)}</span>
-                {REFUSAL_FIX[reason] && (
-                  <Link
-                    href={REFUSAL_FIX[reason] ?? "/keystone/settings/email"}
-                    className="font-medium text-primary-interactive underline-offset-4 hover:underline"
-                  >
-                    {t("fixIt")}
-                  </Link>
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-(--grid-main-aside-wide)">
+          <div className="flex min-w-0 flex-col gap-4">
+            <PreSendChecklist items={checklist}>
+              <ul className="flex flex-col gap-2 text-sm">
+                {props.blockers.length === 0 && (
+                  <li className="flex items-center gap-2 font-medium text-success-interactive">
+                    <CircleCheck aria-hidden className="size-4" />
+                    {t("checklistReady")}
+                  </li>
                 )}
-              </li>
-            ))}
-            {course?.availability === "scheduled" && course.scheduledFor && (
-              <li className="flex items-center gap-2 text-info-interactive">
-                <CalendarClock aria-hidden className="size-4" />
-                {t("sendsWhenLive", { date: formatDateTime(new Date(course.scheduledFor)) })}
-              </li>
-            )}
-          </ul>
-        </EditorSection>
+                {props.blockers.map((reason) => (
+                  <li key={reason} className="flex flex-wrap items-center gap-2">
+                    <CircleX aria-hidden className="size-4 text-destructive" />
+                    <span>{t(`refusals.${reason}`)}</span>
+                    {REFUSAL_FIX[reason] && (
+                      <Link
+                        href={REFUSAL_FIX[reason] ?? "/keystone/settings/email"}
+                        className="font-medium text-primary-interactive underline-offset-4 hover:underline"
+                      >
+                        {t("fixIt")}
+                      </Link>
+                    )}
+                  </li>
+                ))}
+                {course?.availability === "scheduled" && course.scheduledFor && (
+                  <li className="flex items-center gap-2 text-info-interactive">
+                    <CalendarClock aria-hidden className="size-4" />
+                    {t("sendsWhenLive", { date: formatDateTime(new Date(course.scheduledFor)) })}
+                  </li>
+                )}
+              </ul>
+            </PreSendChecklist>
 
-        <EditorSection title={t("sendTitle")} description={t("sendDescription")}>
-          <div className="flex flex-wrap items-center gap-2">
-            <TestSendDialog defaultTo={props.testAddress} pending={pending} onSend={sendTest} />
-          </div>
-          {props.canSend && (
-            <div className="flex flex-col gap-3 border-t pt-3">
-              <Field label={t("scheduleLabel")} hint={t("scheduleHint")}>
-                <DateTimePicker
-                  value={hydrated ? scheduleAt : ""}
-                  onChange={setScheduleAt}
-                  labels={{
-                    placeholder: tAdmin("schedulePickerPlaceholder"),
-                    previousMonth: tAdmin("schedulePickerPreviousMonth"),
-                    nextMonth: tAdmin("schedulePickerNextMonth"),
-                    hour: tAdmin("schedulePickerHour"),
-                    minute: tAdmin("schedulePickerMinute"),
-                  }}
-                />
-              </Field>
-              <div className="flex flex-wrap justify-end gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  loading={pending}
-                  disabled={!scheduleAt || props.blockers.length > 0}
-                  onClick={schedule}
-                >
-                  <CalendarClock aria-hidden data-icon="inline-start" />
-                  {t("schedule")}
-                </Button>
-                <Button
-                  type="button"
-                  loading={pending}
-                  disabled={
-                    props.blockers.length > 0 ||
-                    (unique === 0 && course?.availability !== "scheduled")
-                  }
-                  onClick={() => setConfirmSend(true)}
-                >
-                  <Send aria-hidden data-icon="inline-start" />
-                  {course?.availability === "scheduled" ? t("sendWhenLive") : t("sendNow")}
+            <EditorSection title={t("reviewTitle")} description={t("reviewDescription")}>
+              <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+                <dt className="text-muted-foreground">{t("fieldCourse")}</dt>
+                <dd>{course?.title ?? "—"}</dd>
+                <dt className="text-muted-foreground">{t("fieldSubject")}</dt>
+                <dd>{subject || props.compose.templateSubject}</dd>
+                <dt className="text-muted-foreground">{t("audienceTitle")}</dt>
+                <dd className="flex flex-wrap gap-1">
+                  {keys.map((key) => (
+                    <Badge key={key} variant="info">
+                      {t(`audiences.${key}.label`)}
+                    </Badge>
+                  ))}
+                </dd>
+                <dt className="text-muted-foreground">{t("columnRecipients")}</dt>
+                <dd className="tabular-nums">{t("recipientCount", { count: unique })}</dd>
+              </dl>
+              <div className="flex justify-end">
+                <Button type="button" variant="outline" onClick={() => setPreviewOpen(true)}>
+                  <Eye aria-hidden data-icon="inline-start" />
+                  {t("previewEmail")}
                 </Button>
               </div>
-            </div>
-          )}
-        </EditorSection>
+            </EditorSection>
+          </div>
 
+          <div className="flex min-w-0 flex-col gap-4">
+            <EditorSection
+              title={t("testCard.title")}
+              description={t("testCard.description")}
+              icon={TestTube}
+              accent="info"
+            >
+              <TestSendForm defaultTo={props.testAddress} pending={pending} onSend={sendTest} />
+            </EditorSection>
+
+            {props.canSend && (
+              <EditorSection title={t("sendTitle")} description={t("sendDescription")} icon={Send}>
+                <Field label={t("scheduleLabel")} hint={t("scheduleHint")}>
+                  <DateTimePicker
+                    value={hydrated ? scheduleAt : ""}
+                    onChange={setScheduleAt}
+                    labels={{
+                      placeholder: tAdmin("schedulePickerPlaceholder"),
+                      previousMonth: tAdmin("schedulePickerPreviousMonth"),
+                      nextMonth: tAdmin("schedulePickerNextMonth"),
+                      hour: tAdmin("schedulePickerHour"),
+                      minute: tAdmin("schedulePickerMinute"),
+                    }}
+                  />
+                </Field>
+                <div className="flex flex-wrap justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    loading={pending}
+                    disabled={!scheduleAt || props.blockers.length > 0}
+                    onClick={schedule}
+                  >
+                    <CalendarClock aria-hidden data-icon="inline-start" />
+                    {t("schedule")}
+                  </Button>
+                  <Button
+                    type="button"
+                    loading={pending}
+                    disabled={
+                      props.blockers.length > 0 ||
+                      (unique === 0 && course?.availability !== "scheduled")
+                    }
+                    onClick={() => setConfirmSend(true)}
+                  >
+                    <Send aria-hidden data-icon="inline-start" />
+                    {course?.availability === "scheduled" ? t("sendWhenLive") : t("sendNow")}
+                  </Button>
+                </div>
+              </EditorSection>
+            )}
+          </div>
+        </div>
+
+        <EmailPreviewDialog
+          open={previewOpen}
+          onOpenChange={setPreviewOpen}
+          title={t("previewEmail")}
+          description={t("previewEmailDescription")}
+          fields={{ campaignId: props.initial.id ?? "", locale: previewLocale }}
+        />
         <ConfirmDialog
           open={confirmSend}
           onOpenChange={setConfirmSend}

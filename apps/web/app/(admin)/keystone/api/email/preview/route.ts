@@ -1,7 +1,9 @@
 import {
   announcementPreviewSchema,
+  emailDesignPreviewSchema,
   emailDesignSaveSchema,
   emailPreviewSchema,
+  emailPreviewSchemeSchema,
 } from "@repo/contracts";
 import {
   renderAnnouncementPreview,
@@ -85,6 +87,21 @@ export async function POST(request: Request): Promise<Response> {
       "announcements.create",
       "announcements.direct",
     ]);
+    // A SAVED design by id (the template gallery's cards, changes-59): the
+    // list does not ship every body to the browser just to post it back.
+    const saved = hasBody(input) ? null : emailDesignPreviewSchema.safeParse(input);
+    if (saved?.success) {
+      const rendered = await renderEmailDesignPreview(subject, {
+        designId: saved.data.designId,
+        scheme: previewScheme(input),
+      });
+      return rendered
+        ? previewResponse(request, rendered.html)
+        : new Response(document("This design has nothing to preview yet."), {
+            status: 404,
+            headers: previewHeaders(request),
+          });
+    }
     const design = emailDesignSaveSchema.safeParse(input);
     if (!design.success) {
       return new Response(document("This design cannot be previewed until its body is valid."), {
@@ -93,7 +110,10 @@ export async function POST(request: Request): Promise<Response> {
       });
     }
     try {
-      const rendered = await renderEmailDesignPreview(subject, { draft: design.data });
+      const rendered = await renderEmailDesignPreview(subject, {
+        draft: design.data,
+        scheme: previewScheme(input),
+      });
       if (!rendered) {
         return new Response(document("This design has nothing to preview yet."), {
           status: 404,
@@ -140,8 +160,26 @@ export async function POST(request: Request): Promise<Response> {
   }
 }
 
+/**
+ * The palette the frame asked for (ADR-179 #5). A design preview's body is the
+ * design schema, which has no scheme, so it is read here on its own; anything
+ * that is not a known scheme is light.
+ */
+function previewScheme(input: unknown): "light" | "dark" {
+  const value =
+    typeof input === "object" && input !== null && "scheme" in input
+      ? (input as { scheme: unknown }).scheme
+      : undefined;
+  const parsed = emailPreviewSchemeSchema.safeParse(value);
+  return parsed.success ? parsed.data : "light";
+}
+
 function isAnnouncementPreview(input: unknown): boolean {
   return typeof input === "object" && input !== null && "campaignId" in input;
+}
+
+function hasBody(input: unknown): boolean {
+  return typeof input === "object" && input !== null && "bodyHtml" in input;
 }
 
 /** The design editor and the direct-email dialog post `preview=design`. */

@@ -21,15 +21,13 @@ import { Button } from "@repo/ui/components/button";
 import { Input } from "@repo/ui/components/input";
 import { saveEmailDesignAction } from "../../../../_actions/custom-email-actions.ts";
 import { AdminPageHeading } from "../../../../_components/admin-page.tsx";
-import { AdminCombobox } from "../../../../_components/combobox.tsx";
 import { EditorSection, Field } from "../../../../_components/editor/editor-section.tsx";
+import { EmailPreviewFrame } from "../../../../_components/email-preview.tsx";
 import { RichTextEditor, type RichTextLabels } from "../../../../_components/rich-text-editor.tsx";
 import { useFieldErrors } from "../../../../_hooks/use-field-errors.ts";
 import { useServerAction } from "../../../../_hooks/use-server-action.ts";
 import { unknownVariables } from "../../../../announcements/_lib/variables.ts";
 
-const PREVIEW_FRAME = "design-preview-frame";
-const PREVIEW_URL = "/keystone/api/email/preview";
 const BACK = "/keystone/settings/email/templates";
 
 export interface DesignEditorProps {
@@ -57,8 +55,6 @@ export function DesignEditor({ initial, canUpdate, editorLabels }: DesignEditorP
   const [subject, setSubject] = React.useState(initial.subject);
   const [preheader, setPreheader] = React.useState(initial.preheader);
   const [bodyHtml, setBodyHtml] = React.useState(initial.bodyHtml);
-  const [previewWidth, setPreviewWidth] = React.useState<"desktop" | "mobile">("desktop");
-  const previewFormRef = React.useRef<HTMLFormElement>(null);
 
   const values = React.useMemo(
     () => ({
@@ -76,11 +72,6 @@ export function DesignEditor({ initial, canUpdate, editorLabels }: DesignEditorP
   const unknown = unknownVariables(`${subject} ${preheader} ${bodyHtml}`);
   const needsUnsubscribe = mode === "HTML" && !bodyHtml.includes("{{unsubscribe.url}}");
 
-  const refreshPreview = React.useCallback(() => previewFormRef.current?.requestSubmit(), []);
-  React.useEffect(() => {
-    refreshPreview();
-  }, [refreshPreview]);
-
   function save() {
     if (!form.validate()) return;
     run(
@@ -89,7 +80,6 @@ export function DesignEditor({ initial, canUpdate, editorLabels }: DesignEditorP
         if (!result.ok) throw new Error(t(`announcements.direct.refusals.${result.reason}`));
         form.reset();
         if (!initial.id) router.replace(`/keystone/settings/email/designs/${result.id}`);
-        refreshPreview();
       },
       { successMessage: t("email.designs.saved") },
     );
@@ -228,52 +218,12 @@ export function DesignEditor({ initial, canUpdate, editorLabels }: DesignEditorP
           icon={Sparkles}
           accent="success"
           bodyClassName="gap-2"
-          actions={
-            <div className="flex items-center gap-2">
-              <AdminCombobox
-                aria-label={t("email.previewSection")}
-                className="w-32"
-                value={previewWidth}
-                onValueChange={(value) => setPreviewWidth(value as "desktop" | "mobile")}
-                options={[
-                  { value: "desktop", label: t("email.widthDesktop") },
-                  { value: "mobile", label: t("email.widthMobile") },
-                ]}
-              />
-              <Button type="button" size="sm" variant="outline" onClick={refreshPreview}>
-                {t("email.previewRefresh")}
-              </Button>
-            </div>
-          }
         >
-          {/* A real form POST at a named sandboxed frame: the rendered message
-              lands on its own opaque origin (ADR-078 #8). */}
-          <form
-            ref={previewFormRef}
-            action={PREVIEW_URL}
-            method="post"
-            target={PREVIEW_FRAME}
-            className="hidden"
-          >
-            <input type="hidden" name="preview" value="design" />
-            <input type="hidden" name="name" value={name || "—"} />
-            <input type="hidden" name="mode" value={mode} />
-            <input type="hidden" name="subject" value={subject} />
-            <input type="hidden" name="preheader" value={preheader} />
-            <input type="hidden" name="bodyHtml" value={bodyHtml} />
-          </form>
-          <div className="flex justify-center overflow-x-auto rounded-md border bg-muted/40 p-3">
-            <iframe
-              name={PREVIEW_FRAME}
-              title={t("email.previewFrame")}
-              sandbox=""
-              className={
-                previewWidth === "mobile"
-                  ? "h-160 w-94 shrink-0 rounded-sm border bg-background"
-                  : "h-160 w-full rounded-sm border bg-background"
-              }
-            />
-          </div>
+          {/* The shared frame POSTs the draft at a named sandboxed frame: the
+              rendered message lands on its own opaque origin (ADR-078 #8). */}
+          <EmailPreviewFrame
+            fields={{ preview: "design", name: name || "—", mode, subject, preheader, bodyHtml }}
+          />
         </EditorSection>
       </div>
     </div>

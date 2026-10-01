@@ -70,6 +70,7 @@ export function publicArticleWhere(now: Date) {
 // lives in content.ts. Re-exported: this module is where every article caller
 // already imports it from.
 import { effectivePublishedAt } from "./content.ts";
+import { articlePath } from "./articles.ts";
 export { effectivePublishedAt };
 
 export interface ArticleListEntry {
@@ -663,6 +664,42 @@ export async function getArticleBySlug(
   cacheTag("content");
   cacheLife({ revalidate: 300 });
   return loadArticleBySlug(locale, slug, readingLocale);
+}
+
+/**
+ * Where a slug from ANOTHER language's row of a public article lives in
+ * `locale`, or null when no public article owns the slug.
+ *
+ * A translated article usually has its own slug, but the header's language
+ * switcher swaps only the locale prefix — `/news/how-to-…` becomes
+ * `/ar/news/how-to-…` — and `loadArticleBySlug` matches (locale, slug)
+ * exactly, so the switch landed on a 404 for an article that HAS an Arabic
+ * version. The target is the requested locale's own row when there is one,
+ * otherwise the same fallback pick a listing card links to.
+ */
+export async function loadArticleSlugTarget(locale: string, slug: string): Promise<string | null> {
+  const now = new Date();
+  const owner = await db.articleTranslation.findFirst({
+    where: { slug, locale: { not: locale }, article: publicArticleWhere(now) },
+    select: { article: { select: { translations: { select: { locale: true, slug: true } } } } },
+  });
+  if (!owner) return null;
+  const ctx = await localeContext();
+  const target = pickTranslation(
+    owner.article.translations,
+    locale,
+    ctx.defaultLocale,
+    ctx.locales,
+  );
+  if (!target || (target.locale === locale && target.slug === slug)) return null;
+  return articlePath(target.locale, ctx.defaultLocale, target.slug);
+}
+
+export async function getArticleSlugTarget(locale: string, slug: string): Promise<string | null> {
+  "use cache";
+  cacheTag("content");
+  cacheLife({ revalidate: 300 });
+  return loadArticleSlugTarget(locale, slug);
 }
 
 /** Related by shared tags, newest first (articles.relatedCount drives the limit at the page). */

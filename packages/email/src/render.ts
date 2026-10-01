@@ -26,7 +26,13 @@ export type RenderableEmailKey = EmailTemplateKey | CampaignEmailKey;
 function definitionOf(key: RenderableEmailKey): { required: readonly string[] } {
   return isCampaignEmailKey(key) ? CAMPAIGN_EMAILS[key] : EMAIL_TEMPLATES[key];
 }
-import { inlineEditorialStyles, renderEmailShell, type EmailPalette } from "./layout.ts";
+import {
+  inlineEditorialStyles,
+  renderEmailShell,
+  type EmailPalette,
+  type EmailShellContact,
+  type EmailShellLink,
+} from "./layout.ts";
 import { sanitizeEmailHtml } from "./sanitize.ts";
 
 export class EmailRenderError extends Error {
@@ -38,11 +44,20 @@ export class EmailRenderError extends Error {
 
 export interface EmailShellOptions {
   siteName: string;
+  /** The home page in the reader's language; absent ⇒ the name is plain text. */
+  homeUrl?: string | undefined;
   logoUrl?: string | undefined;
+  /** ADR-179: the footer band's lines, already in the reader's language. */
+  tagline?: string | undefined;
+  links?: readonly EmailShellLink[] | undefined;
+  contacts?: readonly EmailShellContact[] | undefined;
+  legalLines?: readonly string[] | undefined;
   footerText?: string | undefined;
   postalAddress?: string | undefined;
   /** Both halves together: a package may not invent the label (code-style #2). */
   unsubscribe?: { url: string; label: string } | undefined;
+  /** The sentence the link sits in, `{link}` marking where. */
+  unsubscribeLine?: string | undefined;
 }
 
 export interface RenderEmailInput {
@@ -156,10 +171,16 @@ export function renderEmail(input: RenderEmailInput): RenderedEmail {
           palette: input.palette,
           preheader: input.preheader,
           siteName: input.shell.siteName,
+          homeUrl: input.shell.homeUrl,
           logoUrl: input.shell.logoUrl,
+          tagline: input.shell.tagline,
+          links: input.shell.links,
+          contacts: input.shell.contacts,
+          legalLines: input.shell.legalLines,
           footerText: input.shell.footerText,
           postalAddress: input.shell.postalAddress,
           unsubscribe: input.shell.unsubscribe,
+          unsubscribeLine: input.shell.unsubscribeLine,
         })
       : // A hand-built document is the designer's whole document. Wrapping it
         // in our shell would put two <body> elements in one message.

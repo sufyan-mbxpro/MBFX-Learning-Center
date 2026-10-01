@@ -30,7 +30,8 @@ import { SubscriberStatus, db, type EmailBodyMode } from "@repo/db";
 import {
   createSendSession,
   hasLinkSecret,
-  loadEmailRenderContext,
+  loadLocalizedEmailContext,
+  type EmailScheme,
   renderEmail,
   sanitizeEmailHtml,
   type DeliveryResult,
@@ -260,8 +261,9 @@ async function renderWords(
   content: { subject: string; preheader?: string | null; mode: EmailBodyMode; bodyHtml: string },
   locale: string,
   recipient: { name: string; email: string },
+  scheme?: EmailScheme,
 ): Promise<RenderedEmail> {
-  const context = await loadEmailRenderContext();
+  const context = await loadLocalizedEmailContext(locale, recipient.email, { scheme });
   const placeholder = `${siteOrigin().replace(/\/+$/, "")}/email/unsubscribe?t=preview`;
   const label = (await catalogMessage(locale, "announcements.unsubscribe.footerLink")) ?? "";
   return renderEmail({
@@ -287,6 +289,7 @@ export async function renderEmailDesignPreview(
   input: {
     designId?: string;
     draft?: Pick<EmailDesignSave, "mode" | "subject" | "preheader" | "bodyHtml">;
+    scheme?: EmailScheme;
   },
 ): Promise<RenderedEmail | null> {
   requireAnyKey(actor, DESIGN_READERS);
@@ -307,6 +310,7 @@ export async function renderEmailDesignPreview(
     },
     defaultLocale,
     { name: "Alex Morgan", email: "alex@example.com" },
+    input.scheme,
   );
 }
 
@@ -501,7 +505,7 @@ export async function sendCustomEmailTest(
 /** The composer's live preview, served by the isolated preview route. */
 export async function renderCustomEmailPreview(
   actor: Subject,
-  input: { campaignId: string; locale: string },
+  input: { campaignId: string; locale: string; scheme?: EmailScheme | undefined },
 ): Promise<RenderedEmail | null> {
   requireKey(actor, "announcements.view");
   const row = await db.emailCampaign.findUnique({
@@ -520,6 +524,7 @@ export async function renderCustomEmailPreview(
     content,
     content.locale,
     { name: "Alex Morgan", email: "alex@example.com" },
+    input.scheme,
   );
 }
 

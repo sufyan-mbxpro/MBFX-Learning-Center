@@ -32,7 +32,7 @@ import { db, emailTemplateDefault, TranslationStatus, type Prisma } from "@repo/
 import {
   DEFAULT_EMAIL_LOCALE,
   hasEmailSecretKey,
-  loadEmailRenderContext,
+  loadLocalizedEmailContext,
   renderEmail,
   sanitizeEmailHtml,
   sealSecret,
@@ -582,8 +582,12 @@ export async function renderEmailPreview(input: EmailPreviewInput): Promise<Rend
   const subject = input.subject ?? stored?.subject;
   if (!bodyHtml || !subject) return null;
 
-  const context = await loadEmailRenderContext();
   const definition = EMAIL_TEMPLATES[key];
+  const context = await loadLocalizedEmailContext(
+    input.locale,
+    definition.sample["recipient.email"],
+    { scheme: input.scheme },
+  );
 
   return renderEmail({
     key,

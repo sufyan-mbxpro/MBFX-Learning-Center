@@ -11,12 +11,13 @@ import {
 } from "../../../../_lib/seo.ts";
 import { siteUrl } from "../../../../_lib/site-url.ts";
 import Image from "next/image";
-import { notFound, permanentRedirect } from "next/navigation";
+import { notFound, permanentRedirect, redirect } from "next/navigation";
 import { UserRound } from "lucide-react";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import {
   articlePath,
   getArticleBySlug,
+  getArticleSlugTarget,
   getArticleFacets,
   getRedirect,
   getRelatedArticles,
@@ -44,6 +45,7 @@ import { canOptimizeImage } from "../../_lib/image-optimizer.ts";
 import { readingLanguageOptions, readingLocaleFrom } from "../../_lib/reading-language.ts";
 import { VideoFacade } from "../../_components/video-facade.tsx";
 import { CHIP_LINK } from "@repo/ui/lib/surfaces";
+import { decodeParams } from "../../_lib/route-params.ts";
 
 function featureKeyFor(view: ArticleView): "news" | "analysis" {
   return view.kind === "NEWS" ? "news" : "analysis";
@@ -53,7 +55,7 @@ export async function generateMetadata({
   params,
   searchParams,
 }: PageProps<"/[locale]/news/[slug]">): Promise<Metadata> {
-  const { locale, slug } = await params;
+  const { locale, slug } = decodeParams(await params);
   setRequestLocale(locale);
   const readingLocale = readingLocaleFrom(await searchParams);
   const [view, template, brand] = await Promise.all([
@@ -123,13 +125,18 @@ export default async function ArticlePage({
   params,
   searchParams,
 }: PageProps<"/[locale]/news/[slug]">) {
-  const { locale, slug } = await params;
+  const { locale, slug } = decodeParams(await params);
   setRequestLocale(locale);
 
   const readingLocale = readingLocaleFrom(await searchParams);
   const view = await getArticleBySlug(locale, slug, readingLocale);
 
   if (!view) {
+    // Another language's slug, e.g. the header switcher turning `/news/x` into
+    // `/ar/news/x` for an article whose Arabic slug is not `x`. A temporary
+    // redirect: the target moves when a translation is added or renamed.
+    const translated = await getArticleSlugTarget(locale, slug);
+    if (translated) redirect(translated);
     // Old slug? articles.ts wrote a 301 row when it changed.
     const target = await getRedirect(articlePath(locale, routing.defaultLocale, slug));
     if (target) permanentRedirect(target);

@@ -1,7 +1,7 @@
 # SKILL — Module 17: `@repo/email` + newsletter
 
 ADR-078 (platform), ADR-079 (password recovery), ADR-080 (newsletter),
-ADR-171 (announcement emails), ADR-172 (custom and direct emails, designs).
+ADR-171 (announcement emails), ADR-172 (custom and direct emails, designs), ADR-179 (the branded shell).
 Plans: `docs/changes/changes-21-feature-plan.md` (PRs F0–F9),
 `docs/changes/changes-54-notifications.md` (announcements, N0–N7),
 `docs/changes/changes-55-custome-notifications.md` (custom and direct emails).
@@ -13,7 +13,7 @@ packages/email/src/
 ├── secret.ts      # sealSecret / openSecret — AES-256-GCM under EMAIL_SECRET_KEY
 ├── transport.ts   # EmailTransportDriver seam: smtpDriver | logDriver
 ├── render.ts      # {{var}} substitution, escaping, text alternative
-├── layout.ts      # the table-based shell; ed-* classes → inline styles
+├── layout.ts      # the table-based shell (two brand bands, ADR-179); ed-* classes → inline styles
 ├── sanitize.ts    # the email allowlist (save AND render)
 ├── send.ts        # createSendSession() + sendTemplatedEmail() (a one-shot session)
 ├── links.ts       # the announcement unsubscribe token — the ONE reader of EMAIL_LINK_SECRET
@@ -46,10 +46,12 @@ packages/core/src/campaign-content.ts         # a campaign's own words: load, pi
 packages/db/src/email-design-defaults.ts      # the seeded "Plain message" design (create-only, fixed id)
 apps/web/app/(admin)/keystone/settings/email/designs/  # the design editor (the list is a Templates section)
 apps/web/app/(admin)/keystone/_components/send-email-dialog.tsx # "Send email" on users + subscribers
+apps/web/app/(admin)/keystone/_components/email-preview.tsx     # THE preview: frame (device/scheme/HTML), dialog, thumbnail
 ```
 
 `auth → email` and `core → email` — email sits BELOW both senders, because
 both layers send. It never imports an app, `@repo/core`, or `@repo/auth`.
+Since ADR-179 it imports `@repo/i18n` for the shell's words (`emailShell.*`).
 The ADMIN read/write services live in `@repo/core` like every other admin
 service; `@repo/email` stays the sending layer.
 
@@ -150,6 +152,17 @@ service; `@repo/email` stays the sending layer.
 23. **The audience cards are one component** (`audience-cards.tsx`), used by
     both editors; `audiencesForKind()` decides the set. `staff` is a custom
     email's only (ADR-172 #5) and needs `employees.view`.
+
+24. **The shell's lines are data and its words are the catalog's**
+    (ADR-179). `localizeEmailShell` composes links, contact rows and the
+    copyright / "sent to" lines from the render context, `emailShell.*` in
+    the reader's language, and the recipient; an absent value removes its
+    line. Band inks are derived against `brand.secondary`, never chosen.
+    Shell text is brace-escaped, because substitution runs after it.
+25. **One preview component.** Every email screen previews through
+    `email-preview.tsx` (frame, dialog, thumbnail), which keeps #8's
+    POST-to-named-sandboxed-frame. `scheme=dark` renders `tokens.dark` for
+    the preview only; a send is always light.
 
 ## Adding a template
 

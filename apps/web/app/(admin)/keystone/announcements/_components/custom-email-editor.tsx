@@ -15,12 +15,12 @@
 //   3. **A bulk send waits for a test since the last edit** (owner, E5). The
 //      server compares the stored words with the words at the last test; this
 //      screen only shows the answer and the button that changes it.
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
-import { Braces, CalendarClock, CircleCheck, CircleX, Send, TestTube } from "lucide-react";
+import { Braces, CalendarClock, CircleCheck, CircleX, Eye, Send, TestTube } from "lucide-react";
 import {
   announcementAudienceSchema,
   audiencesForKind,
@@ -48,6 +48,7 @@ import {
   type DesignOption,
 } from "../../_actions/custom-email-actions.ts";
 import { AdminCombobox } from "../../_components/combobox.tsx";
+import { EmailPreviewDialog, EmailPreviewFrame } from "../../_components/email-preview.tsx";
 import { EditorSection, Field } from "../../_components/editor/editor-section.tsx";
 import { RichTextEditor, type RichTextLabels } from "../../_components/rich-text-editor.tsx";
 import { useFieldErrors } from "../../_hooks/use-field-errors.ts";
@@ -55,12 +56,11 @@ import { useServerAction } from "../../_hooks/use-server-action.ts";
 import { VariableChips } from "../../settings/email/designs/_components/design-editor.tsx";
 import { CUSTOM_EMAIL_STEPS, type CustomEmailStep } from "../_lib/steps.ts";
 import { unknownVariables } from "../_lib/variables.ts";
-import { AudienceCards } from "./audience-cards.tsx";
+import { AudienceCards, RecipientEstimate } from "./audience-cards.tsx";
+import { InboxPreview, PreSendChecklist, type ChecklistItem } from "./send-review.tsx";
 import type { CourseChip } from "./course-picker.tsx";
-import { TestSendDialog } from "./test-send-dialog.tsx";
+import { TestSendForm } from "./test-send-form.tsx";
 
-const PREVIEW_URL = "/keystone/api/email/preview";
-const PREVIEW_FRAME = "custom-email-preview";
 const COUNT_DELAY_MS = 400;
 const BLANK = "__blank__";
 
@@ -100,6 +100,8 @@ export interface CustomEmailEditorProps {
   editorLabels: RichTextLabels;
   /** The acting admin's address, prefilled in the test dialog. */
   testAddress: string;
+  /** The site-wide sender, for the inbox preview and the checklist. */
+  sender: { name: string; email: string };
 }
 
 const noop = () => () => {};
@@ -157,7 +159,9 @@ export function CustomEmailEditor(props: CustomEmailEditorProps) {
   const [pendingDesign, setPendingDesign] = useState<string | null>(null);
   const [scheduleAt, setScheduleAt] = useState("");
   const [confirmSend, setConfirmSend] = useState(false);
-  const previewFormRef = useRef<HTMLFormElement>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  // Bumped after a save: the preview renders the SAVED words (the route reads them).
+  const [previewNonce, setPreviewNonce] = useState(0);
 
   const words = useMemo(() => drafts[locale] ?? EMPTY, [drafts, locale]);
   const patch = (changes: Partial<Words>) =>
@@ -214,11 +218,6 @@ export function CustomEmailEditor(props: CustomEmailEditorProps) {
     };
   }, [audienceKey]);
 
-  // The preview shows the SAVED words (the route reads them).
-  useEffect(() => {
-    if (step === "content" && props.initial.id) previewFormRef.current?.requestSubmit();
-  }, [step, locale, props.initial.id]);
-
   function refusal(result: CustomEmailRefused | { ok: false; reason: string }): string {
     const key = `refusals.${result.reason}`;
     return t.has(key) ? t(key) : t(`direct.refusals.${result.reason}`);
@@ -237,7 +236,7 @@ export function CustomEmailEditor(props: CustomEmailEditorProps) {
           return;
         }
         if (next) setStep(next);
-        previewFormRef.current?.requestSubmit();
+        setPreviewNonce((n) => n + 1);
       },
       { successMessage: t("saved") },
     );
@@ -329,6 +328,55 @@ export function CustomEmailEditor(props: CustomEmailEditorProps) {
     : needsUnsubscribe
       ? t("custom.needsUnsubscribe", { token: "{{unsubscribe.url}}" })
       : form.error("content.bodyHtml");
+
+  const defaultWords = drafts[defaultLocale] ?? EMPTY;
+  const checklist: ChecklistItem[] = [
+    {
+      key: "subject",
+      state: defaultWords.subject.trim() ? "ok" : "failed",
+      title: t("checks.subject"),
+      detail: defaultWords.subject.trim() || t("checks.subjectMissing"),
+    },
+    {
+      key: "sender",
+      state: props.sender.email ? "ok" : "failed",
+      title: t("checks.sender"),
+      detail: props.sender.email
+        ? `${props.sender.name} <${props.sender.email}>`
+        : t("checks.senderMissing"),
+      fixHref: "/keystone/settings/email",
+    },
+    {
+      key: "content",
+      state: defaultWords.bodyHtml.trim() ? "ok" : "failed",
+      title: t("checks.content"),
+      detail: defaultWords.bodyHtml.trim() ? t("checks.contentReady") : t("checks.contentMissing"),
+    },
+    {
+      key: "tags",
+      state: unknown.length === 0 && !needsUnsubscribe ? "ok" : "failed",
+      title: t("checks.tags"),
+      detail:
+        bodyError && (unknown.length > 0 || needsUnsubscribe) ? bodyError : t("checks.tagsValid"),
+    },
+    {
+      key: "audience",
+      state: unique > 0 ? "ok" : "failed",
+      title: t("checks.audience"),
+      detail:
+        keys.length === 0
+          ? t("pickAudience")
+          : `${t("recipientCount", { count: unique })} · ${keys
+              .map((key) => t(`audiences.${key}.label`))
+              .join(", ")}`,
+    },
+    {
+      key: "test",
+      state: props.tested ? "ok" : "pending",
+      title: t("checks.test"),
+      detail: props.tested ? t("custom.tested") : t("custom.untested"),
+    },
+  ];
 
   function toggleKey(key: AnnouncementAudienceKey) {
     setKeys((current) =>
@@ -447,31 +495,24 @@ export function CustomEmailEditor(props: CustomEmailEditorProps) {
             </EditorSection>
           </div>
 
-          <EditorSection title={t("previewTitle")} description={t("previewDescription")}>
-            {saved ? (
-              <>
-                {/* A real form POST at a named sandboxed frame (ADR-078 #8). */}
-                <form
-                  ref={previewFormRef}
-                  action={PREVIEW_URL}
-                  method="post"
-                  target={PREVIEW_FRAME}
-                  className="hidden"
-                >
-                  <input type="hidden" name="campaignId" value={props.initial.id ?? ""} />
-                  <input type="hidden" name="locale" value={locale} />
-                </form>
-                <iframe
-                  name={PREVIEW_FRAME}
-                  title={t("previewTitle")}
-                  sandbox=""
-                  className="h-160 w-full rounded-sm border bg-background"
+          <div className="flex min-w-0 flex-col gap-4">
+            <InboxPreview
+              fromName={props.sender.name}
+              subject={words.subject}
+              preheader={words.preheader}
+            />
+            <EditorSection title={t("previewTitle")} description={t("previewDescription")}>
+              {saved ? (
+                // A real form POST at a named sandboxed frame (ADR-078 #8).
+                <EmailPreviewFrame
+                  fields={{ campaignId: props.initial.id ?? "", locale }}
+                  refreshKey={previewNonce}
                 />
-              </>
-            ) : (
-              <p className="text-sm text-muted-foreground">{t("previewNeedsSave")}</p>
-            )}
-          </EditorSection>
+              ) : (
+                <p className="text-sm text-muted-foreground">{t("previewNeedsSave")}</p>
+              )}
+            </EditorSection>
+          </div>
         </div>
         <div className="flex justify-end">
           <Button type="button" loading={pending} onClick={() => saveAndGo(nextStep)}>
@@ -482,24 +523,27 @@ export function CustomEmailEditor(props: CustomEmailEditorProps) {
 
       {/* ─── 2. Audience ────────────────────────────────────── */}
       <TabsContent value="audience" className="flex flex-col gap-4">
-        <EditorSection title={t("audienceTitle")} description={t("audienceDescription")}>
-          <AudienceCards
-            cards={cards}
-            keys={keys}
-            onToggle={toggleKey}
-            summary={summary}
-            courses={courses}
-            onCoursesChange={setCourses}
-            users={users}
-            onUsersChange={setUsers}
-            errors={{
-              keys: form.error("audience.keys"),
-              courseIds: form.error("audience.courseIds"),
-              userIds: form.error("audience.userIds"),
-            }}
-          />
-          <p className="text-xs text-muted-foreground">{t("audienceFootnote")}</p>
-        </EditorSection>
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-(--grid-main-aside-wide)">
+          <EditorSection title={t("audienceTitle")} description={t("audienceDescription")}>
+            <AudienceCards
+              cards={cards}
+              keys={keys}
+              onToggle={toggleKey}
+              summary={summary}
+              courses={courses}
+              onCoursesChange={setCourses}
+              users={users}
+              onUsersChange={setUsers}
+              errors={{
+                keys: form.error("audience.keys"),
+                courseIds: form.error("audience.courseIds"),
+                userIds: form.error("audience.userIds"),
+              }}
+            />
+            <p className="text-xs text-muted-foreground">{t("audienceFootnote")}</p>
+          </EditorSection>
+          <RecipientEstimate summary={summary} />
+        </div>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p role="status" aria-live="polite" className="text-sm font-medium">
             {summary?.selection
@@ -518,122 +562,141 @@ export function CustomEmailEditor(props: CustomEmailEditorProps) {
 
       {/* ─── 3. Review & send ───────────────────────────────── */}
       <TabsContent value="review" className="flex flex-col gap-4">
-        <EditorSection title={t("reviewTitle")} description={t("reviewDescription")}>
-          <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
-            <dt className="text-muted-foreground">{t("fieldName")}</dt>
-            <dd>{name || "—"}</dd>
-            <dt className="text-muted-foreground">{t("custom.fieldSubject")}</dt>
-            <dd>{drafts[defaultLocale]?.subject || "—"}</dd>
-            {props.locales.length > 1 && (
-              <>
-                <dt className="text-muted-foreground">{t("custom.language")}</dt>
-                <dd className="flex flex-wrap gap-1">
-                  {props.locales
-                    .filter((entry) => writtenLocales.includes(entry.code))
-                    .map((entry) => (
-                      <Badge key={entry.code} variant="outline">
-                        {entry.name}
-                      </Badge>
-                    ))}
-                </dd>
-              </>
-            )}
-            <dt className="text-muted-foreground">{t("audienceTitle")}</dt>
-            <dd className="flex flex-wrap gap-1">
-              {keys.map((key) => (
-                <Badge key={key} variant="outline">
-                  {t(`audiences.${key}.label`)}
-                </Badge>
-              ))}
-            </dd>
-            <dt className="text-muted-foreground">{t("columnRecipients")}</dt>
-            <dd className="tabular-nums">{t("recipientCount", { count: unique })}</dd>
-          </dl>
-        </EditorSection>
-
-        <EditorSection
-          title={t("custom.testTitle")}
-          description={t("custom.testDescription")}
-          icon={TestTube}
-          accent={props.tested ? "success" : "warning"}
-        >
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <span className="flex items-center gap-2 text-sm">
-              {props.tested ? (
-                <CircleCheck aria-hidden className="size-4 text-success-interactive" />
-              ) : (
-                <CircleX aria-hidden className="size-4 text-destructive" />
-              )}
-              {props.tested ? t("custom.tested") : t("custom.untested")}
-            </span>
-            <TestSendDialog defaultTo={props.testAddress} pending={pending} onSend={sendTest} />
-          </div>
-        </EditorSection>
-
-        <EditorSection title={t("checklistTitle")} description={t("checklistDescription")}>
-          <ul className="flex flex-col gap-2 text-sm">
-            {props.blockers.length === 0 && (
-              <li className="flex items-center gap-2">
-                <CircleCheck aria-hidden className="size-4 text-success-interactive" />
-                {t("checklistReady")}
-              </li>
-            )}
-            {props.blockers.map((reason) => (
-              <li key={reason} className="flex flex-wrap items-center gap-2">
-                <CircleX aria-hidden className="size-4 text-destructive" />
-                <span>{t(`refusals.${reason}`)}</span>
-                {REFUSAL_FIX[reason] && (
-                  <Link
-                    href={REFUSAL_FIX[reason] ?? "/keystone/settings/email"}
-                    className="font-medium text-primary-interactive underline-offset-4 hover:underline"
-                  >
-                    {t("fixIt")}
-                  </Link>
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-(--grid-main-aside-wide)">
+          <div className="flex min-w-0 flex-col gap-4">
+            <PreSendChecklist items={checklist}>
+              <ul className="flex flex-col gap-2 text-sm">
+                {props.blockers.length === 0 && (
+                  <li className="flex items-center gap-2 font-medium text-success-interactive">
+                    <CircleCheck aria-hidden className="size-4" />
+                    {t("checklistReady")}
+                  </li>
                 )}
-              </li>
-            ))}
-          </ul>
-        </EditorSection>
+                {props.blockers.map((reason) => (
+                  <li key={reason} className="flex flex-wrap items-center gap-2">
+                    <CircleX aria-hidden className="size-4 text-destructive" />
+                    <span>{t(`refusals.${reason}`)}</span>
+                    {REFUSAL_FIX[reason] && (
+                      <Link
+                        href={REFUSAL_FIX[reason] ?? "/keystone/settings/email"}
+                        className="font-medium text-primary-interactive underline-offset-4 hover:underline"
+                      >
+                        {t("fixIt")}
+                      </Link>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </PreSendChecklist>
 
-        {props.canSend && (
-          <EditorSection title={t("sendTitle")} description={t("sendDescription")}>
-            <Field label={t("scheduleLabel")} hint={t("scheduleHint")}>
-              <DateTimePicker
-                value={hydrated ? scheduleAt : ""}
-                onChange={setScheduleAt}
-                labels={{
-                  placeholder: tAdmin("schedulePickerPlaceholder"),
-                  previousMonth: tAdmin("schedulePickerPreviousMonth"),
-                  nextMonth: tAdmin("schedulePickerNextMonth"),
-                  hour: tAdmin("schedulePickerHour"),
-                  minute: tAdmin("schedulePickerMinute"),
-                }}
-              />
-            </Field>
-            <div className="flex flex-wrap justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                loading={pending}
-                disabled={!scheduleAt || props.blockers.length > 0}
-                onClick={schedule}
-              >
-                <CalendarClock aria-hidden data-icon="inline-start" />
-                {t("schedule")}
-              </Button>
-              <Button
-                type="button"
-                loading={pending}
-                disabled={props.blockers.length > 0 || unique === 0}
-                onClick={() => setConfirmSend(true)}
-              >
-                <Send aria-hidden data-icon="inline-start" />
-                {t("sendNow")}
-              </Button>
-            </div>
-          </EditorSection>
-        )}
+            <EditorSection title={t("reviewTitle")} description={t("reviewDescription")}>
+              <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+                <dt className="text-muted-foreground">{t("fieldName")}</dt>
+                <dd>{name || "—"}</dd>
+                <dt className="text-muted-foreground">{t("custom.fieldSubject")}</dt>
+                <dd>{drafts[defaultLocale]?.subject || "—"}</dd>
+                {props.locales.length > 1 && (
+                  <>
+                    <dt className="text-muted-foreground">{t("custom.language")}</dt>
+                    <dd className="flex flex-wrap gap-1">
+                      {props.locales
+                        .filter((entry) => writtenLocales.includes(entry.code))
+                        .map((entry) => (
+                          <Badge key={entry.code} variant="success">
+                            {entry.name}
+                          </Badge>
+                        ))}
+                    </dd>
+                  </>
+                )}
+                <dt className="text-muted-foreground">{t("audienceTitle")}</dt>
+                <dd className="flex flex-wrap gap-1">
+                  {keys.map((key) => (
+                    <Badge key={key} variant="info">
+                      {t(`audiences.${key}.label`)}
+                    </Badge>
+                  ))}
+                </dd>
+                <dt className="text-muted-foreground">{t("columnRecipients")}</dt>
+                <dd className="tabular-nums">{t("recipientCount", { count: unique })}</dd>
+              </dl>
+              <div className="flex justify-end">
+                <Button type="button" variant="outline" onClick={() => setPreviewOpen(true)}>
+                  <Eye aria-hidden data-icon="inline-start" />
+                  {t("previewEmail")}
+                </Button>
+              </div>
+            </EditorSection>
+          </div>
 
+          <div className="flex min-w-0 flex-col gap-4">
+            <EditorSection
+              title={t("custom.testTitle")}
+              description={t("custom.testDescription")}
+              icon={TestTube}
+              accent={props.tested ? "success" : "warning"}
+            >
+              <div className="flex flex-col gap-3">
+                <span className="flex items-center gap-2 text-sm">
+                  {props.tested ? (
+                    <CircleCheck aria-hidden className="size-4 text-success-interactive" />
+                  ) : (
+                    <CircleX aria-hidden className="size-4 text-destructive" />
+                  )}
+                  {props.tested ? t("custom.tested") : t("custom.untested")}
+                </span>
+                <TestSendForm defaultTo={props.testAddress} pending={pending} onSend={sendTest} />
+              </div>
+            </EditorSection>
+
+            {props.canSend && (
+              <EditorSection title={t("sendTitle")} description={t("sendDescription")} icon={Send}>
+                <Field label={t("scheduleLabel")} hint={t("scheduleHint")}>
+                  <DateTimePicker
+                    value={hydrated ? scheduleAt : ""}
+                    onChange={setScheduleAt}
+                    labels={{
+                      placeholder: tAdmin("schedulePickerPlaceholder"),
+                      previousMonth: tAdmin("schedulePickerPreviousMonth"),
+                      nextMonth: tAdmin("schedulePickerNextMonth"),
+                      hour: tAdmin("schedulePickerHour"),
+                      minute: tAdmin("schedulePickerMinute"),
+                    }}
+                  />
+                </Field>
+                <div className="flex flex-wrap justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    loading={pending}
+                    disabled={!scheduleAt || props.blockers.length > 0}
+                    onClick={schedule}
+                  >
+                    <CalendarClock aria-hidden data-icon="inline-start" />
+                    {t("schedule")}
+                  </Button>
+                  <Button
+                    type="button"
+                    loading={pending}
+                    disabled={props.blockers.length > 0 || unique === 0}
+                    onClick={() => setConfirmSend(true)}
+                  >
+                    <Send aria-hidden data-icon="inline-start" />
+                    {t("sendNow")}
+                  </Button>
+                </div>
+              </EditorSection>
+            )}
+          </div>
+        </div>
+
+        <EmailPreviewDialog
+          open={previewOpen}
+          onOpenChange={setPreviewOpen}
+          title={t("previewEmail")}
+          description={t("previewEmailDescription")}
+          fields={{ campaignId: props.initial.id ?? "", locale: locale }}
+        />
         <ConfirmDialog
           open={confirmSend}
           onOpenChange={setConfirmSend}

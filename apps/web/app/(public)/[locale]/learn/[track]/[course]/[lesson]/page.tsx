@@ -40,6 +40,7 @@ import { VideoFacade } from "../../../../_components/video-facade.tsx";
 import { ReadingLanguageMenu } from "../../../../_components/reading-language-menu.tsx";
 import { readingLanguageOptions, readingLocaleFrom } from "../../../../_lib/reading-language.ts";
 import { INTERACTIVE_CARD } from "@repo/ui/lib/surfaces";
+import { decodeParams } from "../../../../_lib/route-params.ts";
 
 // Lesson page (changes-11 PR 4.3 + its share of 4.4).
 //
@@ -58,7 +59,7 @@ export async function generateMetadata({
   params,
   searchParams,
 }: PageProps<"/[locale]/learn/[track]/[course]/[lesson]">): Promise<Metadata> {
-  const { locale, track, course: courseSlug, lesson: lessonSlug } = await params;
+  const { locale, track, course: courseSlug, lesson: lessonSlug } = decodeParams(await params);
   setRequestLocale(locale);
   const readingLocale = readingLocaleFrom(await searchParams);
   const [view, template] = await Promise.all([
@@ -119,7 +120,7 @@ export default async function LessonPage({
   params,
   searchParams,
 }: PageProps<"/[locale]/learn/[track]/[course]/[lesson]">) {
-  const { locale, track, course: courseSlug, lesson: lessonSlug } = await params;
+  const { locale, track, course: courseSlug, lesson: lessonSlug } = decodeParams(await params);
   setRequestLocale(locale);
   if (!isLearnTrack(track)) notFound();
 

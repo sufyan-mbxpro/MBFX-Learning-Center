@@ -1,6 +1,10 @@
 "use client";
 
-// The announcements list (ADR-171, changes-54 §10.2).
+// The announcements list (ADR-171, changes-54 §10.2), presented as the
+// reference's campaign list since changes-59: a status TAB strip with a count
+// per status replaces the status dropdown (its own row above the table, the
+// News & Analysis layout), the badges are tonal with a dot,
+// and each date says which date it is.
 //
 // The status column says where a campaign IS — Draft, Scheduled, Waiting for
 // course, Sending n%, Sent, Cancelled — because that is what someone opens
@@ -19,6 +23,7 @@ import type {
   CampaignKind,
 } from "@repo/contracts";
 import { Badge } from "@repo/ui/components/badge";
+import { Tabs, TabsList, TabsTrigger } from "@repo/ui/components/tabs";
 import { Button } from "@repo/ui/components/button";
 import { ConfirmDialog } from "@repo/ui/components/confirm-dialog";
 import { DataTable, type DataTableLabels } from "@repo/ui/components/data-table";
@@ -60,6 +65,7 @@ export interface AnnouncementRow {
   skippedCount: number;
   createdByName: string | null;
   dateLabel: string;
+  dateKind: "finished" | "scheduled" | "created";
   dateSort: number;
 }
 
@@ -149,6 +155,18 @@ export function AnnouncementsTable({
   const [status, setStatus] = useState("");
   const [kind, setKind] = useState("");
 
+  // Counted over the KIND filter, so a tab's number matches what it shows.
+  const counts = useMemo(() => {
+    const byStatus = new Map<string, number>();
+    for (const row of rows) {
+      if (kind !== "" && row.kind !== kind) continue;
+      const shown = displayStatus(row.status, row.waitingForTarget);
+      byStatus.set(shown, (byStatus.get(shown) ?? 0) + 1);
+    }
+    return byStatus;
+  }, [rows, kind]);
+  const total = [...counts.values()].reduce((sum, n) => sum + n, 0);
+
   const visible = useMemo(
     () =>
       rows.filter(
@@ -199,9 +217,27 @@ export function AnnouncementsTable({
               {row.original.kind === "COURSE"
                 ? (row.original.targetTitle ?? ta("courseMissing"))
                 : ta(`kinds.${row.original.kind}`)}
+              {row.original.createdByName
+                ? ` · ${ta("byAuthor", { name: row.original.createdByName })}`
+                : ""}
             </span>
           </div>
         ),
+      },
+      {
+        id: "status",
+        header: ta("columnStatus"),
+        meta: { label: ta("columnStatus") },
+        cell: ({ row }) => {
+          const shown = displayStatus(row.original.status, row.original.waitingForTarget);
+          return (
+            <StatusBadge tone={ANNOUNCEMENT_STATUS_TONE[shown]} appearance="tonal">
+              {shown === "SENDING"
+                ? ta("statusSending", { percent: progressPercent(row.original) })
+                : ta(`statuses.${shown}`)}
+            </StatusBadge>
+          );
+        },
       },
       {
         id: "audience",
@@ -218,52 +254,61 @@ export function AnnouncementsTable({
         ),
       },
       {
-        id: "status",
-        header: ta("columnStatus"),
-        meta: { label: ta("columnStatus") },
-        cell: ({ row }) => {
-          const shown = displayStatus(row.original.status, row.original.waitingForTarget);
-          return (
-            <StatusBadge tone={ANNOUNCEMENT_STATUS_TONE[shown]}>
-              {shown === "SENDING"
-                ? ta("statusSending", { percent: progressPercent(row.original) })
-                : ta(`statuses.${shown}`)}
-            </StatusBadge>
-          );
-        },
-      },
-      {
-        id: "recipients",
-        header: ta("columnRecipients"),
-        meta: { label: ta("columnRecipients") },
-        cell: ({ row }) =>
-          row.original.status === "DRAFT" ? (
-            <span className="text-muted-foreground">—</span>
-          ) : (
-            <div className="flex flex-col text-sm tabular-nums">
-              <span>{ta("recipientCount", { count: row.original.recipientCount })}</span>
-              <span className="text-muted-foreground">
-                {ta("sentAndFailed", {
-                  sent: row.original.sentCount,
-                  failed: row.original.failedCount,
-                })}
-              </span>
-            </div>
-          ),
-      },
-      {
-        id: "createdBy",
-        header: ta("columnCreatedBy"),
-        meta: { label: ta("columnCreatedBy") },
-        cell: ({ row }) => (
-          <span className="text-muted-foreground">{row.original.createdByName ?? "—"}</span>
-        ),
-      },
-      {
         id: "date",
         header: ta("columnDate"),
         meta: { label: ta("columnDate") },
-        cell: ({ row }) => <span className="text-muted-foreground">{row.original.dateLabel}</span>,
+        cell: ({ row }) => (
+          <span className="whitespace-nowrap text-muted-foreground">
+            {ta(`datePrefix.${row.original.dateKind}`, { date: row.original.dateLabel })}
+          </span>
+        ),
+      },
+      {
+        id: "recipients",
+        header: () => <span className="block text-end">{ta("columnRecipients")}</span>,
+        meta: { label: ta("columnRecipients") },
+        cell: ({ row }) => (
+          <span className="block text-end tabular-nums">
+            {row.original.status === "DRAFT" ? "—" : row.original.recipientCount}
+          </span>
+        ),
+      },
+      {
+        id: "sent",
+        header: () => <span className="block text-end">{ta("columnSent")}</span>,
+        meta: { label: ta("columnSent") },
+        cell: ({ row }) =>
+          row.original.status === "DRAFT" ? (
+            <span className="block text-end text-muted-foreground">—</span>
+          ) : (
+            <span className="flex flex-col items-end tabular-nums">
+              <span className="text-success-interactive">{row.original.sentCount}</span>
+              {row.original.recipientCount > 0 && (
+                <span className="text-xs text-muted-foreground">
+                  {Math.round((row.original.sentCount / row.original.recipientCount) * 100)}%
+                </span>
+              )}
+            </span>
+          ),
+      },
+      {
+        id: "failed",
+        header: () => <span className="block text-end">{ta("columnFailed")}</span>,
+        meta: { label: ta("columnFailed") },
+        cell: ({ row }) =>
+          row.original.status === "DRAFT" ? (
+            <span className="block text-end text-muted-foreground">—</span>
+          ) : (
+            <span
+              className={
+                row.original.failedCount > 0
+                  ? "block text-end font-medium text-destructive-interactive tabular-nums"
+                  : "block text-end text-muted-foreground tabular-nums"
+              }
+            >
+              {row.original.failedCount}
+            </span>
+          ),
       },
       {
         id: "actions",
@@ -289,35 +334,55 @@ export function AnnouncementsTable({
   }
 
   return (
-    <DataTable
-      {...tableProps}
-      columns={columns}
-      labels={tableLabels}
-      filters={
-        <FilterBarRow>
-          <AdminCombobox
-            aria-label={ta("filterKind")}
-            className="w-48"
-            value={kind}
-            onValueChange={setKind}
-            options={[
-              { value: "", label: ta("filterAllKinds") },
-              { value: "CUSTOM", label: ta("kinds.CUSTOM") },
-              { value: "COURSE", label: ta("kinds.COURSE") },
-            ]}
-          />
-          <AdminCombobox
-            aria-label={ta("filterStatus")}
-            className="w-44"
-            value={status}
-            onValueChange={setStatus}
-            options={[
-              { value: "", label: ta("filterAllStatuses") },
-              ...STATUSES.map((key) => ({ value: key, label: ta(`statuses.${key}`) })),
-            ]}
-          />
-        </FilterBarRow>
-      }
-    />
+    <div className="flex flex-col gap-6">
+      {/* The status strip IS the status filter, on its own row above the
+          table like the News & Analysis section tabs: one tab per status,
+          each with its count, so the list says where everything stands
+          before a row is read. Absent statuses stay as tabs at 0 — a tab
+          that comes and goes moves the others under the pointer. Search and
+          the kind filter stay in the table's toolbar (code-style #9). */}
+      <Tabs
+        value={status}
+        onValueChange={(value) => setStatus(String(value))}
+        className="max-w-full overflow-x-auto"
+      >
+        <TabsList aria-label={ta("filterStatus")}>
+          <TabsTrigger value="">
+            {ta("filterAllStatuses")}
+            <Badge variant="secondary" size="xs" className="tabular-nums">
+              {total}
+            </Badge>
+          </TabsTrigger>
+          {STATUSES.map((key) => (
+            <TabsTrigger key={key} value={key}>
+              {ta(`statusTabs.${key}`)}
+              <Badge variant="secondary" size="xs" className="tabular-nums">
+                {counts.get(key) ?? 0}
+              </Badge>
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
+      <DataTable
+        {...tableProps}
+        columns={columns}
+        labels={tableLabels}
+        filters={
+          <FilterBarRow>
+            <AdminCombobox
+              aria-label={ta("filterKind")}
+              className="w-40"
+              value={kind}
+              onValueChange={setKind}
+              options={[
+                { value: "", label: ta("filterAllKinds") },
+                { value: "CUSTOM", label: ta("kinds.CUSTOM") },
+                { value: "COURSE", label: ta("kinds.COURSE") },
+              ]}
+            />
+          </FilterBarRow>
+        }
+      />
+    </div>
   );
 }

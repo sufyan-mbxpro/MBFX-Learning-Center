@@ -4,7 +4,7 @@
 //
 // Four decisions worth keeping in view:
 //
-//   1. **Locale tabs hold DRAFTS, and one Save writes one locale.** The server
+//   1. **The language picker holds DRAFTS, and one Save writes one locale.** The server
 //      action takes a single `{key, locale, …}`, and that is deliberate: a
 //      source edit flips its siblings OUTDATED, so saving several locales at
 //      once would mark translations stale against a source saved in the same
@@ -55,6 +55,7 @@ import type {
 import { AdminPageHeading } from "../../../../_components/admin-page.tsx";
 import { AdminCombobox } from "../../../../_components/combobox.tsx";
 import { EditorSection, Field } from "../../../../_components/editor/editor-section.tsx";
+import { EmailPreviewFrame } from "../../../../_components/email-preview.tsx";
 import { RichTextEditor, type RichTextLabels } from "../../../../_components/rich-text-editor.tsx";
 import { StatusBadge } from "../../../../_components/status-badge.tsx";
 import { useFieldErrors } from "../../../../_hooks/use-field-errors.ts";
@@ -65,8 +66,6 @@ import {
   sendTestEmailAction,
 } from "../../../../_actions/email-actions.ts";
 
-const PREVIEW_FRAME = "email-preview-frame";
-const PREVIEW_URL = "/keystone/api/email/preview";
 
 export interface EmailTemplateEditorLabels {
   backToList: string;
@@ -98,10 +97,6 @@ export interface EmailTemplateEditorLabels {
   inheritHint: string;
   previewSection: string;
   previewDescription: string;
-  previewRefresh: string;
-  previewFrame: string;
-  widthDesktop: string;
-  widthMobile: string;
   testSend: string;
   testSendTitle: string;
   testSendDescription: string;
@@ -199,9 +194,6 @@ export function EmailTemplateEditor({
   const [testOpen, setTestOpen] = React.useState(false);
   const [testTo, setTestTo] = React.useState(testAddress);
   const [resetOpen, setResetOpen] = React.useState(false);
-  const [previewWidth, setPreviewWidth] = React.useState<"desktop" | "mobile">("desktop");
-
-  const previewFormRef = React.useRef<HTMLFormElement>(null);
 
   // Memoised so the `values` object below is stable between renders: the
   // fallback literal is a new object every time, and `useFieldErrors` re-runs
@@ -230,15 +222,6 @@ export function EmailTemplateEditor({
     if (!form.validate()) return;
     run(() => saveEmailTemplateAction(values), { successMessage: labels.saved });
   };
-
-  // The preview submits the CURRENT draft, so it shows what is on screen
-  // rather than what was last saved — the whole reason an author opens it.
-  const refreshPreview = React.useCallback(() => previewFormRef.current?.requestSubmit(), []);
-  React.useEffect(() => {
-    refreshPreview();
-    // Intentionally not on every keystroke: a preview is a navigation, and one
-    // per character would be a request per character.
-  }, [locale, refreshPreview]);
 
   /** Copy a variable's token; the author pastes it wherever the caret is. */
   const copyVariable = async (name: string) => {
@@ -329,24 +312,6 @@ export function EmailTemplateEditor({
         }
       />
 
-      {locales.length > 1 && (
-        <div className="flex flex-wrap items-center gap-2">
-          {locales.map((entry) => (
-            <Button
-              key={entry.code}
-              size="sm"
-              variant={entry.code === locale ? "default" : "outline"}
-              onClick={() => setLocale(entry.code)}
-            >
-              {entry.name}
-              <StatusBadge tone={STATE_TONE[localeState(entry.code)]}>
-                {stateLabel[localeState(entry.code)]}
-              </StatusBadge>
-            </Button>
-          ))}
-        </div>
-      )}
-
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <div className="flex min-w-0 flex-col gap-4">
           <EditorSection
@@ -354,6 +319,29 @@ export function EmailTemplateEditor({
             description={labels.contentDescription}
             icon={Mail}
             accent="primary"
+            // changes-44 #3, the content editors' shape: the language and its
+            // state travel with the content, in the same compact picker every
+            // other editor uses, not on a row of buttons above it.
+            actions={
+              locales.length > 1 ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <StatusBadge tone={STATE_TONE[localeState(locale)]}>
+                    {stateLabel[localeState(locale)]}
+                  </StatusBadge>
+                  <AdminCombobox
+                    aria-label={labels.testLocale}
+                    size="sm"
+                    className="w-24"
+                    value={locale}
+                    onValueChange={(next) => setLocale(next || locale)}
+                    options={locales.map((entry) => ({
+                      value: entry.code,
+                      label: entry.code.toUpperCase(),
+                    }))}
+                  />
+                </div>
+              ) : undefined
+            }
           >
             <Field
               label={labels.subject}
@@ -465,63 +453,20 @@ export function EmailTemplateEditor({
           icon={Sparkles}
           accent="success"
           bodyClassName="gap-2"
-          actions={
-            <div className="flex items-center gap-2">
-              <AdminCombobox
-                aria-label={labels.previewSection}
-                className="w-32"
-                value={previewWidth}
-                onValueChange={(value) => setPreviewWidth(value as "desktop" | "mobile")}
-                options={[
-                  { value: "desktop", label: labels.widthDesktop },
-                  { value: "mobile", label: labels.widthMobile },
-                ]}
-              />
-              <Button type="button" size="sm" variant="outline" onClick={refreshPreview}>
-                {labels.previewRefresh}
-              </Button>
-            </div>
-          }
         >
-          {/* The form is the mechanism: it POSTs at the named frame, so the
-              response becomes the frame's document on its own origin. Not
-              `fetch` + blob URL, which would put the author's markup back on
-              the admin origin (ADR-078 #8). */}
-          <form
-            ref={previewFormRef}
-            action={PREVIEW_URL}
-            method="post"
-            target={PREVIEW_FRAME}
-            className="hidden"
-          >
-            <input type="hidden" name="key" value={template.key} />
-            <input type="hidden" name="locale" value={locale} />
-            <input type="hidden" name="subject" value={draft.subject} />
-            <input type="hidden" name="preheader" value={draft.preheader} />
-            <input type="hidden" name="mode" value={draft.mode} />
-            <input type="hidden" name="bodyHtml" value={draft.bodyHtml} />
-          </form>
-          <div className="flex justify-center overflow-x-auto rounded-md border bg-muted/40 p-3">
-            <iframe
-              name={PREVIEW_FRAME}
-              title={labels.previewFrame}
-              // Empty `sandbox` is the strictest value there is: no script, no
-              // forms, no same-origin access. The route asserts the same thing
-              // in its own CSP, so neither end is load-bearing alone.
-              sandbox=""
-              // Desktop is the COLUMN's width, not 600px. The message is a
-              // 600px table inside 12px of gutter, so a 600px frame clipped it
-              // and answered with a horizontal scrollbar — the one thing a real
-              // inbox never shows, and the reason the preview did not match
-              // what arrives. Full width lets the shell centre itself in its
-              // own ground, which is what a mail client does.
-              className={
-                previewWidth === "mobile"
-                  ? "h-160 w-94 shrink-0 rounded-sm border bg-background"
-                  : "h-160 w-full rounded-sm border bg-background"
-              }
-            />
-          </div>
+          {/* The shared frame POSTs the CURRENT draft at a named sandboxed
+              frame, so it shows what is on screen rather than what was last
+              saved, on its own opaque origin (ADR-078 #8). */}
+          <EmailPreviewFrame
+            fields={{
+              key: template.key,
+              locale,
+              subject: draft.subject,
+              preheader: draft.preheader,
+              mode: draft.mode,
+              bodyHtml: draft.bodyHtml,
+            }}
+          />
         </EditorSection>
       </div>
 

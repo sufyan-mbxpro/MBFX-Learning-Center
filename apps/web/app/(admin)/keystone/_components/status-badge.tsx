@@ -18,15 +18,40 @@ const TONE: Record<
   destructive: { variant: "destructive" },
 };
 
+/**
+ * The FILLED status language (changes-59): the hue at /10 with its own ink and
+ * a leading dot, for a screen whose whole point is where things stand (the
+ * campaign list, the template gallery). The outline form stays the default so
+ * every other table keeps its current look.
+ */
+const TONAL: Record<StatusTone, React.ComponentProps<typeof Badge>["variant"]> = {
+  success: "success",
+  warning: "warning",
+  info: "info",
+  neutral: "pill",
+  destructive: "danger",
+};
+
 export function StatusBadge({
   tone,
+  appearance = "outline",
   className,
   children,
 }: {
   tone: StatusTone;
+  appearance?: "outline" | "tonal";
   className?: string;
   children: React.ReactNode;
 }) {
+  if (appearance === "tonal") {
+    return (
+      <Badge variant={TONAL[tone]} className={cn("h-6 gap-1.5 px-2.5", className)}>
+        {/* A status dot is a circle by geometry (ADR-107). */}
+        <span aria-hidden className="size-1.5 rounded-full bg-current" />
+        {children}
+      </Badge>
+    );
+  }
   const { variant, className: toneClass } = TONE[tone];
   return (
     <Badge variant={variant} className={cn(toneClass, className)}>

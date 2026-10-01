@@ -27,6 +27,7 @@ import { VideoRelated } from "../../../_components/video-related.tsx";
 import { categoryTone } from "../../../_lib/video-labels.ts";
 import { ReadingLanguageMenu } from "../../../../_components/reading-language-menu.tsx";
 import { readingLanguageOptions, readingLocaleFrom } from "../../../../_lib/reading-language.ts";
+import { decodeParams } from "../../../../_lib/route-params.ts";
 
 // One video topic (changes-16 PR 8, ADR-068).
 //
@@ -46,7 +47,7 @@ export async function generateMetadata({
   params,
   searchParams,
 }: PageProps<"/[locale]/learn/[track]/videos/[topic]">): Promise<Metadata> {
-  const { locale, track, topic } = await params;
+  const { locale, track, topic } = decodeParams(await params);
   setRequestLocale(locale);
   if (!isLearnTrack(track)) return {};
 
@@ -92,7 +93,7 @@ export default async function VideoTopicPage({
   params,
   searchParams,
 }: PageProps<"/[locale]/learn/[track]/videos/[topic]">) {
-  const { locale, track, topic } = await params;
+  const { locale, track, topic } = decodeParams(await params);
   setRequestLocale(locale);
   if (!isLearnTrack(track)) notFound();
 

@@ -26,6 +26,7 @@ import {
 import { TopicCover } from "../../_components/topic-cover.tsx";
 import { GlossarySidebar } from "../../_components/glossary-sidebar.tsx";
 import { INTERACTIVE_CARD, CHIP_LINK } from "@repo/ui/lib/surfaces";
+import { decodeParams } from "../../../_lib/route-params.ts";
 
 // One topic and its terms (changes-11 Phase 10, D27).
 //
@@ -44,7 +45,7 @@ function topicPath(locale: string, slug: string): string {
 export async function generateMetadata({
   params,
 }: PageProps<"/[locale]/glossary/topics/[topic]">): Promise<Metadata> {
-  const { locale, topic: slug } = await params;
+  const { locale, topic: slug } = decodeParams(await params);
   setRequestLocale(locale);
   const [view, template] = await Promise.all([
     getGlossaryTopicBySlug(locale, slug),
@@ -74,7 +75,7 @@ export async function generateMetadata({
 export default async function GlossaryTopicPage({
   params,
 }: PageProps<"/[locale]/glossary/topics/[topic]">) {
-  const { locale, topic: slug } = await params;
+  const { locale, topic: slug } = decodeParams(await params);
   setRequestLocale(locale);
 
   if (!(await isFeatureVisible("glossary", null))) notFound();

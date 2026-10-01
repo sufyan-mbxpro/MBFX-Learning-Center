@@ -26,7 +26,6 @@ import {
   Layers,
   Mail,
   MailCheck,
-  Newspaper,
   Settings as SettingsIcon,
   SlidersHorizontal,
   TrendingUp,
@@ -173,24 +172,6 @@ export default async function AdminHome({ searchParams }: PageProps<"/keystone/d
       ratio: share(overview.newUsers.value, overview.totalUsers?.value, (percent) =>
         t("dashboardShareOfUsers", { percent }),
       ),
-    },
-    overview.publishedArticles && {
-      icon: Newspaper,
-      label: t("dashboardPublishedArticles"),
-      value: overview.publishedArticles.value,
-      previousValue: overview.publishedArticles.previousValue,
-      accent: "info" as const,
-      detail: overview.articleTotals
-        ? t("dashboardLiveOfTotal", {
-            live: overview.articleTotals.live,
-            total: overview.articleTotals.total,
-          })
-        : undefined,
-      ratio: overview.articleTotals
-        ? share(overview.articleTotals.live, overview.articleTotals.total, (percent) =>
-            t("dashboardShareLive", { percent }),
-          )
-        : undefined,
     },
     overview.activeEmployees && {
       icon: Briefcase,

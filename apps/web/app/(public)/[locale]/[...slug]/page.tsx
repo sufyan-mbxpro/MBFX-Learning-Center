@@ -14,6 +14,7 @@ import { buildPageSeo, getMediaUrls, resolvePublicPage } from "@repo/core";
 import { renderTree } from "@repo/blocks/render";
 import { layoutTreeSchema } from "@repo/contracts";
 import { buildRenderContext, flattenSearchParams } from "../../../_cms/render-context.ts";
+import { decodeParams } from "../_lib/route-params.ts";
 
 // Module 16 Phase 1 (plan v2.2 §7.2/§12 PR 1.4) resolved the page; Phase 3
 // PR 3.3 wires the actual renderer in, mirroring `[locale]/page.tsx`'s
@@ -46,7 +47,7 @@ function pathFromSlug(slug: string[]): string {
 export async function generateMetadata({
   params,
 }: PageProps<"/[locale]/[...slug]">): Promise<Metadata> {
-  const { locale, slug } = await params;
+  const { locale, slug } = decodeParams(await params);
   setRequestLocale(locale);
 
   const { isEnabled: draft } = await draftMode();
@@ -82,7 +83,7 @@ export async function generateMetadata({
 }
 
 export default async function CmsPage({ params, searchParams }: PageProps<"/[locale]/[...slug]">) {
-  const { locale, slug } = await params;
+  const { locale, slug } = decodeParams(await params);
   setRequestLocale(locale);
   const path = pathFromSlug(slug);
 

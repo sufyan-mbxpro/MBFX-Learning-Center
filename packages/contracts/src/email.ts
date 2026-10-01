@@ -399,8 +399,14 @@ export type EmailDeliveryFilter = z.infer<typeof emailDeliveryFilterSchema>;
  * is also why this is a POST with no side effect, and why it is parsed with the
  * same variable rules the save uses.
  */
+/** The palette a PREVIEW renders in (ADR-179 #5); a send is always light. */
+export const EMAIL_PREVIEW_SCHEMES = ["light", "dark"] as const;
+export const emailPreviewSchemeSchema = z.enum(EMAIL_PREVIEW_SCHEMES);
+export type EmailPreviewScheme = z.infer<typeof emailPreviewSchemeSchema>;
+
 export const emailPreviewSchema = z.object({
   key: z.string().refine(isEmailTemplateKey),
+  scheme: emailPreviewSchemeSchema.optional(),
   locale: localeSchema,
   subject: z.string().max(200).optional(),
   preheader: z.string().max(200).optional(),

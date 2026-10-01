@@ -21,12 +21,13 @@ import { SectionHeading } from "@repo/ui/components/section-heading";
 import { ArchiveTaxonomy } from "../../_components/archive-taxonomy.tsx";
 import { ArticleListing } from "../../_components/article-listing.tsx";
 import { NewsMasthead } from "../../_components/news-masthead.tsx";
+import { decodeParams } from "../../../_lib/route-params.ts";
 
 export async function generateMetadata({
   params,
   searchParams,
 }: PageProps<"/[locale]/news/category/[slug]">): Promise<Metadata> {
-  const { locale, slug } = await params;
+  const { locale, slug } = decodeParams(await params);
   const search = await searchParams;
   const page = Math.max(0, Number.parseInt(String(search.page ?? "0"), 10) || 0);
   setRequestLocale(locale);
@@ -68,7 +69,7 @@ export default async function ArticleCategoryPage({
   params,
   searchParams,
 }: PageProps<"/[locale]/news/category/[slug]">) {
-  const { locale, slug } = await params;
+  const { locale, slug } = decodeParams(await params);
   setRequestLocale(locale);
 
   if (!(await isFeatureVisible("news", null))) notFound();

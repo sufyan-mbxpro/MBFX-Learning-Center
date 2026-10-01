@@ -23,7 +23,11 @@ import defaultThemeTokens from "./default-theme-tokens.json" with { type: "json"
 import homePageLayout from "./home-page-layout.json" with { type: "json" };
 import { SEED_ARTICLES } from "./seed-articles.ts";
 import { seedPromotions } from "./seed-promotions.ts";
+import { seedEmailCampaigns } from "./seed-email-campaigns.ts";
 import { seedArabicMenuLabels } from "./seed-menu-ar.ts";
+import { seedArabicEmailTemplates } from "./seed-email-ar.ts";
+import { seedArabicArticles } from "./seed-articles-ar.ts";
+import { seedArabicDemoCourses } from "./seed-learn-ar.ts";
 import { TOOL_HIGHLIGHTS } from "./seed-tool-highlights.ts";
 
 // The `home` page's published layout (Module 16, plan v2.2 PR 2.7) — the
@@ -965,7 +969,6 @@ const SETTINGS = [
   ["email", "email.fromName", "MBX Learning Center", "STRING", "From name", false],
   ["email", "email.fromEmail", "no-reply@mbxpro.com", "STRING", "From address", false],
   ["email", "email.replyTo", "", "STRING", "Reply-to address", false],
-  ["email", "email.logo", "", "IMAGE", "Email logo", false],
   [
     "email",
     "email.footerText",
@@ -1366,6 +1369,8 @@ export async function seed(db: PrismaClient) {
     });
   }
   console.log(`  email templates: ${EMAIL_TEMPLATE_DEFAULTS.length}`);
+  // Arabic (ADR-166), create-only, after the English rows it translates.
+  console.log(`  arabic email templates: ${await seedArabicEmailTemplates(db)} created`);
 
   // Email designs (ADR-172 #3): starting points for a custom email, create-only
   // under a fixed id, so an admin's edit or archive survives every later run.
@@ -2436,6 +2441,12 @@ export async function seed(db: PrismaClient) {
   }
   console.log(
     `  learn: ${seededCourses} demo course(s), ${seededLessons} lesson(s) — tracks ${DEMO_COURSES.map((c) => c.track).join(", ")}`,
+  );
+  // Arabic (ADR-166): both demo courses whole — see `seed-learn-ar.ts` for why
+  // a partial course is worse than none in a locale with no fallback.
+  const arabicLearn = await seedArabicDemoCourses(db);
+  console.log(
+    `  arabic learn: ${arabicLearn.courses} course(s), ${arabicLearn.lessons} lesson(s) created`,
   );
 
   // ─────────────────────────────────────────────────────────────
@@ -3937,6 +3948,8 @@ export async function seed(db: PrismaClient) {
     seededArticles += 1;
   }
   if (seededArticles > 0) console.log(`  article corpus: ${seededArticles} created`);
+  // Arabic (ADR-166): six of the twelve, plus the taxonomy they display.
+  console.log(`  arabic articles: ${await seedArabicArticles(db)} created`);
 
   // Promotions (changes-57): a webinar, an offer and an announcement, so the
   // popup, the home band and the banners have something to show. ACTIVE
@@ -3944,6 +3957,12 @@ export async function seed(db: PrismaClient) {
   // pictures, as it does for the article corpus.
   const seededPromotions = await seedPromotions(db, { adminId });
   if (seededPromotions > 0) console.log(`  promotions: ${seededPromotions} created`);
+
+  // Email campaigns (ADR-171/172): course announcement and custom email
+  // drafts, plus a sent and a cancelled one outside production. Nothing is
+  // seeded SCHEDULED and no recipient row is written, so nothing can send.
+  const seededCampaigns = await seedEmailCampaigns(db, { adminId });
+  if (seededCampaigns > 0) console.log(`  email campaigns: ${seededCampaigns} created`);
 
   // Website builder (Module 16, plan v2.2 PR 2.7). The `home` row is the
   // CMS's owner of "/". Phase 1 (PR 1.1) seeded it as a DRAFT with an empty

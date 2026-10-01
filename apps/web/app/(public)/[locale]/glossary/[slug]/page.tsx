@@ -42,6 +42,7 @@ import { ReadingLanguageMenu } from "../../_components/reading-language-menu.tsx
 import { canOptimizeImage } from "../../_lib/image-optimizer.ts";
 import { readingLanguageOptions, readingLocaleFrom } from "../../_lib/reading-language.ts";
 import { CHIP_LINK } from "@repo/ui/lib/surfaces";
+import { decodeParams } from "../../_lib/route-params.ts";
 
 // One glossary term (design pass ADR-069).
 //
@@ -67,7 +68,7 @@ export async function generateMetadata({
   params,
   searchParams,
 }: PageProps<"/[locale]/glossary/[slug]">): Promise<Metadata> {
-  const { locale, slug } = await params;
+  const { locale, slug } = decodeParams(await params);
   setRequestLocale(locale);
   const readingLocale = readingLocaleFrom(await searchParams);
   const [view, template, brand] = await Promise.all([
@@ -156,7 +157,7 @@ export default async function GlossaryTermPage({
   params,
   searchParams,
 }: PageProps<"/[locale]/glossary/[slug]">) {
-  const { locale, slug } = await params;
+  const { locale, slug } = decodeParams(await params);
   setRequestLocale(locale);
 
   if (!(await isFeatureVisible("glossary", null))) notFound();

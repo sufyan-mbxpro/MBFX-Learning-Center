@@ -28,6 +28,8 @@ export default async function AnnouncementsPage() {
     createdByName: row.createdByName,
     // Formatted here, like every admin table: one date format, one runtime.
     dateLabel: formatDateTime(row.finishedAt ?? row.scheduledFor ?? row.createdAt),
+    // Which date that is, so the list can say "Sent" or "Scheduled for".
+    dateKind: row.finishedAt ? "finished" : row.scheduledFor ? "scheduled" : "created",
     dateSort: (row.finishedAt ?? row.scheduledFor ?? row.createdAt).getTime(),
   }));
 

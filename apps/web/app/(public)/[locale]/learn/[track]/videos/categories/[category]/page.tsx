@@ -7,6 +7,7 @@ import { isLearnTrack, learnTrackVideosPath, LEARN_TRACKS } from "@repo/contract
 import { isFeatureVisible } from "@repo/settings";
 import { VideoMasthead } from "../../../../_components/video-masthead.tsx";
 import { VideoShelf } from "../../../../_components/video-shelf.tsx";
+import { decodeParams } from "../../../../../_lib/route-params.ts";
 
 // One category, inside one school (changes-16 PR 7, ADR-068 §1).
 //
@@ -27,7 +28,7 @@ import { VideoShelf } from "../../../../_components/video-shelf.tsx";
 export async function generateMetadata({
   params,
 }: PageProps<"/[locale]/learn/[track]/videos/categories/[category]">): Promise<Metadata> {
-  const { locale, track, category } = await params;
+  const { locale, track, category } = decodeParams(await params);
   setRequestLocale(locale);
   if (!isLearnTrack(track)) return {};
 
@@ -52,7 +53,7 @@ export async function generateMetadata({
 export default async function VideoCategoryPage({
   params,
 }: PageProps<"/[locale]/learn/[track]/videos/categories/[category]">) {
-  const { locale, track, category } = await params;
+  const { locale, track, category } = decodeParams(await params);
   setRequestLocale(locale);
   if (!isLearnTrack(track)) notFound();
 

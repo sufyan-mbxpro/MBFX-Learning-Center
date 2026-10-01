@@ -36,10 +36,14 @@ export {
 export { sanitizeEmailHtml, sanitizeEmailHtmlWith } from "./sanitize.ts";
 export {
   editorialStyle,
+  emailBandInks,
   inlineEditorialStyles,
   renderEmailShell,
+  type EmailBandInks,
   type EmailPalette,
+  type EmailShellContact,
   type EmailShellInput,
+  type EmailShellLink,
 } from "./layout.ts";
 export {
   EmailRenderError,
@@ -57,6 +61,9 @@ export {
   createSendSession,
   emailTemplateKeys,
   loadEmailRenderContext,
+  loadEmailShellWords,
+  loadLocalizedEmailContext,
+  localizeEmailShell,
   sendTemplatedEmail,
   verifyTransport,
   SANDBOX_REASON,
@@ -68,6 +75,8 @@ export {
   type SessionSendInput,
   type MessageContent,
   type EmailRenderContext,
+  type EmailScheme,
+  type EmailShellWords,
   type SendTemplatedEmailInput,
 } from "./send.ts";
 

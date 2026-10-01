@@ -3,12 +3,20 @@
 // still renders, just unstyled and off-brand.
 import { describe, expect, it } from "vitest";
 import { EDITORIAL_CLASSES } from "@repo/contracts";
-import { DEFAULT_BRAND, DEFAULT_LIGHT_SURFACE, deriveTonalInk } from "@repo/theme";
 import {
+  DEFAULT_BRAND,
+  DEFAULT_DARK_SURFACE,
+  DEFAULT_LIGHT_SURFACE,
+  contrastRatio,
+  deriveTonalInk,
+} from "@repo/theme";
+import {
+  emailBandInks,
   absoluteUrl,
   editorialStyle,
   emailLinkColor,
   inlineEditorialStyles,
+  pickEmailLogo,
   renderEmailShell,
 } from "./layout.ts";
 import type { EmailPalette } from "./layout.ts";
@@ -127,43 +135,155 @@ describe("renderEmailShell", () => {
     expect(html).toContain("Unsubscribe");
   });
 
+  it("sets the unsubscribe link inside its sentence, escaping only the words", () => {
+    const html = renderEmailShell({
+      ...base,
+      unsubscribe: { url: "https://example.com/u?token=x", label: "click to unsubscribe" },
+      unsubscribeLine: "If you no longer wish to receive <these> emails, {link}.",
+    });
+    expect(html).toMatch(
+      /If you no longer wish to receive &lt;these&gt; emails, <a href="https:\/\/example\.com\/u\?token=x"[^>]*>click to unsubscribe<\/a>\./,
+    );
+  });
+
+  it("draws the bands in the same inks whatever the card's scheme", () => {
+    const dark: EmailPalette = {
+      ...palette,
+      surface: DEFAULT_DARK_SURFACE,
+      band: DEFAULT_LIGHT_SURFACE,
+    };
+    expect(emailBandInks(dark)).toEqual(emailBandInks(palette));
+  });
+
   it("takes its ground and ink from the palette", () => {
     const html = renderEmailShell(base);
     expect(html).toContain(DEFAULT_LIGHT_SURFACE.background);
     expect(html).toContain(DEFAULT_LIGHT_SURFACE.textPrimary);
   });
 
-  it("does not paint the footer band in the PAGE's ground", () => {
-    // The page and the footer were both `surfaceMuted`, so the message had no
-    // visible bottom edge and the ground below it read as part of the footer.
-    // Asserted on a palette whose three surfaces differ, because the seeded
-    // themes happen to give `surface` and `background` the same value — the
-    // bug is invisible on those and the rule is not.
+  it("draws header and footer as brand bands with a primary rule (ADR-179 #1)", () => {
     // Sentinels rather than colours: the shell interpolates whatever the token
-    // holds, so this asserts WHICH token the band reads — which is the rule —
+    // holds, so this asserts WHICH token each part reads — which is the rule —
     // and keeps code-style #1's no-hex-literal rule intact in a test.
-    const distinct = {
-      ...palette,
-      surface: {
-        ...DEFAULT_LIGHT_SURFACE,
-        surface: "token-card-footer",
-        surfaceMuted: "token-page-ground",
-      },
-    };
-    const html = renderEmailShell({ ...base, palette: distinct });
-    const footerCell = html.slice(html.indexOf("border-top:1px solid"));
-    expect(footerCell).toContain("background-color:token-card-footer");
-    expect(footerCell).not.toContain("background-color:token-page-ground");
+    const html = renderEmailShell(base);
+    const inks = emailBandInks(palette);
+    const header = html.slice(html.indexOf('<td style="padding:32px'));
+    expect(header).toContain(`background-color:${palette.brand.secondary}`);
+    expect(header).toContain(`border-bottom:2px solid ${palette.brand.primary}`);
+    const footer = html.slice(html.lastIndexOf('<td style="padding:28px 48px 24px'));
+    expect(footer).toContain(`background-color:${inks.band}`);
+    // The page keeps its own ground, so the message still has edges.
+    expect(html).toContain(`background-color:${DEFAULT_LIGHT_SURFACE.surfaceMuted}`);
+  });
+
+  it("derives every band ink to read on the band", () => {
+    const inks = emailBandInks(palette);
+    expect(contrastRatio(inks.text, inks.band)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(inks.muted, inks.band)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(inks.link, inks.band)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("prints only the footer lines it was given", () => {
+    const bare = renderEmailShell(base);
+    expect(bare).not.toContain("mailto:");
+    expect(bare).not.toContain("Contact support");
+
+    const html = renderEmailShell({
+      ...base,
+      tagline: "Learn to trade the markets",
+      links: [{ url: "https://site.test/support", label: "Contact support" }],
+      contacts: [{ label: "Email", value: "hello@site.test", url: "mailto:hello@site.test" }],
+      legalLines: ["© 2026 MBX. All rights reserved."],
+    });
+    expect(html).toContain("Learn to trade the markets");
+    expect(html).toContain('href="https://site.test/support"');
+    expect(html).toContain("mailto:hello@site.test");
+    expect(html).toContain("© 2026 MBX. All rights reserved.");
+  });
+
+  it("links the footer's site name to the home page when it has one", () => {
+    const linked = renderEmailShell({ ...base, homeUrl: "https://site.test/ar" });
+    const footer = linked.slice(linked.lastIndexOf('<td style="padding:28px 48px 24px'));
+    expect(footer).toMatch(/<a href="https:\/\/site\.test\/ar" style="color:[^"]+">[^<]+<\/a>/);
+
+    const plain = renderEmailShell(base);
+    const plainFooter = plain.slice(plain.lastIndexOf('<td style="padding:28px 48px 24px'));
+    expect(plainFooter).not.toContain("<a ");
+  });
+
+  it("makes data in the shell inert to variable substitution (ADR-179 #6)", () => {
+    const html = renderEmailShell({ ...base, legalLines: ["sent to a{{reset.url}}@x.test"] });
+    expect(html).not.toContain("{{reset.url}}");
+    expect(html).toContain("&#123;&#123;reset.url&#125;&#125;");
   });
 
   it("leaves no trailing margin under the last footer line", () => {
     const html = renderEmailShell({
       ...base,
+      legalLines: ["© 2026 MBX."],
       footerText: "Because you have an account.",
       postalAddress: "1 Example Street",
     });
-    const lines = [...html.matchAll(/<p style="margin:([^;]+);font-size:12px/g)].map((m) => m[1]);
-    expect(lines).toEqual(["0 0 8px", "0"]);
+    const lines = [
+      ...html.matchAll(/<p style="margin:([^;]+);text-align:center;font-size:11px/g),
+    ].map((m) => m[1]);
+    expect(lines).toEqual(["0 0 4px", "0"]);
+  });
+
+  it("sets the footer at the reference sizes, centred, and steps the sizes down by job", () => {
+    const html = renderEmailShell({
+      ...base,
+      tagline: "Learn to trade the markets",
+      links: [{ url: "https://site.test/support", label: "Contact support" }],
+      contacts: [{ label: "Email", value: "hello@site.test", url: "mailto:hello@site.test" }],
+      legalLines: ["© 2026 MBX."],
+    });
+    const footer = html.slice(html.lastIndexOf('<td style="padding:28px 48px 24px'));
+    const sizes = [...footer.matchAll(/font-size:(\d+)px/g)]
+      .map((m) => Number(m[1]))
+      .filter((size) => size > 0);
+    expect(Math.min(...sizes)).toBe(11);
+    // name > links > tagline/contacts > legal, in document order.
+    expect(sizes).toEqual([16, 13, 14, 13, 11]);
+    expect(footer.match(/<p style="[^"]*"/g)?.every((p) => p.includes("text-align:center"))).toBe(
+      true,
+    );
+  });
+
+  it("sets the legal band on two lines: sender, then address and unsubscribe", () => {
+    const html = renderEmailShell({
+      ...base,
+      legalLines: ["© 2026 MBX."],
+      footerText: "Because you have an account.",
+      postalAddress: "1 Example Street",
+      unsubscribe: { url: "https://site.test/u", label: "Unsubscribe" },
+    });
+    const lines = [...html.matchAll(/font-size:11px;[^"]*">(.*?)<\/p>/g)].map((m) => m[1]);
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toBe("© 2026 MBX. Because you have an account.");
+    expect(lines[1]).toContain("1 Example Street");
+    expect(lines[1]).toContain('href="https://site.test/u"');
+  });
+});
+
+describe("pickEmailLogo", () => {
+  const logos = { light: "/brand/logo-light.png", dark: "/brand/logo-dark.png" };
+
+  it("puts the dark-ground Branding logo on the seeded near-black band", () => {
+    expect(pickEmailLogo(palette, logos)).toBe(logos.dark);
+  });
+
+  it("puts the light-ground logo on a band a theme made pale", () => {
+    const pale = {
+      ...palette,
+      brand: { ...DEFAULT_BRAND, secondary: DEFAULT_LIGHT_SURFACE.background },
+    };
+    expect(pickEmailLogo(pale, logos)).toBe(logos.light);
+  });
+
+  it("falls back to whichever logo exists, and to nothing", () => {
+    expect(pickEmailLogo(palette, { light: logos.light })).toBe(logos.light);
+    expect(pickEmailLogo(palette, {})).toBe("");
   });
 });
 
