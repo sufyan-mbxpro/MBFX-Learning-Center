@@ -10,7 +10,7 @@
 // a proven pattern here, so the admin screens and the public loaders are the
 // same shape as the ones an editor already knows.
 import { cacheLife, cacheTag, revalidateTag } from "next/cache";
-import { db, type Prisma } from "@repo/db";
+import { TranslationStatus, db, type Prisma } from "@repo/db";
 import { pickTranslation, type LocaleFallbackInfo } from "@repo/i18n";
 import { htmlLead, htmlToText } from "@repo/utils";
 import type { Subject } from "@repo/rbac";
@@ -20,6 +20,13 @@ import { sanitizeRichText, slugify } from "./content.ts";
 // rotation primitive is shared rather than duplicated (import-x/no-cycle).
 import { publicGlossaryTermWhere, termOfTheDayIndex } from "./public-content.ts";
 import { recordAudit } from "./index.ts";
+import {
+  INDEXABLE_TRANSLATION_STATUSES,
+  advertisedAlternates,
+  isIndexableTranslation,
+} from "./reading-languages.ts";
+import { hashGlossaryTopicSource, loadGlossaryTopicSource } from "./glossary-source.ts";
+import { afterSourceSave, enqueueEntityTranslations } from "./translation-queue.ts";
 
 interface LocaleContext {
   locales: LocaleFallbackInfo[];
@@ -292,6 +299,7 @@ export async function duplicateGlossaryTopic(actor: Subject, topicId: string): P
     entityId: copy.id,
     changes: { after: { sourceTopicId: topicId } },
   });
+  await enqueueEntityTranslations("glossary_topic", copy.id);
   revalidateTag("content", { expire: 0 });
   return copy.id;
 }
@@ -312,6 +320,7 @@ export async function createGlossaryTopic(actor: Subject, name: string): Promise
     entityId: topic.id,
     changes: { after: { name } },
   });
+  await enqueueEntityTranslations("glossary_topic", topic.id);
   revalidateTag("content", { expire: 0 });
   return topic.id;
 }
@@ -336,6 +345,16 @@ export interface GlossaryTopicInput {
 }
 
 export async function saveGlossaryTopic(actor: Subject, input: GlossaryTopicInput): Promise<void> {
+  const { defaultLocale } = await localeContext();
+  const isSource = input.locale === defaultLocale;
+  // A person's save is TRANSLATED and records the English it was made from
+  // (ADR-161). Without the status, saving over a machine row left it
+  // MACHINE_TRANSLATED — served, but never indexed.
+  const translatedFrom = isSource
+    ? null
+    : await loadGlossaryTopicSource(db, input.topicId, defaultLocale).then((s) =>
+        s ? hashGlossaryTopicSource(s) : null,
+      );
   const slug = await uniqueTopicSlug(
     input.locale,
     slugify(input.slug?.trim() || input.name),
@@ -359,6 +378,8 @@ export async function saveGlossaryTopic(actor: Subject, input: GlossaryTopicInpu
     seoTitle: input.seoTitle ?? null,
     seoDescription: input.seoDescription ?? null,
     seoKeywords: input.seoKeywords ?? null,
+    translationStatus: TranslationStatus.TRANSLATED,
+    ...(isSource ? {} : { sourceHash: translatedFrom }),
   };
 
   await db.$transaction(async (tx) => {
@@ -388,6 +409,17 @@ export async function saveGlossaryTopic(actor: Subject, input: GlossaryTopicInpu
     entityId: input.topicId,
     changes: { after: { locale: input.locale, name: input.name } },
   });
+  if (isSource) {
+    const source = await loadGlossaryTopicSource(db, input.topicId, defaultLocale);
+    const hash = source ? hashGlossaryTopicSource(source) : null;
+    if (hash) {
+      await db.glossaryTopicTranslation.updateMany({
+        where: { topicId: input.topicId, locale: defaultLocale },
+        data: { sourceHash: hash },
+      });
+    }
+    await afterSourceSave("glossary_topic", input.topicId, hash, defaultLocale);
+  }
   revalidateTag("content", { expire: 0 });
 }
 
@@ -577,8 +609,10 @@ export interface GlossaryTopicDetail extends GlossaryTopicView {
    */
   descriptionHtml: string | null;
   terms: GlossaryTopicTermView[];
-  /** Per-locale slugs, for hreflang — the same shape the course view uses. */
+  /** Per-locale slugs, for hreflang — indexable translations only (ADR-159 #2). */
   alternates: { locale: string; slug: string }[];
+  /** The words at this URL are machine-written, not yet saved by a person. */
+  noIndex: boolean;
 }
 
 export async function loadGlossaryTopicBySlug(
@@ -606,6 +640,7 @@ export async function loadGlossaryTopicBySlug(
           description: true,
           seoTitle: true,
           seoDescription: true,
+          translationStatus: true,
         },
       },
       terms: {
@@ -659,7 +694,10 @@ export async function loadGlossaryTopicBySlug(
     termCount: terms.length,
     coverUrl: topic.coverAssetId ? (covers.get(topic.coverAssetId) ?? null) : null,
     terms,
-    alternates: topic.translations.map((tr) => ({ locale: tr.locale, slug: tr.slug })),
+    // ADR-159 #2: advertise only what a person saved, and do not index
+    // machine-written words at their own URL.
+    alternates: advertisedAlternates(topic.translations, defaultLocale),
+    noIndex: !isIndexableTranslation(t, defaultLocale),
   };
 }
 
@@ -680,8 +718,14 @@ export interface GlossaryTopicSitemapEntry {
 }
 
 export async function loadGlossaryTopicSitemapEntries(): Promise<GlossaryTopicSitemapEntry[]> {
+  const { defaultLocale } = await localeContext();
   const rows = await db.glossaryTopicTranslation.findMany({
     where: {
+      // ADR-159 #2: listed once a person has saved it.
+      OR: [
+        { locale: defaultLocale },
+        { translationStatus: { in: [...INDEXABLE_TRANSLATION_STATUSES] } },
+      ],
       topic: {
         isActive: true,
         terms: { some: publicGlossaryTermWhere() },

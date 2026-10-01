@@ -25,7 +25,14 @@ import { COURSE, RECOMMENDED, loadRelationTargets } from "./content-relations.ts
 import { scheduledVisibilityOr } from "./content.ts";
 import { loadQuizLinks } from "./quiz-links.ts";
 import { loadLocaleMeta } from "./locale-meta.ts";
-import { advertisedAlternates, applyReadingLocale, type ReadingView } from "./reading-languages.ts";
+import {
+  INDEXABLE_TRANSLATION_STATUSES,
+  advertisedAlternates,
+  applyReadingLocale,
+  isIndexableTranslation,
+  type ReadingView,
+} from "./reading-languages.ts";
+import { translatedLabel } from "./learn-source.ts";
 
 interface LocaleContext {
   locales: LocaleFallbackInfo[];
@@ -169,6 +176,8 @@ export interface CourseView extends CourseCardView, ReadingView {
   finalQuiz: QuizLinkView | null;
   /** changes-49 — the course's own questions, in the words' locale; `[]` for none. */
   faq: CourseFaqItem[];
+  /** The words at this URL are machine-written and not yet saved by a person (ADR-159 #2). */
+  noIndex: boolean;
 }
 
 export interface LessonAttachmentView {
@@ -223,6 +232,8 @@ export interface LessonView extends ReadingView {
    * — a broken download link is worse than a missing one.
    */
   attachments: LessonAttachmentView[];
+  /** The words at this URL are machine-written and not yet saved by a person (ADR-159 #2). */
+  noIndex: boolean;
   seoTitle: string | null;
   seoDescription: string | null;
   updatedAt: Date;
@@ -524,6 +535,8 @@ export async function loadCourseBySlug(
     // active locale. An hreflang pointing at a URL that 404s is worse than a
     // missing pair.
     alternates: advertisedAlternates(course.translations, defaultLocale),
+    // ADR-159 #2: machine-written words at the locale URL are served, not indexed.
+    noIndex: !isIndexableTranslation(t, defaultLocale),
     sections: buildSections(course.sections, locale, defaultLocale, locales),
     finalQuiz: course.finalQuizId ? (quizLinks.get(course.finalQuizId) ?? null) : null,
     faq: readCourseFaq(words.faq),
@@ -597,6 +610,7 @@ export async function loadLessonBySlug(
           learningObjectives: true,
           seoTitle: true,
           seoDescription: true,
+          attachmentLabels: true,
           translationStatus: true,
         },
       },
@@ -712,7 +726,12 @@ export async function loadLessonBySlug(
       return [
         {
           assetId: attachment.assetId,
-          label: attachment.label,
+          // ADR-161 #8: the label in the words' locale, keyed by its English
+          // text; the English text when there is no entry.
+          label:
+            words.locale === defaultLocale
+              ? attachment.label
+              : translatedLabel(attachment.label, words.attachmentLabels),
           fileName: asset.fileName,
           url: asset.url,
           mimeType: asset.mimeType,
@@ -724,6 +743,9 @@ export async function loadLessonBySlug(
     seoDescription: words.seoDescription,
     ...reading,
     updatedAt: lesson.updatedAt,
+    // ADR-159 #2: machine-written words at the locale URL are served but not
+    // indexed. `t` is the address's row; a `?lang=` view is noindex anyway.
+    noIndex: !isIndexableTranslation(t, defaultLocale),
     alternates: advertisedAlternates(lesson.translations, defaultLocale),
     courseAlternates: advertisedAlternates(lesson.section.course.translations, defaultLocale),
     previous,
@@ -941,8 +963,19 @@ export interface LearnSitemapEntry {
  * entry (plan §11).
  */
 export async function loadLearnSitemapEntries(): Promise<LearnSitemapEntry[]> {
+  // ADR-159 #2: a translation enters the sitemap once a person has saved it.
+  // The default locale's row is the source and always listed.
+  const defaultLocale =
+    (await db.locale.findFirst({ where: { isDefault: true }, select: { code: true } }))?.code ??
+    "en";
+  const indexable = {
+    OR: [
+      { locale: defaultLocale },
+      { translationStatus: { in: [...INDEXABLE_TRANSLATION_STATUSES] } },
+    ],
+  };
   const courses = await db.courseTranslation.findMany({
-    where: { course: publicCourseWhere() },
+    where: { course: publicCourseWhere(), ...indexable },
     select: {
       locale: true,
       slug: true,
@@ -966,6 +999,7 @@ export async function loadLearnSitemapEntries(): Promise<LearnSitemapEntry[]> {
 
   const lessons = await db.lessonTranslation.findMany({
     where: {
+      ...indexable,
       lesson: {
         ...publicLessonWhere(),
         section: { isPublished: true, course: publicCourseWhere() },

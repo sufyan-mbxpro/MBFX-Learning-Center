@@ -277,10 +277,11 @@ describe("ADR-116 §5/§6/§7 — what the seed says about the absorbed bands", 
     expect(read("_sections/registry.ts")).toContain("trust_strip: TrustStrip,");
   });
 
-  it("the testimonial rail advances on its own and brings its pause control (ADR-121 §4)", () => {
+  it("the testimonial rail advances on its own, with no pause button (ADR-121 §4, changes-56)", () => {
     const src = read("_sections/in-practice.tsx");
     expect(src).toContain("hoverArrows");
-    expect(src).toMatch(/autoplay=\{\{[\s\S]*pauseLabel: t\("practiceQuotesPause"\)/);
+    expect(src).toContain("autoplay={{ interval: 6000 }}");
+    expect(src).not.toContain("practiceQuotesPause");
   });
 
   it("the facts band is seeded off, and migrated off for an existing database (changes-39)", () => {
@@ -331,7 +332,8 @@ describe("ADR-116 §5/§6/§7 — what the seed says about the absorbed bands", 
     // tool pages and the economic calendar, where it had survived.
     expect(seededRow("risk_disclaimer")).toMatch(/enabled: false/);
     const footer = readFileSync(join(ROOT, "_components/footer.tsx"), "utf8");
-    expect(footer).toContain('getSetting("legal.riskDisclaimer")');
+    // In the reader's language since ADR-165 (a person's words, never a machine's).
+    expect(footer).toContain('getLocalizedSetting("legal.riskDisclaimer", locale)');
     // changes-49: the subscribe strip is the visitor band's surface now.
     expect(footer).toContain('source="footer"');
     for (const page of ["tools/page.tsx", "tools/[tool]/page.tsx", "economic-calendar/page.tsx"]) {

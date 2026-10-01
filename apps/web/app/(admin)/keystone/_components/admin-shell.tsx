@@ -7,6 +7,7 @@
 import { cookies } from "next/headers";
 import { getTranslations } from "next-intl/server";
 import { getAiAvailability } from "@repo/ai";
+import { getAuthoringLocales } from "@repo/i18n";
 import { routing } from "@repo/i18n/routing";
 import { adminSessionTimeoutMs } from "@repo/contracts";
 import { can, canAny, type Subject } from "@repo/rbac";
@@ -23,6 +24,7 @@ import { type AdminNavGroup, type VisitSiteLink } from "./admin-sidebar-nav.tsx"
 import { IdleTimeout } from "./idle-timeout.tsx";
 import { NotificationBell, type NotificationItem } from "./notification-bell.tsx";
 import { ProfileMenu } from "./profile-menu.tsx";
+import { SETTINGS_ENTRY_KEYS } from "../settings/_components/settings-entry-keys.ts";
 
 // Module 16 (Website Builder / CMS) is paused per ADR-037: hidden from the
 // admin UI (sidebar, mobile nav, ⌘K search — all driven by this one nav
@@ -38,6 +40,7 @@ interface NavEntryDef {
     | "roles"
     | "employees"
     | "newsletter"
+    | "nav.announcements"
     | "glossary"
     | "learnCourses"
     | "learnLessons"
@@ -45,6 +48,7 @@ interface NavEntryDef {
     | "learnVideos"
     | "learnProgress"
     | "articles"
+    | "nav.promotions"
     | "websiteMedia"
     | "website"
     | "market"
@@ -66,7 +70,13 @@ const ADMIN_NAV_GROUPS: {
   {
     labelKey: null,
     entries: [
-      { href: "/keystone/dashboard", labelKey: "dashboard", icon: "dashboard", permission: null, exact: true },
+      {
+        href: "/keystone/dashboard",
+        labelKey: "dashboard",
+        icon: "dashboard",
+        permission: null,
+        exact: true,
+      },
     ],
   },
   {
@@ -91,25 +101,20 @@ const ADMIN_NAV_GROUPS: {
         permission: "lessons.view",
       },
       {
-        // ADR-058 #8 — quizzes are gated on the LESSON keys. There is
-        // no `quizzes.view` in the seed registry, and adding one would need a role
-        // to attach it to; a quiz is authored beside the lessons it belongs to,
-        // by the same people.
+        // Own keys since ADR-177 (ADR-058 #8 had quizzes on the lesson keys).
         href: "/keystone/learn/quizzes",
         labelKey: "learnQuizzes",
         icon: "learnQuizzes",
-        permission: "lessons.view",
+        permission: "quizzes.view",
       },
       {
-        // ADR-068 §3 — videos take the LESSON keys too, for the reason quizzes
-        // did one row up: there is no `videos.*` group in the seed registry,
-        // and adding one needs a role to attach it to.
+        // Own keys since ADR-177 (ADR-068 §3 had videos on the lesson keys).
         href: "/keystone/learn/videos",
         labelKey: "learnVideos",
         icon: "learnVideos",
         // Not `exact` since changes-48 #3: Categories is a tab of this
         // section, not a row of its own, so this row stays lit on it.
-        permission: "lessons.view",
+        permission: "videos.view",
       },
       {
         // Analytics has its own seeded key and its own audience — a manager who
@@ -140,6 +145,16 @@ const ADMIN_NAV_GROUPS: {
         labelKey: "articles",
         icon: "articles",
         permission: ["analysis.view", "news.manage"],
+      },
+      // Promotions (ADR-167). Beside News & Analysis because the permission
+      // group is: time-boxed notices an editor writes, not site structure.
+      // The label is `admin.nav.promotions` (code-style #29) — the section's
+      // own strings are the `admin.promotions` object.
+      {
+        href: "/keystone/promotions",
+        labelKey: "nav.promotions",
+        icon: "promotions",
+        permission: "promotions.view",
       },
       // Trading tools (Module 13, ADR-086). Its OWN permission group, the
       // fourteenth, because this screen governs nothing market.* does: the
@@ -208,6 +223,15 @@ const ADMIN_NAV_GROUPS: {
         icon: "newsletter",
         permission: "newsletter.view",
       },
+      // Announcement emails (ADR-171). After Newsletter, because both are
+      // audiences: an announcement is SENT TO people, not published content.
+      // The label is `admin.nav.announcements` (code-style #29).
+      {
+        href: "/keystone/announcements",
+        labelKey: "nav.announcements",
+        icon: "announcements",
+        permission: "announcements.view",
+      },
     ],
   },
   {
@@ -231,14 +255,9 @@ const ADMIN_NAV_GROUPS: {
         href: "/keystone/settings",
         labelKey: "settings",
         icon: "settings",
-        permission: [
-          "settings.view",
-          "social.manage",
-          "email.log.view",
-          "ai.usage.view",
-          "ai.settings.manage",
-          "ai.providers.manage",
-        ],
+        // ADR-177: one list with the hub page, so a key whose only screen is
+        // a settings tab (translations.view, theme.update, ...) can reach it.
+        permission: [...SETTINGS_ENTRY_KEYS],
       },
     ],
   },
@@ -265,12 +284,15 @@ async function aiWriterAvailable(subject: Subject): Promise<boolean> {
 
 /**
  * The languages the writer can write in, named in English (ADR-043 #2).
- * Every locale the site can route, active or not: writing a draft in a
- * language is not serving a page in it (ADR-091).
+ * Every language row, active or not: writing a draft in a language is not
+ * serving a page in it (ADR-091), and a language added in the admin is
+ * offered at once (ADR-178 #6).
  */
-function writerLanguages(): { value: string; label: string }[] {
-  const names = new Intl.DisplayNames(["en"], { type: "language" });
-  return routing.locales.map((code) => ({ value: code, label: names.of(code) ?? code }));
+async function writerLanguages(): Promise<{ value: string; label: string }[]> {
+  return (await getAuthoringLocales()).map((locale) => ({
+    value: locale.code,
+    label: locale.name,
+  }));
 }
 
 function allows(subject: Subject, entry: NavEntryDef): boolean {
@@ -445,7 +467,7 @@ export async function AdminShell({
           />
           <div className="ms-auto flex items-center gap-1 md:gap-2">
             {writerOn && (
-              <AiWriter languages={writerLanguages()} defaultLanguage={routing.defaultLocale} />
+              <AiWriter languages={await writerLanguages()} defaultLanguage={routing.defaultLocale} />
             )}
             <NotificationBell
               items={items}

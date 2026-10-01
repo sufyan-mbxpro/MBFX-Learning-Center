@@ -101,8 +101,10 @@ describe.each(Object.entries(PAGES))("%s page reading language (ADR-127)", (_, p
   // The `robots: undefined` half of ADR-090 is `seo-metadata.test.ts`'s job.
   it("never indexes a reading view", () => {
     // A quiz page is never indexed at all (ADR-058), so it needs no condition.
+    // ADR-159 #2 added a second reason — machine-written words at their own
+    // URL — as an OR beside the reading view, never in place of it.
     expect(page).toMatch(
-      /view\.readingLocale\s*\?\s*\{ robots: \{ index: false|^\s*robots: \{ index: false, follow: true \},\r?$/m,
+      /view\.readingLocale(\s*\|\|\s*view\.noIndex)?\s*\?\s*\{ robots: \{ index: false|^\s*robots: \{ index: false, follow: true \},\r?$/m,
     );
   });
 

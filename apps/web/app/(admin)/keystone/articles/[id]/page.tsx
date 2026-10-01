@@ -8,8 +8,11 @@ import {
   loadArticleTagsAdmin,
 } from "@repo/core";
 import { can, canAny, requireAnyPermission } from "@repo/rbac";
+import { getAuthoringLocales } from "@repo/i18n";
 import { routing } from "@repo/i18n/routing";
 import { getAiAvailability } from "@repo/ai";
+import { TRANSLATE_REASONS } from "@repo/contracts";
+import { isAutoTranslateAvailable } from "@repo/translate";
 import { EditorPage } from "../../_components/admin-page.tsx";
 import {
   aiAssistantLabels,
@@ -27,9 +30,20 @@ import { formatDateTime, siteOrigin } from "@repo/utils";
 // information architecture; the kind-specific and publish gates still live in
 // the service, and the flags computed here only shape the UI — a hidden button
 // is not security (security.md #1).
-export default async function ArticleEditPage({ params }: PageProps<"/keystone/articles/[id]">) {
+export default async function ArticleEditPage({
+  params,
+  searchParams,
+}: PageProps<"/keystone/articles/[id]">) {
   const subject = await requireAnyPermission(["analysis.view", "news.manage"]);
   const { id } = await params;
+  // `?locale=xx` opens that language's tab (the translation review queue links
+  // here, ADR-163). Only a code the editor offers is honoured; anything else
+  // is ignored, never an error.
+  const requested = (await searchParams).locale;
+  // Every language row, live or not (ADR-178 #6), never the routing list.
+  const locales = (await getAuthoringLocales()).map((locale) => locale.code);
+  const initialLocale =
+    typeof requested === "string" && locales.includes(requested) ? requested : undefined;
 
   const [t, tAi, detail, categories, tags, availability] = await Promise.all([
     getTranslations("admin"),
@@ -75,6 +89,27 @@ export default async function ArticleEditPage({ params }: PageProps<"/keystone/a
         }
       : undefined;
   const summarize = canUseAi && availability.features.summarization;
+  // ADR-160: "Translate with Google" — present only when automatic translation
+  // is switched on AND the viewer can save an article (the prefill action
+  // refuses anyone else, so a viewer would get a button that always fails).
+  const google =
+    canAny(subject, ["analysis.update", "news.manage"]) && (await isAutoTranslateAvailable())
+      ? {
+          labels: {
+            action: t("translate.editor.action", { source: routing.defaultLocale }),
+            confirmTitle: t("translate.editor.confirmTitle"),
+            confirmDescription: t("translate.editor.confirmDescription"),
+            confirm: t("translate.editor.confirm"),
+            cancel: t("cancel"),
+            working: t("translate.editor.working"),
+            done: t("translate.editor.done"),
+            failed: t("translate.editor.failed"),
+            reasons: Object.fromEntries(
+              TRANSLATE_REASONS.map((reason) => [reason, t(`translate.reasons.${reason}`)]),
+            ),
+          },
+        }
+      : undefined;
   // ADR-126: the brief bar and the per-field menus. Also gated on the keys that
   // can SAVE an article — the run route refuses anyone else, so a viewer would
   // otherwise get a bar whose every press fails.
@@ -169,6 +204,7 @@ export default async function ArticleEditPage({ params }: PageProps<"/keystone/a
     >
       <ArticleEditor
         ai={ai}
+        google={google}
         // The takeaways control is drawn whether or not AI exists — only its
         // Generate button is conditional — so its labels are not optional.
         takeawaysLabels={takeawaysLabels(
@@ -211,7 +247,8 @@ export default async function ArticleEditPage({ params }: PageProps<"/keystone/a
           count: tag.articleCount,
         }))}
         relatedOptions={relatedOptions}
-        locales={[...routing.locales]}
+        locales={locales}
+        initialLocale={initialLocale}
         siteUrl={siteOrigin()}
         defaultLocale={routing.defaultLocale}
         canPublish={canPublish}

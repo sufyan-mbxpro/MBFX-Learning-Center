@@ -23,6 +23,7 @@
     "@repo/rbac": "workspace:*",
     "@repo/settings": "workspace:*",
     "@repo/theme": "workspace:*",
+    "@repo/translate": "workspace:*",
     "@repo/ui": "workspace:*",
     "@repo/utils": "workspace:*",
     "@tanstack/react-table": "8.21.3",

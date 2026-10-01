@@ -37,7 +37,7 @@ import {
   ROUTE_PATHS,
 } from "@repo/contracts";
 import { Link } from "@repo/i18n/navigation";
-import { getSetting, isFeatureVisible } from "@repo/settings";
+import { getLocalizedSetting, getSetting, isFeatureVisible } from "@repo/settings";
 import { BrandLogo } from "@repo/ui/components/brand-logo";
 import { SocialLinkIcon } from "./social-link-icon.tsx";
 import { Container } from "@repo/ui/components/container";
@@ -139,13 +139,14 @@ export async function SiteFooter({ locale }: { locale: string }) {
   ] = await Promise.all([
     getTranslations({ locale, namespace: "footer" }),
     getSetting("site.name"),
-    getSetting("site.description"),
-    getSetting("legal.copyrightNotice"),
+    // Translatable (ADR-165): read in the reader's language, English beneath.
+    getLocalizedSetting("site.description", locale),
+    getLocalizedSetting("legal.copyrightNotice", locale),
     // changes-38 (ADR-122, superseding ADR-119 §1 for the footer): the
     // disclaimer is back, HERE and nowhere else — "remove within the site,
     // visible in the footer, dynamically". Dynamic means the admin-edited
     // setting, never catalog copy: it is a legal statement the operator owns.
-    getSetting("legal.riskDisclaimer"),
+    getLocalizedSetting("legal.riskDisclaimer", locale),
     getSetting("legal.companyRegistration"),
     getSetting("legal.registeredAddress"),
     // Read in registry order so the row cannot drift from LEGAL_DOCUMENT_KEYS
@@ -198,7 +199,10 @@ export async function SiteFooter({ locale }: { locale: string }) {
   const copyrightLine = (copyright ?? "").replaceAll("{year}", String(await getCurrentYear()));
 
   return (
-    <footer className="relative isolate overflow-hidden bg-secondary text-secondary-foreground">
+    // The footer, not the body, makes room for the fixed bottom promotion
+    // strip (ADR-174 #5): padding on the body showed its light ground as a
+    // band between the footer and the strip on a phone (changes-57).
+    <footer className="relative isolate overflow-hidden bg-secondary pb-(--promotion-bar-height) text-secondary-foreground">
       {/* Decorative texture, faded top-to-bottom so it never competes with
           content (ADR-018 rule 5 — large ambient fill, not a text/border
           color). Built from currentcolor (globals.css), so it reads
@@ -367,7 +371,15 @@ export async function SiteFooter({ locale }: { locale: string }) {
                     // timeline (see Reveal's own note) — never load-bearing.
                     <Reveal key={column.key} variant="up" delay={index * 70}>
                       <nav aria-labelledby={headingId} className="flex flex-col gap-4">
-                        <ColumnHeading id={headingId}>{column.name ?? ""}</ColumnHeading>
+                        <ColumnHeading id={headingId}>
+                          {/* `Menu.name` is one untranslated column; the
+                              heading a reader sees is a catalog string, with
+                              the stored name kept for a menu the catalog
+                              does not know. */}
+                          {t.has(`columns.${column.key}`)
+                            ? t(`columns.${column.key}`)
+                            : (column.name ?? "")}
+                        </ColumnHeading>
                         <ul className="flex flex-col gap-0.5">
                           {column.items.map((item) => (
                             <li key={item.id}>
@@ -454,10 +466,13 @@ export async function SiteFooter({ locale }: { locale: string }) {
             page-wide band — so it went back inside the Container as an inset,
             bordered panel with its own lifted fill, and the texture shows
             around it. The form widened from w-96 to w-xl so the consent line
-            fits on one row instead of wrapping under a cramped input. */}
+            fits on one row instead of wrapping under a cramped input.
+            The owner then asked for the panel in #2A2A29 — the default
+            `--secondary` — so its fill is the solid token rather than a
+            translucent lift, which also stops the dot grid showing through. */}
         {newsletterFlag && newsletterPlaced && (
           <Container className={`pb-8 ${SIGNED_OUT_ONLY_CLASS}`}>
-            <div className="relative rounded-lg border border-secondary-foreground/12 bg-secondary-foreground/5 px-6 py-5 text-secondary-foreground">
+            <div className="relative rounded-lg border border-secondary-foreground/12 bg-secondary px-6 py-5 text-secondary-foreground">
               <div className="flex flex-col items-center gap-4 text-center xl:flex-row xl:justify-between xl:gap-8 xl:text-start">
                 <p className="min-w-0 text-pretty">
                   <span className="text-lg font-semibold">{t("newsletterHeading")}</span>{" "}

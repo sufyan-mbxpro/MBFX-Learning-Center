@@ -5,6 +5,7 @@
 // then the @repo/core service (which enforces the KIND-specific gate —
 // news.manage vs analysis.* — and the publish gate against the same
 // subject).
+import { after } from "next/server";
 import { z } from "zod";
 import {
   createArticle,
@@ -15,6 +16,7 @@ import {
   duplicateArticle,
   publishDueArticles,
   quickUpdateArticle,
+  runTranslationWork,
   saveArticle,
   setArticleFeatured,
   saveArticleCategoryTranslation,
@@ -50,8 +52,20 @@ import {
   type UpdateArticleMetaInput,
 } from "@repo/contracts";
 import { requireAnyPermission } from "@repo/rbac";
+import { translateSoon as translateEntitySoon } from "./translate-soon.ts";
 
 const id = z.string().min(1);
+
+/**
+ * ADR-162 #7: after the response is sent, run this article's translation
+ * jobs, so a normal edit reaches every active language within seconds. The
+ * service already enqueued them; this only drains them early, and
+ * `runTranslationWork` never throws. With no active non-default locale there
+ * are no jobs and this does nothing.
+ */
+function translateSoon(articleId: string): void {
+  after(() => runTranslationWork({ entity: { type: "article", id: articleId } }));
+}
 
 export async function createArticleAction(input: CreateArticleInput): Promise<string> {
   const subject = await requireAnyPermission(["analysis.create", "news.manage"]);
@@ -70,7 +84,9 @@ export async function saveArticleTranslationAction(
   input: SaveArticleTranslationInput,
 ): Promise<void> {
   const subject = await requireAnyPermission(["analysis.update", "news.manage"]);
-  await saveArticleTranslation(subject, saveArticleTranslationSchema.parse(input));
+  const parsed = saveArticleTranslationSchema.parse(input);
+  await saveArticleTranslation(subject, parsed);
+  translateSoon(parsed.articleId);
 }
 
 export async function transitionArticleAction(
@@ -84,6 +100,7 @@ export async function transitionArticleAction(
   const status = z.enum(["DRAFT", "SCHEDULED", "PUBLISHED", "ARCHIVED"]).parse(to);
   const scheduledFor = scheduledForIso ? z.coerce.date().parse(scheduledForIso) : undefined;
   await transitionArticle(subject, id.parse(articleId), status, scheduledFor);
+  translateSoon(articleId);
 }
 
 /**
@@ -92,7 +109,9 @@ export async function transitionArticleAction(
  */
 export async function saveArticleAction(input: SaveArticleInput): Promise<void> {
   const subject = await requireAnyPermission(["analysis.update", "news.manage"]);
-  await saveArticle(subject, saveArticleSchema.parse(input));
+  const parsed = saveArticleSchema.parse(input);
+  await saveArticle(subject, parsed);
+  translateSoon(parsed.articleId);
 }
 
 export async function setArticleFeaturedAction(
@@ -109,6 +128,7 @@ export async function quickUpdateArticleAction(
 ): Promise<void> {
   const subject = await requireAnyPermission(["analysis.update", "news.manage"]);
   await quickUpdateArticle(subject, id.parse(articleId), quickEditArticleSchema.parse(input));
+  translateSoon(articleId);
 }
 
 export async function setArticleActiveAction(articleId: string, isActive: boolean): Promise<void> {
@@ -119,6 +139,7 @@ export async function setArticleActiveAction(articleId: string, isActive: boolea
 export async function setArticleDeletedAction(articleId: string, deleted: boolean): Promise<void> {
   const subject = await requireAnyPermission(["analysis.delete", "news.manage"]);
   await setArticleDeleted(subject, id.parse(articleId), z.boolean().parse(deleted));
+  if (!deleted) translateSoon(articleId);
 }
 
 export async function duplicateArticleAction(articleId: string): Promise<string> {
@@ -138,7 +159,9 @@ export async function createArticleCategoryAction(
   input: CreateArticleCategoryInput,
 ): Promise<string> {
   const subject = await requireAnyPermission(["analysis.update", "news.manage"]);
-  return createArticleCategory(subject, createArticleCategorySchema.parse(input));
+  const categoryId = await createArticleCategory(subject, createArticleCategorySchema.parse(input));
+  translateEntitySoon("article_category", categoryId);
+  return categoryId;
 }
 
 export async function updateArticleCategoryAction(
@@ -157,7 +180,9 @@ export async function saveArticleCategoryTranslationAction(
   input: SaveArticleCategoryTranslationInput,
 ): Promise<void> {
   const subject = await requireAnyPermission(["analysis.update", "news.manage"]);
-  await saveArticleCategoryTranslation(subject, saveArticleCategoryTranslationSchema.parse(input));
+  const parsed = saveArticleCategoryTranslationSchema.parse(input);
+  await saveArticleCategoryTranslation(subject, parsed);
+  translateEntitySoon("article_category", parsed.categoryId);
 }
 
 export async function deleteArticleCategoryAction(categoryId: string): Promise<void> {
@@ -169,14 +194,18 @@ export async function deleteArticleCategoryAction(categoryId: string): Promise<v
 
 export async function createArticleTagAction(input: CreateArticleTagInput): Promise<string> {
   const subject = await requireAnyPermission(["analysis.update", "news.manage"]);
-  return createArticleTag(subject, createArticleTagSchema.parse(input));
+  const tagId = await createArticleTag(subject, createArticleTagSchema.parse(input));
+  translateEntitySoon("article_tag", tagId);
+  return tagId;
 }
 
 export async function saveArticleTagTranslationAction(
   input: SaveArticleTagTranslationInput,
 ): Promise<void> {
   const subject = await requireAnyPermission(["analysis.update", "news.manage"]);
-  await saveArticleTagTranslation(subject, saveArticleTagTranslationSchema.parse(input));
+  const parsed = saveArticleTagTranslationSchema.parse(input);
+  await saveArticleTagTranslation(subject, parsed);
+  translateEntitySoon("article_tag", parsed.tagId);
 }
 
 export async function setArticleTagActiveAction(tagId: string, isActive: boolean): Promise<void> {

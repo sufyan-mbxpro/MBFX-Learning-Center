@@ -12,9 +12,11 @@
 //
 // What belongs in this file and what does not: everything here is interface
 // copy ABOUT THE SITE. A claim about a brokerage — a minimum deposit, a
-// leverage ratio, a withdrawal window — goes in `SUPPORT_FAQ`, the facts file,
-// for the reason ADR-113 gives: a translator should not be the one deciding
-// what a withdrawal window says. "All questions" points there.
+// leverage ratio, a withdrawal window — goes in the support FAQ, whose FIGURES
+// live in `SUPPORT_FAQ_FIGURES` (the facts file) and reach its catalog
+// sentences only as arguments (ADR-113, ADR-159 #6): a translator should not
+// be the one deciding what a withdrawal window says. "All questions" points
+// there.
 import { getTranslations } from "next-intl/server";
 import { ArrowRight } from "lucide-react";
 import {

@@ -25,7 +25,7 @@ let videos: typeof VideosModule;
 let content: typeof ContentModule;
 
 let editor: Subject;
-/** Every lessons.* key EXCEPT publish — ADR-068 §3's gate, tested. */
+/** Every videos.* key EXCEPT publish — ADR-177's gate, tested. */
 let assistant: Subject;
 
 beforeAll(async () => {
@@ -61,12 +61,14 @@ beforeAll(async () => {
     userType: "STAFF",
     roleKeys: [],
     maxRoleLevel: 60,
-    allowed: new Set(["lessons.view", "lessons.create", "lessons.update", "lessons.publish"]),
+    allowed: new Set(["videos.view", "videos.create", "videos.update", "videos.publish"]),
     denied: new Set(),
   };
   assistant = {
     ...editor,
-    allowed: new Set(["lessons.view", "lessons.create", "lessons.update"]),
+    // ADR-177: `lessons.publish` no longer publishes a video, so holding it
+    // must not help.
+    allowed: new Set(["videos.view", "videos.create", "videos.update", "lessons.publish"]),
   };
 
   await db.locale.create({
@@ -517,7 +519,7 @@ describe("publishing", () => {
     return topicId;
   }
 
-  it("throws PublishPermissionError without lessons.publish", async () => {
+  it("throws PublishPermissionError without videos.publish", async () => {
     const topicId = await approved();
     await expect(
       content.transitionContentStatus(assistant, "videos", topicId, ContentStatus.PUBLISHED),
@@ -527,11 +529,11 @@ describe("publishing", () => {
     expect(detail!.status).toBe(ContentStatus.APPROVED);
   });
 
-  it("names the LESSON key, not a videos.* key that no role can hold", async () => {
+  it("names the VIDEO key, which the lesson key no longer stands in for (ADR-177)", async () => {
     const topicId = await approved();
     await expect(
       content.transitionContentStatus(assistant, "videos", topicId, ContentStatus.PUBLISHED),
-    ).rejects.toThrow(/lessons\.publish/);
+    ).rejects.toThrow(/videos\.publish/);
   });
 
   it("publishes DRAFT directly for an editor who may publish (ADR-147)", async () => {
@@ -545,7 +547,7 @@ describe("publishing", () => {
     const topicId = await makeTopic({ publish: false });
     await expect(
       content.transitionContentStatus(assistant, "videos", topicId, ContentStatus.PUBLISHED),
-    ).rejects.toThrow(/lessons\.publish/);
+    ).rejects.toThrow(/videos\.publish/);
   });
 });
 

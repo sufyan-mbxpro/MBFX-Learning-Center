@@ -56,8 +56,9 @@ describe("the opening band is a slider of published articles", () => {
     // Both sections' flags gate their kinds.
     expect(src).toMatch(/isFeatureVisible\("news"/);
     expect(src).toMatch(/isFeatureVisible\("analysis"/);
-    // `site.description` still leads the static fallback.
-    expect(src).toContain("getSetting");
+    // `site.description` still leads the static fallback — in the reader's
+    // language since ADR-165.
+    expect(src).toContain('getLocalizedSetting("site.description", locale)');
   });
 
   it("falls back to the static band when nothing is published", () => {

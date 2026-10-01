@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import {
@@ -9,12 +10,15 @@ import {
   KeyRound,
   Laptop,
   ListChecks,
+  Mail,
   ShieldCheck,
   Trophy,
   UserRound,
   UsersRound,
 } from "lucide-react";
 import {
+  getAnnouncementSuppression,
+  listEmailsSentToUser,
   loadAssignableRoles,
   loadLearnerActivity,
   loadRoleMatrix,
@@ -26,7 +30,9 @@ import { Progress } from "@repo/ui/components/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@repo/ui/components/tabs";
 import { formatDate, formatDateTime, humanizeKey } from "@repo/utils";
 import { AdminPage, AdminSection } from "../../_components/admin-page.tsx";
+import { richTextLabels } from "../../_components/editor-labels.ts";
 import { permissionGroupLabel } from "../../_components/permission-groups.ts";
+import { SendEmailButton } from "../../_components/send-email-dialog.tsx";
 import {
   RecordCard,
   RecordEmpty,
@@ -34,7 +40,13 @@ import {
   RecordStat,
   RecordStats,
 } from "../../_components/record-page.tsx";
-import { StatusBadge, USER_STATUS_TONE, statusTone } from "../../_components/status-badge.tsx";
+import {
+  StatusBadge,
+  USER_STATUS_TONE,
+  statusTone,
+  type StatusTone,
+} from "../../_components/status-badge.tsx";
+import { AnnouncementSuppression } from "./announcement-suppression.tsx";
 import { OverrideControls, ResetPasswordButton, RoleControls } from "./detail-controls.tsx";
 import {
   ControlTile,
@@ -56,6 +68,16 @@ import {
 // IDOR discipline (security.md #7): the load is scoped to non-deleted users
 // and 404s when absent. Every control re-checks its own permission in its
 // server action; which ones render here is UX.
+/** A recipient row's outcome → badge tone, for the Emails tab (ADR-172). */
+const EMAIL_STATUS_TONE: Record<string, StatusTone> = {
+  PENDING: "info",
+  SENDING: "info",
+  SENT: "success",
+  FAILED: "destructive",
+  SUPPRESSED: "neutral",
+  SKIPPED: "neutral",
+};
+
 export default async function UserDetailPage({ params }: PageProps<"/keystone/users/[id]">) {
   const subject = await requirePermission("users.view");
   const { id } = await params;
@@ -72,12 +94,24 @@ export default async function UserDetailPage({ params }: PageProps<"/keystone/us
   const isLearner = user.userType === "LEARNER";
   // The admin is English-only (ADR-043 #2), so titles resolve in `en`.
   const activity = isLearner ? await loadLearnerActivity(user.id, "en") : null;
+  // ADR-171 #5: whether this learner hears about new courses. STAFF are in no
+  // announcement audience, so the row is a learner's only.
+  const suppression = isLearner ? await getAnnouncementSuppression(subject, user.email) : null;
+  // ADR-172: one-to-one email from the record, and what this person was sent.
+  // The history lists delivery outcomes, so it takes the delivery log's key.
+  const canEmail = can(subject, "announcements.direct");
+  const emails = can(subject, "email.log.view")
+    ? await listEmailsSentToUser(subject, user.id)
+    : null;
 
   const permissionOptions = matrix.groups.flatMap((group) => {
     const groupLabel = permissionGroupLabel(t, group.groupName);
     return group.permissions.map((permission) => ({
       value: permission.key,
-      label: `${groupLabel} · ${permission.label}`,
+      // ADR-177: a key nothing checks says so here too, as in the role editor.
+      label: permission.unused
+        ? `${groupLabel} · ${permission.label} (${t("permissionUnused")})`
+        : `${groupLabel} · ${permission.label}`,
     }));
   });
   const canUpdate = can(subject, "users.update");
@@ -152,6 +186,12 @@ export default async function UserDetailPage({ params }: PageProps<"/keystone/us
       actions={
         <>
           <RefreshButton label={r("refresh")} />
+          {canEmail && (
+            <SendEmailButton
+              recipient={{ kind: "user", id: user.id }}
+              editorLabels={richTextLabels(t)}
+            />
+          )}
           {canImpersonate && (
             <ImpersonateButton
               userId={user.id}
@@ -267,7 +307,7 @@ export default async function UserDetailPage({ params }: PageProps<"/keystone/us
           <ControlTile
             label={r("newsletter")}
             hint={r("newsletterHint")}
-            checked={user.newsletter?.status === "CONFIRMED"}
+            checked={user.newsletter?.status === "ACTIVE"}
           />
         </div>
       </RecordCard>
@@ -297,6 +337,11 @@ export default async function UserDetailPage({ params }: PageProps<"/keystone/us
           {canAssign && (
             <TabsTrigger value="access">
               <KeyRound aria-hidden /> {r("tabAccess")}
+            </TabsTrigger>
+          )}
+          {emails !== null && (
+            <TabsTrigger value="emails">
+              <Mail aria-hidden /> {t("userEmails.tab")}
             </TabsTrigger>
           )}
           <TabsTrigger value="devices">
@@ -378,6 +423,20 @@ export default async function UserDetailPage({ params }: PageProps<"/keystone/us
                     label: r("twoFactor"),
                     value: yesNo(user.twoFactorEnabled, r("enabled"), r("disabled")),
                   },
+                  ...(isLearner
+                    ? [
+                        {
+                          label: t("announcements.suppression.label"),
+                          value: (
+                            <AnnouncementSuppression
+                              email={user.email}
+                              state={suppression?.reason ?? "none"}
+                              canChange={can(subject, "announcements.send")}
+                            />
+                          ),
+                        },
+                      ]
+                    : []),
                   {
                     label: r("newsletter"),
                     value: user.newsletter
@@ -571,6 +630,45 @@ export default async function UserDetailPage({ params }: PageProps<"/keystone/us
                 }}
               />
             </AdminSection>
+          </TabsContent>
+        )}
+
+        {emails !== null && (
+          <TabsContent value="emails" className="pt-4">
+            <RecordCard
+              icon={Mail}
+              title={t("userEmails.title")}
+              description={t("userEmails.description")}
+            >
+              {emails.length === 0 ? (
+                <RecordEmpty>{t("userEmails.empty")}</RecordEmpty>
+              ) : (
+                <ul className="flex flex-col divide-y rounded-lg border">
+                  {emails.map((email) => (
+                    <li
+                      key={email.campaignId}
+                      className="flex flex-wrap items-center justify-between gap-2 px-4 py-3"
+                    >
+                      <span className="flex min-w-0 flex-col gap-0.5">
+                        <Link
+                          href={`/keystone/announcements/${email.campaignId}`}
+                          className="truncate font-medium hover:underline"
+                        >
+                          {email.name}
+                        </Link>
+                        <span className="text-xs text-muted-foreground">
+                          {t(`announcements.kinds.${email.kind}`)}
+                          {email.sentAt ? ` · ${formatDateTime(email.sentAt)}` : ""}
+                        </span>
+                      </span>
+                      <StatusBadge tone={EMAIL_STATUS_TONE[email.status] ?? "neutral"}>
+                        {t(`userEmails.statuses.${email.status}`)}
+                      </StatusBadge>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </RecordCard>
           </TabsContent>
         )}
 

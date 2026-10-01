@@ -99,7 +99,8 @@ export async function generateMetadata({
         href: glossaryTermPath(alt.locale, routing.defaultLocale, alt.slug),
       })),
     }),
-    ...(view.readingLocale ? { robots: { index: false, follow: true } } : {}),
+    // ADR-159 #2: machine-written words at their own URL are not indexed either.
+    ...(view.readingLocale || view.noIndex ? { robots: { index: false, follow: true } } : {}),
     // changes-46 SEO check: the term page had no share card of its own, so
     // Open Graph fell through to the root layout's — no `og:url`, and a title
     // carrying the site template the other content pages leave off. The

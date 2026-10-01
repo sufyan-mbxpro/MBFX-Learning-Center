@@ -59,6 +59,35 @@ export function htmlToText(html: string): string {
     .trim();
 }
 
+/**
+ * Inline formatting tags. They sit INSIDE a run of words, so a display
+ * excerpt removes them without a space — `htmlToText` turns every tag into a
+ * space, which reads "Start <strong>here</strong>." as "Start here .".
+ * Block tags (p, li, h2, br…) are not listed: they separate words and keep
+ * becoming a space.
+ */
+const INLINE_TAG =
+  /<\/?(?:a|abbr|b|cite|code|em|i|kbd|mark|q|s|small|span|strong|sub|sup|u)\b[^>]*>/gi;
+
+/**
+ * Inline tags removed with no space left behind. For DISPLAY text only: word
+ * counts and reading time keep `htmlToText`'s rule, where an extra space can
+ * never merge two words.
+ */
+export function stripInlineTags(html: string): string {
+  return html.replace(INLINE_TAG, "");
+}
+
+/**
+ * A rich-text value as one line of display text — inline markup glued to its
+ * words, entities decoded — cut to `max` characters with an ellipsis. The
+ * shared form of a search hit's or a promotion's borrowed excerpt.
+ */
+export function htmlExcerpt(html: string, max: number): string {
+  const text = htmlToText(stripInlineTags(html));
+  return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
+}
+
 /** Whitespace-delimited word count of already-extracted text. */
 export function countWords(text: string): number {
   if (text === "") return 0;

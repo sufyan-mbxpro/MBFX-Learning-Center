@@ -181,6 +181,27 @@ describe("searchPublicContent — the query itself", () => {
     expect(term?.excerpt).not.toContain("<");
   });
 
+  it("keeps punctuation attached to a word inside inline markup", async () => {
+    // Regression: every tag became a space, so "Buy <strong>low</strong>."
+    // read "Buy low ." in the palette, and `&amp;` became a space.
+    await db.glossaryTerm.create({
+      data: {
+        status: "PUBLISHED",
+        translations: {
+          create: {
+            locale: "en",
+            term: "Quokka rule",
+            slug: "quokka-rule",
+            simpleExplanation: "<p>Buy <strong>low</strong>, sell <em>high</em> &amp; wait.</p>",
+            translationStatus: "TRANSLATED",
+          },
+        },
+      },
+    });
+    const { hits } = await search.searchPublicContent("en", "Quokka rule");
+    expect(hits.find((hit) => hit.kind === "glossary")?.excerpt).toBe("Buy low, sell high & wait.");
+  });
+
   it("does not match a tag name inside a rich-text field", async () => {
     // The other half of the same decision: the stored explanation contains
     // `<em>`, and a reader typing "em" is looking for a word, not for markup.

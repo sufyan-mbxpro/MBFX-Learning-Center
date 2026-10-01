@@ -9,10 +9,17 @@
 // Same conditional-gate precedent as content.ts's publish check.
 import { revalidateTag } from "next/cache";
 import { ArticleKind, ContentStatus, DbNull, TranslationStatus, db, type Prisma } from "@repo/db";
-import { computeSourceHash, isTranslationOutdated } from "@repo/i18n";
 import { can, type Subject } from "@repo/rbac";
 import { parseVideoUrl } from "@repo/utils";
+import { hashArticleSource, loadArticleSource } from "./article-source.ts";
 import { syncReferences } from "./cms/references.ts";
+import { afterSourceSave, enqueueEntityTranslations } from "./translation-queue.ts";
+import {
+  hashArticleCategorySource,
+  hashArticleTagSource,
+  loadArticleCategorySource,
+  loadArticleTagSource,
+} from "./label-source.ts";
 import { ARTICLE, RELATED, loadRelationTargets, replaceRelations } from "./content-relations.ts";
 import type {
   ArticleFaqItemInput,
@@ -325,8 +332,28 @@ async function prepareArticleTranslation(
     select: { slug: true },
   });
 
+  // ADR-161: the source hash covers every translatable field. The English
+  // save hashes what is ABOUT to be stored (its FAQ as typed, or as stored
+  // when this save does not touch the FAQ); another locale records the hash
+  // of the English it was translated from.
   const sourceHash = isSource
-    ? computeSourceHash((input.title ?? "") + (body ?? ""))
+    ? hashArticleSource({
+        title: input.title ?? "",
+        excerpt: input.excerpt ?? null,
+        body,
+        seoTitle: input.seoTitle ?? null,
+        seoDescription: input.seoDescription ?? null,
+        ogTitle: input.ogTitle ?? null,
+        ogDescription: input.ogDescription ?? null,
+        keyTakeaways:
+          input.keyTakeaways && input.keyTakeaways.length > 0 ? input.keyTakeaways : null,
+        faq: input.faqItems
+          ? input.faqItems.map((item) => ({
+              question: item.question,
+              answer: sanitizeRichText(item.answer),
+            }))
+          : ((await loadArticleSource(db, input.articleId, defaultLocale))?.faq ?? []),
+      })
     : await currentArticleSourceHash(input.articleId, defaultLocale);
 
   return {
@@ -428,19 +455,32 @@ async function finishArticleTranslation(
     );
   }
 
-  if (prepared.isSource) {
-    const siblings = await db.articleTranslation.findMany({
-      where: { articleId: input.articleId, locale: { not: defaultLocale } },
-      select: { id: true, sourceHash: true },
+  if (prepared.isSource) await afterSourceChange(input.articleId, defaultLocale);
+}
+
+/**
+ * After the English text of an article changed (ADR-161 #3): a person's
+ * TRANSLATED sibling whose hash no longer matches — or was never known
+ * (#4) — becomes OUTDATED; a MACHINE_TRANSLATED one is left for the job to
+ * re-translate, which the enqueue below arranges. The other human states
+ * (NEEDS_REVIEW, DRAFT, OUTDATED) are already out of the current set and are
+ * not touched. The hash is read back from the database, after the write
+ * committed, so the sweep and the job agree on what the source is.
+ */
+async function afterSourceChange(articleId: string, defaultLocale: string): Promise<void> {
+  const current = await currentArticleSourceHash(articleId, defaultLocale);
+  if (current !== null) {
+    await db.articleTranslation.updateMany({
+      where: {
+        articleId,
+        locale: { not: defaultLocale },
+        translationStatus: TranslationStatus.TRANSLATED,
+        OR: [{ sourceHash: null }, { sourceHash: { not: current } }],
+      },
+      data: { translationStatus: TranslationStatus.OUTDATED },
     });
-    const stale = siblings.filter((s) => isTranslationOutdated(prepared.sourceHash!, s.sourceHash));
-    if (stale.length > 0) {
-      await db.articleTranslation.updateMany({
-        where: { id: { in: stale.map((s) => s.id) } },
-        data: { translationStatus: TranslationStatus.OUTDATED },
-      });
-    }
   }
+  await enqueueEntityTranslations("article", articleId);
 }
 
 /**
@@ -481,12 +521,8 @@ async function currentArticleSourceHash(
   articleId: string,
   defaultLocale: string,
 ): Promise<string | null> {
-  const source = await db.articleTranslation.findUnique({
-    where: { articleId_locale: { articleId, locale: defaultLocale } },
-    select: { title: true, body: true },
-  });
-  if (!source) return null;
-  return computeSourceHash(source.title + (source.body ?? ""));
+  const source = await loadArticleSource(db, articleId, defaultLocale);
+  return source ? hashArticleSource(source) : null;
 }
 
 /**
@@ -626,6 +662,12 @@ export async function quickUpdateArticle(
       actor.id,
     );
   }
+  // A title edited here is the English source changing: the same sweep and
+  // enqueue a full save does. It used to skip both, leaving translations of
+  // the old title marked current.
+  if (existing && input.title !== undefined && input.title !== existing.title) {
+    await afterSourceChange(articleId, defaultLocale);
+  }
 
   await recordAudit({
     userId: actor.id,
@@ -684,6 +726,10 @@ export async function transitionArticle(
       after: { status: to, ...(scheduledFor ? { scheduledFor: scheduledFor.toISOString() } : {}) },
     },
   });
+  // ADR-161 #1: a status change enqueues too. A job for an article that is
+  // already translated and current is a no-op, and going live is the moment
+  // a missing translation starts to matter.
+  if (publishing) await enqueueEntityTranslations("article", articleId);
   revalidateTag("content", { expire: 0 });
 }
 
@@ -727,6 +773,8 @@ export async function setArticleDeleted(
     entityType: "article",
     entityId: articleId,
   });
+  // A job skips a deleted article, so one restored may have missed a change.
+  if (!deleted) await enqueueEntityTranslations("article", articleId);
   revalidateTag("content", { expire: 0 });
 }
 
@@ -820,6 +868,7 @@ export async function publishDueArticles(now: Date = new Date()): Promise<number
     entityType: "article",
     changes: { after: { count: due.length, ids: due.map((r) => r.id) } },
   });
+  for (const row of due) await enqueueEntityTranslations("article", row.id);
   revalidateTag("content", { expire: 0 });
   return due.length;
 }
@@ -1137,6 +1186,7 @@ export async function createArticleCategory(
     entityId: category.id,
     changes: { after: { name: input.name } },
   });
+  await enqueueEntityTranslations("article_category", category.id);
   revalidateTag("content", { expire: 0 });
   return category.id;
 }
@@ -1166,12 +1216,22 @@ export async function saveArticleCategoryTranslation(
   const existing = await db.articleCategoryTranslation.findUnique({
     where: { categoryId_locale: { categoryId: input.categoryId, locale: input.locale } },
   });
+  const isSource = input.locale === defaultLocale;
+  // A person's save is TRANSLATED and records the English it was made from
+  // (ADR-161); without the status, saving over a machine row left it machine.
+  const translatedFrom = isSource
+    ? null
+    : await loadArticleCategorySource(db, input.categoryId, defaultLocale).then((s) =>
+        s ? hashArticleCategorySource(s) : null,
+      );
   const fields = {
     name: input.name,
     slug,
     description: input.description ?? null,
     seoTitle: input.seoTitle ?? null,
     seoDescription: input.seoDescription ?? null,
+    translationStatus: TranslationStatus.TRANSLATED,
+    ...(isSource ? {} : { sourceHash: translatedFrom }),
   };
   await db.articleCategoryTranslation.upsert({
     where: { categoryId_locale: { categoryId: input.categoryId, locale: input.locale } },
@@ -1192,6 +1252,17 @@ export async function saveArticleCategoryTranslation(
     entityId: `${input.categoryId}:${input.locale}`,
     changes: { after: { name: input.name, slug, locale: input.locale } },
   });
+  if (isSource) {
+    const source = await loadArticleCategorySource(db, input.categoryId, defaultLocale);
+    const hash = source ? hashArticleCategorySource(source) : null;
+    if (hash) {
+      await db.articleCategoryTranslation.updateMany({
+        where: { categoryId: input.categoryId, locale: defaultLocale },
+        data: { sourceHash: hash },
+      });
+    }
+    await afterSourceSave("article_category", input.categoryId, hash, defaultLocale);
+  }
   revalidateTag("content", { expire: 0 });
 }
 
@@ -1273,6 +1344,7 @@ export async function createArticleTag(
     entityId: tag.id,
     changes: { after: { name: input.name } },
   });
+  await enqueueEntityTranslations("article_tag", tag.id);
   revalidateTag("content", { expire: 0 });
   return tag.id;
 }
@@ -1286,10 +1358,22 @@ export async function saveArticleTagTranslation(
   const existing = await db.articleTagTranslation.findUnique({
     where: { tagId_locale: { tagId: input.tagId, locale: input.locale } },
   });
+  const isSource = input.locale === defaultLocale;
+  const translatedFrom = isSource
+    ? null
+    : await loadArticleTagSource(db, input.tagId, defaultLocale).then((s) =>
+        s ? hashArticleTagSource(s) : null,
+      );
+  const fields = {
+    name: input.name,
+    slug,
+    translationStatus: TranslationStatus.TRANSLATED,
+    ...(isSource ? {} : { sourceHash: translatedFrom }),
+  };
   await db.articleTagTranslation.upsert({
     where: { tagId_locale: { tagId: input.tagId, locale: input.locale } },
-    update: { name: input.name, slug },
-    create: { tagId: input.tagId, locale: input.locale, name: input.name, slug },
+    update: fields,
+    create: { tagId: input.tagId, locale: input.locale, ...fields },
   });
   if (existing && existing.slug !== slug) {
     await createSlugRedirect(
@@ -1305,6 +1389,17 @@ export async function saveArticleTagTranslation(
     entityId: `${input.tagId}:${input.locale}`,
     changes: { after: { name: input.name, slug, locale: input.locale } },
   });
+  if (isSource) {
+    const source = await loadArticleTagSource(db, input.tagId, defaultLocale);
+    const hash = source ? hashArticleTagSource(source) : null;
+    if (hash) {
+      await db.articleTagTranslation.updateMany({
+        where: { tagId: input.tagId, locale: defaultLocale },
+        data: { sourceHash: hash },
+      });
+    }
+    await afterSourceSave("article_tag", input.tagId, hash, defaultLocale);
+  }
   revalidateTag("content", { expire: 0 });
 }
 

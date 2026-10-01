@@ -1,8 +1,8 @@
-import { createHash, timingSafeEqual } from "node:crypto";
 import { revalidateTag } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
 import { MARKET_CACHE_TAG, getSyncDueState, syncDailyBars } from "@repo/core";
 import { recordAudit } from "@repo/core";
+import { cronAuthFailure } from "../_lib/cron-auth.ts";
 
 // The nightly market sweep (ADR-087 #9/#11) — `publish-due`'s twin, and
 // deliberately the same shape rather than a second convention.
@@ -44,36 +44,11 @@ import { recordAudit } from "@repo/core";
 // route handler reading `process.env` and the request headers is dynamic
 // already.
 
-function unauthorized(): NextResponse {
-  return NextResponse.json(
-    { error: "unauthorized" },
-    { status: 401, headers: { "cache-control": "no-store" } },
-  );
-}
-
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  const secret = process.env.CRON_SECRET;
-
-  // Absent secret FAILS CLOSED. An unset variable must never mean "anyone may
-  // spend the provider's request budget" — 503 says the endpoint is not
-  // configured, which is true, and leaves the product correct because of the
-  // degrade rule above.
-  if (!secret) {
-    return NextResponse.json(
-      { error: "not_configured" },
-      { status: 503, headers: { "cache-control": "no-store" } },
-    );
-  }
-
-  const header = request.headers.get("authorization") ?? "";
-  const presented = header.startsWith("Bearer ") ? header.slice(7) : "";
-
-  // Compare SHA-256 digests, not the strings. `timingSafeEqual` THROWS on a
-  // length mismatch, so feeding it raw secrets of different lengths would
-  // force an early return that leaks the length through timing. Digests are
-  // always 32 bytes, so the comparison is constant-width for every input.
-  const digest = (v: string) => createHash("sha256").update(v).digest();
-  if (!timingSafeEqual(digest(presented), digest(secret))) return unauthorized();
+  // The shared bearer check (`_lib/cron-auth.ts`): 503 with no secret, 401
+  // for anything but the right token.
+  const refused = cronAuthFailure(request);
+  if (refused) return refused;
 
   const startedAt = new Date();
 

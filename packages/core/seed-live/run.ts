@@ -10,7 +10,7 @@
 //      two here), two quizzes, six video topics — each skipped when its slug
 //      already exists.
 //   4. Pictures for every seeded row that has none: demo courses, lessons,
-//      quizzes, video topics, glossary topics and articles.
+//      quizzes, video topics, glossary topics, articles and promotions.
 //
 // Everything is written through @repo/core, so the sanitizer, the lesson
 // recount, redirects, ContentReference rows and the audit log all run
@@ -23,6 +23,7 @@ import { loadSubject, type Subject } from "@repo/rbac";
 import { setFeatureFlagEnabled, updateSettings, type UpdateSettingsEntry } from "@repo/settings";
 import {
   courseInputSchema,
+  promotionSaveSchema,
   lessonInputSchema,
   quizInputSchema,
   videoTopicInputSchema,
@@ -37,6 +38,7 @@ import {
   createQuiz,
   createSection,
   createVideoTopic,
+  getPromotion,
   getQuizAdmin,
   getVideoTopicAdmin,
   loadCourseAdminDetail,
@@ -51,6 +53,7 @@ import {
   saveGlossaryTopic,
   saveLesson,
   saveMarketProvider,
+  savePromotion,
   saveQuiz,
   saveSection,
   saveTheme,
@@ -70,6 +73,7 @@ import {
   COURSES,
   DEMO_COURSE_COVERS,
   DEMO_LESSON_HEROES,
+  DEMO_PROMOTION_IMAGES,
   DEMO_QUIZ_COVERS,
   DEMO_VIDEO_COVERS,
   GLOSSARY_TOPIC_COVERS,
@@ -841,6 +845,63 @@ async function fillArticleImages(actor: Subject, locale: string): Promise<void> 
   }
 }
 
+/**
+ * The three promotions `db:seed` writes without a picture. Saved through
+ * `savePromotion` with everything else unchanged, so the `ContentReference`,
+ * the audit row and the version bump are an admin's save. The translation's
+ * `imageAlt` is set too: the public card reads it and has no fallback to the
+ * library row's alt text.
+ */
+async function fillPromotionImages(actor: Subject, locale: string): Promise<void> {
+  for (const [id, picture] of Object.entries(DEMO_PROMOTION_IMAGES)) {
+    const promo = await getPromotion(id);
+    const tr = promo?.translations.find((x) => x.locale === locale);
+    if (!promo || !tr || promo.deletedAt || promo.imageAssetId) continue;
+    const pic = await image(actor, picture, "promo");
+    const link =
+      promo.linkKind === "CONTENT" && promo.target
+        ? { kind: "CONTENT" as const, targetType: promo.target.type, targetId: promo.target.id }
+        : promo.linkKind === "PATH" && promo.targetPath
+          ? { kind: "PATH" as const, path: promo.targetPath }
+          : promo.linkKind === "EXTERNAL" && promo.targetUrl
+            ? { kind: "EXTERNAL" as const, url: promo.targetUrl }
+            : { kind: "NONE" as const };
+    await savePromotion(
+      actor,
+      promotionSaveSchema.parse({
+        id: promo.id,
+        kind: promo.kind,
+        placements: promo.placements,
+        showAsPopup: promo.showAsPopup,
+        showInBand: promo.showInBand,
+        showAsBar: promo.showAsBar,
+        barPosition: promo.barPosition,
+        priority: promo.priority,
+        startsAt: promo.startsAt,
+        endsAt: promo.endsAt,
+        eventStartsAt: promo.eventStartsAt,
+        eventEndsAt: promo.eventEndsAt,
+        frequency: promo.frequency,
+        delaySeconds: promo.delaySeconds,
+        audience: promo.audience,
+        untranslated: promo.untranslated,
+        imageAssetId: pic.id,
+        link,
+        recordingTopicId: promo.recording?.id ?? null,
+        translation: {
+          locale,
+          title: tr.title,
+          body: tr.body,
+          badge: tr.badge,
+          ctaLabel: tr.ctaLabel,
+          imageAlt: tr.imageAlt ?? IMAGE_ALT[picture],
+        },
+      }),
+    );
+    stats.filled += 1;
+  }
+}
+
 // ─── Report ──────────────────────────────────────────────────
 
 async function report(): Promise<void> {
@@ -901,6 +962,7 @@ async function main(): Promise<void> {
   await fillVideoCovers(actor, locale);
   await fillGlossaryTopicCovers(actor, locale);
   await fillArticleImages(actor, locale);
+  await fillPromotionImages(actor, locale);
 
   await report();
 }

@@ -50,6 +50,11 @@ export const URL_EMAIL_VARIABLES = [
   "verify.url",
   "confirm.url",
   "unsubscribe.url",
+  // ADR-171: the announcement's destination and its cover. A cover is an
+  // `<img src>`, which the sanitiser saw as a relative path exactly as it saw
+  // an href, so it is validated here like one.
+  "course.url",
+  "course.coverUrl",
 ] as const;
 
 export interface EmailTemplateDefinition {
@@ -180,6 +185,40 @@ export const EMAIL_TEMPLATES = {
       "contact.message":
         "The reset link in your email says it has expired, but I only asked for it a minute ago.",
       "contact.locale": "en",
+    },
+  },
+  // ADR-171 #8 — a new course, announced to a chosen audience. Public, so it
+  // is translated per active locale (ADR-043). Not `critical`: switching it
+  // off stops announcements, which is a choice, not a broken flow.
+  //
+  // Every variable ALWAYS has a value, because the template language has no
+  // conditionals (ADR-078 #6): a coverless course gets its track's raster
+  // panel, and an absent note is the empty string.
+  "announcement.course": {
+    audience: "public",
+    critical: false,
+    variables: [
+      "course.title",
+      "course.summary",
+      "course.level",
+      "course.lessonCount",
+      "course.url",
+      "course.coverUrl",
+      "campaign.message",
+      "unsubscribe.url",
+    ],
+    required: ["course.url", "unsubscribe.url"],
+    sample: {
+      ...SAMPLE_BASE,
+      "course.title": "Forex Basics",
+      "course.summary":
+        "How a currency pair is quoted, what moves it, and how to read a price chart.",
+      "course.level": "Beginner",
+      "course.lessonCount": "12",
+      "course.url": "https://example.com/learn/forex/forex-basics",
+      "course.coverUrl": "https://example.com/email/track-forex.png",
+      "campaign.message": "Our most requested course is here.",
+      "unsubscribe.url": "https://example.com/email/unsubscribe?t=sample",
     },
   },
 } as const satisfies Record<string, EmailTemplateDefinition>;
@@ -346,6 +385,8 @@ export const emailDeliveryFilterSchema = z.object({
   /** Matches the recipient address. */
   q: z.string().trim().max(255).optional(),
   isTest: z.boolean().optional(),
+  /** One announcement's sends (ADR-171): the detail page links here with it. */
+  campaignId: z.string().min(1).max(191).optional(),
   cursor: z.string().max(256).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });

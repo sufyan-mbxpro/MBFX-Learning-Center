@@ -30,7 +30,7 @@ let progress: typeof ProgressModule;
 let quizzes: typeof QuizzesModule;
 
 let editor: Subject;
-/** Has every lessons.* key EXCEPT publish — ADR-058 #8's gate, tested. */
+/** Has every quizzes.* key EXCEPT publish — ADR-177's gate, tested. */
 let assistant: Subject;
 let learner: string;
 
@@ -79,12 +79,25 @@ beforeAll(async () => {
       "lessons.create",
       "lessons.update",
       "lessons.publish",
+      "quizzes.view",
+      "quizzes.create",
+      "quizzes.update",
+      "quizzes.publish",
     ]),
     denied: new Set(),
   };
   assistant = {
     ...editor,
-    allowed: new Set(["courses.update", "lessons.create", "lessons.update"]),
+    // `lessons.publish` is held on purpose: since ADR-177 it does not publish a
+    // quiz, and the authoring test below proves it.
+    allowed: new Set([
+      "courses.update",
+      "lessons.create",
+      "lessons.update",
+      "lessons.publish",
+      "quizzes.create",
+      "quizzes.update",
+    ]),
   };
 
   learner = (
@@ -676,16 +689,14 @@ describe("quiz generation's source lesson (ADR-097 #4)", () => {
 });
 
 describe("authoring", () => {
-  it("requires lessons.publish to publish, because quizzes reuse the lesson keys", async () => {
+  it("requires quizzes.publish to publish, and lessons.publish is not enough", async () => {
     const quizId = await quizzes.createQuiz(editor, { title: "Gated", track: "forex" });
     await quizzes.setQuizStatus(editor, quizId, ContentStatus.IN_REVIEW);
     await quizzes.setQuizStatus(editor, quizId, ContentStatus.SEO_REVIEW);
     await quizzes.setQuizStatus(editor, quizId, ContentStatus.APPROVED);
 
-    // The assistant holds lessons.update but NOT lessons.publish. If the
-    // permission map interpolated the entity name it would look for
-    // `quizzes.publish`, which no role can hold, and EVERY publish would fail
-    // — including the editor's.
+    // The assistant holds `lessons.publish` but NOT `quizzes.publish`
+    // (ADR-177). Before ADR-177 the lesson key published quizzes too.
     await expect(
       quizzes.setQuizStatus(assistant, quizId, ContentStatus.PUBLISHED),
     ).rejects.toThrow();

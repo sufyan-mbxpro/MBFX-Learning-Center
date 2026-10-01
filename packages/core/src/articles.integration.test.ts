@@ -503,7 +503,7 @@ describe("visibility rule (status × isActive × category × deletion)", () => {
   });
 
   // ADR-127: reading an article in another language without changing the site's.
-  it("reads a human translation by ?lang=, and never a machine one", async () => {
+  it("reads a translation by ?lang= — a machine one too since ADR-159, never indexed", async () => {
     const id = await publishedArticle();
     const { slug } = await db.articleTranslation.findUniqueOrThrow({
       where: { articleId_locale: { articleId: id, locale: "en" } },
@@ -517,12 +517,21 @@ describe("visibility rule (status × isActive × category × deletion)", () => {
       body: "<p>máquina</p>",
       machineTranslated: true,
     });
+    // ADR-159 #1: machine translations are served on every path, so ?lang=
+    // offers what /es already serves. #2: never indexable — not in the
+    // alternates, and the Spanish page itself is noindex.
     const machine = await publicArticles.loadArticleBySlug("en", slug, "es");
-    expect(machine?.locale).toBe("en");
-    expect(machine?.readingLocale).toBeNull();
-    expect(machine?.readingLanguages.map((l) => l.locale)).toEqual(["en"]);
+    expect(machine?.readingLocale).toBe("es");
+    expect(machine?.title).toBe("Traducido por máquina");
+    expect(machine?.readingLanguages.map((l) => l.locale)).toEqual(["en", "es"]);
+    expect(machine?.alternates.map((a) => a.locale)).toEqual(["en"]);
+    const machinePage = await db.articleTranslation.findUniqueOrThrow({
+      where: { articleId_locale: { articleId: id, locale: "es" } },
+      select: { slug: true },
+    });
+    expect((await publicArticles.loadArticleBySlug("es", machinePage.slug))?.noIndex).toBe(true);
 
-    // An editor's Save is the promotion (ADR-097), and it makes it readable.
+    // An editor's Save is the promotion (ADR-097): it makes it indexable.
     await articles.saveArticleTranslation(editor, {
       articleId: id,
       locale: "es",

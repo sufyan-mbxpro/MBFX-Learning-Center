@@ -157,6 +157,7 @@ export function aiTranslateLabels(
 ): AiTranslateLabels {
   return {
     action: t("translateAction", { source: sourceLocale }),
+    refineAction: t("translateRefineAction"),
     confirmTitle: t("translateConfirmTitle"),
     confirmDescription: t("translateConfirmDescription"),
     confirm: t("translateConfirm"),

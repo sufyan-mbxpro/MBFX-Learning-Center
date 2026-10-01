@@ -31,6 +31,9 @@ export type SocialGlyphName =
   | "tiktok"
   | "telegram"
   | "whatsapp"
+  // ADR-169: the review platforms' buttons. Facebook's mark above serves Meta.
+  | "google"
+  | "trustpilot"
   | "link";
 
 const GLYPHS: Record<SocialGlyphName, React.ReactNode> = {
@@ -82,6 +85,18 @@ const GLYPHS: Record<SocialGlyphName, React.ReactNode> = {
     <>
       <path d="M20.5 11.7a8.5 8.5 0 0 1-12.6 7.5L3.5 20.5l1.4-4.3A8.5 8.5 0 1 1 20.5 11.7z" />
       <path d="M8.9 8.4c.3-.1.6 0 .8.3l.8 1.3c.1.3.1.6-.1.8l-.5.5c.5 1 1.3 1.8 2.3 2.3l.5-.5c.2-.2.5-.2.8-.1l1.3.8c.3.2.4.5.3.8-.3.8-1.1 1.3-2 1.1-2.7-.5-4.8-2.6-5.3-5.3-.2-.9.3-1.7 1.1-2z" />
+    </>
+  ),
+  google: (
+    <>
+      {/* A "G": an open ring with its bar, not the vendor's four-colour mark. */}
+      <path d="M20 12a8 8 0 1 1-2.34-5.66" />
+      <path d="M20 12h-7.5" />
+    </>
+  ),
+  trustpilot: (
+    <>
+      <path d="M12 3.5l2.6 5.6 6 .6-4.5 4 1.3 6-5.4-3.1-5.4 3.1 1.3-6-4.5-4 6-.6z" />
     </>
   ),
   link: (

@@ -120,9 +120,45 @@ export async function createE2eFixtures(): Promise<void> {
   });
 
   await addKeyTakeaways();
+  await activateArabic();
 
   console.log(`  e2e fixtures: ${VIEWER_EMAIL} (${VIEWER_ROLE_KEY}, read-only on articles)`);
   console.log(`  e2e fixtures: ${LEARNER_EMAIL} (LEARNER, no role)`);
+  console.log(`  e2e fixtures: ar active (RTL smoke + axe, testing.md #4)`);
+}
+
+/**
+ * Arabic, served — the state Phase 6 puts a real install in (ADR-166).
+ *
+ * testing.md #4 wants the public suite run in `en` AND `ar`, and every RTL
+ * assertion in the suite skipped itself while the seed left `ar` inactive,
+ * which is exactly the state they were written to catch regressions in. The
+ * seed stays as it is: a fresh install serves English only (ADR-007).
+ *
+ * The admin refuses to switch a language on until a PERSON has written its
+ * two legal lines (ADR-165 #9), so the fixture writes them first, as the
+ * admin would. Placeholder words — this is a test database.
+ */
+async function activateArabic(): Promise<void> {
+  const legal = {
+    "legal.riskDisclaimer": "نص تجريبي لإخلاء المسؤولية عن المخاطر.",
+    "legal.copyrightNotice": "© {year} نص تجريبي لحقوق النشر.",
+  } as const;
+  for (const [key, text] of Object.entries(legal)) {
+    const setting = await db.setting.findUnique({ where: { key }, select: { id: true } });
+    if (!setting) continue;
+    await db.settingTranslation.upsert({
+      where: { settingId_locale: { settingId: setting.id, locale: "ar" } },
+      update: {},
+      create: {
+        settingId: setting.id,
+        locale: "ar",
+        value: { value: text },
+        translationStatus: "TRANSLATED",
+      },
+    });
+  }
+  await db.locale.update({ where: { code: "ar" }, data: { isActive: true } });
 }
 
 /**

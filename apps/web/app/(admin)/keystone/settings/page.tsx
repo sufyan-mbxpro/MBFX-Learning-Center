@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 import { ArrowRight } from "lucide-react";
 import { requireAnyPermission } from "@repo/rbac";
+import { SETTINGS_ENTRY_KEYS } from "./_components/settings-entry-keys.ts";
 import { Card, CardAction, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
 import { AdminPage } from "../_components/admin-page.tsx";
 import { groupDescription, loadSettingsIndex } from "./_components/settings-shared.ts";
@@ -28,20 +29,8 @@ function descriptionKey(href: string): string {
 // Cards for social/navigation/theme front their own screens —
 // each destination re-checks its own permission key.
 export default async function SettingsHubPage() {
-  const subject = await requireAnyPermission([
-    "settings.view",
-    "social.manage",
-    "navigation.manage",
-    "theme.update",
-    // `support` holds only this one key under settings (ADR-078 #4).
-    "email.log.view",
-    // changes-37: the market provider card (ADR-121 §6).
-    "market.providers.manage",
-    // changes-51: AI lives here now, and has no sidebar entry of its own.
-    "ai.usage.view",
-    "ai.settings.manage",
-    "ai.providers.manage",
-  ]);
+  // The same list as the sidebar's Settings row (ADR-177).
+  const subject = await requireAnyPermission([...SETTINGS_ENTRY_KEYS]);
   const t = await getTranslations("admin");
   const { navEntries, groups } = await loadSettingsIndex(subject, t);
 

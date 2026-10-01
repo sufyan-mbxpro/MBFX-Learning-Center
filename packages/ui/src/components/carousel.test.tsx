@@ -3,7 +3,7 @@
 // IntersectionObserver, which makes it exactly the environment to prove that:
 // every assertion below runs with the observer absent, and the component still
 // has to render all of its content and keep its controls sane.
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Carousel } from "./carousel.tsx";
 
@@ -55,9 +55,15 @@ describe("Carousel — the no-JS surface", () => {
 
   it("the track is a keyboard-reachable scroll region", () => {
     const { container } = renderCarousel();
-    const track = container.querySelector("ul.carousel-track");
+    const track = container.querySelector("div.carousel-track");
     expect(track).toBeTruthy();
     expect(track?.getAttribute("tabindex")).toBe("0");
+  });
+
+  it("is not a list, because a slide's group role would leave it with no items", () => {
+    const { container } = renderCarousel();
+    expect(container.querySelector("ul.carousel-track")).toBeNull();
+    expect(container.querySelector('li[role="group"]')).toBeNull();
   });
 });
 
@@ -274,19 +280,16 @@ describe("Carousel — opt-in autoplay and hover arrows (changes-37, ADR-121 §4
       </Carousel>,
     );
   }
-  const autoplay = { pauseLabel: "Pause quotes", playLabel: "Play quotes" };
+  const autoplay = { interval: 6000 };
 
-  it("renders no pause control and no hover arrows unless asked", () => {
+  it("renders no hover arrows unless asked", () => {
     renderWith({ controls: "dots" });
-    expect(screen.queryByRole("button", { name: "Pause quotes" })).toBeNull();
     expect(screen.queryAllByRole("button", { name: /quote$/ })).toHaveLength(0);
   });
 
-  it("autoplay renders a visible pause button that names the state it changes to", () => {
+  it("autoplay renders no pause or play button (changes-56)", () => {
     renderWith({ controls: "dots", autoplay });
-    const button = screen.getByRole("button", { name: "Pause quotes" });
-    fireEvent.click(button);
-    expect(screen.getByRole("button", { name: "Play quotes" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /pause|play/i })).toBeNull();
   });
 
   it("autoplay loops, so neither arrow is disabled at the first slide", () => {

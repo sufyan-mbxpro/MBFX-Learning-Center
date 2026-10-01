@@ -128,6 +128,9 @@ export const HOME_SECTION_BUILT_KEYS = [
   // datasets — a testimonial, a published video topic, the enabled tools — and
   // therefore the first that degrades per COLUMN rather than per band.
   "in_practice",
+  // Built by changes-52 P4 (ADR-167), seeded in the same change. Renders
+  // nothing while no promotion is live with "show in the home band".
+  "promotions",
 ] as const satisfies readonly string[];
 
 /**
@@ -268,6 +271,19 @@ export function adminSessionTimeoutMs(value: AdminSessionTimeout): number | null
   return value === "never" ? null : Number(value) * 60_000;
 }
 
+/**
+ * The Inactive users card's threshold (ADR-171, plan §4): a learner who has
+ * not signed in for this many days. Days as strings, because a SELECT
+ * setting's options are strings; `announcementInactiveDays` is the one reader.
+ */
+export const ANNOUNCEMENT_INACTIVE_DAYS = ["14", "30", "60", "90"] as const;
+
+export type AnnouncementInactiveDays = (typeof ANNOUNCEMENT_INACTIVE_DAYS)[number];
+
+export function announcementInactiveDays(value: AnnouncementInactiveDays): number {
+  return Number(value);
+}
+
 /** `seo.titleTemplate`'s slot for the page's own title. */
 export const TITLE_PLACEHOLDER = "%s";
 /** `seo.titleTemplate`'s slot for `site.name`. */
@@ -294,16 +310,8 @@ export const SETTINGS_SCHEMAS = {
   "site.defaultLocale": z.string().min(2).max(10),
   "site.defaultTimezone": z.string().min(1).max(64),
   "site.defaultThemeMode": z.enum(["light", "dark", "system"]),
-  // changes-41 / ADR-135 — where "Share your experience" sends a reader (a
-  // Trustpilot review page). https only, because it is printed as a link on
-  // every tool page; empty makes the band absent rather than a dead button.
-  "site.reviewsUrl": z.union([
-    z.literal(""),
-    z
-      .string()
-      .max(500)
-      .regex(/^https:\/\/[^\s/]+\.[^\s]+$/, "must be an https:// address"),
-  ]),
+  // NOTE: no `site.reviewsUrl` (ADR-169). The reviews band's links are the
+  // `review_platforms` rows, one per platform, edited at General → Reviews.
   // ADR-105 — how long a STAFF session survives without admin activity.
   // Minutes as strings with an explicit "never", not a number with 0 meaning
   // unlimited: a sentinel a reader has to be told about is one the screen
@@ -416,6 +424,12 @@ export const SETTINGS_SCHEMAS = {
   "newsletter.placements.home": z.boolean(),
   "newsletter.placements.news": z.boolean(),
   "newsletter.placements.analysis": z.boolean(),
+  // Announcement emails (ADR-171 #12). Pacing belongs to the PROVIDER, so it
+  // is a setting: SendGrid takes thousands a minute, a Workspace SMTP account
+  // a few hundred a day.
+  "email.campaignRatePerMinute": z.int().min(1).max(1000),
+  "email.campaignBatchSize": z.int().min(1).max(200),
+  "announcements.inactiveDays": z.enum(ANNOUNCEMENT_INACTIVE_DAYS),
 
   // AI platform (Module 18, ADR-097/099/100). Every one of these is
   // `isPublic: false` — security.md #12 forbids a non-public setting from
@@ -461,7 +475,6 @@ export const SETTING_GROUPS: Record<SettingKey, string> = {
   "site.defaultLocale": "general",
   "site.defaultTimezone": "general",
   "site.defaultThemeMode": "general",
-  "site.reviewsUrl": "general",
   "security.adminSessionTimeout": "general",
   "security.learnerSessionTimeout": "general",
   "security.requireStaffTwoFactor": "general",
@@ -514,6 +527,9 @@ export const SETTING_GROUPS: Record<SettingKey, string> = {
   "newsletter.placements.home": "email",
   "newsletter.placements.news": "email",
   "newsletter.placements.analysis": "email",
+  "email.campaignRatePerMinute": "email",
+  "email.campaignBatchSize": "email",
+  "announcements.inactiveDays": "email",
 
   "ai.enabled": "ai",
   "ai.maxTokensPerRequest": "ai",
@@ -544,6 +560,7 @@ export const SETTING_WIDGETS: Partial<Record<SettingKey, SettingWidget>> = {
   "site.defaultThemeMode": "select",
   "security.adminSessionTimeout": "select",
   "security.learnerSessionTimeout": "select",
+  "announcements.inactiveDays": "select",
   "media.maxBytes.image": "megabytes",
   "media.maxBytes.video": "megabytes",
   "media.maxBytes.audio": "megabytes",
@@ -555,6 +572,7 @@ export const SETTING_SELECT_OPTIONS: Partial<Record<SettingKey, readonly string[
   "site.defaultThemeMode": ["light", "dark", "system"],
   "security.adminSessionTimeout": ADMIN_SESSION_TIMEOUTS,
   "security.learnerSessionTimeout": ADMIN_SESSION_TIMEOUTS,
+  "announcements.inactiveDays": ANNOUNCEMENT_INACTIVE_DAYS,
 };
 
 // ─── Upload caps in megabytes (changes-46) ────────────────────

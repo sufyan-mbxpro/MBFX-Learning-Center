@@ -69,7 +69,7 @@ export async function generateMetadata({
   return {
     title: titleFrom(template, t("title")),
     description: t("latestLead"),
-    ...listingMetadata(locale, "/news", page, q),
+    ...(await listingMetadata(locale, "/news", page, q)),
   };
 }
 

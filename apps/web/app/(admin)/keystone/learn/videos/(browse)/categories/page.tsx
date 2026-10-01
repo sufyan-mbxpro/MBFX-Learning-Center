@@ -10,15 +10,15 @@ import { NewCategoryButton } from "./categories-controls.tsx";
 //
 // Read gate here; every write re-gates in its own action (security.md #1).
 // The `can()` calls only decide what to render — a hidden button is not
-// security. Gated on `lessons.*` per ADR-068 §3.
+// security. Gated on `videos.*` (ADR-177).
 export default async function VideoCategoriesAdminPage() {
-  const subject = await requirePermission("lessons.view");
+  const subject = await requirePermission("videos.view");
   const rows = await listVideoCategoriesAdmin();
 
   return (
     <>
       <HeaderActions>
-        {can(subject, "lessons.create") ? (
+        {can(subject, "videos.create") ? (
           <NewCategoryButton locale={routing.defaultLocale} />
         ) : undefined}
       </HeaderActions>
@@ -32,8 +32,8 @@ export default async function VideoCategoriesAdminPage() {
           topicCount: row.topicCount,
         }))}
         locale={routing.defaultLocale}
-        canUpdate={can(subject, "lessons.update")}
-        canDelete={can(subject, "lessons.delete")}
+        canUpdate={can(subject, "videos.update")}
+        canDelete={can(subject, "videos.delete")}
       />
     </>
   );

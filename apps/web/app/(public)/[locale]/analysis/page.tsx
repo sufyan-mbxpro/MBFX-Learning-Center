@@ -30,7 +30,7 @@ export async function generateMetadata({
   return {
     title: titleFrom(template, t("analysisTitle")),
     description: t("analysisIntro"),
-    ...listingMetadata(locale, "/analysis", page, q),
+    ...(await listingMetadata(locale, "/analysis", page, q)),
   };
 }
 

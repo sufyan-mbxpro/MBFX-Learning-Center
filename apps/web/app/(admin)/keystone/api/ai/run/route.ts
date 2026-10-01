@@ -46,10 +46,14 @@ const FEATURE_SURFACE_PERMISSIONS: Record<AiFeatureKey, string[] | null> = {
     "analysis.update",
     "courses.update",
     "lessons.update",
+    "quizzes.update",
+    "videos.update",
     "glossary.update",
     "tools.update",
     // changes-46 #4: the email template body. Its save key, per the rule above.
     "email.templates.update",
+    // changes-52 P6: a promotion's body.
+    "promotions.update",
   ],
   // Every editor with an SEO section: the key that saves THAT editor.
   seo_generation: [
@@ -58,13 +62,15 @@ const FEATURE_SURFACE_PERMISSIONS: Record<AiFeatureKey, string[] | null> = {
     "analysis.update",
     "courses.update",
     "lessons.update",
+    "quizzes.update",
+    "videos.update",
     "glossary.update",
     "tools.update",
   ],
   translation: ["translations.update"],
   summarization: ["news.manage", "analysis.update"],
   alt_text: ["media.update"],
-  quiz_generation: ["lessons.update"],
+  quiz_generation: ["quizzes.update"],
   // The union of the modules below. This is the FIRST gate only; the payload
   // names a module, and `requireFillModule` then demands THAT module's key, so
   // holding `glossary.update` does not buy course generation (ADR-126 §6).
@@ -73,8 +79,11 @@ const FEATURE_SURFACE_PERMISSIONS: Record<AiFeatureKey, string[] | null> = {
     "analysis.update",
     "courses.update",
     "lessons.update",
+    "quizzes.update",
+    "videos.update",
     "glossary.update",
     "tools.update",
+    "promotions.update",
   ],
   // ADR-129 §4 — NO surface key, stated rather than implied. The studio writes
   // into no entity: its result is copied out by hand, so there is no content
@@ -85,17 +94,18 @@ const FEATURE_SURFACE_PERMISSIONS: Record<AiFeatureKey, string[] | null> = {
 
 /**
  * The content key each fillable editor saves under. Quizzes and video topics
- * share the lesson keys, as their own save actions do.
+ * have their own keys since ADR-177, as their own save actions do.
  */
 const FILL_MODULE_PERMISSIONS: Record<AiFillModule, string[]> = {
   article: ["news.manage", "analysis.update"],
   course: ["courses.update"],
   lesson: ["lessons.update"],
-  video_topic: ["lessons.update"],
-  quiz: ["lessons.update"],
+  video_topic: ["videos.update"],
+  quiz: ["quizzes.update"],
   glossary_term: ["glossary.update"],
   glossary_topic: ["glossary.update"],
   tool: ["tools.update"],
+  promotion: ["promotions.update"],
 };
 
 function requireFillModule(subject: Subject, module: AiFillModule): void {

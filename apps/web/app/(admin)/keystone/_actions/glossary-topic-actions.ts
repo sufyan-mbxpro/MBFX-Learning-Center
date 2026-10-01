@@ -26,12 +26,18 @@ import {
 } from "@repo/contracts";
 import type { SaveGlossaryTopicInput } from "@repo/contracts";
 import { requirePermission } from "@repo/rbac";
+import { translateSoon } from "./translate-soon.ts";
 
 const id = z.string().min(1).max(64);
 
 export async function createGlossaryTopicAction(name: string): Promise<string> {
   const subject = await requirePermission("glossary.create");
-  return createGlossaryTopic(subject, createGlossaryTopicSchema.parse({ name }).name);
+  const topicId = await createGlossaryTopic(
+    subject,
+    createGlossaryTopicSchema.parse({ name }).name,
+  );
+  translateSoon("glossary_topic", topicId);
+  return topicId;
 }
 
 /**
@@ -56,12 +62,15 @@ export async function saveGlossaryTopicAction(input: unknown): Promise<void> {
     ...parsed.translation,
     ...parsed.meta,
   });
+  translateSoon("glossary_topic", parsed.topicId);
 }
 
 // `glossary.create`, not `glossary.update` — a duplicate mints a topic.
 export async function duplicateGlossaryTopicAction(topicId: string): Promise<string> {
   const subject = await requirePermission("glossary.create");
-  return duplicateGlossaryTopic(subject, id.parse(topicId));
+  const copyId = await duplicateGlossaryTopic(subject, id.parse(topicId));
+  translateSoon("glossary_topic", copyId);
+  return copyId;
 }
 
 export async function deleteGlossaryTopicAction(topicId: string): Promise<void> {

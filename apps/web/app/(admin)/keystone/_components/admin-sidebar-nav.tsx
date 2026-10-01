@@ -30,6 +30,8 @@ import {
   Globe,
   ExternalLink,
   Video,
+  Megaphone,
+  Send,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@repo/ui/lib/utils";
@@ -43,6 +45,7 @@ export const ICONS: Record<string, LucideIcon> = {
   roles: Shield,
   employees: IdCard,
   newsletter: Mail,
+  announcements: Send,
   glossary: BookOpen,
   learnCourses: GraduationCap,
   learnLessons: ListChecks,
@@ -50,6 +53,7 @@ export const ICONS: Record<string, LucideIcon> = {
   learnProgress: ChartLine,
   learnVideos: Video,
   articles: Newspaper,
+  promotions: Megaphone,
   websiteMedia: Image,
   website: Globe,
   market: CandlestickChart,

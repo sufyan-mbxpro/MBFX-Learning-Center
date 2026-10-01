@@ -5,7 +5,7 @@
 import { buildNavigation, getBrandAssets } from "@repo/core";
 import { getActiveLocales } from "@repo/i18n";
 import { Link } from "@repo/i18n/navigation";
-import { getSetting } from "@repo/settings";
+import { getLocalizedSetting, getSetting } from "@repo/settings";
 import { BrandLogo } from "@repo/ui/components/brand-logo";
 import { Button } from "@repo/ui/components/button";
 import { Container } from "@repo/ui/components/container";
@@ -26,9 +26,10 @@ export async function SiteHeader({ locale }: { locale: string }) {
       buildNavigation("main", locale, null),
       getSetting("site.name"),
       getSetting("header.sticky"),
-      getSetting("header.cta"),
-      getSetting("header.announcementBar"),
-      getSetting("header.topBar"),
+      // Their words are translatable (ADR-165); switches and URLs stay English.
+      getLocalizedSetting("header.cta", locale),
+      getLocalizedSetting("header.announcementBar", locale),
+      getLocalizedSetting("header.topBar", locale),
       getSetting("header.showSearch"),
       getActiveLocales(),
       getTranslations({ locale, namespace: "nav" }),

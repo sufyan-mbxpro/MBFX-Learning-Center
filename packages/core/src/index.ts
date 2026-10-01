@@ -9,6 +9,7 @@ import { db } from "@repo/db";
 
 export * from "./navigation.ts";
 export * from "./social-links.ts";
+export * from "./review-platforms.ts";
 export * from "./admin.ts";
 export * from "./admin-reads.ts";
 export * from "./users.ts";
@@ -19,6 +20,51 @@ export * from "./public-content.ts";
 export * from "./articles.ts";
 export * from "./content-relations.ts";
 export * from "./public-articles.ts";
+// Automatic translation (ADR-160…163): enqueue, run, the article job, and the
+// dashboard / languages / review services behind Settings → Translation.
+export { enqueueEntityTranslations, translationTargetLocales } from "./translation-queue.ts";
+export {
+  runTranslationWork,
+  runQuizTranslationWork,
+  drainTranslationQueue,
+  CRON_DRAIN_BUDGET_MS,
+  TRANSLATION_JOB_HANDLERS,
+  type DrainSummary,
+} from "./translation-runner.ts";
+export {
+  fitTo,
+  loadGlossaryPairs,
+  translateArticleJob,
+  articleSegments,
+  articleSourceCharacters,
+} from "./article-translation.ts";
+export {
+  TRANSLATABLE_TYPES,
+  type ReviewRow,
+  type ReviewStatus,
+  type TranslatableType,
+} from "./translatable-types.ts";
+export { toCoverage, type CoverageBucket, type CoverageCounts } from "./translation-coverage.ts";
+export * from "./translation-admin.ts";
+export * from "./languages.ts";
+export * from "./interface-text.ts";
+// Translatable settings (ADR-165): the Site text editor, the English save's
+// sweep, and the activation gate's human-only keys.
+export {
+  afterSettingsSaved,
+  loadSiteText,
+  saveSettingTranslation,
+  siteTextGaps,
+  type SaveSettingTranslationResult,
+  type SiteTextEntry,
+  type SiteTextField,
+} from "./site-text.ts";
+export {
+  prefillTranslation,
+  PREFILL_REQUESTS_PER_MINUTE,
+  type PrefillResult,
+} from "./translation-prefill.ts";
+export { hashArticleSource, loadArticleSource, type ArticleSource } from "./article-source.ts";
 export * from "./article-search.ts";
 export * from "./reading-languages.ts";
 export * from "./courses.ts";
@@ -33,6 +79,8 @@ export * from "./videos.ts";
 export * from "./learn-analytics.ts";
 export * from "./learn-analytics-filter.ts";
 export * from "./glossary-topics.ts";
+export * from "./promotions.ts";
+export * from "./promotion-stats.ts";
 export * from "./public-search.ts";
 export * from "./market.ts";
 export * from "./market-admin.ts";
@@ -45,6 +93,20 @@ export * from "./media.ts";
 export * from "./brand-assets.ts";
 export * from "./email-admin.ts";
 export * from "./newsletter.ts";
+export * from "./announcements.ts";
+export * from "./announcement-runner.ts";
+export * from "./custom-emails.ts";
+export {
+  countAudience,
+  type AudienceContext,
+  type AudienceCounts,
+} from "./announcement-audience.ts";
+export {
+  courseAvailability,
+  emailTrackCover,
+  pickCourseWords,
+  type TargetAvailability,
+} from "./announcement-target.ts";
 export * from "./support.ts";
 export * from "./ai-admin.ts";
 export * from "./ai-media.ts";

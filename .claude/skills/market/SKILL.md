@@ -211,8 +211,19 @@ the masthead and the widget|explainer split.
 highlights and related, and at the foot of `/support`. It is a plain anchor
 styled with `buttonVariants`, not `Button render={<a>}`, whose `role="button"`
 misdescribes an off-site link. It is not Trustpilot's script widget either,
-which would need a public CSP exception. `site.reviewsUrl` empty ⇒ the band is
-absent.
+which would need a public CSP exception.
+
+**One button per review platform since changes-53 (ADR-169).** `site.reviewsUrl`
+is DELETED; the band reads `getActiveReviewLinks()` (`@repo/core`), one
+`review_platforms` row per `REVIEW_PLATFORM_KEYS` entry (`trustpilot`,
+`google`, `facebook`), edited at Settings → General → Reviews under
+`settings.update`. The admin types a public identifier (domain / Place ID /
+Page name) and `resolveReviewUrl` builds the write-a-review address; a custom
+`https:` link overrides it, and the URL is re-validated at READ time too. No
+platform on ⇒ the band is absent. Links only: no vendor API, no ratings, no
+secret. Adding a platform = a registry entry, a `SocialGlyph`, a
+`public.reviews.platforms.*` label in en AND ar, admin labels — and
+`apps/web/app/review-platforms.test.ts` names any half you forget.
 
 ## Two market boards that are not tools (changes-42, ADR-136)
 

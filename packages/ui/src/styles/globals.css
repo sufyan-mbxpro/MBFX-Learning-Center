@@ -325,6 +325,11 @@
        / `rail-main` / `menu-main` a fixed start column + content, `2-1` and
        `3-2` a weighted pair, `label-value` a definition list. */
     --grid-main-aside: minmax(0, 1fr) 20rem;
+    /* A promotion's bottom banner (ADR-173) publishes its height here while
+       it shows; the public body pads by it and the back-to-top button rises
+       by it, so the strip covers neither. 0 when there is no strip. */
+    --promotion-bar-height: 0px;
+    --floating-bottom: calc(1.5rem + var(--promotion-bar-height));
     --grid-main-aside-wide: minmax(0, 1fr) 22rem;
     /* `prose-aside` is `main-aside` for a page whose main column is PROSE
        (changes-40): the measure is capped at the narrow container's own
@@ -386,6 +391,9 @@
     --width-slide-4: calc((100% - 3.75rem) / 4);
     /* Five across, for a strip of small cover cards (changes-51). */
     --width-slide-5: calc((100% - 5rem) / 5);
+    /* A dialog on a phone that keeps a 1rem margin each side instead of
+       touching both edges — the promotion popup (ADR-174 #7). */
+    --width-dialog-inset: calc(100vw - 2rem);
 
     /* Viewport fractions: a centred error/empty page, and a scroll region
        inside a dialog or panel. */
@@ -401,6 +409,10 @@
        header and footer instead of running its Save off the screen. `dvh`
        for the same keyboard reason as the palette. */
     --dialog-max-h: calc(100dvh - 2rem);
+    /* The promotion popup while it pages (changes-57): ONE height for every
+       promotion in it, so paging never resizes the dialog, capped by the
+       dialog's own viewport limit. */
+    --height-promo-dialog: min(42rem, var(--dialog-max-h));
 
     /* The homepage's full-bleed hero (changes-31): about two thirds of the
        viewport under the header (changes-43 — a full screen of slider pushed
@@ -1286,6 +1298,26 @@
       animation: page-enter var(--duration-base) var(--ease-out-quint) backwards;
     }
   }
+
+  /* == The promotions spotlight (ADR-175) ==========================
+   *
+   * `.promo-progress`: the active position dash filling over the autoplay
+   * interval, which the caller passes as `--promo-interval`. The caller
+   * remounts it on every slide and every resume, so the fill restarts with
+   * the timer rather than resuming half-way. Scale, not width: nothing here
+   * triggers layout. Reduced motion never autoplays, so it never needs this.
+   *
+   * `.promo-panel-enter`: the description column's words arriving when the
+   * selection changes, keyed by the promotion so each change replays it. */
+  @media (prefers-reduced-motion: no-preference) {
+    .promo-progress {
+      transform-origin: var(--promo-progress-origin, left);
+      animation: promo-progress var(--promo-interval, 7s) linear both;
+    }
+    .promo-panel-enter {
+      animation: rise-enter var(--duration-slow) var(--ease-out-quint) both;
+    }
+  }
 }
 
 /* Keyframes for the reveal and marquee utilities above. Deliberately at top
@@ -1306,6 +1338,15 @@
   to {
     opacity: 1;
     transform: none;
+  }
+}
+
+@keyframes promo-progress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
   }
 }
 

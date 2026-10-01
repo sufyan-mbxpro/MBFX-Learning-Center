@@ -11,40 +11,64 @@ export interface LocaleMeta {
 }
 
 /**
- * The translation statuses a reader may CHOOSE to read (ADR-127 #2).
+ * The translation statuses a reader may CHOOSE to read (ADR-127 #2, amended by
+ * ADR-159 #1).
  *
- * A human wrote both: `OUTDATED` only means the source moved on since. This is
- * the first public read that filters on the status, so ADR-097's recorded
- * consequence binds it — `MACHINE_TRANSLATED` is out until an editor's Save
- * promotes it, and `DRAFT` (a duplicated article's copies) is out entirely.
+ * A person wrote `TRANSLATED` and `OUTDATED` (the source only moved on since).
+ * `MACHINE_TRANSLATED` joined them under ADR-159: machine translations go live
+ * at once, on every read path, so the `?lang=` menu offers what the locale URL
+ * already serves. `DRAFT` (a duplicated article's copies) and `NEEDS_REVIEW`
+ * (a figure changed in translation, ADR-160 #8) stay out: both are waiting for
+ * a person.
  */
 export const READABLE_TRANSLATION_STATUSES: readonly TranslationStatus[] = [
+  TranslationStatus.TRANSLATED,
+  TranslationStatus.OUTDATED,
+  TranslationStatus.MACHINE_TRANSLATED,
+];
+
+/**
+ * The statuses a search engine may be sent to (ADR-159 #2): only what a person
+ * saved. Machine-written prose is served but `noindex`, left out of the
+ * sitemap and out of every page's hreflang until someone saves it.
+ */
+export const INDEXABLE_TRANSLATION_STATUSES: readonly TranslationStatus[] = [
   TranslationStatus.TRANSLATED,
   TranslationStatus.OUTDATED,
 ];
 
 /**
+ * Whether a translation may be indexed. The default locale's row always may:
+ * it is the source, and its status says nothing about the page (a course's
+ * source row is often still `DRAFT` until someone marks it).
+ */
+export function isIndexableTranslation(
+  translation: { locale: string; translationStatus: TranslationStatus },
+  defaultLocale: string,
+): boolean {
+  return (
+    translation.locale === defaultLocale ||
+    INDEXABLE_TRANSLATION_STATUSES.includes(translation.translationStatus)
+  );
+}
+
+/**
  * The translations a page may ADVERTISE as its other-language versions — the
  * hreflang alternates.
  *
- * The same human-saved rule as the reading menu, with one exception: the
- * DEFAULT locale's row is always kept. It is the source, and a course's source
- * row is often still `DRAFT` until someone marks it, which says nothing about
- * whether the page is published. A `MACHINE_TRANSLATED` or `DRAFT` row in any
- * other locale is left out, because a search engine sent there would find
- * words no human has approved (ADR-097) — or, while the locale is inactive, a
- * 404. Whether the locale is SERVED is the page's half of the rule
- * (`getServableLocales`), applied where the URLs are built.
+ * Indexable ones only (ADR-159 #2): a search engine sent to a
+ * `MACHINE_TRANSLATED`, `NEEDS_REVIEW` or `DRAFT` row would find words no
+ * person has approved, which is also why those pages carry `noindex`. This is
+ * what closes ADR-127's recorded issue of alternates that 404: whether the
+ * locale is SERVED is the page's half of the rule (`getServableLocales`),
+ * applied where the URLs are built.
  */
 export function advertisedAlternates(
   translations: readonly { locale: string; slug: string; translationStatus: TranslationStatus }[],
   defaultLocale: string,
 ): { locale: string; slug: string }[] {
   return translations
-    .filter(
-      (t) =>
-        t.locale === defaultLocale || READABLE_TRANSLATION_STATUSES.includes(t.translationStatus),
-    )
+    .filter((t) => isIndexableTranslation(t, defaultLocale))
     .map((t) => ({ locale: t.locale, slug: t.slug }));
 }
 
@@ -111,8 +135,9 @@ export interface ReadingView {
 /**
  * Apply a reader's `?lang=` choice to a loader's ordinary fallback pick.
  *
- * The chosen translation REPLACES the pick only when a human saved it
- * (#2); anything else leaves the page exactly as it was. The caller keeps its
+ * The chosen translation REPLACES the pick only when it is readable (#2 as
+ * amended by ADR-159: a person's row or a machine one); anything else leaves
+ * the page exactly as it was. The caller keeps its
  * own pick for everything that is ADDRESS rather than words — slugs, canonical,
  * breadcrumbs — so a reading view never changes the URL it lives at.
  */

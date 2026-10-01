@@ -9,12 +9,10 @@ import { QuizzesTable, type QuizzesTableLabels } from "./quizzes-table.tsx";
 
 // Quiz admin list (changes-11 Phase 6, ADR-058).
 //
-// **Gated on `lessons.view`, not `quizzes.view`** — ADR-058 #8. There is no
-// `quizzes.*` group in the seed registry, so a key like that would be one no
-// role can hold and every check would silently 403; the permission-key
-// cross-check exists to catch exactly that.
+// Gated on `quizzes.*` since ADR-177. Until then quizzes borrowed the lesson
+// keys (ADR-058 #8), so quiz authorship could not be granted on its own.
 export default async function QuizzesAdminPage() {
-  const subject = await requirePermission("lessons.view");
+  const subject = await requirePermission("quizzes.view");
   const [t, rows] = await Promise.all([
     getTranslations("admin"),
     listQuizzesAdmin({ includeDeleted: true }),
@@ -67,7 +65,7 @@ export default async function QuizzesAdminPage() {
       description={t("pageDesc.learnQuizzes")}
       // ADR-140 §3: the primary create action sits on the title row, last.
       actions={
-        can(subject, "lessons.create") ? (
+        can(subject, "quizzes.create") ? (
           <NewQuizDialog
             labels={{
               newQuiz: t("quizzes.create"),
@@ -109,8 +107,8 @@ export default async function QuizzesAdminPage() {
           updatedAtSort: row.updatedAt.getTime(),
         }))}
         statusKeys={Object.keys(statuses)}
-        canCreate={can(subject, "lessons.create")}
-        canDelete={can(subject, "lessons.delete")}
+        canCreate={can(subject, "quizzes.create")}
+        canDelete={can(subject, "quizzes.delete")}
         labels={labels}
       />
     </AdminPage>

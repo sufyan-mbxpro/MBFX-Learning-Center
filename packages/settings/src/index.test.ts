@@ -2,7 +2,13 @@
 // writes, and cache-tag behavior are covered by settings.integration.test.ts
 // (testing.md: real MariaDB via Testcontainers, not mocked Prisma).
 import { describe, expect, it } from "vitest";
-import { SETTINGS_SCHEMAS, SETTING_GROUPS, type SettingKey } from "@repo/contracts";
+import {
+  SETTINGS_SCHEMAS,
+  SETTING_GROUPS,
+  TRANSLATABLE_SETTING_KEYS,
+  type SettingKey,
+} from "@repo/contracts";
+import { TRANSLATABLE_SETTING_KEY_LIST } from "@repo/db";
 import { evaluateVisibility, isFlagVisible, type FeatureFlagState } from "./index.ts";
 
 describe("SETTING_GROUPS registry completeness", () => {
@@ -10,6 +16,16 @@ describe("SETTING_GROUPS registry completeness", () => {
     const schemaKeys = Object.keys(SETTINGS_SCHEMAS).sort();
     const groupKeys = Object.keys(SETTING_GROUPS).sort();
     expect(groupKeys).toEqual(schemaKeys);
+  });
+});
+
+describe("translatable settings (ADR-165 #1)", () => {
+  it("@repo/db's seed list names exactly the contracts registry's keys", () => {
+    // @repo/db sits below contracts and keeps its own copy for the seed's
+    // `isTranslatable` column; this package depends on both.
+    expect([...TRANSLATABLE_SETTING_KEY_LIST].sort()).toEqual(
+      [...TRANSLATABLE_SETTING_KEYS].sort(),
+    );
   });
 });
 

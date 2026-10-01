@@ -12,6 +12,8 @@ import { ARTICLE, RELATED, loadRelationTargets } from "./content-relations.ts";
 import {
   advertisedAlternates,
   applyReadingLocale,
+  INDEXABLE_TRANSLATION_STATUSES,
+  isIndexableTranslation,
   type LocaleMeta,
   type ReadingLanguage,
 } from "./reading-languages.ts";
@@ -632,7 +634,10 @@ export async function loadArticleBySlug(
     seoDescription: picked.seoDescription,
     ogImageUrl: picked.ogImageUrl,
     canonicalUrl: picked.canonicalUrl,
-    noIndex: picked.noIndex,
+    // ADR-159 #2: words no person has saved are served but not indexed. The
+    // page's robots already follow `noIndex`, so the rule lands here once
+    // rather than in every page that renders an article.
+    noIndex: picked.noIndex || !isIndexableTranslation(picked, ctx.defaultLocale),
     noFollow: picked.noFollow,
     ogTitle: picked.ogTitle,
     ogDescription: picked.ogDescription,
@@ -891,8 +896,17 @@ export async function getArticleTagBySlug(
 export async function loadArticleSitemapEntries(): Promise<
   { locale: string; slug: string; updatedAt: Date }[]
 > {
+  // ADR-159 #2: a machine translation is not submitted until a person saves it.
+  const { defaultLocale } = await localeContext();
   return db.articleTranslation.findMany({
-    where: { noIndex: false, article: publicArticleWhere(new Date()) },
+    where: {
+      noIndex: false,
+      article: publicArticleWhere(new Date()),
+      OR: [
+        { locale: defaultLocale },
+        { translationStatus: { in: [...INDEXABLE_TRANSLATION_STATUSES] } },
+      ],
+    },
     select: { locale: true, slug: true, updatedAt: true },
   });
 }

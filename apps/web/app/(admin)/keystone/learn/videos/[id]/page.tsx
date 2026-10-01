@@ -20,11 +20,11 @@ import { formatDateTime, siteOrigin } from "@repo/utils";
 // Video topic editor (changes-16 PR 6, ADR-068).
 //
 // Read gate here; every write re-gates in its own action (security.md #1).
-// **`lessons.*`, not `videos.*`** — ADR-068 §3.
+// Gated on `videos.*` (ADR-177).
 export default async function VideoTopicEditPage({
   params,
 }: PageProps<"/keystone/learn/videos/[id]">) {
-  const subject = await requirePermission("lessons.view");
+  const subject = await requirePermission("videos.view");
   const { id } = await params;
 
   const [t, detail, categories, authoringLocales, ai] = await Promise.all([
@@ -33,12 +33,12 @@ export default async function VideoTopicEditPage({
     listVideoCategoriesAdmin(),
     getAuthoringLocales(),
     // ADR-126: the "Generate with AI" bar, each field's ✨ menu, and the
-    // writing assistant on the body. `lessons.update` because a video topic
-    // saves on the lesson keys (ADR-068 §3).
+    // writing assistant on the body. `videos.update` is the key a video topic
+    // saves on (ADR-177).
     loadEditorAi(subject, {
       module: "video_topic",
       entity: { type: "video_topic", id },
-      contentKeys: ["lessons.update"],
+      contentKeys: ["videos.update"],
     }),
   ]);
   if (!detail) notFound();
@@ -249,12 +249,12 @@ export default async function VideoTopicEditPage({
         locales={authoringLocales.map((l) => l.code)}
         defaultLocale={routing.defaultLocale}
         siteUrl={siteOrigin()}
-        canUpdate={can(subject, "lessons.update")}
+        canUpdate={can(subject, "videos.update")}
         // The inline "New category" (ADR-144 §2) runs the categories screen's
         // own action, which gates a create on `lessons.create`.
-        canCreateCategory={can(subject, "lessons.create")}
-        canPublish={can(subject, "lessons.publish")}
-        canDelete={can(subject, "lessons.delete")}
+        canCreateCategory={can(subject, "videos.create")}
+        canPublish={can(subject, "videos.publish")}
+        canDelete={can(subject, "videos.delete")}
         labels={labels}
         {...(ai ? { ai } : {})}
       />

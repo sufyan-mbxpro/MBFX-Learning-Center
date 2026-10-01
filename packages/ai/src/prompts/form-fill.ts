@@ -51,6 +51,8 @@ const MODULE_NAMES: Record<AiFillModule, string> = {
   quiz: "a quiz",
   glossary_term: "a glossary term",
   glossary_topic: "a glossary topic that groups related terms",
+  promotion:
+    "a time-limited promotion shown as a popup on a forex learning site (a webinar, event, offer, news item or announcement)",
   tool: "a trading tool's page (the explanatory copy around a calculator; the calculator itself is code and must not be described as doing anything it was not said to do)",
 };
 

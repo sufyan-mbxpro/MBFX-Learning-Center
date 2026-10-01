@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import {
+  alternatesFor,
   descriptionFrom,
   localizedPath,
   shareMetadata,
@@ -62,7 +63,13 @@ export async function generateMetadata({
   return {
     title: titleFrom(template, view.seoTitle?.trim() || view.title),
     ...descriptionFrom(view.seoDescription, view.summary),
-    alternates: { canonical },
+    alternates: await alternatesFor({
+      canonical,
+      languages: view.alternates.map((alt) => ({
+        locale: alt.locale,
+        href: localizedPath(alt.locale, `${learnTrackVideosPath(track)}/${alt.slug}`),
+      })),
+    }),
     // changes-46 SEO check: no share card of its own, so Open Graph fell
     // through to the root layout's (no `og:url`, no cover). The topic's cover
     // is its card image, as a course's is.
@@ -76,7 +83,8 @@ export async function generateMetadata({
     })),
     // ADR-127 #4: a `?lang=` reading view is never indexed. A conditional
     // SPREAD, never `robots: undefined` (ADR-090).
-    ...(view.readingLocale ? { robots: { index: false, follow: true } } : {}),
+    // ADR-159 #2: machine-written words at their own URL are not indexed either.
+    ...(view.readingLocale || view.noIndex ? { robots: { index: false, follow: true } } : {}),
   };
 }
 

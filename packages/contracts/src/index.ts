@@ -2,6 +2,7 @@
 // Implementation lands alongside the modules that need validated I/O.
 export * from "./auth.ts";
 export * from "./settings.ts";
+export * from "./settings-translation.ts";
 export * from "./navigation.ts";
 export * from "./search.ts";
 export * from "./admin.ts";
@@ -10,14 +11,19 @@ export * from "./media.ts";
 export * from "./learn.ts";
 export * from "./glossary.ts";
 export * from "./videos.ts";
+export * from "./promotions.ts";
+export * from "./review-platforms.ts";
 export * from "./tools.ts";
 export * from "./market-boards.ts";
 export * from "./market.ts";
 export * from "./field-issues.ts";
 export * from "./email.ts";
 export * from "./newsletter.ts";
+export * from "./announcements.ts";
+export * from "./custom-emails.ts";
 export * from "./support.ts";
 export * from "./captcha.ts";
+export * from "./translate.ts";
 export * from "./legal.ts";
 export * from "./ai.ts";
 export * from "./cms/index.ts";

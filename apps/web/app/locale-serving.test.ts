@@ -13,6 +13,8 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { isReservedFirstSegment } from "@repo/contracts";
+import { SUPPORTED_LOCALES } from "@repo/i18n/routing";
 
 const APP = resolve(process.cwd(), "app");
 const PUBLIC_ROOT_LAYOUT = resolve(APP, "(public)/[locale]/layout.tsx");
@@ -85,5 +87,19 @@ describe("the sitemap advertises only what is served", () => {
     // The default locale has no prefix (`localePrefix: "as-needed"`), and that
     // is a routing fact, not an activation one — so this reader stays.
     expect(code(SITEMAP)).toContain("routing.defaultLocale");
+  });
+});
+
+describe("the language registry and the address space (ADR-178 #1)", () => {
+  it("no supported language code is a coded first segment", () => {
+    // Every registry code is a URL prefix next-intl claims, live or not. A
+    // code equal to a coded route's first segment would shadow that route.
+    expect(SUPPORTED_LOCALES.filter((l) => isReservedFirstSegment(l.code))).toEqual([]);
+  });
+
+  it("the proxy only lets browser-language detection land on a served language", () => {
+    const proxy = readFileSync(resolve(process.cwd(), "proxy.ts"), "utf8");
+    expect(proxy).toContain('prefix === "" ? await intlServed(request) : intl(request)');
+    expect(proxy).toContain('"/api/locales"');
   });
 });

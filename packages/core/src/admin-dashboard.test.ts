@@ -78,17 +78,16 @@ describe("visibleContentEntities", () => {
   });
 
   it("narrows to the types a key actually covers", () => {
-    // `courses.view` alone: courses and nothing else. Lessons, quizzes and
-    // videos all sit behind `lessons.view` (ADR-058 #6, ADR-068).
+    // `courses.view` alone: courses and nothing else.
     expect(visibleContentEntities((p) => p === "courses.view")).toEqual(["courses"]);
   });
 
-  it("gives lessons, quizzes and videos to the one key they share", () => {
-    expect(visibleContentEntities((p) => p === "lessons.view")).toEqual([
-      "lessons",
-      "quizzes",
-      "videos",
-    ]);
+  it("gives lessons, quizzes and videos each their own key (ADR-177)", () => {
+    // They shared `lessons.view` until ADR-177; holding it alone must no
+    // longer show the quiz and video counts.
+    expect(visibleContentEntities((p) => p === "lessons.view")).toEqual(["lessons"]);
+    expect(visibleContentEntities((p) => p === "quizzes.view")).toEqual(["quizzes"]);
+    expect(visibleContentEntities((p) => p === "videos.view")).toEqual(["videos"]);
   });
 
   it("keeps DASHBOARD_CONTENT_ENTITIES order regardless of which keys are held", () => {
@@ -98,9 +97,8 @@ describe("visibleContentEntities", () => {
 });
 
 describe("DASHBOARD_CONTENT_PERMISSIONS", () => {
-  it("is deduped — three types share `lessons.view`", () => {
+  it("is deduped", () => {
     expect(new Set(DASHBOARD_CONTENT_PERMISSIONS).size).toBe(DASHBOARD_CONTENT_PERMISSIONS.length);
-    expect(DASHBOARD_CONTENT_PERMISSIONS.length).toBeLessThan(DASHBOARD_CONTENT_ENTITIES.length);
   });
 
   it("covers every entity — no type is reachable with no key at all", () => {

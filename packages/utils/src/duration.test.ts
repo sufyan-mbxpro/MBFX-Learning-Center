@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatDurationSeconds } from "./duration.ts";
+import { formatDurationParts, formatDurationSeconds } from "./duration.ts";
 
 describe("formatDurationSeconds", () => {
   it("names the unit a value divides into exactly", () => {
@@ -28,5 +28,21 @@ describe("formatDurationSeconds", () => {
   it("does not throw on a nonsense stored value", () => {
     expect(formatDurationSeconds(0)).toBe("0 seconds");
     expect(formatDurationSeconds(-5)).toBe("0 seconds");
+  });
+});
+
+describe("formatDurationParts", () => {
+  it("reads two units compactly", () => {
+    expect(formatDurationParts({ days: 2, hours: 4 })).toBe("2d 4h");
+    expect(formatDurationParts({ hours: 3, minutes: 7 })).toBe("3h 7m");
+  });
+
+  it("drops a zero part unless it is the only one", () => {
+    expect(formatDurationParts({ days: 2, hours: 0 })).toBe("2d");
+    expect(formatDurationParts({ minutes: 0 })).toBe("0m");
+  });
+
+  it("follows the locale", () => {
+    expect(formatDurationParts({ days: 2, hours: 4 }, "ar")).not.toBe("2d 4h");
   });
 });

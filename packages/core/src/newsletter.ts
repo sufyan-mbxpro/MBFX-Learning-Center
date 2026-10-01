@@ -85,6 +85,18 @@ export function newsletterLink(
   return `${origins.site.replace(/\/+$/, "")}${prefix}/newsletter/${action}?token=${encodeURIComponent(token)}`;
 }
 
+/**
+ * The RFC 8058 one-click handler a message's `List-Unsubscribe` header names.
+ *
+ * NOT `newsletterLink("unsubscribe", …)`: that is the page a person clicks,
+ * and a page route has no POST, so a mail client's own Unsubscribe button
+ * posted into nothing (changes-54 §9.3). It carries no locale segment — the
+ * handler lives under `/api`, which the proxy never locale-prefixes.
+ */
+export function newsletterOneClickUrl(token: string, origins: NewsletterLinkOrigins): string {
+  return `${origins.site.replace(/\/+$/, "")}/api/newsletter/unsubscribe?token=${encodeURIComponent(token)}`;
+}
+
 function origins(): NewsletterLinkOrigins {
   // changes-49: the shared precedence, so a confirm link is never a bare path.
   return { site: siteOrigin() };
@@ -272,6 +284,7 @@ async function sendWelcome(row: { id: string; email: string; locale: string }): 
     },
     unsubscribe: {
       url: newsletterLink("unsubscribe", unsubscribeToken, row.locale, origins()),
+      oneClickUrl: newsletterOneClickUrl(unsubscribeToken, origins()),
       // The visible word comes from the catalog at the call site; this header
       // is machine-read (RFC 8058) and never displayed.
       label: "Unsubscribe",

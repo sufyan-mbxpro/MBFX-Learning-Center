@@ -32,6 +32,7 @@ export default async function EmailLogPage({
     status: one(params.status),
     templateKey: one(params.template),
     q: one(params.q),
+    campaignId: one(params.campaign),
     cursor: one(params.cursor),
     ...(one(params.test) === undefined ? {} : { isTest: one(params.test) === "1" }),
   });

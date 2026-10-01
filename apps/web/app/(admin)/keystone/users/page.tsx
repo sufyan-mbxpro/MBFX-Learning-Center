@@ -3,6 +3,7 @@ import { listUsers } from "@repo/core";
 import { can, requirePermission } from "@repo/rbac";
 import { formatDate, humanizeKey } from "@repo/utils";
 import { userStatusFilterSchema, userTypeFilterSchema } from "@repo/contracts";
+import { richTextLabels } from "../_components/editor-labels.ts";
 import { UsersTable } from "./users-table.tsx";
 import { AdminPage } from "../_components/admin-page.tsx";
 
@@ -67,7 +68,10 @@ export default async function UsersPage({ searchParams }: PageProps<"/keystone/u
         status={status ?? ""}
         canUpdate={can(subject, "users.update")}
         canResetPassword={can(subject, "users.password.reset")}
+        canEmail={can(subject, "announcements.direct")}
+        editorLabels={richTextLabels(t)}
         labels={{
+          sendEmail: t("announcements.direct.open"),
           search: t("searchUsers"),
           columns: t("columns"),
           export: t("export"),

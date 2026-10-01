@@ -61,6 +61,17 @@ describe("validateFields — codes", () => {
     expect(first(z.object({ v: z.string().refine((s) => s === "ok") }), { v: "no" })).toEqual({
       code: "invalid",
     });
+    // A refine may name a code from the closed vocabulary, and nothing else.
+    const named = (code: string) =>
+      z.object({
+        v: z.string().superRefine((_, ctx) => {
+          ctx.addIssue({ code: "custom", params: { code }, message: "x" });
+        }),
+      });
+    expect(first(named("required"), { v: "" })).toEqual({ code: "required" });
+    expect(first(named("invalidFormat"), { v: "" })).toEqual({ code: "invalidFormat" });
+    expect(first(named("tooLong"), { v: "" })).toEqual({ code: "invalid" });
+    expect(first(named("made-up"), { v: "" })).toEqual({ code: "invalid" });
   });
 });
 

@@ -8,6 +8,7 @@ import {
   resolveRecommendations,
 } from "@repo/core";
 import { LEARN_TRACK_KEYS } from "@repo/contracts";
+import { getAuthoringLocales } from "@repo/i18n";
 import { routing } from "@repo/i18n/routing";
 import { can, requirePermission } from "@repo/rbac";
 import { EditorPage } from "../../../_components/admin-page.tsx";
@@ -57,6 +58,7 @@ export default async function CourseEditPage({ params }: PageProps<"/keystone/le
     updateCourse: t("updateCourse"),
     saved: t("saved"),
     viewLive: t("viewLive"),
+    announceCourse: t("announcements.announceCourse"),
     openActions: t("openActions"),
     softDelete: t("softDelete"),
     restore: t("restore"),
@@ -301,11 +303,12 @@ export default async function CourseEditPage({ params }: PageProps<"/keystone/le
           }))}
         fallbackPreview={fallback.map((row) => ({ id: row.id, title: row.title }))}
         trackKeys={[...LEARN_TRACK_KEYS]}
-        locales={[...routing.locales]}
+        locales={(await getAuthoringLocales()).map((locale) => locale.code)}
         defaultLocale={routing.defaultLocale}
         siteUrl={siteOrigin()}
         canUpdate={can(subject, "courses.update")}
         canPublish={can(subject, "courses.publish")}
+        canAnnounce={can(subject, "announcements.create")}
         canDelete={can(subject, "courses.delete")}
         canCreateLesson={can(subject, "lessons.create")}
         canDeleteLesson={can(subject, "lessons.delete")}

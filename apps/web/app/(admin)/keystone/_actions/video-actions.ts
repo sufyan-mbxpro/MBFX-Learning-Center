@@ -6,12 +6,9 @@
 // then the `@repo/core` service. Nothing here touches Prisma
 // (architecture.md #2).
 //
-// **Gated on the existing `lessons.*` keys** (ADR-068 §3). This is the third
-// content type to make that call — quizzes (ADR-058 #8) and glossary topics
-// (D27) made it first, for the same reason: five `videos.*` keys with no
-// seeded role behind them is a silent 403 waiting to happen, and
-// `check:permission-keys` exists to catch exactly that. The named cost is that
-// video authorship cannot be granted apart from lesson authorship.
+// Gated on `videos.*` (ADR-177, superseding ADR-068 §3, which had videos on
+// the lesson keys). Video categories use the same keys as video topics: they
+// are edited from the same screen by the same people.
 //
 // Every export must be async — a sync helper in a `"use server"` module takes
 // the whole app down at compile time (DEVLOG 2026-09-09,
@@ -36,6 +33,7 @@ import {
 } from "@repo/contracts";
 import { requirePermission } from "@repo/rbac";
 import { parseScheduledFor } from "./scheduled-for.ts";
+import { translateSoon } from "./translate-soon.ts";
 
 const id = z.string().min(1).max(64);
 
@@ -44,23 +42,26 @@ const id = z.string().min(1).max(64);
 export async function createVideoTopicAction(
   input: z.input<typeof createVideoTopicSchema>,
 ): Promise<string> {
-  const subject = await requirePermission("lessons.create");
+  const subject = await requirePermission("videos.create");
   return createVideoTopic(subject, createVideoTopicSchema.parse(input));
 }
 
 export async function saveVideoTopicAction(
   input: z.input<typeof videoTopicInputSchema>,
 ): Promise<void> {
-  const subject = await requirePermission("lessons.update");
-  await saveVideoTopic(subject, videoTopicInputSchema.parse(input));
+  const subject = await requirePermission("videos.update");
+  const parsed = videoTopicInputSchema.parse(input);
+  await saveVideoTopic(subject, parsed);
+  translateSoon("video_topic", parsed.topicId);
 }
 
 export async function setVideoTopicDeletedAction(topicId: string, deleted: boolean): Promise<void> {
   // Restore is not a destructive act, so it gates on update rather than delete
   // — the same split `setQuizDeleted`'s action makes. Undo must not need a
   // permission the original action did not (code-style #7).
-  const subject = await requirePermission(deleted ? "lessons.delete" : "lessons.update");
+  const subject = await requirePermission(deleted ? "videos.delete" : "videos.update");
   await setVideoTopicDeleted(subject, id.parse(topicId), z.boolean().parse(deleted));
+  if (!deleted) translateSoon("video_topic", topicId);
 }
 
 /**
@@ -76,7 +77,7 @@ export async function setVideoTopicStatusAction(
   to: string,
   scheduledForIso?: string,
 ): Promise<void> {
-  const subject = await requirePermission("lessons.update");
+  const subject = await requirePermission("videos.update");
   await transitionContentStatus(
     subject,
     "videos",
@@ -84,6 +85,7 @@ export async function setVideoTopicStatusAction(
     contentStatusSchema.parse(to),
     parseScheduledFor(scheduledForIso),
   );
+  translateSoon("video_topic", topicId);
 }
 
 // ─── Categories ──────────────────────────────────────────────
@@ -92,24 +94,26 @@ export async function saveVideoCategoryAction(
   input: z.input<typeof videoCategoryInputSchema>,
 ): Promise<string> {
   const parsed = videoCategoryInputSchema.parse(input);
-  const subject = await requirePermission(parsed.categoryId ? "lessons.update" : "lessons.create");
-  return saveVideoCategory(subject, parsed);
+  const subject = await requirePermission(parsed.categoryId ? "videos.update" : "videos.create");
+  const categoryId = await saveVideoCategory(subject, parsed);
+  translateSoon("video_category", categoryId);
+  return categoryId;
 }
 
 export async function setVideoCategoryActiveAction(
   categoryId: string,
   active: boolean,
 ): Promise<void> {
-  const subject = await requirePermission("lessons.update");
+  const subject = await requirePermission("videos.update");
   await setVideoCategoryActive(subject, id.parse(categoryId), z.boolean().parse(active));
 }
 
 export async function deleteVideoCategoryAction(categoryId: string): Promise<void> {
-  const subject = await requirePermission("lessons.delete");
+  const subject = await requirePermission("videos.delete");
   await deleteVideoCategory(subject, id.parse(categoryId));
 }
 
 export async function reorderVideoCategoriesAction(ids: string[]): Promise<void> {
-  const subject = await requirePermission("lessons.update");
+  const subject = await requirePermission("videos.update");
   await reorderVideoCategories(subject, reorderVideoCategoriesSchema.parse({ ids }));
 }

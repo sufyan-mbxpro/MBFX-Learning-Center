@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { localizedPath, titleTemplate, titleFrom } from "../../../../_lib/seo.ts";
+import { titleTemplate, titleFrom, staticPageAlternates } from "../../../../_lib/seo.ts";
 import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { getLearnIndex } from "@repo/core";
@@ -49,7 +49,7 @@ export async function generateMetadata({
   return {
     title: titleFrom(template, t(LEARN_TRACKS[track].titleKey)),
     description: t(LEARN_TRACKS[track].descriptionKey),
-    alternates: { canonical: localizedPath(locale, learnTrackPath(track)) },
+    alternates: await staticPageAlternates(locale, learnTrackPath(track)),
   };
 }
 

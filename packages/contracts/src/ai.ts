@@ -543,6 +543,12 @@ export const translationPayloadSchema = z.object({
    * what is here and nothing else.
    */
   fields: z.record(z.string().max(60), z.string().max(AI_MAX_CONTENT_CHARS)),
+  /**
+   * ADR-160 #7: the current translation of some fields — usually Google's —
+   * keyed like `fields`. With a draft the model REFINES it against the source
+   * instead of starting over, so a correct sentence is not churned.
+   */
+  drafts: z.record(z.string().max(60), z.string().max(AI_MAX_CONTENT_CHARS)).optional(),
 });
 
 export const summarizationPayloadSchema = z.object({
@@ -585,6 +591,7 @@ export const AI_FILL_MODULES = [
   "glossary_term",
   "glossary_topic",
   "tool",
+  "promotion",
 ] as const;
 
 export type AiFillModule = (typeof AI_FILL_MODULES)[number];
@@ -747,6 +754,25 @@ export const AI_FILL_FIELDS = {
     { key: "seoTitle", kind: "text", max: 70, purpose: "the search-result title" },
     { key: "seoDescription", kind: "textarea", max: 180, purpose: "the meta description" },
     { key: "seoFocusKeyword", kind: "text", max: 100, purpose: "the one search phrase targeted" },
+  ],
+  // changes-52 P6. The words only: the window, the link and the placements are
+  // decisions, not prose. No alt text either — the model never sees the image,
+  // so it could only invent one, and an alt text that lies is worse than none.
+  promotion: [
+    { key: "title", kind: "text", max: 160, purpose: "the headline of a short popup" },
+    {
+      key: "body",
+      kind: "rich",
+      purpose:
+        "two or three short sentences under the headline; state only facts given in the brief, and never invent a price, a date, a percentage or a promise of returns",
+    },
+    {
+      key: "badge",
+      kind: "text",
+      max: 40,
+      purpose: "a two- or three-word label beside the kind, such as a deadline",
+    },
+    { key: "ctaLabel", kind: "text", max: 60, purpose: "the button's words, a short verb phrase" },
   ],
 } as const satisfies Record<AiFillModule, readonly AiFillFieldDefinition[]>;
 

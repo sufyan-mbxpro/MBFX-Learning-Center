@@ -16,6 +16,7 @@
     "format": "prettier --write \"**/*.{ts,tsx,md,json,mdx,css}\" --ignore-unknown",
     "format:check": "prettier --check \"**/*.{ts,tsx,md,json,mdx,css}\" --ignore-unknown",
     "governance:check": "node scripts/governance-check.mjs",
+    "translate:catalog": "pnpm --filter @repo/translate run catalog --",
     "check:phantom-deps": "node scripts/check-phantom-deps.mjs",
     "check:permission-keys": "node scripts/check-permission-keys.mjs",
     "check:email-templates": "node scripts/check-email-templates.mjs",

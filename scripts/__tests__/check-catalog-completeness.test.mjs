@@ -73,13 +73,18 @@ describe("check:catalog-completeness — ADR-043 namespace split", () => {
   });
 });
 
-// ADR-043 #4. The gate is armed but INERT in the real workspace: `en` is the
-// only enforced locale and, as the source catalog, is never compared against
-// itself. So the failure branch is exercised here against a fixture instead of
-// being discovered broken on the day a second locale is activated.
+// ADR-043 #4. The gate was armed but INERT while `en` was the only enforced
+// locale; since ADR-166 it guards `ar` in the real workspace too. The failure
+// branch is still exercised against a fixture below, so it cannot pass by
+// never running.
 describe("check:catalog-completeness — activation gate", () => {
-  it("only the active locale is enforced (ADR-007 — English-only launch)", () => {
-    expect([...ENFORCED_LOCALES]).toEqual(["en"]);
+  it("enforces the source and Arabic, the first locale prepared to go live (ADR-166)", () => {
+    expect([...ENFORCED_LOCALES]).toEqual(["en", "ar"]);
+  });
+
+  it("the real workspace passes with Arabic enforced", () => {
+    // The tests run from the repo root (package.json's vitest invocation).
+    expect(run(process.cwd())).toBe(0);
   });
 
   it("FAILS when an enforced locale's public catalog is incomplete", () => {

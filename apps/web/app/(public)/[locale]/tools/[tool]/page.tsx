@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import {
+  alternatesFor,
   descriptionFrom,
   jsonLd,
   localizedPath,
@@ -61,24 +62,38 @@ export async function generateMetadata({
   setRequestLocale(locale);
   if (!isToolKey(tool)) return {};
 
-  const [page, template, brand] = await Promise.all([
+  const [page, template, brand, t] = await Promise.all([
     getToolPage(locale, tool),
     titleTemplate(),
     siteName(),
+    getTranslations({ locale, namespace: "tools" }),
   ]);
   if (!page) return {};
+  // ADR-168 #3: no translation in this locale's chain → the catalog's name.
+  const name = page.title ?? t(`names.${tool}`);
 
   const ownPath = localizedPath(locale, toolPath(tool));
   return {
-    title: titleFrom(template, page.seoTitle?.trim() || page.title),
+    title: titleFrom(template, page.seoTitle?.trim() || name),
     ...descriptionFrom(page.seoDescription, page.tagline),
-    alternates: { canonical: ownPath },
+    // hreflang to the locales a person approved (ADR-164 #5); a tool's path is
+    // its registry key everywhere, so the alternate is the same path.
+    alternates: await alternatesFor({
+      canonical: ownPath,
+      languages: page.alternateLocales.map((code) => ({
+        locale: code,
+        href: localizedPath(code, toolPath(tool)),
+      })),
+    }),
+    // ADR-159 #2: machine-written words at their own URL are served, not
+    // indexed. A conditional SPREAD, never `robots: undefined` (ADR-090).
+    ...(page.noIndex ? { robots: { index: false, follow: true } } : {}),
     // The editor's Cover image is the masthead AND the share card.
     ...(await shareMetadata({
       locale,
       siteName: brand,
       url: ownPath,
-      title: page.seoTitle?.trim() || page.title,
+      title: page.seoTitle?.trim() || name,
       description: page.seoDescription ?? page.tagline,
       image: page.coverUrl,
     })),
@@ -99,6 +114,8 @@ export default async function ToolPage({ params }: PageProps<"/[locale]/tools/[t
   const t = await getTranslations({ locale, namespace: "tools" });
   const page = await getToolPage(locale, key);
   if (!page) notFound();
+
+  const name = page.title ?? t(`names.${key}`);
 
   const parsed = parseToolConfig(key, page.config);
   // A config an older deploy wrote that no longer parses is not a 500: the
@@ -216,7 +233,7 @@ export default async function ToolPage({ params }: PageProps<"/[locale]/tools/[t
     {
       "@context": "https://schema.org",
       "@type": "WebApplication",
-      name: page.title,
+      name,
       url: ownUrl,
       ...(page.seoDescription || page.tagline
         ? { description: page.seoDescription || page.tagline }
@@ -251,7 +268,9 @@ export default async function ToolPage({ params }: PageProps<"/[locale]/tools/[t
         />
       ))}
       <ToolShell
-        title={page.title}
+        title={name}
+        // ADR-168 #4: the calculator stays; the explainer says why it is absent.
+        untranslated={page.title === null}
         tagline={page.tagline}
         intro={page.intro}
         body={page.body}

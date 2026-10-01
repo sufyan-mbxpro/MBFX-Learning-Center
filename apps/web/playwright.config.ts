@@ -57,7 +57,12 @@ export default defineConfig({
       name: "admin",
       dependencies: ["auth"],
       use: { ...devices["Desktop Chrome"], storageState: STORAGE_STATE },
-      testMatch: /keystone\/.*\.spec\.ts/,
+      // The FOLDER is `e2e/admin/`, whatever the portal's URL is. ADR-151's
+      // `/admin` → `/keystone` rename rewrote this pattern with the URLs, and
+      // from then on the project matched nothing: every admin spec was
+      // silently not run while the suite reported green.
+      // `app/e2e-projects.test.ts` fails if a spec file is claimed by no project.
+      testMatch: /e2e\/admin\/.*\.spec\.ts/,
     },
     {
       // No storageState: the public surface is tested as an anonymous
@@ -114,6 +119,10 @@ export default defineConfig({
       NEXT_DIST_DIR: ".next-e2e",
       NEXT_PUBLIC_SITE_URL: BASE_URL,
       BETTER_AUTH_URL: BASE_URL,
+      // ADR-171: announcements refuse to send without a signing key for their
+      // unsubscribe link. A test-only value when the .env has none, so the
+      // journey runs on a machine that has never configured announcements.
+      EMAIL_LINK_SECRET: process.env.EMAIL_LINK_SECRET || "e2e-only-email-link-secret-000000000",
     },
   },
 });

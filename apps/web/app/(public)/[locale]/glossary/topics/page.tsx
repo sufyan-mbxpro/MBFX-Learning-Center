@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { localizedPath, titleTemplate, titleFrom } from "../../../../_lib/seo.ts";
+import { titleTemplate, titleFrom, staticPageAlternates } from "../../../../_lib/seo.ts";
 import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { ChevronRight, Tag } from "lucide-react";
@@ -41,7 +41,7 @@ export async function generateMetadata({
   return {
     title: titleFrom(template, t("topicsTitle")),
     description: t("topicsIntro"),
-    alternates: { canonical: localizedPath(locale, GLOSSARY_TOPICS_PATH) },
+    alternates: await staticPageAlternates(locale, GLOSSARY_TOPICS_PATH),
   };
 }
 

@@ -212,10 +212,11 @@ Public: `app/(public)/[locale]/learn/[track]/videos/**` — the index, `categori
   row into a `VideoSourceView` and DROPS one whose URL no provider recognises,
   or whose asset has been deleted. A player with no source beats handing an
   attacker-controlled string to an iframe.
-- **Videos publish on `lessons.*`** — the third refusal to add keys for a new
-  content type, after quizzes (ADR-058 #8) and glossary topics (D27). Cost:
-  video authorship cannot be granted apart from lesson authorship.
-  `ENTITY_PUBLISH_PERMISSION` is the one line that changes it.
+- **Videos and quizzes have their own keys since ADR-177** (`videos.*`,
+  `quizzes.*`; video categories use `videos.*`). They borrowed `lessons.*`
+  until then (ADR-058 #8, ADR-068 §3). Glossary topics still use
+  `glossary.*` (D27). `ENTITY_PUBLISH_PERMISSION` and `purge.ts`'s
+  `DELETE_PERMISSION` map each entity to its key.
 - **Videos and links are NOT translatable.** They live on the topic, not the
   translation: a recording is the same recording in every language, and a
   link's destination does not change with the reader (`@repo/i18n`'s `Link`
@@ -288,7 +289,6 @@ rail and pager, the breadcrumb trail's parents, section titles. They are
 navigation, and a `?lang=` choice does not follow the reader onto the next
 page — that would be a sticky reading preference, which is its own decision.
 
-
 ## Featured / Active / Premium on learning content (ADR-139, 2026-09-18)
 
 `Course`, `Lesson`, `Quiz`, `VideoTopic` and `GlossaryTerm` carry the
@@ -313,3 +313,60 @@ its existing `isActive`. Read ADR-139 before extending them.
   `markers` (`@repo/ui/components/card-markers`). Popular means enrollments
   for courses and finished attempts for quizzes; the video shelf has no count,
   so it has no Popular view.
+
+## Promotions (ADR-167 + ADR-170, changes-52, 2026-09-29)
+
+A promotion is a webinar, event, offer, news item or announcement shown for a
+set time as a popup on chosen pages and in the home band. Read ADR-167 before
+changing any of the rules below.
+
+- **Data in coded slots.** The records are admin data; the popup host, the
+  band's place on the home page and the set of placements
+  (`PROMOTION_PLACEMENTS`, `@repo/contracts`) are code. Pages that never show
+  a popup (auth, legal, newsletter confirmation, a quiz mid-attempt) are a
+  code list, not an option.
+- **Status is derived.** Only `DRAFT | ACTIVE | ARCHIVED` is stored;
+  Scheduled, Live and Ended come from the window (`startsAt` inclusive,
+  `endsAt` exclusive). No cron changes a promotion.
+- **One link, or none**: site content, a path, an `https:` URL, or nothing,
+  enforced once in contracts. A content target that is not public HIDES the
+  promotion; it never links to a 404. A linked promotion may leave its words
+  empty and borrow the target's.
+- **Keys** (`promotions` group): `view/create/update/delete/publish`, seeded to
+  `super_admin` and `admin` only. `publish` alone activates or archives, and
+  editing a LIVE promotion needs it too (a service rule, not a key), because
+  the edit reaches visitors on save.
+- **Status is not part of Save.** Activate / Archive act on what is stored and
+  are offered only when nothing is unsaved.
+- **Languages** go through the one engine (`promotion-translation.ts`).
+  `NEEDS_REVIEW` and `OUTDATED` count as missing, and missing means hidden
+  unless the promotion says "Show it in English" (`untranslated:
+SHOW_DEFAULT`).
+- **Counters** (ADR-170) are daily totals per surface in `PromotionDailyStat`,
+  with no visitor identifier of any kind. The admin labels every figure
+  approximate. Surfaces are `POPUP`, `BAND` and, since ADR-173, `BAR`.
+- **Banner** (ADR-173): a third surface beside popup and band. "Show as a
+  banner" + a position (top, bottom, left, right) in the editor's "Where and
+  how"; a promotion needs at least one of the three. The delay stays a popup
+  setting; the frequency applies to both.
+- **E2E**: `apps/web/e2e/admin/promotions.spec.ts` (P8) drives create →
+  activate → popup → dismiss → denial → archive against one promotion.
+
+## Announcing a course (ADR-171, changes-54, 2026-09-30)
+
+The email side lives in the email skill; three things touch this module.
+
+- **"Announce this course"** sits on the course editor's heading row for a
+  PUBLISHED or SCHEDULED course, behind `announcements.create`. It opens
+  `/keystone/announcements/new?course=<id>`. A draft is never announceable.
+- **What counts as announceable is the course module's own rule.**
+  `announcement-target.ts` composes `publicCourseWhere` (live) and the same
+  filter with a FUTURE `scheduledFor` (scheduled). A campaign on a SCHEDULED
+  course waits (`sendWhenLive`) and starts the first cron tick the course is
+  public, whether or not `publish-due` has run; a course that leaves
+  SCHEDULED without going live cancels it (`target_unavailable`).
+- **The email's words follow reading rules.** A recipient gets the course's
+  title, summary and link in their locale only when that locale is active and
+  the translation passes `isIndexableTranslation`; otherwise English. Enrolled
+  learners of the course are left out of every audience.
+

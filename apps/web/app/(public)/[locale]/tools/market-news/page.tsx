@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { localizedPath, titleTemplate, titleFrom } from "../../../../_lib/seo.ts";
+import { titleTemplate, titleFrom, staticPageAlternates } from "../../../../_lib/seo.ts";
 import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { ArrowRight, CalendarClock, Newspaper, ShieldAlert } from "lucide-react";
@@ -28,7 +28,7 @@ export async function generateMetadata({
   return {
     title: titleFrom(template, t("title")),
     description: t("lead"),
-    alternates: { canonical: localizedPath(locale, ROUTE_PATHS["market-news"]) },
+    alternates: await staticPageAlternates(locale, ROUTE_PATHS["market-news"]),
   };
 }
 

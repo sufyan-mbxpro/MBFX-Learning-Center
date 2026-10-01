@@ -10,12 +10,20 @@ import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { hash } from "@node-rs/argon2";
 import type { PrismaClient } from "../src/generated/client/client.ts";
+import { EMAIL_DESIGN_DEFAULTS } from "../src/email-design-defaults.ts";
 import { EMAIL_TEMPLATE_DEFAULTS } from "../src/email-template-defaults.ts";
 import { CONTENT_LIFECYCLE_GROUPS } from "../src/permission-groups.ts";
 import { isSuperAdminOnlyPermission } from "../src/role-exclusions.ts";
+import { TRANSLATABLE_SETTING_KEY_LIST } from "../src/translatable-settings.ts";
+import {
+  REVIEW_PLATFORM_SEED_DEFAULTS,
+  REVIEW_PLATFORM_SEED_KEYS,
+} from "../src/review-platforms.ts";
 import defaultThemeTokens from "./default-theme-tokens.json" with { type: "json" };
 import homePageLayout from "./home-page-layout.json" with { type: "json" };
 import { SEED_ARTICLES } from "./seed-articles.ts";
+import { seedPromotions } from "./seed-promotions.ts";
+import { seedArabicMenuLabels } from "./seed-menu-ar.ts";
 import { TOOL_HIGHLIGHTS } from "./seed-tool-highlights.ts";
 
 // The `home` page's published layout (Module 16, plan v2.2 PR 2.7) — the
@@ -35,20 +43,31 @@ const HOME_PAGE_LAYOUT = homePageLayout;
 // ─────────────────────────────────────────────────────────────
 
 const PERMISSIONS = [
-  // Learning — /keystone/learn/* (courses, lessons, quizzes, videos).
-  // Quizzes (ADR-058 #8) and videos (ADR-068 §3) are gated on the LESSON keys
-  // rather than groups of their own, which is why this card is "Courses &
-  // lessons" and covers four screens.
-  ["learning", "courses.view", "View courses"],
-  ["learning", "courses.create", "Create courses"],
-  ["learning", "courses.update", "Edit courses"],
-  ["learning", "courses.delete", "Delete courses"],
-  ["learning", "courses.publish", "Publish courses"],
-  ["learning", "lessons.view", "View lessons"],
-  ["learning", "lessons.create", "Create lessons"],
-  ["learning", "lessons.update", "Edit lessons"],
-  ["learning", "lessons.delete", "Delete lessons"],
-  ["learning", "lessons.publish", "Publish lessons"],
+  // Learning — /keystone/learn/*, one card per screen (ADR-177). Quizzes and
+  // videos borrowed the LESSON keys until ADR-177 (superseding ADR-058 #8 and
+  // ADR-068 §3), so lesson authorship could not be granted without quiz and
+  // video authorship. They have their own keys now; the migration that added
+  // them granted each one to every role and override holding its lesson twin.
+  ["courses", "courses.view", "View courses"],
+  ["courses", "courses.create", "Create courses"],
+  ["courses", "courses.update", "Edit courses and their sections"],
+  ["courses", "courses.delete", "Delete courses"],
+  ["courses", "courses.publish", "Publish courses"],
+  ["lessons", "lessons.view", "View lessons"],
+  ["lessons", "lessons.create", "Create lessons"],
+  ["lessons", "lessons.update", "Edit lessons"],
+  ["lessons", "lessons.delete", "Delete lessons"],
+  ["lessons", "lessons.publish", "Publish lessons"],
+  ["quizzes", "quizzes.view", "View quizzes"],
+  ["quizzes", "quizzes.create", "Create and duplicate quizzes"],
+  ["quizzes", "quizzes.update", "Edit quizzes and their questions"],
+  ["quizzes", "quizzes.delete", "Delete quizzes"],
+  ["quizzes", "quizzes.publish", "Publish quizzes"],
+  ["videos", "videos.view", "View videos and video categories"],
+  ["videos", "videos.create", "Create video topics and categories"],
+  ["videos", "videos.update", "Edit video topics and categories"],
+  ["videos", "videos.delete", "Delete video topics and categories"],
+  ["videos", "videos.publish", "Publish video topics"],
 
   // Glossary — /keystone/glossary and /keystone/glossary/topics. A topic IS glossary
   // data (D27), so it reuses these keys rather than adding three nobody holds.
@@ -73,6 +92,17 @@ const PERMISSIONS = [
   ["articles", "analysis.publish", "Publish analysis"],
   ["articles", "news.manage", "Manage news"],
   ["articles", "comments.moderate", "Moderate comments"],
+
+  // Promotions — /keystone/promotions (ADR-167). `publish` alone puts a
+  // promotion live or archives it, so an author can draft without being able
+  // to interrupt every visitor with a popup. Not super_admin-only: nothing here
+  // captures or spends anything, so `admin` holds it through the registry and
+  // the owner grants it to any other role in the role editor.
+  ["promotions", "promotions.view", "View promotions"],
+  ["promotions", "promotions.create", "Create promotions"],
+  ["promotions", "promotions.update", "Edit promotions"],
+  ["promotions", "promotions.delete", "Delete promotions"],
+  ["promotions", "promotions.publish", "Activate or archive promotions"],
 
   // Website builder (Module 16 — ADR-021 pages, ADR-027 parts). CANCELLED by
   // ADR-042 and hidden, not deleted; the keys stay seeded for the same reason
@@ -105,28 +135,38 @@ const PERMISSIONS = [
   ["translations", "translations.update", "Edit translations"],
   ["translations", "translations.approve", "Approve translations"],
   ["translations", "locales.manage", "Manage locales"],
+  // ADR-160: the Google Cloud Translation key and its budget. super_admin
+  // only (role-exclusions.ts) — a key rather than a role test, as
+  // `ai.providers.manage` is, so a later grant is an ADR.
+  ["translations", "translations.provider.manage", "Manage the translation provider and its key"],
 
   // SEO & redirects
   ["seo", "seo.update", "Edit SEO fields"],
   ["seo", "redirects.manage", "Manage redirects"],
   ["seo", "sitemaps.manage", "Manage sitemaps"],
 
-  // Users & roles — /keystone/users, /keystone/roles
+  // Users — /keystone/users. `permissions.assign` stays here rather than under
+  // Roles: it is used on a USER's record (assigning a role or an override to
+  // that person), not in the role editor.
   ["users", "users.view", "View users"],
   ["users", "users.create", "Create users"],
   ["users", "users.update", "Edit users"],
   ["users", "users.delete", "Delete users"],
   ["users", "users.impersonate", "Impersonate users"],
   ["users", "users.password.reset", "Reset user passwords"],
-  ["users", "roles.view", "View roles"],
-  ["users", "roles.manage", "Create and edit roles"],
-  ["users", "permissions.assign", "Assign permissions"],
+  ["users", "permissions.assign", "Assign roles and permissions to a user"],
+
+  // Roles — /keystone/roles (ADR-177: its own sidebar entry, so its own card).
+  ["roles", "roles.view", "View roles"],
+  ["roles", "roles.manage", "Create and edit roles"],
 
   // Employees — /keystone/employees
   ["employees", "employees.view", "View employees"],
   ["employees", "employees.create", "Add employees"],
   ["employees", "employees.update", "Edit employees"],
-  ["employees", "employees.delete", "Remove employees"],
+  // ADR-177: offboarding IS removing an employee, so it is gated here. It sat
+  // on `employees.update` until then, which left this key governing nothing.
+  ["employees", "employees.delete", "Offboard employees"],
   ["employees", "departments.manage", "Manage departments"],
 
   // Newsletter (Module 17, ADR-080 #7). Administration is a list, not a CRM:
@@ -136,6 +176,18 @@ const PERMISSIONS = [
   ["newsletter", "newsletter.view", "View newsletter subscribers"],
   ["newsletter", "newsletter.manage", "Unsubscribe and delete subscribers"],
   ["newsletter", "newsletter.export", "Export subscribers as CSV"],
+
+  // Announcement emails (Module 17, ADR-171 #11). `send` is its own key
+  // because the bulk action is the dangerous one: an author can draft and
+  // test, and only a holder of `send` can mail the audience, schedule,
+  // cancel, retry or add a suppression.
+  ["announcements", "announcements.view", "View announcement emails"],
+  ["announcements", "announcements.create", "Draft announcement emails and send tests"],
+  ["announcements", "announcements.send", "Send announcement emails to an audience"],
+  // ADR-172 #7: one-to-one email from a user's or subscriber's record. Its own
+  // key because it bypasses the composer's count, test gate and confirmation;
+  // the action also re-checks the right to see that person.
+  ["announcements", "announcements.direct", "Email one user or subscriber directly"],
 
   // Email (Module 17, ADR-078). Five keys, split deliberately:
   // `email.settings.manage` guards the TRANSPORT and is super_admin-only
@@ -265,6 +317,16 @@ const ROLES: Array<{
       "lessons.create",
       "lessons.update",
       "lessons.publish",
+      // ADR-177: the quiz and video twins of the lesson keys above, so the
+      // split left this role's reach exactly where it was.
+      "quizzes.view",
+      "quizzes.create",
+      "quizzes.update",
+      "quizzes.publish",
+      "videos.view",
+      "videos.create",
+      "videos.update",
+      "videos.publish",
       "courses.view",
       "courses.update",
       "courses.publish",
@@ -295,6 +357,12 @@ const ROLES: Array<{
       "lessons.view",
       "lessons.create",
       "lessons.update",
+      "quizzes.view",
+      "quizzes.create",
+      "quizzes.update",
+      "videos.view",
+      "videos.create",
+      "videos.update",
       "courses.view",
       "glossary.view",
       "glossary.create",
@@ -314,6 +382,8 @@ const ROLES: Array<{
     description: "Owns SEO metadata, redirects, and sitemaps site-wide.",
     permissions: [
       "lessons.view",
+      "quizzes.view",
+      "videos.view",
       "courses.view",
       "glossary.view",
       "analysis.view",
@@ -458,17 +528,10 @@ const SETTINGS = [
   ["general", "site.defaultLocale", "en", "STRING", "Default language", true],
   ["general", "site.defaultTimezone", "UTC", "STRING", "Default timezone", true],
   ["general", "site.defaultThemeMode", "system", "SELECT", "Default colour mode", true],
-  // changes-41 / ADR-135 — the "Share your experience" band's destination.
-  // Public: it is printed as a link on public pages (security.md #12). A new
-  // key, so the seed's `create` branch reaches an existing database too.
-  [
-    "general",
-    "site.reviewsUrl",
-    "https://www.trustpilot.com/review/mbfx.co",
-    "STRING",
-    "Reviews page (Trustpilot)",
-    true,
-  ],
+  // NOTE: no `site.reviewsUrl` here any more (ADR-169). The reviews band's
+  // links are `review_platforms` rows, seeded below beside the social links;
+  // `20260929150000_review_platforms_changes53_adr169` moved an existing
+  // install's value into the Trustpilot row and deleted this setting.
   // NOTE: there is deliberately no `site.faviconUrl` here (changes-36).
   // The favicon is a BrandAsset, set in Theme → Logos & Favicons and read by
   // `faviconIcons()` in both root layouts; this row was read by nothing, so
@@ -512,6 +575,14 @@ const SETTINGS = [
       // brand footage, the <h1>, and the quick-start panel across its bottom
       // edge (changes-31).
       { key: "hero", enabled: true, order: 1, variant: "split" },
+
+      // changes-52 P4 (ADR-167): live promotions set to "show in the home
+      // band", directly under the hero — a webinar or an offer is the most
+      // time-bound thing on the page. Seeded ENABLED because it renders
+      // NOTHING while no promotion is live, the rule ADR-103 wrote for the
+      // data-gated bands. Migration 20260929120000 appends it to an existing
+      // install's list (create-only seed values never reach one).
+      { key: "promotions", enabled: true, order: 2 },
 
       // OFF, and not a leftover. The video rail opened this page for two
       // years; the owner asked for the dynamic video content off the home
@@ -915,6 +986,14 @@ const SETTINGS = [
   ["email", "newsletter.placements.news", true, "BOOLEAN", "Newsletter on /news", false],
   ["email", "newsletter.placements.analysis", true, "BOOLEAN", "Newsletter on /analysis", false],
 
+  // Announcement emails (ADR-171 #12), all read by `@repo/core`'s
+  // announcements runner. 120 a minute suits SendGrid comfortably and is
+  // raised once the list size is known (owner, D2); a Workspace SMTP account
+  // needs it far lower.
+  ["email", "email.campaignRatePerMinute", 120, "NUMBER", "Announcement emails per minute", false],
+  ["email", "email.campaignBatchSize", 50, "NUMBER", "Announcement emails per batch", false],
+  ["email", "announcements.inactiveDays", "30", "SELECT", "Inactive after (days)", false],
+
   // ─── AI platform (Module 18, ADR-097/099/100) ──────────────
   //
   // Every key here is `isPublic: false` and that is load-bearing: security.md
@@ -1223,12 +1302,24 @@ export async function seed(db: PrismaClient) {
   console.log(`  brand logos: ${seededLogos} created`);
 
   // Settings
+  const translatableSettings = new Set<string>(TRANSLATABLE_SETTING_KEY_LIST);
   for (const [groupName, key, value, type, label, isPublic] of SETTINGS) {
+    // A fact about the KEY, not a value an admin chose (ADR-165 #1), so it is
+    // written on update as well as create.
+    const isTranslatable = translatableSettings.has(key);
     await db.setting.upsert({
       where: { key },
       // Never overwrite a value an admin has already changed.
-      update: { groupName, label, type: type as never, isPublic },
-      create: { key, groupName, value: value as never, type: type as never, label, isPublic },
+      update: { groupName, label, type: type as never, isPublic, isTranslatable },
+      create: {
+        key,
+        groupName,
+        value: value as never,
+        type: type as never,
+        label,
+        isPublic,
+        isTranslatable,
+      },
     });
   }
   console.log(`  settings: ${SETTINGS.length}`);
@@ -1276,6 +1367,26 @@ export async function seed(db: PrismaClient) {
   }
   console.log(`  email templates: ${EMAIL_TEMPLATE_DEFAULTS.length}`);
 
+  // Email designs (ADR-172 #3): starting points for a custom email, create-only
+  // under a fixed id, so an admin's edit or archive survives every later run.
+  for (const design of EMAIL_DESIGN_DEFAULTS) {
+    await db.emailDesign.upsert({
+      where: { id: design.id },
+      update: {},
+      create: {
+        id: design.id,
+        name: design.name,
+        description: design.description,
+        mode: "RICH",
+        subject: design.subject,
+        preheader: design.preheader || null,
+        bodyHtml: design.bodyHtml,
+        createdById: "seed",
+      },
+    });
+  }
+  console.log(`  email designs: ${EMAIL_DESIGN_DEFAULTS.length}`);
+
   // Social links
   for (const link of SOCIAL_LINKS) {
     await db.socialLink.upsert({
@@ -1285,6 +1396,18 @@ export async function seed(db: PrismaClient) {
     });
   }
   console.log(`  social links: ${SOCIAL_LINKS.length}`);
+
+  // Review platforms (ADR-169). `create`-only: an admin's switch, order,
+  // identifier and link are never overwritten by a later seed run, and the
+  // migration may already have created Trustpilot from `site.reviewsUrl`.
+  for (const [sortOrder, platform] of REVIEW_PLATFORM_SEED_KEYS.entries()) {
+    await db.reviewPlatform.upsert({
+      where: { platform },
+      update: {},
+      create: { platform, sortOrder, ...REVIEW_PLATFORM_SEED_DEFAULTS[platform] },
+    });
+  }
+  console.log(`  review platforms: ${REVIEW_PLATFORM_SEED_KEYS.length}`);
 
   // Departments
   for (const d of [
@@ -1950,6 +2073,7 @@ export async function seed(db: PrismaClient) {
   }
 
   console.log(`  menu items: ${NAV.length + footerItemCount + 1}`);
+  console.log(`  arabic menu labels: ${await seedArabicMenuLabels(db)} created`);
 
   // Redirects for the pages ADR-109 withdrew.
   //
@@ -3813,6 +3937,13 @@ export async function seed(db: PrismaClient) {
     seededArticles += 1;
   }
   if (seededArticles > 0) console.log(`  article corpus: ${seededArticles} created`);
+
+  // Promotions (changes-57): a webinar, an offer and an announcement, so the
+  // popup, the home band and the banners have something to show. ACTIVE
+  // outside production only — see the file. `pnpm seed:live` attaches their
+  // pictures, as it does for the article corpus.
+  const seededPromotions = await seedPromotions(db, { adminId });
+  if (seededPromotions > 0) console.log(`  promotions: ${seededPromotions} created`);
 
   // Website builder (Module 16, plan v2.2 PR 2.7). The `home` row is the
   // CMS's owner of "/". Phase 1 (PR 1.1) seeded it as a DRAFT with an empty

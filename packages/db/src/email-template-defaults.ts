@@ -115,6 +115,29 @@ export const EMAIL_TEMPLATE_DEFAULTS: readonly EmailTemplateDefault[] = [
       '<p class="ed-tx-muted">Reading the site in: {{contact.locale}}</p>' +
       "<p>{{contact.message}}</p>",
   },
+  // A new course, announced (ADR-171 #8). The body is the design; a campaign
+  // overrides only its subject and the short note. The cover is ALWAYS a URL
+  // (a track's raster panel when the course has none — Gmail and Outlook do
+  // not render SVG), and an empty note is an empty paragraph, because the
+  // template language has no conditionals (ADR-078 #6). The lesson count is
+  // a label, not a sentence, so "1" never reads "1 lessons".
+  {
+    key: "announcement.course",
+    subject: "New course: {{course.title}}",
+    preheader: "{{course.summary}}",
+    bodyHtml:
+      '<p><a href="{{course.url}}"><img src="{{course.coverUrl}}" alt="{{course.title}}" ' +
+      'width="560" style="width:100%;max-width:560px;height:auto;border:0"></a></p>' +
+      '<p class="ed-tx-primary ed-fs-sm"><strong>New course</strong></p>' +
+      "<h2>{{course.title}}</h2>" +
+      '<p class="ed-tx-muted ed-fs-sm">Level: {{course.level}} · Lessons: {{course.lessonCount}}</p>' +
+      "<p>{{course.summary}}</p>" +
+      "<p>{{campaign.message}}</p>" +
+      '<p><strong><a href="{{course.url}}">Start the course</a></strong></p>' +
+      '<p class="ed-tx-muted ed-fs-sm">You are receiving this because you have an account ' +
+      "with {{site.name}} or subscribed to its newsletter. " +
+      '<a href="{{unsubscribe.url}}">Stop course announcements</a>.</p>',
+  },
 ] as const;
 
 /** The default content for one key, or null when the key is not one of ours. */

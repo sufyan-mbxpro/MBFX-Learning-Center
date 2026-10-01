@@ -7,14 +7,25 @@
 //
 // A delivery failure is RETURNED, never thrown. Sign-up must not fail because
 // a mail server did.
-import { EMAIL_TEMPLATES, type EmailBodyMode, type EmailTemplateKey } from "@repo/contracts";
+import {
+  EMAIL_TEMPLATES,
+  isCampaignEmailKey,
+  type EmailBodyMode,
+  type EmailTemplateKey,
+} from "@repo/contracts";
 import { db, emailTemplateDefault } from "@repo/db";
 import { loadSetting } from "@repo/settings";
 import { CURATED_FONTS, loadActiveThemeTokens } from "@repo/theme";
 import { siteOrigin } from "@repo/utils";
 import { absoluteUrl, type EmailPalette } from "./layout.ts";
-import { renderEmail } from "./render.ts";
-import { TRANSPORT_ID, loadTransportDriver } from "./transport.ts";
+import { renderEmail, type RenderableEmailKey } from "./render.ts";
+import {
+  TRANSPORT_ID,
+  classifySendError,
+  loadTransportDriver,
+  type EmailTransportDriver,
+} from "./transport.ts";
+import { listUnsubscribeHeaders, type UnsubscribeLinks } from "./unsubscribe-headers.ts";
 
 /** The locale every template is guaranteed to have (ADR-043 #3). */
 export const DEFAULT_EMAIL_LOCALE = "en";
@@ -35,13 +46,25 @@ export interface SendTemplatedEmailInput {
   triggeredById?: string | undefined;
   /** A test send ignores `isActive` — never the global switch. */
   isTest?: boolean | undefined;
-  /** Both halves, because a package may not invent the word (code-style #2). */
-  unsubscribe?: { url: string; label: string } | undefined;
+  /**
+   * Both halves, because a package may not invent the word (code-style #2).
+   * `oneClickUrl` is the RFC 8058 handler for the header; `url` is the page.
+   */
+  unsubscribe?: UnsubscribeLinks | undefined;
 }
+
+/**
+ * Why a FAILED send failed, for a caller that decides whether to retry
+ * (ADR-171): `transient` and `permanent` come from the transport
+ * (`classifySendError`), `render` from the template and its variables, and
+ * `config` from a missing template row or content.
+ */
+export type DeliveryFailure = "transient" | "permanent" | "render" | "config";
 
 export interface DeliveryResult {
   status: DeliveryStatus;
   reason?: string;
+  failure?: DeliveryFailure;
   deliveryId: string;
 }
 
@@ -68,6 +91,8 @@ async function record(input: {
   providerMessageId?: string | undefined;
   isTest: boolean;
   triggeredById?: string | undefined;
+  campaignId?: string | undefined;
+  failure?: DeliveryFailure | undefined;
 }): Promise<DeliveryResult> {
   const row = await db.emailDelivery.create({
     data: {
@@ -81,12 +106,14 @@ async function record(input: {
       providerMessageId: input.providerMessageId ?? null,
       isTest: input.isTest,
       triggeredBy: input.triggeredById ?? null,
+      campaignId: input.campaignId ?? null,
     },
     select: { id: true },
   });
   return {
     status: input.status,
     ...(input.reason === undefined ? {} : { reason: input.reason }),
+    ...(input.failure === undefined ? {} : { failure: input.failure }),
     deliveryId: row.id,
   };
 }
@@ -192,121 +219,276 @@ async function loadTemplate(key: EmailTemplateKey) {
   return findTemplate(key);
 }
 
-export async function sendTemplatedEmail(input: SendTemplatedEmailInput): Promise<DeliveryResult> {
-  const locale = input.locale ?? DEFAULT_EMAIL_LOCALE;
-  const isTest = input.isTest ?? false;
-  const base = { key: input.key, to: input.to, locale, isTest, triggeredById: input.triggeredById };
+/** One recipient's message within a session. */
+export interface SessionSendInput {
+  to: string;
+  locale?: string | undefined;
+  /** Used for {{recipient.name}}; the address is filled in automatically. */
+  recipientName?: string | undefined;
+  variables?: Readonly<Record<string, string>> | undefined;
+  /** `oneClickUrl` is the RFC 8058 handler for the header; `url` is the page. */
+  unsubscribe?: UnsubscribeLinks | undefined;
+  /**
+   * Replaces the template's own subject for this message (ADR-171 #8: a
+   * campaign's override). Variables are substituted into it the same way.
+   */
+  subject?: string | undefined;
+  /** The announcement this message belongs to, for the delivery log. */
+  campaignId?: string | undefined;
+  /**
+   * The message's own words, in place of the template's stored content
+   * (ADR-172 #2). Required for a campaign key, which owns no stored body; the
+   * caller has already sanitised it, and the renderer sanitises again.
+   */
+  content?: MessageContent | undefined;
+  /** Replaces the sender's Reply-To for this message (a DIRECT email's author). */
+  replyTo?: string | undefined;
+}
 
-  // 1. The global switch. A test send does not get past this one either.
-  if ((await loadSetting("email.enabled")) === false) {
-    return record({ ...base, subject: "", status: "SUPPRESSED", reason: "email.enabled is off" });
-  }
+export interface MessageContent {
+  subject: string;
+  preheader?: string | null | undefined;
+  mode: EmailBodyMode;
+  bodyHtml: string;
+}
 
-  const template = await loadTemplate(input.key);
-  if (!template) {
-    return record({
-      ...base,
-      subject: "",
-      status: "FAILED",
-      reason: `No template row for ${input.key} — run the seed.`,
-    });
-  }
+export interface SendSessionOptions {
+  /** The staff member who pressed the button, for the log. */
+  triggeredById?: string | undefined;
+  /** A test send ignores `isActive` — never the global switch. */
+  isTest?: boolean | undefined;
+  /** Pool SMTP connections across the batch (ADR-171). */
+  pool?: boolean | undefined;
+}
 
-  // 2. The template's own switch. A test IS allowed past this one: you have
-  //    to be able to check a template before turning it on.
-  if (!template.isActive && !isTest) {
-    return record({ ...base, subject: "", status: "SUPPRESSED", reason: "template is inactive" });
-  }
+/**
+ * Many messages from one template, with the expensive reads done ONCE
+ * (ADR-171, plan §8.2): the global switch, the template, the render context,
+ * the sender settings and the transport. A one-shot send makes about eight
+ * reads of its own, which is fine for a password reset and fifty times too
+ * many for a batch of fifty.
+ *
+ * The switches are read when the session opens, so a batch sees one answer
+ * for its whole run. The announcement runner re-reads `email.enabled` before
+ * every batch, which is where "switched off mid-campaign" is decided.
+ */
+export interface SendSession {
+  send(input: SessionSendInput): Promise<DeliveryResult>;
+  /** Releases pooled connections. Safe to call twice. */
+  close(): void;
+}
 
-  // 3. Locale, then the default locale (ADR-078 #12).
-  const content =
-    template.translations.find((row) => row.locale === locale) ??
-    template.translations.find((row) => row.locale === DEFAULT_EMAIL_LOCALE);
-  if (!content) {
-    return record({
-      ...base,
-      subject: "",
-      status: "FAILED",
-      reason: `Template ${input.key} has no ${DEFAULT_EMAIL_LOCALE} content.`,
-    });
-  }
+interface SenderSettings {
+  context: EmailRenderContext;
+  fromName: string | null;
+  fromEmail: string | null;
+  replyTo: string | null;
+}
 
+async function loadSender(): Promise<SenderSettings> {
   const [context, fromName, fromEmail, replyTo] = await Promise.all([
     loadEmailRenderContext(),
     loadSetting("email.fromName"),
     loadSetting("email.fromEmail"),
     loadSetting("email.replyTo"),
   ]);
-
-  const resolvedSiteName = context.shell.siteName;
-  const variables: Record<string, string> = {
-    ...context.globals,
-    "recipient.email": input.to,
-    "recipient.name": input.recipientName ?? "",
-    ...input.variables,
+  return {
+    context,
+    fromName: fromName ?? null,
+    fromEmail: fromEmail ?? null,
+    replyTo: replyTo ?? null,
   };
+}
 
-  let rendered;
-  try {
-    rendered = renderEmail({
-      key: input.key,
-      mode: content.mode as EmailBodyMode,
-      subject: content.subject,
-      preheader: content.preheader ?? undefined,
-      bodyHtml: content.bodyHtml,
-      variables,
-      palette: context.palette,
-      shell: { ...context.shell, unsubscribe: input.unsubscribe },
-    });
-  } catch (error) {
-    return record({
-      ...base,
-      subject: content.subject,
-      status: "FAILED",
-      reason: errorMessage(error),
-    });
+/**
+ * A campaign key owns no row: no stored body, no translations and no on/off
+ * switch (ADR-172 #4). The sender is the site-wide one.
+ */
+const CAMPAIGN_TEMPLATE = {
+  isActive: true,
+  fromName: null,
+  fromEmail: null,
+  replyTo: null,
+  translations: [] as {
+    locale: string;
+    subject: string;
+    preheader: string | null;
+    mode: string;
+    bodyHtml: string;
+  }[],
+};
+
+export async function createSendSession(
+  key: RenderableEmailKey,
+  options: SendSessionOptions = {},
+): Promise<SendSession> {
+  const isTest = options.isTest ?? false;
+  const enabled = (await loadSetting("email.enabled")) !== false;
+  const template = !enabled
+    ? null
+    : isCampaignEmailKey(key)
+      ? CAMPAIGN_TEMPLATE
+      : await loadTemplate(key);
+
+  // Loaded on the first message that gets past the switches, then kept: a
+  // session whose every message is suppressed never opens a connection.
+  let sender: Promise<SenderSettings> | undefined;
+  let driver: Promise<EmailTransportDriver> | undefined;
+  let closed = false;
+
+  async function send(input: SessionSendInput): Promise<DeliveryResult> {
+    const locale = input.locale ?? DEFAULT_EMAIL_LOCALE;
+    const base = {
+      key,
+      to: input.to,
+      locale,
+      isTest,
+      triggeredById: options.triggeredById,
+      campaignId: input.campaignId,
+    };
+
+    // 1. The global switch. A test send does not get past this one either.
+    if (!enabled) {
+      return record({ ...base, subject: "", status: "SUPPRESSED", reason: "email.enabled is off" });
+    }
+    if (!template) {
+      return record({
+        ...base,
+        subject: "",
+        status: "FAILED",
+        reason: `No template row for ${key} — run the seed.`,
+        failure: "config",
+      });
+    }
+
+    // 2. The template's own switch. A test IS allowed past this one: you have
+    //    to be able to check a template before turning it on.
+    if (!template.isActive && !isTest) {
+      return record({ ...base, subject: "", status: "SUPPRESSED", reason: "template is inactive" });
+    }
+
+    // 3. The message's own words (a campaign's), else the template's in the
+    //    locale, then the default locale (ADR-078 #12).
+    const content =
+      input.content ??
+      template.translations.find((row) => row.locale === locale) ??
+      template.translations.find((row) => row.locale === DEFAULT_EMAIL_LOCALE);
+    if (!content) {
+      return record({
+        ...base,
+        subject: "",
+        status: "FAILED",
+        reason: `Template ${key} has no ${DEFAULT_EMAIL_LOCALE} content.`,
+        failure: "config",
+      });
+    }
+
+    sender ??= loadSender();
+    const { context, fromName, fromEmail, replyTo } = await sender;
+
+    const resolvedSiteName = context.shell.siteName;
+    const variables: Record<string, string> = {
+      ...context.globals,
+      "recipient.email": input.to,
+      "recipient.name": input.recipientName ?? "",
+      ...input.variables,
+    };
+    const subjectSource = input.subject ?? content.subject;
+
+    let rendered;
+    try {
+      rendered = renderEmail({
+        key,
+        mode: content.mode as EmailBodyMode,
+        subject: subjectSource,
+        preheader: content.preheader ?? undefined,
+        bodyHtml: content.bodyHtml,
+        variables,
+        palette: context.palette,
+        shell: {
+          ...context.shell,
+          unsubscribe: input.unsubscribe
+            ? { url: input.unsubscribe.url, label: input.unsubscribe.label }
+            : undefined,
+        },
+      });
+    } catch (error) {
+      return record({
+        ...base,
+        subject: subjectSource,
+        status: "FAILED",
+        reason: errorMessage(error),
+        failure: "render",
+      });
+    }
+
+    // 4. Send. The sender identity is the template's override, then the
+    //    site-wide setting.
+    try {
+      driver ??= loadTransportDriver({ pool: options.pool ?? false });
+      const transport = await driver;
+      const { messageId, sandbox } = await transport.send({
+        to: input.to,
+        from: {
+          name: template.fromName ?? fromName ?? resolvedSiteName,
+          address: template.fromEmail ?? fromEmail ?? "",
+        },
+        replyTo: input.replyTo ?? template.replyTo ?? replyTo ?? undefined,
+        subject: rendered.subject,
+        html: rendered.html,
+        text: rendered.text,
+        // RFC 8058: a mail client's own one-click button (ADR-080 #4).
+        headers: listUnsubscribeHeaders(input.unsubscribe),
+      });
+      return record({
+        ...base,
+        subject: rendered.subject,
+        status: "SENT",
+        providerMessageId: messageId,
+        // ADR-152: accepted and validated, delivered to nobody. Said on the row,
+        // or the log would claim an inbox received it.
+        ...(sandbox ? { reason: SANDBOX_REASON } : {}),
+      });
+    } catch (error) {
+      // Not rethrown: a mail server being down must not fail the sign-up,
+      // reset or subscription that triggered this.
+      return record({
+        ...base,
+        subject: rendered.subject,
+        status: "FAILED",
+        reason: errorMessage(error),
+        failure: classifySendError(error),
+      });
+    }
   }
 
-  // 4. Send. The sender identity is the template's override, then the
-  //    site-wide setting.
+  return {
+    send,
+    close() {
+      if (closed) return;
+      closed = true;
+      // A driver that never loaded has nothing to release; one whose load
+      // failed has nothing either, and that failure was already recorded.
+      void driver?.then((loaded) => loaded.close?.()).catch(() => undefined);
+    },
+  };
+}
+
+export async function sendTemplatedEmail(input: SendTemplatedEmailInput): Promise<DeliveryResult> {
+  const session = await createSendSession(input.key, {
+    triggeredById: input.triggeredById,
+    isTest: input.isTest,
+  });
   try {
-    const driver = await loadTransportDriver();
-    const { messageId, sandbox } = await driver.send({
+    return await session.send({
       to: input.to,
-      from: {
-        name: template.fromName ?? fromName ?? resolvedSiteName,
-        address: template.fromEmail ?? fromEmail ?? "",
-      },
-      replyTo: template.replyTo ?? replyTo ?? undefined,
-      subject: rendered.subject,
-      html: rendered.html,
-      text: rendered.text,
-      headers: input.unsubscribe
-        ? {
-            // RFC 8058: a mail client's own one-click button (ADR-080 #4).
-            "List-Unsubscribe": `<${input.unsubscribe.url}>`,
-            "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
-          }
-        : undefined,
+      locale: input.locale,
+      recipientName: input.recipientName,
+      variables: input.variables,
+      unsubscribe: input.unsubscribe,
     });
-    return record({
-      ...base,
-      subject: rendered.subject,
-      status: "SENT",
-      providerMessageId: messageId,
-      // ADR-152: accepted and validated, delivered to nobody. Said on the row,
-      // or the log would claim an inbox received it.
-      ...(sandbox ? { reason: SANDBOX_REASON } : {}),
-    });
-  } catch (error) {
-    // Not rethrown: a mail server being down must not fail the sign-up,
-    // reset or subscription that triggered this.
-    return record({
-      ...base,
-      subject: rendered.subject,
-      status: "FAILED",
-      reason: errorMessage(error),
-    });
+  } finally {
+    session.close();
   }
 }
 

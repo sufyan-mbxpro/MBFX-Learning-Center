@@ -14,6 +14,8 @@ import { ScrollToTop } from "@repo/ui/components/scroll-to-top";
 import { SiteLoader } from "@repo/ui/components/site-loader";
 import { SiteFooter } from "./_components/footer.tsx";
 import { ImpersonationBanner } from "./_components/impersonation-banner.tsx";
+import { PromotionBars } from "./_components/promotion-bars.tsx";
+import { PromotionHost } from "./_components/promotion-host.tsx";
 import { PublicSessionProvider } from "./_components/public-session.tsx";
 import { SessionHintScript } from "./_components/session-hint-script.tsx";
 import { VisitorCta } from "./_components/visitor-cta.tsx";
@@ -158,7 +160,10 @@ export default async function PublicRootLayout({ children, params }: LayoutProps
       {/* suppressHydrationWarning: browser extensions (e.g. ColorZilla's
           cz-shortcut-listen) inject body attributes before React hydrates —
           same rationale as this <html>'s suppression above. */}
-      <body className="flex min-h-full flex-col" suppressHydrationWarning>
+      <body
+        className="flex min-h-full flex-col"
+        suppressHydrationWarning
+      >
         {/* ADR-064: the pre-paint mode guard, server-rendered so the browser
             actually executes it. No nonce here — this layout is cached (ADR-004)
             and has no request to read one from. */}
@@ -184,6 +189,8 @@ export default async function PublicRootLayout({ children, params }: LayoutProps
                 the content. It renders no markup of its own. */}
             <PublicSessionProvider>
               <ImpersonationBanner />
+              {/* ADR-173: a TOP banner, in flow so it never covers the sticky header. */}
+              <PromotionBars slot="top" />
               <SiteHeader locale={locale} />
               {/* overflow-x-clip: a `Reveal variant="end"` rests 1.5rem toward
                 the inline end until it scrolls into view (ADR-018 rule 2),
@@ -197,9 +204,14 @@ export default async function PublicRootLayout({ children, params }: LayoutProps
                   visitor-cta.tsx records why. Absent for a signed-in learner
                   and while the session is still loading. */}
               <VisitorCta />
+              {/* ADR-167: the promotion popup. Inside the provider for the
+                  audience rule; renders nothing until a promotion is due. */}
+              <PromotionHost />
+              {/* ADR-173: the bottom strip and the side cards, fixed to the viewport. */}
+              <PromotionBars slot="fixed" />
             </PublicSessionProvider>
             <SiteFooter locale={locale} />
-            <ScrollToTop label={t("backToTop")} />
+            <ScrollToTop label={t("backToTop")} className="bottom-(--floating-bottom)" />
           </ThemeProvider>
         </NextIntlClientProvider>
       </body>

@@ -34,7 +34,7 @@ import { getTranslations } from "next-intl/server";
 import { ArrowRight, Lightbulb, LineChart, Newspaper } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { getSpotlightArticles, type ArticleListEntry } from "@repo/core";
-import { getSetting, isFeatureVisible } from "@repo/settings";
+import { getLocalizedSetting, isFeatureVisible } from "@repo/settings";
 import { Link } from "@repo/i18n/navigation";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
@@ -75,7 +75,7 @@ export async function Hero({ locale, variant = "split" }: SectionProps) {
   // rendered the same sentence twice.
   const [t, description] = await Promise.all([
     getTranslations({ locale, namespace: "home" }),
-    getSetting("site.description"),
+    getLocalizedSetting("site.description", locale),
   ]);
 
   const body = description ?? t("heroBody");

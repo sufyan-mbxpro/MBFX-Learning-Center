@@ -108,51 +108,46 @@ export const SUPPORT_CHANNELS: readonly SupportChannel[] = [
 ];
 
 /**
- * The questions support is actually asked, with the owner's own answers.
+ * The questions support is actually asked (ADR-113), in the order they are
+ * shown. The WORDS are catalog messages, `support.faq.items.<key>` (ADR-159
+ * #6): they are interface text like every other band on the page, and left in
+ * code they made `/ar/support` the one page with English inside it.
  *
- * Plain text, not HTML: `FaqPanel` renders these with `format="text"`, so
- * nothing here needs sanitising and nothing here can carry a link. If an
- * answer ever needs one, the answer is too long and wants a page.
+ * The FIGURES are not. Every quantity below is a claim about the brokerage —
+ * a $10 minimum, 1:100 leverage, a 24-hour window — and ADR-113 §3's reason
+ * for keeping them out of a translator's hands still holds, so they stay here
+ * and are passed to the messages as ICU arguments. No translation, a person's
+ * or a machine's, can change one: the catalog messages hold no digits at all
+ * (`support-page.test.ts`), and the catalog script protects arguments.
+ *
+ * Plain text: `FaqPanel` renders the answers with `format="text"`.
  */
-export interface SupportFaqItem {
-  question: string;
-  answer: string;
-}
+export const SUPPORT_FAQ_KEYS = [
+  "openAccount",
+  "minimumDeposit",
+  "withdraw",
+  "platforms",
+  "hours",
+  "education",
+  "leverage",
+] as const;
 
-export const SUPPORT_FAQ: readonly SupportFaqItem[] = [
-  {
-    question: "How do I open a trading account?",
-    answer:
-      "Opening an account is simple. Click 'Sign Up' on our homepage, choose your account type, complete the registration form, verify your identity, and make your first deposit. The entire process typically takes 15-30 minutes.",
+export type SupportFaqKey = (typeof SUPPORT_FAQ_KEYS)[number];
+
+/** The owner's figures, by question — the only place a number in the FAQ lives. */
+export const SUPPORT_FAQ_FIGURES: Record<SupportFaqKey, Record<string, string>> = {
+  openAccount: { fromMinutes: "15", toMinutes: "30" },
+  minimumDeposit: { fromMinutes: "15", toHours: "24", minimumDeposit: "$10" },
+  withdraw: { fromMinutes: "30", toHours: "24", holidayHours: "48" },
+  platforms: { platform: "MetaTrader 5 (MT5)", platformShort: "MT5" },
+  hours: {
+    hoursPerDay: "24",
+    daysPerWeek: "5",
+    opens: "5:00 PM EST",
+    closes: "5:00 PM EST",
+    platformTimeZone: "GMT+2",
+    cryptoHours: "24/7",
   },
-  {
-    question: "What is the minimum deposit required?",
-    answer:
-      "The minimum deposit depends on the payment method you choose. Our deposit and withdrawal requests are typically processed within a minimum of 15 minutes and up to a maximum of 24 hours. To view your exact deposit limits and available methods, please log in to your client portal. You can start trading with as little as $10.",
-  },
-  {
-    question: "How can I withdraw my funds?",
-    answer:
-      "You can withdraw funds using the same method you used for your deposit. Withdrawals are processed within a minimum of 30 minutes and up to a maximum of 24 hours. During weekends and public holidays, processing may take up to 48 hours. We also offer instant withdrawal services for selected payment methods.",
-  },
-  {
-    question: "What trading platforms do you offer?",
-    answer:
-      "We are licensed by MetaQuotes and provide you with the industry-leading MetaTrader 5 (MT5) trading platform. Our clients can access MT5 through the web terminal, mobile apps for iOS and Android, and desktop applications for Windows and Mac. All versions offer advanced charting tools, real-time price feeds, fast execution, and a full suite of professional trading features.",
-  },
-  {
-    question: "What are your trading hours?",
-    answer:
-      "The forex market operates 24 hours a day, 5 days a week. Trading opens on Sunday at 5:00 PM EST and closes on Friday at 5:00 PM EST. On our platform, market hours are displayed in GMT+2 for your convenience. Additionally, cryptocurrency trading is available 24/7, allowing you to trade anytime — even on weekends and public holidays.",
-  },
-  {
-    question: "Do you offer educational resources?",
-    answer:
-      "Yes, we provide comprehensive educational materials including trading courses, live webinars, platform tutorials, market analysis, and a complete trading glossary. All resources are free for our clients.",
-  },
-  {
-    question: "What is leverage and how does it work?",
-    answer:
-      "Leverage allows you to control larger positions with smaller capital. For example, with 1:100 leverage, you can control $10,000 with just $100. While leverage can amplify profits, it also increases risk, so proper risk management is essential.",
-  },
-];
+  education: {},
+  leverage: { leverage: "1:100", position: "$10,000", margin: "$100" },
+};

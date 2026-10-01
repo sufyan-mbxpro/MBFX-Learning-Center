@@ -25,6 +25,8 @@ import {
   RecordStats,
 } from "../../_components/record-page.tsx";
 import { StatusBadge, type StatusTone } from "../../_components/status-badge.tsx";
+import { richTextLabels } from "../../_components/editor-labels.ts";
+import { SendEmailButton } from "../../_components/send-email-dialog.tsx";
 import { SubscriberActions } from "./subscriber-actions.tsx";
 
 const STATUS_TONE: Record<string, StatusTone> = {
@@ -85,28 +87,37 @@ export default async function SubscriberDetailPage({
         </>
       }
       actions={
-        can(subject, "newsletter.manage") ? (
-          <SubscriberActions
-            id={subscriber.id}
-            unsubscribed={subscriber.status === "UNSUBSCRIBED"}
-            labels={{
-              unsubscribe: t("newsletterUnsubscribeAction"),
-              unsubscribeTitle: t("newsletterUnsubscribeTitle"),
-              unsubscribeBody: t("newsletterUnsubscribeBody"),
-              unsubscribeConfirm: t("newsletterUnsubscribeConfirm"),
-              unsubscribed: t("newsletterUnsubscribedToast"),
-              resubscribe: t("newsletterResubscribeAction"),
-              restored: t("newsletterRestoredToast"),
-              invited: t("newsletterInvitedToast"),
-              remove: t("newsletterDeleteAction"),
-              deleteTitle: t("newsletterDeleteTitle"),
-              deleteBody: t("newsletterDeleteBody"),
-              deleteConfirm: t("newsletterDeleteConfirm"),
-              deleted: t("newsletterDeletedToast"),
-              cancel: t("cancel"),
-            }}
-          />
-        ) : undefined
+        <>
+          {/* ADR-172 #6: only a confirmed, still-subscribed address. */}
+          {can(subject, "announcements.direct") && subscriber.status === "ACTIVE" && (
+            <SendEmailButton
+              recipient={{ kind: "subscriber", id: subscriber.id }}
+              editorLabels={richTextLabels(t)}
+            />
+          )}
+          {can(subject, "newsletter.manage") && (
+            <SubscriberActions
+              id={subscriber.id}
+              unsubscribed={subscriber.status === "UNSUBSCRIBED"}
+              labels={{
+                unsubscribe: t("newsletterUnsubscribeAction"),
+                unsubscribeTitle: t("newsletterUnsubscribeTitle"),
+                unsubscribeBody: t("newsletterUnsubscribeBody"),
+                unsubscribeConfirm: t("newsletterUnsubscribeConfirm"),
+                unsubscribed: t("newsletterUnsubscribedToast"),
+                resubscribe: t("newsletterResubscribeAction"),
+                restored: t("newsletterRestoredToast"),
+                invited: t("newsletterInvitedToast"),
+                remove: t("newsletterDeleteAction"),
+                deleteTitle: t("newsletterDeleteTitle"),
+                deleteBody: t("newsletterDeleteBody"),
+                deleteConfirm: t("newsletterDeleteConfirm"),
+                deleted: t("newsletterDeletedToast"),
+                cancel: t("cancel"),
+              }}
+            />
+          )}
+        </>
       }
     >
       <RecordStats>

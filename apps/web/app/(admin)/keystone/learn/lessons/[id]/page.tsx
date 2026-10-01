@@ -6,6 +6,7 @@ import {
   loadCourseCurriculum,
   loadLessonAdminDetail,
 } from "@repo/core";
+import { getAuthoringLocales } from "@repo/i18n";
 import { routing } from "@repo/i18n/routing";
 import { can, requirePermission } from "@repo/rbac";
 import { EditorPage } from "../../../_components/admin-page.tsx";
@@ -266,7 +267,7 @@ export default async function LessonEditPage({ params }: PageProps<"/keystone/le
           id: quiz.id,
           title: quiz.title || t("untitled"),
         }))}
-        locales={[...routing.locales]}
+        locales={(await getAuthoringLocales()).map((locale) => locale.code)}
         defaultLocale={routing.defaultLocale}
         siteUrl={siteOrigin()}
         canUpdate={can(subject, "lessons.update")}

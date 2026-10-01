@@ -32,6 +32,8 @@ import {
   transitionContentStatus,
 } from "./content.ts";
 import { recordAudit } from "./index.ts";
+import { hashCourseSource, loadCourseSource } from "./learn-source.ts";
+import { afterSourceSave, enqueueEntityTranslations } from "./translation-queue.ts";
 
 // ─── Errors ──────────────────────────────────────────────────
 
@@ -284,20 +286,15 @@ export async function saveCourse(actor: Subject, input: CourseInput): Promise<vo
   });
   const previousTrack = previous?.track ?? null;
 
-  // `CourseTranslation` has no `sourceHash` column — only `LessonTranslation`
-  // does — so freshness is decided by comparing against the row we are about
-  // to overwrite rather than by a stored hash. Computing a hash we could not
-  // persist would look like the lesson flow while behaving differently.
-  //
-  // The comparison matters: flipping every sibling OUTDATED on any source-locale
-  // save would mark translations stale when an editor only touched an SEO field,
-  // and a work queue that cries wolf gets ignored.
-  const sourceChanged =
-    isSource &&
-    existing !== null &&
-    (existing.title !== input.translation.title ||
-      existing.summary !== (input.translation.summary ?? null) ||
-      existing.description !== description);
+  // Phase 5 (ADR-161): a translation records the hash of the English it was
+  // made from, so the sweep and the job can tell whether it is current. The
+  // English row's own hash is read back AFTER the write (`afterSourceSave`),
+  // so the sweep and the job agree on what the source is.
+  const translatedFrom = isSource
+    ? null
+    : await loadCourseSource(db, input.courseId, defaultLocale).then((s) =>
+        s ? hashCourseSource(s) : null,
+      );
 
   const fields = {
     title: input.translation.title,
@@ -310,6 +307,7 @@ export async function saveCourse(actor: Subject, input: CourseInput): Promise<vo
     // changes-49: `Json?`, where `undefined` means "leave the column alone"
     // and an empty array is "the author removed every question".
     ...(input.translation.faq === undefined ? {} : { faq: input.translation.faq }),
+    ...(isSource ? {} : { sourceHash: translatedFrom }),
     // changes-29 B3: MACHINE_TRANSLATED only while the AI text is untouched;
     // any other save, a human's review included, writes TRANSLATED.
     translationStatus: input.translation.machineTranslated
@@ -355,7 +353,7 @@ export async function saveCourse(actor: Subject, input: CourseInput): Promise<vo
     previousSlug: existing?.slug ?? null,
     previousTrack,
     track: input.meta.track ?? previousTrack,
-    sourceChanged,
+    isSource,
     defaultLocale,
   });
 
@@ -374,7 +372,7 @@ interface FinishCourseSave {
   previousSlug: string | null;
   previousTrack: string | null;
   track: string | null;
-  sourceChanged: boolean;
+  isSource: boolean;
   defaultLocale: string;
 }
 
@@ -383,7 +381,7 @@ async function finishCourseSave(
   input: CourseInput,
   prepared: FinishCourseSave,
 ): Promise<void> {
-  const { slug, previousSlug, previousTrack, track, sourceChanged, defaultLocale } = prepared;
+  const { slug, previousSlug, previousTrack, track, isSource, defaultLocale } = prepared;
   const locale = input.translation.locale;
 
   // A course's URL is /learn/<track>/<slug> (ADR-065 §1). EITHER half moving
@@ -418,19 +416,21 @@ async function finishCourseSave(
     }
   }
 
-  // A real source-content edit → flip siblings OUTDATED, feeding the same
-  // translation work queue the glossary and lesson flows fill.
-  if (sourceChanged) {
-    const siblings = await db.courseTranslation.findMany({
-      where: { courseId: input.courseId, locale: { not: defaultLocale } },
-      select: { id: true },
-    });
-    if (siblings.length > 0) {
+  // An English save: a person's translation whose source moved becomes
+  // OUTDATED, a machine one is re-translated (ADR-161 #3). The English row's
+  // hash is stored too, so a later sweep compares like with like. An
+  // SEO-only edit changes the hash as well now — the job keeps a machine row
+  // current, and a person's row is flagged because its SEO text is theirs.
+  if (isSource) {
+    const source = await loadCourseSource(db, input.courseId, defaultLocale);
+    const hash = source ? hashCourseSource(source) : null;
+    if (hash) {
       await db.courseTranslation.updateMany({
-        where: { id: { in: siblings.map((s) => s.id) } },
-        data: { translationStatus: TranslationStatus.OUTDATED },
+        where: { courseId: input.courseId, locale: defaultLocale },
+        data: { sourceHash: hash },
       });
     }
+    await afterSourceSave("course", input.courseId, hash, defaultLocale);
   }
 }
 
@@ -451,6 +451,9 @@ export async function setCourseDeleted(
     entityType: "course",
     entityId: courseId,
   });
+  // A restore can bring back an English edit the jobs skipped while the course
+  // was deleted (ADR-161 #1).
+  if (!deleted) await enqueueEntityTranslations("course", courseId);
   revalidateTag("content", { expire: 0 });
 }
 

@@ -21,7 +21,7 @@
 // in the table's own toolbar (ADR-106) and invites through double opt-in.
 import * as React from "react";
 import Link from "next/link";
-import { MailX, MoreHorizontal, Plus, Trash2, UserMinus, UserPlus } from "lucide-react";
+import { Mail, MailX, MoreHorizontal, Plus, Trash2, UserMinus, UserPlus } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { toast } from "sonner";
 import { adminAddSubscriberSchema } from "@repo/contracts";
@@ -47,6 +47,8 @@ import { Empty, EmptyDescription, EmptyMedia, EmptyTitle } from "@repo/ui/compon
 import { Field, FieldError, FieldGroup, FieldLabel } from "@repo/ui/components/field";
 import { FilterBarRow } from "@repo/ui/components/filter-bar";
 import { Input } from "@repo/ui/components/input";
+import type { RichTextLabels } from "../_components/rich-text-editor.tsx";
+import { SendEmailDialog } from "../_components/send-email-dialog.tsx";
 import { useSearchParams } from "next/navigation";
 import {
   addSubscriberAction,
@@ -72,6 +74,7 @@ export interface SubscriberTableRow {
 }
 
 export interface SubscribersLabels {
+  sendEmail: string;
   search: string;
   columns: string;
   export: string;
@@ -145,10 +148,27 @@ const STATUS_TONE: Record<string, StatusTone> = {
   UNSUBSCRIBED: "neutral",
 };
 
-function RowActions({ row, labels }: { row: SubscriberTableRow; labels: SubscribersLabels }) {
+function RowActions({
+  row,
+  labels,
+  canManage,
+  canEmail,
+  editorLabels,
+}: {
+  row: SubscriberTableRow;
+  labels: SubscribersLabels;
+  canManage: boolean;
+  canEmail: boolean;
+  editorLabels: RichTextLabels;
+}) {
   const { run } = useServerAction();
   const [confirmUnsubscribe, setConfirmUnsubscribe] = React.useState(false);
   const [confirmDelete, setConfirmDelete] = React.useState(false);
+  const [emailOpen, setEmailOpen] = React.useState(false);
+  // ADR-172 #6: only a confirmed, still-subscribed address may be emailed
+  // directly; a pending one never proved it is theirs, and an unsubscribed one
+  // asked to stop. The server decides again, with suppression too.
+  const emailable = canEmail && row.status === "ACTIVE";
 
   return (
     <div className="flex justify-end">
@@ -161,34 +181,54 @@ function RowActions({ row, labels }: { row: SubscriberTableRow; labels: Subscrib
           }
         />
         <DropdownMenuContent align="end">
-          {row.status === "UNSUBSCRIBED" ? (
-            // The undo, so no ConfirmDialog. Core decides whether this
-            // restores the row or sends a fresh confirmation, and says which.
-            <DropdownMenuItem
-              onClick={() =>
-                run(async () => {
-                  const result = await resubscribeSubscriberAction({ id: row.id });
-                  if (result === "restored") toast.success(labels.restoredToast);
-                  else if (result === "invited") toast.success(labels.invitedToast);
-                })
-              }
-            >
-              <UserPlus aria-hidden />
-              {labels.resubscribeAction}
-            </DropdownMenuItem>
-          ) : (
-            <DropdownMenuItem onClick={() => setConfirmUnsubscribe(true)}>
-              <UserMinus aria-hidden />
-              {labels.unsubscribeAction}
+          {emailable && (
+            <DropdownMenuItem onClick={() => setEmailOpen(true)}>
+              <Mail aria-hidden />
+              {labels.sendEmail}
             </DropdownMenuItem>
           )}
-          <DropdownMenuSeparator />
-          <DropdownMenuItem variant="destructive" onClick={() => setConfirmDelete(true)}>
-            <Trash2 aria-hidden />
-            {labels.deleteAction}
-          </DropdownMenuItem>
+          {emailable && canManage && <DropdownMenuSeparator />}
+          {canManage &&
+            (row.status === "UNSUBSCRIBED" ? (
+              // The undo, so no ConfirmDialog. Core decides whether this
+              // restores the row or sends a fresh confirmation, and says which.
+              <DropdownMenuItem
+                onClick={() =>
+                  run(async () => {
+                    const result = await resubscribeSubscriberAction({ id: row.id });
+                    if (result === "restored") toast.success(labels.restoredToast);
+                    else if (result === "invited") toast.success(labels.invitedToast);
+                  })
+                }
+              >
+                <UserPlus aria-hidden />
+                {labels.resubscribeAction}
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem onClick={() => setConfirmUnsubscribe(true)}>
+                <UserMinus aria-hidden />
+                {labels.unsubscribeAction}
+              </DropdownMenuItem>
+            ))}
+          {canManage && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem variant="destructive" onClick={() => setConfirmDelete(true)}>
+                <Trash2 aria-hidden />
+                {labels.deleteAction}
+              </DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
+      {emailOpen && (
+        <SendEmailDialog
+          recipient={{ kind: "subscriber", id: row.id }}
+          open
+          onOpenChange={setEmailOpen}
+          editorLabels={editorLabels}
+        />
+      )}
 
       <ConfirmDialog
         open={confirmUnsubscribe}
@@ -323,6 +363,8 @@ export function SubscribersTable({
   locales,
   canManage,
   canExport,
+  canEmail,
+  editorLabels,
   labels,
 }: {
   rows: SubscriberTableRow[];
@@ -331,6 +373,9 @@ export function SubscribersTable({
   locales: SubscriberLocaleOption[];
   canManage: boolean;
   canExport: boolean;
+  /** `announcements.direct` (ADR-172 #7). */
+  canEmail: boolean;
+  editorLabels: RichTextLabels;
   labels: SubscribersLabels;
 }) {
   const [addOpen, setAddOpen] = React.useState(false);
@@ -424,17 +469,25 @@ export function SubscribersTable({
       },
     ];
 
-    if (canManage) {
+    if (canManage || canEmail) {
       base.push({
         id: "actions",
         header: () => <span className="sr-only">{labels.actionsCol}</span>,
         meta: { label: labels.actionsCol },
         enableHiding: false,
-        cell: ({ row }) => <RowActions row={row.original} labels={labels} />,
+        cell: ({ row }) => (
+          <RowActions
+            row={row.original}
+            labels={labels}
+            canManage={canManage}
+            canEmail={canEmail}
+            editorLabels={editorLabels}
+          />
+        ),
       });
     }
     return base;
-  }, [labels, sources, statusLabel, canManage]);
+  }, [labels, sources, statusLabel, canManage, canEmail, editorLabels]);
 
   const tableLabels: DataTableLabels = {
     search: labels.search,

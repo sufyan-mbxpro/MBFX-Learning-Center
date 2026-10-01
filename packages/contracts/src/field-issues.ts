@@ -21,6 +21,8 @@ export type FieldIssueCode =
   | "invalidEmail"
   | "invalidUrl"
   | "invalidFormat"
+  // A translation dropped a `{token}` its English carries (ADR-165 #8).
+  | "missingToken"
   | "invalid";
 
 export interface FieldIssue {
@@ -33,6 +35,16 @@ export interface FieldIssue {
 export type FieldIssues = Record<string, FieldIssue>;
 
 const COLLECTIONS = new Set(["array", "set"]);
+// The codes a refine may name for itself (ADR-165 #8's `missingToken`; ADR-169's
+// "an enabled platform needs a link" is `required`, a malformed identifier
+// `invalidFormat`).
+const REFINE_CODES = new Set<FieldIssueCode>([
+  "missingToken",
+  "required",
+  "invalidFormat",
+  "invalidUrl",
+  "invalidEmail",
+]);
 const NUMBERS = new Set(["number", "int", "bigint"]);
 
 /** One Zod issue as a form-level code. Exported for its tests. */
@@ -66,6 +78,15 @@ export function toFieldIssue(issue: z.core.$ZodIssue): FieldIssue {
       if (issue.format === "email") return { code: "invalidEmail" };
       if (issue.format === "url") return { code: "invalidUrl" };
       return { code: "invalidFormat" };
+    case "custom": {
+      // A refine names its own code through `params.code` when the generic
+      // "invalid" would not tell the admin what to fix. Only the codes that
+      // need no `limit` are accepted; anything else is "invalid".
+      const named: unknown = issue.params?.code;
+      return typeof named === "string" && REFINE_CODES.has(named as FieldIssueCode)
+        ? { code: named as FieldIssueCode }
+        : { code: "invalid" };
+    }
     default:
       return { code: "invalid" };
   }

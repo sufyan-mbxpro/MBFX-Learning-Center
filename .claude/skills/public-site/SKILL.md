@@ -353,3 +353,44 @@ skill. The nine that carry the owner's photography are `--secondary` bands
 showing the photograph at full strength under a scrim; the artless ones
 (`/sitemap`, `/economic-calendar`, the eight tool pages) still open on
 `brand`.
+
+## Promotions, public side (ADR-167 + ADR-170, changes-52, 2026-09-29)
+
+- **The popup never rides in a page payload.** A promotion goes live at its
+  `startsAt` with no admin action, so nothing would revalidate the page.
+  `PromotionHost` (mounted once in the public root layout) reads
+  `GET /api/promotions?locale=` after hydration: public, read-only,
+  `s-maxage=60`, and it returns words, an href and an image — never a draft,
+  a target id or anything a reader cannot see. Do not move it into a layout.
+- **One dialog.** Several live promotions page inside ONE dialog, highest
+  priority first, at most three. Nothing opens on first paint (default delay
+  5 s). Focus goes to the title, not the button. The frequency rule is
+  `shouldShowPromotion` (contracts): PER_SESSION lives in `sessionStorage`,
+  which is per TAB, so a new tab is a new session; storage that throws falls
+  back to once per page load.
+- **The home band** (`_sections/promotions.tsx`) is a dynamic hole, not a
+  shorter page cache: `getLivePromotions`' `expire` is under five minutes, so
+  Next resolves it per request inside its own `<Suspense>` (P4 outcome, plan
+  §7.4). It renders nothing when nothing is live.
+- **Webinars**: `/api/promotions/[id]/calendar.ics` (UID = id, `SEQUENCE` =
+  version), a countdown, "Live now", and "Watch the recording" once
+  `eventEndsAt` passes and the recording topic is public.
+- **`POST /api/promotions/events`** is the THIRD anonymous write (ADR-170):
+  five guards, always an empty 204. A fourth needs its own ADR, and
+  `promotions-public.test.ts` fails on an ungated POST route.
+- **Banners (ADR-173, 2026-09-30)** are a third surface: `showAsBar` +
+  `barPosition` (`TOP`/`BOTTOM`/`LEFT`/`RIGHT`). `PromotionBars` is mounted
+  TWICE in the root layout: `slot="top"` in flow ABOVE `<SiteHeader>` (a fixed
+  strip would cover the sticky nav) and `slot="fixed"` after the popup host.
+  One banner per position, highest priority first. LEFT/RIGHT render at the
+  inline start/end (mirrored in Arabic), and only from `xl`; below that, the
+  fixed slot shows ONE bottom strip. The strip publishes
+  `--promotion-bar-height`; the body pads by it and `ScrollToTop` sits at
+  `bottom-(--floating-bottom)`. `frequency` means "when a CLOSED banner
+  returns" (`promotionBarSeenKey`, apart from the popup's key). Both hosts
+  share one `/api/promotions` read (`_lib/live-promotions.ts`), which now
+  returns popup OR banner promotions. Counted as surface `BAR`, and DISMISS is
+  accepted from it.
+- **E2E** (P8, `e2e/admin/promotions.spec.ts`): the popup on `/` and on `/ar`
+  at phone width, axe with the dialog open, dismissal honoured for the
+  session, a counter row from the real beacon, and archive taking it down.

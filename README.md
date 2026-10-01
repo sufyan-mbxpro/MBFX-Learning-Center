@@ -13,7 +13,7 @@ on a live server**, using git and SSH. Deeper references:
 | Document                                     | What it covers                                             |
 | -------------------------------------------- | ---------------------------------------------------------- |
 | [docs/ops/deploy.md](docs/ops/deploy.md)     | Full server runbook: env vars, nginx, pm2/systemd, backups |
-| [docs/ops/cron.md](docs/ops/cron.md)         | The three scheduled jobs and how to call them              |
+| [docs/ops/cron.md](docs/ops/cron.md)         | The five scheduled jobs and how to call them               |
 | [CLAUDE.md](CLAUDE.md)                       | Architecture and the project's rules                       |
 | [docs/memory/stack.md](docs/memory/stack.md) | Exact tool and library versions                            |
 
@@ -101,6 +101,8 @@ NEXT_PUBLIC_ADMIN_URL="http://localhost:3000/admin"
 EMAIL_SECRET_KEY="<generated>"
 MARKET_SECRET_KEY="<generated>"
 AI_SECRET_KEY="<generated>"
+TRANSLATE_SECRET_KEY="<generated>"
+EMAIL_LINK_SECRET="<generated>"   # signs announcement unsubscribe links (ADR-171)
 CRON_SECRET="<generated>"
 
 # Creates the local admin account on the first seed (see §3)
@@ -396,6 +398,8 @@ UPLOADS_DIR="/srv/mbx/shared/uploads"
 EMAIL_SECRET_KEY="<generated>"
 MARKET_SECRET_KEY="<generated>"
 AI_SECRET_KEY="<generated>"
+TRANSLATE_SECRET_KEY="<generated>"
+EMAIL_LINK_SECRET="<generated>"   # signs announcement unsubscribe links (ADR-171)
 CRON_SECRET="<generated>"
 
 HOME_CONTENT_MODE="real"     # hide the homepage's placeholder figures
@@ -406,7 +410,7 @@ SEED_ADMIN_PASSWORD="<strong one-off password>"
 ```
 
 > **Back up this file somewhere safe.** If you lose `EMAIL_SECRET_KEY`,
-> `MARKET_SECRET_KEY` or `AI_SECRET_KEY`, the SMTP password and API keys
+> `MARKET_SECRET_KEY`, `AI_SECRET_KEY` or `TRANSLATE_SECRET_KEY`, the SMTP password and API keys
 > stored in the database can no longer be read. They would have to be typed
 > in again.
 
@@ -489,7 +493,7 @@ running the whole file as a shell script:
 
 ```bash
 #!/usr/bin/env bash
-# Usage: cron.sh market-sync | publish-due | housekeeping
+# Usage: cron.sh market-sync | publish-due | translate | announcements | housekeeping
 S=$(grep -E '^CRON_SECRET=' /srv/mbx/shared/.env | cut -d= -f2- | tr -d '"\r')
 curl -fsS -X POST "https://example.com/api/cron/$1" -H "Authorization: Bearer $S" >/dev/null
 ```
@@ -502,6 +506,8 @@ crontab -e        # as mbx
 ```cron
 */15 * * * * /srv/mbx/cron.sh market-sync
 */15 * * * * /srv/mbx/cron.sh publish-due
+*/5 * * * *  /srv/mbx/cron.sh translate
+* * * * *    /srv/mbx/cron.sh announcements
 30 3 * * *   /srv/mbx/cron.sh housekeeping
 ```
 

@@ -13,7 +13,10 @@ import { describe, expect, it } from "vitest";
 import {
   CONTENT_LIFECYCLE_GROUPS,
   PERMISSION_GROUPS,
+  PERMISSION_GROUP_SECTIONS,
+  PERMISSION_SECTIONS,
   permissionGroupOrder,
+  permissionGroupSection,
 } from "./permission-groups.ts";
 
 const seed = readFileSync(fileURLToPath(new URL("../prisma/seed.ts", import.meta.url)), "utf8");
@@ -43,35 +46,48 @@ describe("the group registry", () => {
     expect(new Set(PERMISSION_GROUPS).size).toBe(PERMISSION_GROUPS.length);
   });
 
-  it("orders the cards the way the admin sidebar orders its sections", () => {
-    // People → Learning → Content → data/reach → System. The role editor reads
-    // this array's INDEX, so reordering it reorders the screen — which is the
-    // point, and is why the expectation is spelled out rather than derived.
+  it("orders the cards the way the admin sidebar orders its entries", () => {
+    // Learning → Content → People → System, and within each the order of the
+    // sidebar's rows (ADR-177). The role editor reads this array's INDEX, so
+    // reordering it reorders the screen, which is why the expectation is
+    // spelled out rather than derived.
     expect([...PERMISSION_GROUPS]).toEqual([
-      "users",
-      "employees",
-      // ADR-080 #7, added by changes-21 F7. It sits with People because the
-      // sidebar entry does — a subscriber list is an audience, curated by
-      // whoever manages users, not by whoever can repoint the SMTP host.
-      "newsletter",
-      "learning",
+      "courses",
+      "lessons",
+      "quizzes",
+      "videos",
       "glossary",
-      "media",
       "articles",
-      "website",
-      "market",
+      "promotions",
       "tools",
+      "market",
+      "media",
+      "website",
+      "users",
+      "roles",
+      "employees",
+      "newsletter",
+      "announcements",
+      "settings",
+      "email",
+      "ai",
       "translations",
       "seo",
-      "email",
-      // ADR-097 — the fifteenth group. changes-29 §7.2 said "between tools and
-      // translations"; §10 puts the AI screen under System, above Settings,
-      // and ADR-083's rule is that this array mirrors the sidebar. The rule
-      // wins, so the card sits where its screen does.
-      "ai",
-      "settings",
       "system",
     ]);
+  });
+
+  it("puts every card under a sidebar section, in one run per section", () => {
+    // The role editor draws a heading wherever the section changes, so a
+    // section split in two would draw its heading twice.
+    const sections = PERMISSION_GROUPS.map((g) => PERMISSION_GROUP_SECTIONS[g]);
+    const runs = sections.filter((section, i) => section !== sections[i - 1]);
+    expect(runs).toEqual([...PERMISSION_SECTIONS]);
+  });
+
+  it("files an unregistered group under System", () => {
+    expect(permissionGroupSection("video_topics")).toBe("system");
+    expect(permissionGroupSection("quizzes")).toBe("learning");
   });
 
   it("sorts an unregistered group last instead of throwing", () => {
@@ -79,14 +95,15 @@ describe("the group registry", () => {
     // render somewhere an admin can see it; vanishing from the editor would
     // hide granted permissions, which is the failure that matters.
     expect(permissionGroupOrder("video_topics")).toBe(PERMISSION_GROUPS.length);
-    expect(permissionGroupOrder("users")).toBe(0);
+    expect(permissionGroupOrder("courses")).toBe(0);
   });
 });
 
 describe("the split of the old `content` group", () => {
-  it("covers exactly the keys `content` used to hold", () => {
+  it("covers exactly the keys `content` used to hold, plus their quiz and video twins", () => {
     // `content_manager` was seeded with every key in the one `content` group.
-    // The split is display-shaped, so its grant set must not have moved.
+    // The split is display-shaped, so its grant set must not have moved,
+    // except for the quiz and video keys ADR-177 cut out of `lessons.*`.
     const covered = permissionTuples()
       .filter((t) => (CONTENT_LIFECYCLE_GROUPS as readonly string[]).includes(t.group))
       .map((t) => t.key)
@@ -103,6 +120,17 @@ describe("the split of the old `content` group", () => {
         "lessons.update",
         "lessons.delete",
         "lessons.publish",
+        // ADR-177: what `lessons.*` used to grant on the quiz and video screens.
+        "quizzes.view",
+        "quizzes.create",
+        "quizzes.update",
+        "quizzes.delete",
+        "quizzes.publish",
+        "videos.view",
+        "videos.create",
+        "videos.update",
+        "videos.delete",
+        "videos.publish",
         "glossary.view",
         "glossary.create",
         "glossary.update",

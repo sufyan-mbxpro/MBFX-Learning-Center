@@ -20,6 +20,7 @@
 // ADR-043 #2: these labels are admin surface and English-only by design. The
 // course CONTENT they edit is fully multilingual.
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ExternalLink,
@@ -27,6 +28,7 @@ import {
   MoreHorizontal,
   Search,
   ImageIcon,
+  Send,
   SlidersHorizontal,
   SquareArrowOutUpRight,
   Trash2,
@@ -150,6 +152,7 @@ export function CourseEditor({
   siteUrl,
   canUpdate,
   canPublish,
+  canAnnounce,
   canDelete,
   canCreateLesson,
   canDeleteLesson,
@@ -168,6 +171,8 @@ export function CourseEditor({
   siteUrl: string;
   canUpdate: boolean;
   canPublish: boolean;
+  /** ADR-171: holds `announcements.create`, so the Announce button may show. */
+  canAnnounce: boolean;
   canDelete: boolean;
   canCreateLesson: boolean;
   canDeleteLesson: boolean;
@@ -361,6 +366,19 @@ export function CourseEditor({
           >
             <ExternalLink data-icon="inline-start" aria-hidden />
             {labels.viewLive}
+          </Button>
+        )}
+        {/* ADR-171 (owner, D5): a SCHEDULED course can be announced too — the
+            email waits until the course is live. Never a draft. */}
+        {canAnnounce && (course.status === "PUBLISHED" || course.status === "SCHEDULED") && (
+          <Button
+            variant="outline"
+            render={
+              <Link href={`/keystone/announcements/new?course=${encodeURIComponent(course.id)}`} />
+            }
+          >
+            <Send data-icon="inline-start" aria-hidden />
+            {labels.announceCourse}
           </Button>
         )}
         {canUpdate && (

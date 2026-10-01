@@ -25155,3 +25155,2087 @@ and logo alt text are unchanged: the preset is a theme's label, and the
 header and footer already take the logo's alt from `site.name`.
 
 **Tests:** no test asserted the old value; `governance:check` OK.
+
+## 2026-09-25 — Module 06: automatic translation, Phase 0 (ADR-159…162)
+
+Decisions only; no code. Plan: `docs/changes/multilingual-automation-plan.md`
+(revision 2, after a review against the codebase). Owner decisions: machine
+translations go live instantly, Google Cloud Translation **Basic (v2)** is the
+automatic translator, and AI is a manual assist in the translation editor.
+
+- **ADR-159:** `MACHINE_TRANSLATED` is served on every read path (the `?lang=`
+  exclusion goes), but machine-written prose is `noindex`, and left out of the
+  sitemap and hreflang until a person saves it. Labels are published freely.
+  ADR-007's no-English-in-RTL rule stands. The support FAQ's wording moves to
+  the catalog while its figures stay in the facts file as ICU arguments
+  (amends ADR-113 §3).
+- **ADR-160:** new domain package `@repo/translate` (`core → translate →
+  secrets`), and the fifth sealed secret: the Google API key under
+  `TRANSLATE_SECRET_KEY`, sent in a header, gated on the new
+  `translations.provider.manage` (super_admin only). Not an `AiProvider` row:
+  that table is chat vendors priced per token. Per-character usage table,
+  monthly budget that pauses, a number check that flags changed figures, and
+  glossary terms substituted before the call. AI gets no new feature key: the
+  `translation` feature gains an optional `draft` to refine.
+- **ADR-161:** work is enqueued on every save and status change, not on
+  publish (ADR-071's scheduled items become visible with no code running).
+  The machine writes only to an absent or `MACHINE_TRANSLATED` row. New hash
+  columns stay null, and null means unknown.
+- **ADR-162:** `TranslationJob` table: upsert enqueue with no NULL keys,
+  atomic claim, stale-lease recovery, conditional writes under a row lock at
+  `ReadCommitted`. Drained inline after a save and by `/api/cron/translate`
+  every 5 minutes.
+
+Rules amended: security.md #10 (fifth exception) and architecture.md #8 (new
+package and edges).
+
+**Tests:** none (documentation only). `governance:check` OK.
+
+## 2026-09-25 — Module 06: automatic translation, Phase 1 (`@repo/translate`)
+
+Plan: `docs/changes/multilingual-automation-plan.md` §6 Phase 1, under
+ADR-160. Built against a faked Google endpoint (MSW); no real key has been
+used yet, so the spike against the live API (HTML handling of
+`translate="no"` and `ed-*` classes, request limits, error shapes) is still
+owed and is the first thing to run when a key exists.
+
+**Shipped.**
+- `@repo/translate` (new domain package: `db / contracts / secrets`,
+  `@formatjs/icu-messageformat-parser` 3.5.17, already in the lockfile via
+  next-intl). One door, `translateSegments` (with `translateTexts` and
+  `translateHtml` over it): skips blank segments, checks the monthly budget
+  for the whole call before Google is touched, batches (128 segments /
+  30,000 characters), retries a transient failure twice (1 s, 4 s), and
+  writes a `TranslateUsage` row for every request, failure and refusal. Only
+  a success is billed, into `TranslateUsagePeriod` by one
+  `INSERT … ON DUPLICATE KEY UPDATE`. No text is stored.
+- Google driver: plain `fetch`, key in `X-goog-api-key` (never the URL),
+  every failure mapped to the `TRANSLATE_REASONS` taxonomy, Google's message
+  dropped. `loadTranslateDriver()` is the one reader of `apiKeyCipher`
+  (source-guarded, like `@repo/ai`'s).
+- HTML: long bodies split only at nesting depth zero; glossary terms with a
+  human translation substituted inside `<span translate="no">` and stripped
+  after; the caller still sanitizes. The number check (`numbersMatch`)
+  normalises Arabic-Indic/Urdu digits and thousands separators.
+- ICU catalog pipeline (`icu.ts`): arguments and tags travel as protected
+  spans and must come back exactly once; plurals are hoisted to whole
+  sentences, then rebuilt with the TARGET's `Intl.PluralRules` categories
+  (Arabic's six from English's two) and listed for review.
+  `pnpm translate:catalog -- --locale ar [--fake|--dry-run]` fills missing
+  public keys only and never overwrites a value.
+- Schema: `TranslateProvider` (singleton; price and monthly budget are its
+  columns, ADR-160 #6 as amended), `TranslateUsage`,
+  `TranslateUsagePeriod`; migration `20260925130000_translate_provider_adr160`.
+- Permission `translations.provider.manage`, super_admin only: sixth entry in
+  `SUPER_ADMIN_ONLY_PERMISSIONS`, argued in ADR-160.
+- Settings → Translation (`/keystone/settings/translation`): key
+  (write-only), price, budget, switch; switching on runs a test translation
+  first; Test connection; this month's usage. Actions audit every change and
+  never the key. `admin.translate.*` strings (English only, ADR-043).
+- `TRANSLATE_SECRET_KEY` in `.env.example`, the README and `docs/ops/deploy.md`.
+
+**Decisions made while building (recorded in ADR-160 before merge).** The
+budget and price are columns on the provider row, not registry settings, so
+the package does not depend on `@repo/settings`. `@repo/translate/testing`
+exports the fake endpoint for the Phase 3 tests in `@repo/core`. The
+workspace links and the lockfile importer were written by hand to match
+what `pnpm install` produces: this machine's pnpm 10 must not install over a
+tree the pinned pnpm 12.4.1 owns. The next real `pnpm install` should leave
+both unchanged.
+
+**Measured.** `ar.json` is missing 962 public keys (about 29,600 characters,
+roughly $0.60 at list price), not the plan's estimated 570. A `--fake` run
+filled all 962 with none refused and 18 plurals flagged, every result parsed,
+no existing value changed, and `check:catalog-completeness` passed with `ar`
+enforced. `ar.json` was restored afterwards and is unchanged.
+
+**Tests:** `@repo/translate` 79 passed (63 unit, 16 integration on
+Testcontainers MariaDB), coverage 97.7% statements / 89.8% branches, every
+file over its floor. `icu.ts` branches sit at 85% by stated exception
+(three unreachable defensive refusals, `@repo/ai` secret.ts precedent).
+The unit suite includes every public message in `en.json` round-tripped
+through plan → identity → rebuild. `@repo/contracts` 516 passed; `@repo/db`
+role-exclusions + permission-groups 22 passed; `apps/web` admin convention
+guards (11 files) 1720 passed; `apps/web` `tsc` clean; eslint clean on every
+touched file; `check:permission-keys` and `check:phantom-deps` OK.
+
+## 2026-09-25 — Module 06: automatic translation, Phase 2 (schema pass)
+
+Plan §4.1/§4.2 and ADR-161 #7–#9, ADR-162. Schema only; nothing reads the
+new columns yet.
+
+**Shipped.**
+- `translationStatus` (default `TRANSLATED`) and `sourceHash` on the seven
+  translation tables that had neither: menu items, course sections, quiz
+  questions, glossary topics, video categories, article categories and
+  tags. `CourseTranslation` gained `sourceHash` (it had a status). The plan
+  listed `VideoCategoryTranslation` as hash-only; it had no status either.
+- Hashes are NOT backfilled: NULL means unknown (ADR-161 #4), so existing
+  human rows get one review pass instead of being declared current.
+- A lesson's attachment labels and a video topic's link labels are stored on
+  the PARENT's translation row, as JSON maps from English label to
+  translation (`LessonTranslation.attachmentLabels`,
+  `VideoTopicTranslation.linkLabels`). This replaces the plan's separate
+  tables: `saveLesson` and `saveVideoTopic` delete and recreate those
+  children on every save, which would cascade-delete a person's translation
+  each time (ADR-161 #8).
+- Social link labels are brand names and stay untranslated (ADR-161 #9).
+- `TranslationJob` (ADR-162): `"*"` rather than NULL for a backfill's
+  entity, because MariaDB lets duplicate NULLs through a unique index.
+  `entityId` is 191 wide, like every String id.
+- Migration `20260925150000_translation_status_and_jobs_adr161_162`,
+  additive only.
+
+**Verified on real data.** Applied to the local dev database: 66 menu item,
+14 course section, 35 quiz question and 4 article category translations all
+read `TRANSLATED` with a NULL hash, and the existing course statuses
+(including one `DRAFT`) are untouched.
+
+**Tests:** `@repo/translate` 82 passed. New schema tests: a row written
+without a status is `TRANSLATED` with a NULL hash; a second backfill for one
+locale is refused; upsert re-arms a finished job. Every package that imports
+`@repo/db` typechecks, plus `apps/web`. `@repo/core` unit suite 233 passed.
+`@repo/core` integration suites touching the altered tables: navigation 20,
+quizzes 40, learn 57, articles 58, videos 27, content 32, all passed.
+`check:phantom-deps` and `check:permission-keys` OK.
+
+## 2026-09-26 — Module 06/15: automatic translation, Phase 3 (news end to end)
+
+Plan §6 Phase 3, under ADR-159…162. Google is still faked (MSW); no live key
+has been used.
+
+**The loop.**
+- `@repo/translate/jobs.ts`: the queue. Enqueue is one `INSERT … ON
+  DUPLICATE KEY UPDATE`. Claim is an atomic `UPDATE … ORDER BY … LIMIT` with
+  a token. Stuck `RUNNING` rows are recovered after 10 minutes. Three
+  attempts back off 1 and 5 minutes; quota pauses 30 minutes, the budget
+  until the 1st of next month; our own bugs are `internal_error` (a new
+  reason). Revalidation runs once per batch, through a callback.
+- **ADR-162 #2 amended before merge (`rerun`,
+  `20260925170000_translation_job_rerun_adr162`).** An editor's save landing
+  between the job's write and its DONE found the job RUNNING and did
+  nothing, leaving a stale translation until the next save. Enqueue now
+  marks a running job `rerun`, and finishing re-queues it in one statement.
+  A test reproduces the race.
+- `@repo/core`: `translation-queue.ts` enqueues for active non-default
+  locales only. `article-translation.ts` translates outside any transaction,
+  then writes at `ReadCommitted` holding a lock on the SOURCE row and
+  re-hashing it. It writes only an absent or `MACHINE_TRANSLATED` row, reuses
+  the English slug (the locale is appended on a collision), sanitizes
+  Google's HTML, fits text that grew to its column, substitutes glossary
+  terms that have a human translation, and writes `NEEDS_REVIEW` when a
+  figure changed. `translation-runner.ts` never throws. Article admin
+  actions drain the article's jobs in `after()`.
+- `translateHtmlMany`: an article's body and FAQ answers go in one request.
+
+**Behaviour that changed.**
+- **The article source hash covers every translatable field**
+  (`article-source.ts`). It was title + body only, so an edited excerpt, SEO
+  field, takeaway or FAQ never marked a translation stale. Existing rows
+  mismatch once: a person's becomes OUTDATED on the next English save, and a
+  machine row is re-translated.
+- The post-save sweep flips only `TRANSLATED` rows (an unknown hash counts
+  as stale) and enqueues. It used to flip every stale sibling to OUTDATED,
+  machine rows included, which under ADR-159 would have made stale machine
+  text indexable.
+- `quickUpdateArticle` changed the English title without recomputing
+  anything. It now runs the same sweep and enqueue.
+- ADR-159 on the read path: `READABLE_TRANSLATION_STATUSES` gains
+  `MACHINE_TRANSLATED`, and the new `INDEXABLE_TRANSLATION_STATUSES` /
+  `isIndexableTranslation` drive hreflang, the article sitemap query and the
+  article view's `noIndex`. This applies to every module's `?lang=` menu at
+  once. Four existing tests encoded ADR-097/ADR-127's "never a machine one"
+  and were rewritten to the new rule (reading-languages, articles, learn,
+  glossary), not loosened.
+
+**Editor.**
+- "Translate from en with Google" fills the open locale tab from the
+  English form's CURRENT text: plain fields as text, the body as HTML, never
+  the slug. The result is marked machine-written, so an untouched Save keeps
+  it `MACHINE_TRANSLATED`. It asks before replacing a person's text, and is
+  absent unless translation is switched on and the viewer can save articles.
+- It is a BUTTON, not an automatic fill when the tab opens, as plan §3 had
+  it. Opening a tab should not spend money.
+- `prefillTranslationAction`: the permission gate runs first, on the union
+  of prefill keys, then the parse, then the entity's own key. It writes
+  nothing, is limited to 20 Google requests per user per minute, and is
+  metered.
+- The AI translate button becomes "Refine with AI" when the tab has text,
+  sending it as `drafts` (new optional field in `translationPayloadSchema`;
+  the prompt corrects rather than retranslates).
+
+**Tests:**
+- `@repo/translate` 97 passed, coverage 97.6% / 90.4% branches, including 14
+  queue tests on Testcontainers: four concurrent claimers share no job,
+  stale lease, backoff timing, budget and quota pauses, the `rerun` race.
+- `@repo/core`: `article-translation.integration` 10 passed (translate,
+  noindex then lifted by a person's save, machine refreshed vs person
+  flagged, excerpt-only change, number check, a person saving mid-job wins,
+  single-language no-op, deleted article, slug collision, Google failure).
+  articles 58, public-content 6, learn 57, videos 27, quizzes 40, unit 237.
+- `@repo/contracts` 519, `@repo/ai` prompts 57, `apps/web` convention guards
+  1307; `tsc` clean in contracts/translate/ai/core/web; eslint clean on every
+  touched file; `check:phantom-deps` and `check:permission-keys` OK.
+- Not done: a browser check of the editor buttons, and a live Google call.
+
+## 2026-09-28 — Module 06/09: automatic translation, Phase 4 (cron, backfill, dashboard)
+
+Plan §6 Phase 4, under ADR-162 and the new **ADR-163** (written before the
+code). Google is still faked (MSW); no live key has been used.
+
+**Decisions (ADR-163).**
+- Nothing in the admin could switch a language on: `locales.manage` had been
+  seeded since Module 01 and read by nothing, and `invalidateActiveLocales()`
+  had no caller. Activation is now Settings → Translation → **Languages**,
+  behind `locales.manage`.
+- A locale is served at request time, so a database switch never meets CI's
+  `ENFORCED_LOCALES` gate, and missing keys fall back to English. Activation
+  is therefore **refused unless the public catalog is complete**, checked at
+  request time by `publicCatalogGaps()` (`@repo/i18n`) with the CI script's
+  namespace split. A test keeps the three copies of the admin-namespace list
+  equal (the CI script, `translate:catalog`, and this one).
+- The confirmation shows a **pre-flight estimate**: characters the backfill
+  would send × price, beside the budget left. Not a gate; the budget pauses.
+- Switching off keeps every translation; queued jobs for an inactive locale
+  **finish without calling Google**.
+- Sync (per locale or all) and Retry failed are `translations.approve`, one
+  audit row per press. They and activation start one queue tick in `after()`;
+  the cron does the rest.
+- `TRANSLATABLE_TYPES` (`@repo/core`) is the one registry the handler, the
+  backfill walk, the coverage counts, the estimate and the review queue read.
+  Phase 5 adds a type there.
+
+**Shipped.**
+- `@repo/translate/jobs.ts`: `enqueueLocaleBackfill` (restarts a finished or
+  pending walk; marks a running one `rerun`), `expandBackfill` (atomic claim of
+  one backfill, 200 ids a page, 10 pages a tick, cursor `type|lastId` saved
+  after every page), `retryFailedJobs`, `countJobs`, `loadBackfillStates`,
+  `listFailedJobs`, `purgeTranslationRows`. Enqueue is now chunked multi-row
+  INSERTs with bound parameters. `CURSOR` is a reserved word in MariaDB, so
+  the raw SQL quotes it.
+- `@repo/core`: `translatable-types.ts`, `translation-coverage.ts` (pure),
+  `translation-admin.ts` (overview, languages, review queue, `setLocaleActive`,
+  `syncTranslations`, `retryFailedTranslations`), and `drainTranslationQueue`
+  in `translation-runner.ts`: batches of 25 until empty, paused, or 240 s.
+  `articleSegments()` is now the one list of what an article job sends, and
+  the estimate counts it.
+- `POST /api/cron/translate` (fail-closed 503, 401, POST only). Housekeeping
+  now deletes DONE jobs after 7 days and `TranslateUsage` rows after 90
+  (ADR-162 #10).
+- Settings → Translation is a tabbed section (ADR-150): **Overview**
+  (`translations.view`: usage and budget tiles, a per-language table with a
+  coverage bar, machine / reviewed / outdated / needs-review / missing counts
+  and queue state, recent failures, live refresh while work is pending; Sync
+  all and Retry all on the title row, ADR-140 §3), **Languages**, **Review**
+  (machine, outdated and flagged rows per ADR-159 #5 and ADR-160 #8, with
+  language and state filters, opening the article editor on that language via
+  the new `?locale=`), and **Provider** (the Phase 1 form, moved to
+  `…/translation/provider`). The settings sub-nav entry lands on the first tab
+  the viewer can open.
+- Contracts: `localeActivationSchema`, `translationScopeSchema`.
+- Docs: `docs/ops/cron.md` (route, every scheduler recipe, symptoms), README
+  §6.9 and `deploy.md` §8 (four routes, `*/5` for translate), plan status.
+
+**Tests.**
+- `@repo/translate` 111 passed (coverage 97.5% statements / 90.0% branches;
+  `jobs.ts` 97.2 / 89.3), including 14 new queue integration tests: the walk
+  across types and pages, one runner per backfill under concurrency, restart on
+  Sync, `rerun` mid-walk, an inactive locale, a failing walk counted as an
+  attempt, the tick that expands and runs, inactive-locale skip, retry scoping,
+  counts, failures order, and the purge windows.
+- `@repo/core` `translation-admin.integration` 10 passed — **the Phase 4 exit**:
+  the incomplete `es` catalog refuses activation and changes nothing;
+  activating (catalog seam) backfills three articles with one cron call and
+  nothing else, and the estimate equals what was sent then drops to 0;
+  switching off makes queued jobs finish with zero Google calls; Sync flags a
+  person's unknown-hash row OUTDATED and the review queue lists it; a
+  non-transient failure retries with backoff three times, surfaces as FAILED,
+  and Retry re-arms it; **two concurrent drains translate each of eight
+  articles exactly once** (two metered requests each); the budget pauses the
+  drain (`stoppedBy: "paused"`, attempts 0, nothing FAILED); the time budget
+  stops a drain. Phase 3 suites re-run: `article-translation.integration` +
+  `articles.integration` 68 passed. Core unit 241, i18n unit 24 (6 new),
+  contracts `translate.test` 12 (3 new), `apps/web` cron route test 4.
+- `apps/web` convention guards: 2357 passed, 1 failed —
+  `changes-50-fixes.test.ts` (the footer subscribe strip) fails on
+  `_components/footer.tsx`, which this change does not touch and which is
+  unmodified in the working tree; it predates this work.
+- `tsc` clean in i18n, contracts, translate, core and web; eslint clean on
+  every touched file; `check:permission-keys`, `check:phantom-deps` and
+  `check:catalog-completeness` OK.
+- Smoke on the running dev server: the four new routes are registered and
+  answer the proxy's unauthenticated 404 like every other `/keystone` screen;
+  `/api/cron/translate` answers 401 without a token and 405 to GET.
+- **Not done:** a signed-in browser pass over the four tabs, and a live
+  Google call (still owed from Phase 1).
+
+## 2026-09-28 — Module 06/11/13/15: automatic translation, Phase 5 (every module)
+
+Plan §6 Phase 5, under the new **ADR-164**. Google is still faked (MSW); no
+live key has been used.
+
+**The engine.** `translation-engine.ts` runs the ADR-161/162 protocol for any
+entity from a small declaration: its translation table, FK and parent, and
+four functions (load the English source, hash it, list its segments, write a
+result). The same declaration derives the backfill walk, coverage, estimate
+and review rows, so a new type is one adapter plus one registry line.
+Identifiers in the generated SQL come from the declaration and are refused at
+definition time unless they are plain names. Articles keep their Phase 3
+handler.
+
+**Thirteen new types**, registered in backfill order: glossary topics and
+terms, courses, course sections, lessons, video categories and topics, tools,
+article categories and tags, menu items, quizzes and quiz questions. Each
+module has a `*-source.ts` shared by its service and its job.
+
+**What mapping the modules found, and what changed.**
+- Hashes covered a subset of what is translated, or nothing at all: courses
+  had no hash; lessons covered title + body; videos title + summary + body;
+  glossary terms the four bodies; tools everything but SEO. Each now covers
+  everything the job sends (SEO, FAQ, objectives, highlights, child labels).
+  Existing rows mismatch once, as Phase 3's articles did.
+- Sweeps in courses, lessons, glossary terms and tools flipped EVERY stale
+  sibling to OUTDATED, machine rows included, which under ADR-159 would have
+  made stale machine text indexable. One shared sweep (`afterSourceSave`) now
+  flips only `TRANSLATED` rows.
+- Sections, glossary topics, video categories, article categories and tags,
+  and quiz questions wrote no status on a person's save, so saving over a
+  machine row left it `MACHINE_TRANSLATED`. Every person's save now writes
+  `TRANSLATED` and records the hash of the English it was made from. Tools
+  copied the English row's STORED hash, which a seeded row does not have; the
+  hash is now computed.
+- No module but articles enqueued anything. Saves, creation, duplication,
+  restore, every content status transition and the publish-due sweep now
+  enqueue, and the admin actions drain the saved entity in `after()`. A quiz
+  drains its questions as well (`runQuizTranslationWork`).
+- Public side (ADR-159 #2): course, lesson, glossary term and topic, video
+  topic and tool pages now carry `noIndex` for machine words at their own URL,
+  and their sitemaps list only indexable translations. Tool pages moved from
+  the sitemap's static list to a per-locale one (`loadToolSitemapEntries`).
+  Glossary topic hreflang had advertised every status; it now uses
+  `advertisedAlternates`.
+- Lesson attachment labels and video link labels are translated on the
+  parent's row by English text and rendered in the reader's language. Video
+  links are rewritten on every save whatever tab was open, so the video
+  sweep reads its source back.
+- Quizzes: option count and order are kept exactly (`correctAnswer` is an
+  index), a blank result keeps the English option, and each question is its
+  own entity.
+- The support FAQ's sentences moved to `support.faq.items.*` (ADR-159 #6);
+  the figures stay in `SUPPORT_FAQ_FIGURES` and are ICU arguments, and a test
+  fails on a digit in any FAQ message.
+- Dashboard: Overview gains "By content type" (coverage per module and
+  language), and Review rows link to each type's editor.
+- Menu labels are cached under `navigation`, so a batch now revalidates that
+  tag as well as `content`.
+
+**Deferred (ADR-164 #9).** Translatable settings (no model, and `getSetting`
+has no locale; own ADR, and it must land before Phase 6 activates an RTL
+locale), `Tool.config` session names, `Quiz.category`, per-type Sync. The
+plan's "search hard-codes `en`" is the admin ⌘K palette, which stays English
+(ADR-043); public search already queries the request's locale.
+
+**Tests.**
+- New integration suites (Testcontainers + MSW), 24 tests: learning 6,
+  glossary 5, videos 4, tools 3, labels 3, quizzes 3 — including the plan's
+  exit: **a learner taking a quiz in Spanish is graded exactly as in English**
+  (every option the answer key names is the translation of the right one).
+  New unit tests: `quiz-source.test.ts` 4 (option order and count invariance
+  over every option count the editor allows), `translation-coverage.test.ts` 2.
+- Touched-module suites, all green: learn, content, public-content, videos,
+  tools, quizzes, articles, navigation, article-translation,
+  translation-admin — 309 tests with the new ones. Three existing tests were
+  rewritten to the new rules, not loosened: learn's "SEO-only change leaves
+  siblings alone" (the compromise existed because courses had no hash) became
+  "an unchanged English save leaves them alone" plus "an SEO change flags a
+  person's", with a new "never turns a machine row OUTDATED"; and
+  translation-admin's counts now include the category every article needs.
+- `@repo/core` unit 245, `@repo/contracts` 522, `@repo/i18n` 24. `apps/web`
+  guards 2446 passed + route tests 495 passed; `reading-language.test.ts`'s
+  source guard now accepts `view.readingLocale || view.noIndex`. The one
+  failure is `changes-50-fixes.test.ts` (footer), pre-existing, file
+  untouched.
+- `tsc` clean in core and web; eslint clean on every touched file;
+  `check:permission-keys`, `check:phantom-deps`,
+  `check:catalog-completeness`, `governance:check` OK.
+- `fast-check` is not a `@repo/core` dependency, so the quiz invariance test
+  sweeps option counts 2–8 deterministically instead.
+- **Not done:** a signed-in browser pass, and a live Google call.
+
+## 2026-09-28 — Module 05/06/08: translatable settings (ADR-165)
+
+ADR-164 #9's first deferral, and Phase 6's prerequisite. Written as **ADR-165**
+before the code. Google is still faked (MSW); no live key has been used.
+
+**Decisions (ADR-165).**
+- Six settings carry words a reader sees: `site.description`,
+  `legal.riskDisclaimer`, `legal.copyrightNotice`, and the text fields of
+  `header.announcementBar`, `header.topBar` and `header.cta`. A code registry,
+  `TRANSLATABLE_SETTINGS` (`@repo/contracts`), names each key, which fields are
+  words, each field's maximum, and whether the machine may translate it.
+- A translation holds ONLY words (`SettingTranslation.value`, always an object
+  of fields), and the reader lays them over the English, so a translation
+  cannot switch a bar on or repoint the header button.
+- The `legal` group is human-only: never enqueued, never walked, never sent to
+  Google. Switching a language on is refused (`siteTextIncomplete`) until a
+  person has translated the disclaimer and the copyright line.
+- Not translated: `site.name` (a brand), `site.tagline` (read by nothing —
+  code-style.md #28; left as it is, flagged here), `seo.titleTemplate`, the two
+  legal identity lines (ADR-110), the `email` group.
+- Settings are chrome: served in every state, machine included, and never
+  decide a page's index directive.
+
+**Shipped.**
+- Schema: `SettingTranslation` (`settingId`, `locale`, `value`,
+  `translationStatus`, `sourceHash`, `updatedBy`), cascade on the setting.
+  Migration `20260928120000_setting_translations_adr165` also sets
+  `settings.isTranslatable` from the registry; the seed writes it on create
+  AND update. `@repo/db` keeps the key list (`TRANSLATABLE_SETTING_KEY_LIST`),
+  held equal to the registry by a `@repo/settings` test.
+- `@repo/contracts`: the registry, `settingTextFields`,
+  `applySettingTranslation`, `missingSettingTokens`, `settingTranslationSchema`
+  (built from the English, so it can require `{year}`) and
+  `settingTranslationSaveSchema`. `field-issues.ts` gains the `missingToken`
+  code, carried on a refine's `params.code`.
+- `@repo/settings`: `loadLocalizedSetting` / `getLocalizedSetting` (cached
+  under the key's own `settings:{group}` tag — no new tag) and
+  `invalidateSettingGroup`.
+- `@repo/core`: `setting-source.ts` (the hash covers WORDS only — a URL or a
+  switch change does not flag a translation), `setting-translation.ts` (the
+  `setting` type, first in `TRANSLATABLE_TYPES`), `site-text.ts`
+  (`loadSiteText`, `saveSettingTranslation`, `afterSettingsSaved`,
+  `siteTextGaps`). The engine gains three optional hooks rather than a copy of
+  its protocol: `lockSource` (a setting's English is a `settings` row),
+  `acceptResult` (a result that lost a `{token}` is NEEDS_REVIEW), and
+  `afterWrite` (drops the settings tag AFTER the commit); `handlerFor` is
+  exported as `translationJobHandler`. `afterSourceSave` takes
+  `{ enqueue: false }` for a human-only key.
+- Admin: Settings → Translation → **Site text** (a fifth tab; `settings.update`
+  and `translations.update`), one card per key with the English beside the
+  translation, the target field in the language's `lang`/`dir`. Saving all
+  fields blank deletes the row. The English save in `updateSettingsAction`
+  runs the sweep and drains machine keys in `after()`. Review rows for a
+  setting open Site text on their language; Languages names the new refusal.
+- Public: the footer, header, hero and risk-disclaimer section read the six
+  keys through `getLocalizedSetting`.
+
+**A bug the change exposed (fixed, with its regression test).** A backfill
+walks at most 10 types a tick, one page each even when empty. The cron drain
+stopped when a tick claimed nothing and enqueued nothing, so a tick that
+crossed ten EMPTY types ended the drain with the walk unfinished — every type
+past the tenth waited for the next cron call. The label suite had passed only
+because its tenth type happened to have rows; putting `setting` first moved
+the tenth onto an empty one. `RunSummary` gains `backfillClaimed`, and the
+drain continues while a walk advanced. `jobs.integration.test.ts` walks
+`BACKFILL_PAGES_PER_TICK + 2` empty types.
+
+**Tests.**
+- New: `settings-translation.test.ts` (contracts) 14; `@repo/settings` 4
+  integration + 1 unit; `setting-translation.integration.test.ts` (core) 11 —
+  a machine key translated after an English save and read back merged; only
+  the words sent; an empty value not sent; a lost `{year}` held NEEDS_REVIEW;
+  a person's row TRANSLATED, untouched by a URL change, OUTDATED on new words
+  and never overwritten; the `{year}` refusal and blank-deletes; the audit
+  row; **the legal group never reaches Google through a save or a full
+  backfill**; activation refused `siteTextIncomplete` until both legal keys
+  exist, then allowed; coverage, review and estimate. `apps/web`
+  `translatable-settings.test.ts` 7 (checked to FAIL on a reverted call site).
+- Re-run green: `@repo/contracts` 536, `@repo/settings` 38, `@repo/core` unit
+  245, core integration — translation-admin, label, article, learn, glossary,
+  quiz, tool, video, settings-audit, setting — all passed after the drain fix
+  (the label backfill test failed before it, which is how the bug was found);
+  `@repo/translate` jobs 29.
+- `apps/web`: 3038 passed, 8 failed → 6 after this change. Two guards had
+  pinned the old `getSetting(...)` spelling of the hero and footer reads; they
+  now assert the localized call with its key and locale. The six left are not
+  this change: `changes-50-fixes.test.ts` (footer subscribe band, recorded as
+  pre-existing in the two entries above) and five in `_lib/site-url.test.ts`,
+  which fail because the root `.env` sets `NEXT_PUBLIC_SITE_URL` to a tunnel
+  URL that the test reads.
+- `tsc` clean in contracts, db, settings, core, translate and web; eslint and
+  prettier clean on every touched file; `check:permission-keys`,
+  `check:phantom-deps`, `check:catalog-completeness`, `governance:check` OK.
+- **Live dev server:** after `prisma generate` the running `next dev` kept
+  its old client (the `db` singleton survives hot reload) and every page
+  answered 500 (`Unknown field translations … on model Setting`). It needs a
+  restart; not done here. The localized read was checked against the dev
+  database with a fresh client, and the migration's `isTranslatable` flags
+  are the six registry keys.
+
+**Phase 6 status.** Not started. Its first step, the catalog fill, needs a
+live Google key (the dev database has no `TranslateProvider` row) and a
+choice of locale (plan §7 item 1). `--dry-run` today: `ar` and `ur` each
+miss 976 public keys, 31,998 characters of English (~$0.64 at the seeded
+$20 per million).
+
+## 2026-09-28 — Module 06: Phase 6 begins — the Arabic interface catalog (ADR-166)
+
+The owner chose **Arabic** as the first locale (plan §7 item 1), and chose to
+have its catalog written in the development session rather than by
+`translate:catalog` through Google: this install has no translation provider
+row and no `TRANSLATE_SECRET_KEY`. **ADR-166** records the deviation, written
+before the catalog. Arabic is NOT switched on: that is still an admin action,
+and ADR-165 #9 refuses it until a person writes the two legal settings.
+
+**What changed.**
+- `ar.json` public namespaces are complete: **976 missing keys written**, and
+  **160 existing values rewritten** because they no longer translated the
+  current English (ADR-166 #4). Most of the 160 were **English text sitting in
+  `ar.json`**: all of `tools.*` (146 values) had been filled with the English,
+  so the namespace passed the completeness check and would have rendered in
+  English on `/ar`. The other 14: `nav.mega.tools.{position,timing,rates}`
+  (English, and `timing` no longer matched), `nav.signUp`,
+  `footer.newsletterSent`, `home.heroTitle`, `home.heroBody`,
+  `home.heroPrimaryCta` (it said "Read the latest analysis"),
+  `home.videoTitle`, `home.videoLead`, `home.videoAll`, `news.minRead` (a
+  plural noun that was wrong for 1 and for 11+), `news.searchResults` and
+  `news.topicsCount` (plurals with only `one`/`other`).
+- Admin namespaces untouched (ADR-043). Brand and product names (MBX, MBFX,
+  TradingView, MetaQuotes, iOS…), pivot level codes (R1–S4) and Western
+  digits kept (ADR-166 #5). The support FAQ answers keep every figure as an
+  ICU argument and introduce no digit.
+- `ENFORCED_LOCALES` = `en`, `ar` (`scripts/check-catalog-completeness.mjs`):
+  a public key added to `en.json` without its Arabic now fails CI. Its test
+  pinned `["en"]`; it now pins `["en", "ar"]` and also runs the gate against
+  the real workspace.
+
+**Validation (ADR-166 #3), run on every message, not trusted.**
+- Every Arabic message parses as ICU and carries exactly the English
+  message's arguments, rich-text tags and select options — 1,145 written
+  values, 0 errors.
+- Every plural carries all six Arabic categories (`zero one two few many
+  other`, from `Intl.PluralRules("ar")`); a scan of every value NOT rewritten
+  found no remaining English (other than brand names and the sample email)
+  and no short plural.
+- Every public Arabic message was then RENDERED through `intl-messageformat`
+  with locale `ar` and sample arguments — 0 failures — and each of the 20
+  plural messages printed at 0, 1, 2, 3, 11 and 100 (e.g. درس واحد، درسان،
+  3 دروس، 11 درسًا، 100 درس).
+
+**Tests.** `check:catalog-completeness` OK with `ar` enforced; its script
+tests 11 passed. `@repo/i18n` unit 24 passed. `apps/web` 3040 passed, 6
+failed — the same six as the entry above (five `site-url.test.ts` from the
+root `.env`'s `NEXT_PUBLIC_SITE_URL`, one `changes-50-fixes.test.ts`),
+none touching a catalog.
+
+**Needs a person before Arabic goes live (in order).**
+1. Restart the dev server (the Prisma client is stale since ADR-165).
+2. Read the Arabic catalog — it is machine-written text (ADR-166 #2). The
+   highest-risk keys: `support.faq.items.*` (deposits, withdrawals,
+   leverage), `liveRates.riskBody`, `volatility.*`, `tools.riskReward.*`,
+   `tools.margin.*`.
+3. Settings → Translation → Site text → Arabic: write `legal.riskDisclaimer`
+   and `legal.copyrightNotice` (human-only, ADR-165 #6).
+4. Settings → Translation → Languages → switch Arabic on (the catalog gate
+   now passes; the backfill needs a Google key to translate content).
+5. Then the rest of Phase 6: RTL smoke and axe on `/ar`, hreflang and sitemap
+   checks, the review pass over machine-translated content.
+
+## 2026-09-28 — Module 06/08: Arabic switched on locally; menus and footer headings in Arabic
+
+**What happened.** Arabic was switched on in the local dev database through
+`saveSettingTranslation` + `setLocaleActive` (the admin's own services, so
+both gates ran and the audit log has the rows). The site text step (item 3
+above) was filled with an AI-DRAFTED disclaimer and copyright line, stored
+`TRANSLATED` — local only, and it still needs a person's reading before any
+real deployment. With Arabic on, every menu still read English: no
+`MenuItemTranslation` row existed for `ar`, and no Google key is configured,
+so the queued backfill cannot write one.
+
+**What shipped.**
+- `packages/db/prisma/seed-menu-ar.ts` — Arabic label and title for every
+  seeded menu row, keyed by the ENGLISH words (one routeKey carries different
+  labels in different menus). `create`-only, called from `seed.ts` after the
+  menus; applied to the local database (66 rows).
+- Footer and `/sitemap` column headings resolve `footer.columns.<menuKey>`
+  through `t.has`, falling back to `Menu.name` — that column is a single
+  untranslated string, so a heading could never follow the locale. New keys
+  in `en.json` + `ar.json` (`ar` is enforced).
+
+**Still English on `/ar`** (data, not chrome): `site.description` (a
+translatable setting with no Arabic row), `legal.registeredAddress`, the
+homepage testimonials, and all content awaiting the backfill.
+
+**Tests.** `check:catalog-completeness` OK. `apps/web` public-chrome +
+`_components` 32 passed; `@repo/db` `footer-sitemap.test.ts` 7 passed.
+
+## 2026-09-29 — Module 11/12: Promotions P1 — schema, contracts, permissions (ADR-167, changes-52)
+
+**What shipped.** The data layer for admin-managed, time-boxed promotions
+(webinars, events, offers, news, announcements) shown as popups on chosen
+pages and in a home band. No service, admin screen or public rendering yet
+(P2–P4).
+- `@repo/db`: `Promotion` + `PromotionTranslation` and seven enums; migration
+  `20260929090000_promotions_changes52_adr167` (additive only).
+  `ReferenceSourceType` gains `PROMOTION` for the image's `ContentReference`.
+- `@repo/contracts` `promotions.ts`:
+  - `promotionSaveSchema`: exactly one link as a discriminated union
+    (site content · path · https URL · none); window order; popup or band;
+    band only with a home-reaching placement; event time only on a webinar
+    or event; a title required unless the link can lend one; no button label
+    without a link.
+  - `PROMOTION_PLACEMENTS`, `placementsForPath()` and
+    `PROMOTION_EXCLUDED_PATHS` (auth, password, newsletter, legal, staff
+    preview, the quiz runner, admin and API).
+  - `promotionPhase()`, the derived Scheduled / Live / Ended.
+- `MEDIA_CATEGORIES` and `mediaSourceTypeSchema` gain `promo` / `PROMOTION`.
+- **Permissions:** a `promotions` group (after `articles` in
+  `PERMISSION_GROUPS`) with `view/create/update/delete/publish`. Catalog
+  label and description are in `en.json` (admin, English only).
+
+**Decisions.**
+- ADR-167 was Accepted before the code. Its #7 was corrected before its
+  first commit: the keys are held by `super_admin` AND `admin`, because
+  `admin` is built as every key except `SUPER_ADMIN_ONLY_PERMISSIONS`, and
+  putting these on that list would make them un-grantable below super_admin,
+  the opposite of the owner's "assignable to any role".
+- Targets and the recording topic are plain id columns with no FK
+  (polymorphic, resolved by each module's own public rule at read time),
+  like `coverAssetId`.
+
+**Tests.**
+- `@repo/contracts`: 569 passed, including 33 new in `promotions.test.ts`.
+  One of them files every `ROUTE_PATHS` entry into a section, `everywhere`
+  alone on purpose, or excluded.
+- `@repo/db`: 43 passed, including `db.integration.test.ts` (Testcontainers:
+  migrations from zero, seed twice) and `permission-groups.test.ts`, whose
+  spelled-out order now names `promotions`.
+- `@repo/core` `media.test.ts`: 54 passed.
+- Typecheck is clean on contracts, db and core. `check:phantom-deps`,
+  `check:catalog-completeness` and `governance:check` are OK.
+
+**To apply locally:** `pnpm db:deploy && pnpm db:seed`, then restart the
+dev server (stale Prisma client).
+
+## 2026-09-29 — Module 06/13/12: Phase 6 continued — fallback, hreflang, RTL smoke
+
+Continues the Arabic activation. No Google key yet, so no content backfill:
+every content table still has English rows only (menus and the two legal
+settings are the Arabic data). Written under **ADR-168**, before the code.
+
+**Tools followed no fallback chain (fixed, ADR-168).** `getToolPage` and
+`getEnabledTools` read the requested locale's row only and fell back to the
+REGISTRY KEY. `/ar/tools/pip-value` rendered the heading "pip-value" over an
+empty explainer, as an indexable page. The `/ar/tools` cards, both homepage
+tool bands and the header search did the same. Both reads now go through
+`pickTranslation`, and `title` is `null` when the chain has no row. Callers
+name the tool from the new `tools.names.<key>` (en + ar). The page keeps its
+calculator (catalog labels, already Arabic), shows `tools.untranslated` where
+the explainer goes, and is `noindex` when the URL's own locale has no row.
+
+**hreflang on every page that exists in every locale.** Before this, only the
+homepage declared its alternates, so `/support` and `/ar/support` (both in the
+sitemap, both self-canonical) were unpaired. `staticPageAlternates(locale,
+path)` (`app/_lib/seo.ts`) now covers the 14 coded routes the sitemap lists
+per locale. `listingMetadata` adds hreflang on page 0 only (page 3 of each
+locale lists different articles). Tool pages and video topics now emit
+hreflang from indexable translations, which ADR-164 #5 required and neither
+did (`ToolPageView.alternateLocales`, `PublicVideoTopicView.alternates`).
+
+**RTL smoke + axe on `/ar` (testing.md #4).** The E2E fixtures switch `ar` on
+(`activateArabic`: the two human-only legal rows first, as ADR-165 requires).
+Every RTL case in the public suite had skipped itself since ADR-091, because
+the seed leaves `ar` inactive. New `e2e/public/rtl-smoke.spec.ts` covers 12
+templates. It asserts dir/lang with no sideways scroll at 1280px and 390px in
+both directions, runs axe on each Arabic template, and checks the switcher,
+hreflang both ways and the untranslated tool page. Its first run found two
+real defects:
+- **The header overflowed at 1280px** (60px in English, 159px in Arabic). The
+  language switcher appears only once a second locale is served, and it
+  printed the language name. At `xl` the full nav, a 224px search box, the
+  switcher, the mode toggle and two auth buttons do not fit, and Arabic labels
+  are wider. Fixes: the switcher shows its name from `2xl` only (the
+  `aria-label` names it for assistive tech), and the search collapses to its
+  icon between `xl` and `2xl`. Both locales now measure 1280/1280.
+- **Every carousel failed axe's `list` rule** (serious). `<li role="group">`
+  replaces the listitem role, so the `<ul>` held no items. The track and
+  slides are `div`s now (the APG carousel pattern), with a regression test in
+  `carousel.test.tsx`.
+
+**Tests.**
+- New: `tools-fallback.test.ts` 8 (both catalogs name every `TOOL_KEYS` entry;
+  every public caller of the two tool reads falls back to `names.`, never
+  `.key`). `seo-metadata.test.ts` +15 (the 14 static routes, plus the listing,
+  tool and video-topic wiring). `tool-translation.integration.test.ts` +2 (no
+  fallback → `title: null`, noindex, English unaffected; with a fallback → the
+  fallback's words, still noindex). `carousel.test.tsx` +1.
+- `rtl-smoke.spec.ts`: **8 passed** against a freshly provisioned E2E database.
+- Core integration (tool-translation + navigation) 25 passed; `@repo/ui`
+  carousel 29 passed; `apps/web` vitest 3063 passed, 6 failed. The 6 are the
+  pre-existing failures recorded above (five `site-url.test.ts` from the root
+  `.env`, one `changes-50-fixes.test.ts`); none touches this change.
+- `tsc` clean in core, ui and web. The exception is three web errors from the
+  in-progress Promotions work (ADR-167: `PROMOTION` / `promo`), not this
+  change. eslint + prettier clean on every touched file;
+  `check:catalog-completeness` and `governance:check` OK.
+- **Pre-existing E2E failures, not fixed here** (same run, none caused by this
+  change): `about-section.spec.ts` (all 14; it tests the About section that
+  ADR-109 deleted). `tools.spec.ts`: 11 widget-band tests plus the index test
+  look for the tools section bar ADR-112 deleted. The 11 tool-page axe tests
+  and the index axe test fail `color-contrast` in ENGLISH: white on
+  `#c8986b`, 2.57:1. All three need their own pass.
+
+**Still owed before Arabic goes live anywhere real.**
+1. A Google key (Settings → Translation → Provider), then the backfill. Until
+   then every course, lesson, glossary term, article and video is absent on
+   `/ar`, and every tool shows the notice.
+2. A person reads the Arabic catalog (ADR-166 #2) and the AI-drafted legal
+   lines in the dev database.
+3. The review pass over machine-translated content once the backfill runs.
+
+## 2026-09-29 — Module 11/12: Promotions P2 — the core service (ADR-167, changes-52)
+
+**What shipped.** `@repo/core/promotions.ts`:
+- **Writes:** `savePromotion` (one transaction: the promotion, its
+  default-language words and its media reference; bumps `version`),
+  `savePromotionTranslation`, `setPromotionStatus`, `duplicatePromotion`,
+  `softDeletePromotion` and `restorePromotion`.
+- **Admin reads:** `listPromotions` (derived phase, per-locale state, target
+  health), `getPromotion` and `searchLinkableContent`.
+- **Public read:** `loadLivePromotions(locale, now, { unavailableTargetTypes })`.
+
+Every write re-checks its key with `can()` and writes an audit row; nothing
+is wired to a route yet (P3/P4).
+
+**Decisions.**
+- **Linked content** resolves through each module's OWN public rule
+  (`publicCourseWhere`, `publicLessonWhere` plus visible section,
+  `publicQuizWhere`, `publicArticleWhere`, `publicVideoWhere`,
+  `publicGlossaryTermWhere`, and `isEnabled` for a tool). A target that is not
+  public drops the promotion instead of linking to a 404. Hrefs are
+  locale-less. The reader's own slug is tried before the default language's,
+  and a lesson needs its course slug in the SAME locale.
+- **Languages:** only `TRANSLATED` and `MACHINE_TRANSLATED` are shown.
+  `NEEDS_REVIEW` and `OUTDATED` count as missing, and missing means hidden
+  unless the row says `SHOW_DEFAULT`. The response carries `lang`, so an
+  English fallback on `/ar` can be marked up as English.
+- **Permissions:** editing an ACTIVE promotion, its words or a translation
+  needs `promotions.publish`, because the edit is live the moment it saves.
+- **Restore and duplicate:** a restore always lands as DRAFT. Duplicate keeps
+  the window (plan §5 updated: the columns are required, so there was nothing
+  to clear to).
+- **Feature flags** are not read in core. The route passes
+  `unavailableTargetTypes`, as search gates flags at the route (ADR-108).
+- **Excerpts** borrowed from rich text drop INLINE tags without a space.
+  `htmlToText` turns every tag into a space, so "Start <strong>here</strong>."
+  read "Start here .", which the integration test caught.
+  `public-search.ts`'s `toPlainExcerpt` has the same defect and was left
+  alone; it is its own fix with its own regression test.
+
+**Fixed from P1.** Adding `promo` to `MEDIA_CATEGORIES` broke the web app's
+typecheck. The two media screens build a label `Record` over every category,
+and P1 ran typecheck on packages only. Both now pass `mediaCategory.promo`.
+
+**Tests.**
+- `promotions.integration.test.ts`: 30 passed (Testcontainers MariaDB,
+  migrations from zero). It covers:
+  - window bounds, drafts, archived rows and the trash;
+  - priority order and the derived phase;
+  - sanitized body, no target id in the public shape, an external link, the
+    media reference;
+  - borrowing, per-locale slugs, an unpublished or draft target, a flag-off
+    section, the recording;
+  - all four translation states and both `untranslated` modes;
+  - the author/publisher split, audit rows, restore-as-draft, duplicate and
+    the link picker.
+- `@repo/core` unit: 245 passed.
+- Typecheck is clean on core and `apps/web`. `check:phantom-deps` and
+  `check:permission-keys` are OK.
+
+## 2026-09-29 — Module 11/12: Promotions P3 — admin screens; search excerpt fix (ADR-167, changes-52)
+
+**Search excerpt fix (from P2's finding).** `toPlainExcerpt` in
+`public-search.ts` turned every tag into a space, so
+"Buy <strong>low</strong>." read "Buy low ." in the ⌘K palette, and `&amp;`
+became a space rather than "&". The inline-tag rule moved to `@repo/utils`
+(`stripInlineTags`, `htmlExcerpt`), and search and promotions now share it.
+Block tags still separate words. `htmlToText` is unchanged, so word counts
+and reading time are unaffected.
+- Regression tests: five in `content-analysis.test.ts`, plus one in
+  `public-search.integration.test.ts` on a real MariaDB.
+
+**What shipped (P3).**
+- **Sidebar:** `/keystone/promotions` under Content, after News & Analysis,
+  labelled `admin.nav.promotions` (code-style #29, beside the new
+  `admin.promotions` object).
+- **List:** a `DataTable` with the DERIVED phase, the window, the pages,
+  per-language state, and a warning when active linked content is not public.
+  Status and type filters sit in the toolbar, and the trash is behind the
+  Deleted filter. Restore is unconfirmed and lands as a draft.
+- **Editor** at `/keystone/promotions/new` and `/[id]`:
+  - content, link, schedule, display, status, preview and image sections;
+  - ONE Save, which writes the promotion and its default words, then each
+    other language whose words changed;
+  - Activate / Archive / Back to draft only when nothing is unsaved and the
+    viewer holds `promotions.publish`;
+  - a live promotion is read-only without publish (the service's rule, shown
+    rather than failed on Save).
+- **Link picker:** searches drafts too, labelled with the module's own status
+  words. It says in words when a pick is not public yet. The recording picker
+  reuses it for videos.
+- **Preview:** renders the real `@repo/ui` `PromoCard` (new, shared with P4's
+  popup and band) in popup and band layouts, borrowing the linked title the
+  way the public read does. The frames are `inert`; the captions are not.
+- **Actions** (`promotion-actions.ts`): `requirePermission` first, then the
+  contract parse, then core. The service's refusals come back as
+  `{ ok: false, reason }` and render from `admin.promotions.refusals.*`,
+  because a thrown message is replaced by a generic one in production.
+- **Catalog:** about 130 `admin.promotions.*` keys, English only (ADR-043 #2).
+  Cross-field contract rules ("end after start", "band needs home") arrive as
+  the generic `invalid` code; the editor maps those paths to sentences that
+  name the rule.
+
+**Decisions.**
+- **Dates** are entered in the editor's own local time (ADR-071), not a site
+  time zone. Plan §8 is updated. The stored instant is shown only after
+  hydration, because the server has no reader's zone.
+- **The link picker's search** is a server action gated on `promotions.view`,
+  not a public route: it returns titles of drafts.
+- `PROMOTION_KIND_TONE` lives in `app/_lib`, so the admin preview and the
+  public popup cannot disagree about an Offer's colour.
+
+**Guards touched.** `learner-admin-probe.spec.ts` now probes
+`/keystone/promotions` (`admin-surface.test.ts` failed until it did). The
+preview uses `formatDateTime` (`date-format.test.ts` failed on a private
+`Intl.DateTimeFormat`).
+
+**Tests.**
+- `apps/web`: 3121 passed, 8 failed → 6 after the two fixes above. The six
+  are the known ones recorded earlier today: five `site-url.test.ts` from the
+  root `.env`, and one `changes-50-fixes.test.ts`.
+- `@repo/ui`: 506 passed (5 new, `promo-card.test.tsx`).
+- `@repo/utils`: 356 passed.
+- `@repo/core`: `promotions.integration` 30, `public-search` suites 26.
+- Typecheck is clean on web (after `next typegen`), core and ui.
+- `check:permission-keys`, `check:phantom-deps`, `check:catalog-completeness`
+  and `governance:check` are OK.
+- `@repo/utils` `tsc` reports two errors in `site-origin.ts` and
+  `tradingview.ts`. They are committed files this change did not touch, and
+  the errors predate it.
+
+**Not done.**
+- Not exercised in a browser: no dev server was running, and the local
+  database does not have the P1 migration yet.
+- Admin E2E (happy path + permission denied) is owed to P8 with the rest.
+
+## 2026-09-29 — Module 12: Promotions P4 — public popup and home band (ADR-167, changes-52)
+
+**What shipped.**
+- **`GET /api/promotions?locale=`:** read-only, anonymous, `Cache-Control:
+  public, s-maxage=60, stale-while-revalidate=300`. It returns only popup
+  promotions, keyed by locale alone (one URL per language). An inactive or
+  malformed locale gets an empty list. Feature flags gate here through
+  `app/_lib/promotion-flags.ts`, the `/api/search` rule. A promotion that
+  links into a switched-off section is hidden like a draft.
+- **`getLivePromotions` (`@repo/core`):** `use cache`, tagged `content`, with
+  `cacheLife({ stale: 30, revalidate: 60, expire: 120 })`. The short life is
+  for the clock: a promotion starts with no admin action.
+- **`PromotionHost`:** mounted once in the public root layout, INSIDE
+  `PublicSessionProvider`, so it reuses the one session read (ADR-094).
+  - It files the list by path (`promotionShowsOnPath`; excluded pages get
+    nothing), by audience (`promotionAudienceIncludes`, which waits for the
+    session rather than guessing), by the client clock, and by frequency
+    (`shouldShowPromotion`).
+  - It opens ONE dialog after the top promotion's delay, paging up to 3.
+  - Seen is recorded on open, keyed by id and version, in local and session
+    storage, with an in-memory fallback. It never re-arms the page it just
+    opened on.
+  - Focus goes to the heading, not the button.
+- **`PromotionCard`:** the shared public renderer (popup and band) over
+  `@repo/ui` `PromoCard`.
+  - It sets `lang` only when the words fell back to another language.
+  - An internal link goes through `@repo/i18n` `Link`; an external one opens
+    in a new tab with `noopener noreferrer` and an announced "opens in a new
+    tab".
+  - The event time is printed after hydration, in the reader's zone and
+    locale digits (`formatDateTime`).
+- **Home band:** the `promotions` section, seeded `{ enabled: true, order: 2 }`
+  under the hero. It suspends on its own with a `null` fallback and renders
+  nothing when none is live. Audience is filtered client-side, and the first
+  render (everyone-audience only) matches the server. It is in
+  `HOME_SECTION_BUILT_KEYS`, with no variants (the `connect` precedent).
+  - Migration `20260929120000_home_promotions_band_changes52` appends the
+    entry for an existing install, bounded to a list with no `promotions` key.
+- **Catalog:** a new public `promotions` namespace in `en.json` AND `ar.json`
+  (`ar` is enforced).
+
+**Decisions.**
+- **§7.4 → Option A, as a dynamic hole.** The installed cacheLife docs say a
+  cache with `expire` under five minutes is excluded from the prerender and
+  filled per request inside its `<Suspense>`, while the rest of the page
+  keeps its own lifetime. So the band cannot shorten the home page's cache;
+  it is a request-time hole. This is from the docs, not measured on a build:
+  a `next build` confirming the home route still prerenders is owed to P8.
+- **Dialog only, no phone `Sheet`** (plan §7.3 updated): the Dialog is
+  already full width below `sm:`.
+- **Band audience** is decided in the browser. The home page reads no session
+  and must stay cached.
+
+**Tests.**
+- `@repo/contracts` 579 (frequency, audience and query-schema cases added).
+- `apps/web` 3127 passed, 6 failed: the known six recorded earlier today.
+  - New guard `promotions-public.test.ts` checks: the host sits inside the
+    provider, the endpoint is GET-only, the band suspends on its own, and
+    every target type maps to a seeded flag.
+- `@repo/db` integration 15 (two new): the band migration appends once as a
+  real JSON boolean, a second run changes nothing, and an install that
+  already places the band is untouched.
+- `@repo/core` `promotions.integration` 30.
+- Typecheck and lint are clean. `check:home-sections` and
+  `check:catalog-completeness` are OK.
+
+**Not done.** Not exercised in a browser (no dev server; the local database
+has neither migration yet). P5 adds the countdown, `.ics` and the recording
+handoff.
+
+## 2026-09-29 — Module 12: Promotions P5 — webinar countdown, calendar file, recording handoff (ADR-167, changes-52)
+
+**What shipped.**
+- **`GET /api/promotions/[id]/calendar.ics?locale=`:** read-only, anonymous,
+  `s-maxage=60`. It finds the promotion in the SAME cached `getLivePromotions`
+  list the popup reads, so every public rule (window, status, language,
+  target visibility, feature flags) applies by construction; anything absent
+  is a 404. Also a 404: no event time, or an event already ended.
+  - UID is `promotion-{id}@{host}` and `SEQUENCE` is the version, so a
+    re-download after an edit updates the reader's entry. Plan §7.5 said
+    "UID from id and version", which would have duplicated it; §7.5 is updated.
+  - An internal link becomes an absolute, locale-prefixed URL
+    (`siteUrl()` + `localizedPath`). The link is in `URL` and at the end of
+    `DESCRIPTION`, because most calendar apps ignore `URL`.
+- **`@repo/utils` `buildICalendar`:** hand-written RFC 5545 (CRLF, TEXT
+  escaping, 75-octet folding that never splits a character, UTC stamps, a
+  line break stripped from `URL`). No dependency. `formatDurationParts` joins
+  narrow `Intl` units with the locale's list rule, so "2d 4h" needs no plural
+  catalog keys.
+- **`@repo/contracts`:** `promotionEventPhase` (UPCOMING / LIVE / ENDED
+  against the EVENT's own time, not the display window),
+  `promotionCountdown` (two units, rounded down), `promotionCalendarPath`
+  (the card and the route share one address) and
+  `promotionCalendarQuerySchema`.
+- **`PromotionCard`:** after hydration, and ticking every 15 s through
+  `useSyncExternalStore`, it shows the countdown (`role="timer"`, so it
+  never interrupts a screen reader), **Add to calendar** before the end,
+  **Live now** during, and after the end swaps the button for **Watch the
+  recording** when the recording is public. A cached band or popup therefore
+  follows the reader's clock, not the cache's.
+- **Catalog:** six public `promotions.*` keys in `en` and `ar`.
+
+**Decisions.**
+- **A recording now needs `eventEndsAt`**, not just `eventStartsAt`
+  (contracts save rule). An event with no end never reaches ENDED, so the
+  recording would never show. The admin message
+  `errors.recordingNeedsTime` now says "end time".
+- After an event with no recording, the button stays as it was until the
+  display window closes, as §7.5 specified.
+
+**Tests.**
+- `@repo/contracts` promotions: 52 (phase boundaries, countdown rounding,
+  calendar path and query schema, the stricter recording rule).
+- `@repo/utils`: 370 (new `icalendar.test.ts`: a minimal RFC 5545 parser in
+  the test checks CRLF, unfolding, escaping round-trips, property injection
+  by fast-check, the 75-octet limit by fast-check, and Arabic + emoji folding;
+  `formatDurationParts`).
+- `apps/web`: 3132 passed, 6 failed, the known six recorded earlier today.
+  `promotions-public.test.ts` now also checks the calendar route is GET-only,
+  reads `getLivePromotions` and no database, and serves `text/calendar`.
+- Typecheck and lint are clean on web and contracts. `@repo/utils` `tsc`
+  still shows only the two errors that predate this change.
+  `check:catalog-completeness` is OK.
+
+**Not done.** Not exercised in a browser or imported into a real calendar
+application: no dev server was running and the local database lacks the
+changes-52 migrations. P6 is next (translation engine registration).
+
+## 2026-09-29 — Modules 06/11/18: Promotions P6 — translation engine, editor languages, AI form fill (ADR-167, changes-52)
+
+**What shipped.**
+- **Engine registration (ADR-164):** `promotion-source.ts` (the five word
+  columns and their hash) and `promotion-translation.ts`
+  (`defineTranslatable`: title, badge, button label and alt text as plain
+  text fitted to their columns, the body as rich text). `TRANSLATION_TABLES`
+  gains `promotion`, and `TRANSLATABLE_TYPES` lists it right after articles,
+  so a new language's backfill reaches promotions while they still run. The
+  trash is excluded (`p.deletedAt IS NULL`).
+- **The service:** P2 wrote no `sourceHash` and never enqueued.
+  - `savePromotion` now hashes the STORED English row (so the sanitized
+    body), records it, and calls `afterSourceSave`: a person's translation
+    made from older English turns OUTDATED (and so hidden, ADR-167 #6), and
+    one job per active language is queued.
+  - `savePromotionTranslation` records the hash of the English it was made
+    from, computed rather than copied. A new `machineTranslated` flag keeps
+    an untouched Google prefill MACHINE_TRANSLATED.
+  - The save action now calls `translateSoon("promotion", id)`, so the
+    queued jobs run after the response instead of waiting for the cron. A
+    duplicate queues nothing, because the copy carries every language's row
+    and hash.
+- **Editor:**
+  - The current language's state (Translated · Machine translated · Needs
+    review · Out of date · Missing) is a badge beside the language switcher.
+  - **Translate with Google** fills a non-default language from the English
+    as it is on screen, saved or not. The prefill action's permission map
+    gains `promotion: ["promotions.update"]`, and the contract's entity enum
+    gains `promotion`.
+  - The page honours `?locale=`, and the review queue links there.
+  - A save calls `router.refresh()`, so the states shown are the server's.
+- **AI form fill (ADR-126):** `promotion` is an `AI_FILL_MODULES` entry
+  with title, body, badge and button label. The body's purpose line tells
+  the model never to invent a price, a date, a percentage or a promise of
+  returns. There is no alt-text field: the model never sees the image. The
+  run route gates the module on `promotions.update`, and that key joins the
+  `form_fill` and `writing_assistant` surfaces. The editor gets the brief
+  bar, the per-field ✨ menus and the body's assistant, all absent on a
+  promotion not saved yet.
+- **Review queue:** a promotion that borrows its linked item's title has a
+  NULL title column, so the engine's review row now falls back to the
+  English title, then "".
+
+**Decisions.**
+- **No separate tab strip.** Plan §6 said "a language tab strip". Every
+  editor puts the switcher and state in the section header (changes-44 #3),
+  so the state badge joined it there. §6 is updated.
+- **A promotion with no words of its own still gets a blank machine row.**
+  A linked promotion may borrow every word from its target. Without a row
+  for L it is hidden in L under the default `HIDE`, even though there was
+  nothing to translate. The blank row costs nothing (no Google call) and
+  lets it show with the target's own L words.
+
+**Tests.**
+- `@repo/core` integration, new `promotion-translation.integration`: 7. A
+  save translates every word and the popup then shows in Spanish. A changed
+  figure writes NEEDS_REVIEW, stays hidden and is in the review queue. A
+  wordless promotion gets a blank row with zero Google calls. A person's
+  save is TRANSLATED with the English hash, is never overwritten, and turns
+  OUTDATED (hidden) on an English edit. An untouched prefill stays machine.
+  An unchanged English save leaves a person's row current. The backfill
+  and the coverage count list promotions and skip the trash.
+- `promotions.integration` 30, and `translation-admin`, `learn-translation`
+  and `tool-translation` 21, all green: the review-row change touches every
+  type.
+- `@repo/contracts` 590, including two new schema tests. `@repo/ai` 157.
+  `ai.test.ts` already walks every fill module, so the promotion fields are
+  checked for forbidden keys.
+- `apps/web`: 3132 passed, 6 failed, the known six. `ai-degradation.test.ts`
+  now requires `loadEditorAi` on the promotion editor page.
+- Typecheck and lint are clean on core, contracts, ai and web.
+  `check:catalog-completeness`, `check:permission-keys`,
+  `check:phantom-deps` and `governance:check` are OK.
+- `@repo/core` `index.test.ts` fails to import `prisma/build/index.js` when
+  unit tests run without `NODE_PATH`. That is the known environment issue,
+  not this change.
+
+**Not done.** Not exercised in a browser: no dev server was running, and
+the local database lacks the changes-52 migrations. P7 (counters) needs its
+own ADR and an owner decision. P8 (E2E, axe, RTL smoke, skill updates) is
+next.
+
+## 2026-09-29 — Module 12/05/01: Review platforms — Trustpilot, Google and Facebook buttons (ADR-169, changes-53)
+
+**What shipped.**
+- **`review_platforms` table** (`ReviewPlatform`): one row per platform with
+  a switch, an order, a public identifier and an optional `https:` override.
+  Migration `20260929150000_review_platforms_changes53_adr169` creates it,
+  carries a non-empty `site.reviewsUrl` into an ENABLED Trustpilot custom link
+  (so a live site prints the same button after deploy), and deletes the
+  setting row. The key is gone from `SETTINGS_SCHEMAS`, `SETTING_GROUPS`, the
+  seed, `settings-shared.ts` and `seed-live/defaults.json`.
+- **`@repo/contracts` `review-platforms.ts`:** `REVIEW_PLATFORM_KEYS`
+  (`trustpilot`, `google`, `facebook`), per-platform normalise + pattern +
+  URL builder (`/evaluate/{domain}`, `writereview?placeid=`,
+  `facebook.com/{page}/reviews`), `resolveReviewUrl` (override first, https
+  only, re-checked at READ time) and `reviewPlatformsSaveSchema` (every
+  platform exactly once; an enabled row needs an identifier or a link).
+  `toFieldIssue` now lets a refine name `required` / `invalidFormat` /
+  `invalidUrl` / `invalidEmail` as well as `missingToken`.
+- **`@repo/core` `review-platforms.ts`:** `listReviewPlatforms`,
+  `saveReviewPlatforms` (one transaction, one audit row,
+  `revalidateTag("settings:general", { expire: 0 })`), and the cached public
+  `getActiveReviewLinks` (platform + url only).
+- **Admin:** Settings → General → **Reviews** tab (`review-platforms-form.tsx`
+  + `saveReviewPlatformsAction`, `settings.update`). One card per platform:
+  leading switch, identifier + custom link `Field`s validated inline against
+  the action's schema, up/down reorder buttons, a status chip, and the
+  address a visitor will get computed live from the typed values with a
+  "Test link".
+- **Public:** `ReviewsBand` draws one button per active platform, first one
+  default, the rest outline, each a plain new-tab anchor with the sr-only
+  notice; none active ⇒ absent. `SocialGlyph` gains `google` and
+  `trustpilot`. `public.reviews.cta` → `public.reviews.platforms.*` in en
+  and ar.
+
+**Decisions.** ADR-169. A table rather than settings (four values per
+platform). Links only, per the owner: no ratings, counts or vendor API, so no
+new sealed secret. No new permission group and no new cache tag.
+
+**Tests.**
+- `@repo/contracts`: 611 passed (new `review-platforms.test.ts`: identifier
+  normalisation and refusals, URL building and encoding, override precedence,
+  `javascript:`/`http:`/`//host` refused at save AND at read, save-schema
+  paths and codes; `field-issues.test.ts` covers the named refine codes).
+- `@repo/core`: `review-platforms.integration.test.ts` 8 passed on
+  Testcontainers MariaDB (list defaults, unknown platform ignored, save order
+  + normalisation + one audit row + the tag, corrupted rows dropped, and the
+  migration's data move run against a DB holding a URL and one holding `""`);
+  `review-platforms.test.ts` holds the `@repo/db` seed copy equal to the
+  registry.
+- `@repo/ui` `social-glyph.test.tsx` 8 passed. `@repo/settings` 38 passed.
+- `apps/web`: new `review-platforms.test.ts` (10: glyph + en/ar label per
+  platform, admin labels, band markup, no app source reads `site.reviewsUrl`);
+  the admin form/dialog conventions, translatable-settings and support guards
+  pass (981).
+- Typecheck clean on web, contracts, core, db, ui; eslint clean on every
+  touched file; `check:phantom-deps`, `check:permission-keys` and
+  `check:catalog-completeness` OK.
+
+**Not done.** Not exercised in a browser, and the migration was not applied to
+the shared local database (other sessions' pending migrations sit ahead of
+it). Admin E2E for the tab is owed to Module 14 with every other admin spec;
+the public `tools.spec.ts` Trustpilot assertion is unchanged and still holds
+on a seeded install.
+
+## 2026-09-29 — Modules 11/12/01: Promotions P7 — view, click and dismiss counters (ADR-170, changes-52)
+
+**What shipped.**
+- **ADR-170** (Accepted): the counters are the repo's THIRD anonymous write,
+  and it states what replaces `requirePermission()` for a beacon that has no
+  form to put a honeypot in.
+- **Schema:** `PromotionDailyStat` (`promotion_daily_stats`), one row per
+  promotion, UTC day and surface (`POPUP` · `BAND`), with impressions, clicks
+  and dismissals. It has no IP, cookie, user, session, user agent or path
+  column. Rows cascade with their promotion. Migration
+  `20260929180000_promotion_counters_adr170`.
+- **Contracts:** `promotionEventsSchema` (at most six events; a dismissal
+  only from the popup), `acceptedPromotionEvents` (a live promotion, on a
+  surface it uses, once per report) and `promotionClickRate`.
+- **Core** (`promotion-stats.ts`): `recordPromotionEvents` re-applies the
+  live filter itself, so no caller can skip it. Each event is one
+  `INSERT … ON DUPLICATE KEY UPDATE`. `getPromotionTotals` and
+  `getPromotionStats` feed the admin.
+- **`POST /api/promotions/events`:** the same empty 204 for every answer.
+  Five guards:
+  - live only (the popup's own cached list);
+  - the schema, over a 4 KB body;
+  - same origin (`Sec-Fetch-Site`, else `Origin`; the new
+    `_lib/same-origin.ts`);
+  - 60 requests per IP per ten minutes;
+  - one count per (IP, promotion, surface, event) per 24 hours. The IP is
+    only a Redis key.
+- **Public:** `_lib/promotion-events.ts` queues events for a second and sends
+  them with `fetch` `keepalive`, flushing on `pagehide`.
+  - **Popup:** an impression for each dialog page shown, a click on the
+    button, the recording or "Add to calendar" (the card's new `onEngage`),
+    and a dismissal for every promotion seen when the dialog closes with no
+    click.
+  - **Band:** an impression once a card is half on screen, and a click.
+- **Admin:** the list gains a Reach column (views and clicks). The editor
+  gains a Results section: views split popup/band, clicks with the click
+  rate, closed-without-a-click with its share of popup views, and a
+  last-30-days table. It is read under `promotions.view` (no new key), and
+  every figure is labelled approximate.
+
+**Decisions.**
+- **One count per network per day** is the second rate-limit bucket
+  (security.md #13). There is no account or address to key on, so the
+  promotion is what is protected. The cost is an honest undercount behind a
+  shared address, and the screens say so.
+- **No captcha.** A Google call per popup view would spend a request on every
+  page. The live-only and once-a-day guards bound what a script can inflate,
+  and the figures are never used for billing or any automatic decision
+  (ADR-170 #4).
+- **"Add to calendar" counts as a click.** It is the reader acting on the
+  promotion. It does not close the dialog, so closing afterwards records no
+  dismissal.
+
+**Tests.**
+- `@repo/contracts` 611 (promotions 60): bounds, enums, the band-dismissal
+  refusal, unnamed fields stripped, the live and surface filter, and click
+  rate edges.
+- `@repo/core` integration, new `promotion-stats.integration`: 9 on MariaDB.
+  - 25 concurrent beacons lose no increment;
+  - the UTC day boundary;
+  - drafts, invented ids and unused surfaces never gain a row;
+  - a promotion deleted since the cache refreshed is dropped without failing
+    the rest;
+  - rows cascade with their promotion;
+  - totals and the recent-days split.
+- `promotions.integration` and `promotion-translation.integration` are still
+  green (46 across the three suites).
+- `apps/web`: 3183 passed, 6 failed, the known six (five `site-url.test.ts`
+  from the root `.env`, one `changes-50-fixes.test.ts`).
+  - `promotions-public.test.ts` pins the route's five guards, that it
+    answers only 204 and never imports `@repo/db`, and that the stats table
+    has exactly its eight fields.
+  - The same file now walks every POST route under `app/api` and requires a
+    gate in CODE (comments are stripped, since csp-report's comment names
+    `requirePermission`) or a declared anonymous entry with its record.
+    Removing the ADR-170 entry was checked to fail it.
+  - New `same-origin.test.ts`.
+- Typecheck is clean on web, core and contracts. Lint is clean on every
+  touched file.
+
+**Not done.** Not exercised in a browser, and the migration was not applied to
+the shared local database (the changes-52 migrations are not on it yet). P8
+(E2E, axe, RTL smoke, skill updates) is next. It should add a journey that
+opens the popup and asserts a counter row.
+
+## 2026-09-29 — Modules 11/12/14: Promotions P8 — end-to-end journey, and the admin E2E project runs again (ADR-167/170, changes-52)
+
+**What shipped.**
+- **`e2e/admin/promotions.spec.ts`**, seven serial tests on one promotion:
+  - an editor creates a standalone announcement (title, a window picked in the
+    `DateTimePicker`, a one-second delay, "Show it in English"), and the row,
+    its English words and one `promotions.create` audit row are asserted in
+    the database; Activate writes `ACTIVE` and one `promotions.publish` row;
+  - a visitor meets the popup on `/`: focus lands on the heading, axe passes
+    with the dialog open, and an impression reaches `PromotionDailyStat`
+    through the real beacon (P7's owed journey);
+  - "Not now" records a dismissal, a reload in the same tab shows nothing
+    (PER_SESSION), and a new tab (a new session) shows it again;
+  - `/ar` at 390px: `dir=rtl` on the page and the dialog, Arabic chrome over
+    the English fallback, the dialog inside the viewport, no sideways scroll,
+    axe;
+  - denial at the database: the viewer (`seo_manager`, no `promotions.*` key)
+    cannot open the editor, and REPLAYING the admin's own recorded save and
+    status requests (same `Next-Action` ids, a hijacked title, ARCHIVED)
+    changes no row and writes no audit row. The admin replaying the status
+    request answers 200 first, so the refusal is the subject, not the shape;
+  - Archive takes it off `/api/promotions`.
+- **`playwright.config.ts`: the admin project matched NO spec.** ADR-151's
+  rename rewrote its `testMatch` to `/keystone\/…/`, but the specs live in
+  `e2e/admin/`. Every admin E2E had silently not run since, while the suite
+  reported green. Now `/e2e\/admin\/…/`. New `app/e2e-projects.test.ts`
+  (vitest) requires every spec to belong to exactly one project; putting the
+  broken pattern back fails it on all three older admin specs (checked).
+- **`e2e/sign-in.ts`** drives the staff form by its ids. Its copy had changed
+  ("Admin Email", "Sign In to Admin") while nothing ran the helper, so
+  `auth.setup.ts` failed too.
+- **`e2e/axe.ts`** takes `include` and an opt-in `acceptBrandFillLabels`.
+- `e2e-query.ts`: `promotion` and `promotionPopupTotals` (read-only).
+- Skills: a Promotions section in `content` and in `public-site`.
+
+**Decisions.**
+- **ADR-143 vs the axe gate is not settled here.** Without any dialog, `/`
+  already fails `color-contrast`: white on the primary fill `#C8986B`,
+  2.57:1, which ADR-143 accepted as the owner's decision (the tools-page axe
+  tests fail the same way, DEVLOG Phase 6). The popup check is scoped to the
+  dialog and exempts ONLY white text on the page's resolved `--primary`,
+  read at runtime; every other contrast failure in the dialog still blocks.
+  It is an opt-in per call so the suite-wide default is unchanged. The
+  conflict itself still needs a decision: either the gate accepts ADR-143
+  everywhere, or the brand labels change.
+- The public tests page the dialog to their own promotion. A run that dies
+  before Archive leaves its promotion live on a reused server at the same
+  priority, and ours then is page two (this happened while writing it).
+
+**Tests.**
+- Playwright, admin project: promotions 7/7, articles 4/4, AI 3 passed then
+  1 failed, tools 2 passed then 1 failed (16 passed, 2 failed, 9 not run
+  behind the failures in serial files).
+- The two failures are OLD specs that had not run since ADR-151, not this
+  change: `ai.spec.ts` "saves one feature's house style" expects one Save
+  button and the features screen now renders seven; `tools.spec.ts` "the
+  live switch" cannot find a `Live` switch on the gain-loss card. Both need
+  their specs brought up to the current screens.
+- `app/e2e-projects.test.ts` 12/12. ESLint and Prettier clean on every
+  touched file; `tsc` reports nothing in them.
+
+**Not done.** The two stale admin specs above. The public project was not
+re-run in full here (unchanged by this work apart from the shared axe
+helper's defaults, which are unchanged).
+
+## 2026-09-30 — Module 17: Announcement emails N0 — ADR-171, and the newsletter one-click header fix (changes-54)
+
+**What shipped.**
+- **ADR-171** (Accepted): announcement emails are delivered only through a
+  database job queue on ADR-162's pattern (owner D8), one recipient row per
+  address with `@@unique([campaignId, email])`, at-most-once delivery, soft
+  opt-in consent (D1), a SCHEDULED course announced before it is live and sent
+  when it goes live (D5), and the announcement unsubscribe as the FOURTH
+  anonymous write with its five guards. Supersedes ADR-080 #8 and the last
+  sentence of ADR-078 #11; transactional mail keeps sending through `after()`.
+- **Plan** `docs/changes/changes-54-notifications.md`: the owner's answers to
+  D1–D8 recorded in §16, and the sections D5 changes (§3, §6 `sendWhenLive`,
+  §8.1, §10, §14, §15) rewritten to them.
+- **Bug fix (plan §9.3):** the newsletter welcome put the unsubscribe PAGE
+  (`/newsletter/unsubscribe?token=`) in `List-Unsubscribe`, so every mail
+  client's RFC 8058 one-click POST reached a page route and unsubscribed
+  nobody. `@repo/email` now takes `unsubscribe.oneClickUrl` for the header,
+  separate from the footer link (new `unsubscribe-headers.ts`), and
+  `sendWelcome` passes the new `newsletterOneClickUrl()`
+  (`/api/newsletter/unsubscribe?token=`, no locale segment).
+
+**Decisions.**
+- The older ADRs are not edited. ADR-162 amended ADR-078 the same way.
+- The header helper is its own module so its test needs no database.
+
+**Tests.**
+- `@repo/email` unit: 103 passed (new `unsubscribe-headers.test.ts`, 3).
+- `@repo/core` `newsletter.integration` on MariaDB: 24 passed, including the
+  new regression test (the welcome's `oneClickUrl` is the `/api` handler and
+  carries the same token as the page link) and a URL-shape test.
+- `tsc --noEmit` clean on `@repo/email` and `@repo/core`.
+
+**Next.** N1: schema, migration, contracts, permission group, settings.
+
+## 2026-09-30 — Modules 17/11/10/12: Announcement emails N1–N6 — schema, queue, runner, public unsubscribe, admin (ADR-171, changes-54)
+
+**What shipped.**
+- **N1 — schema and contracts.** `EmailCampaign`, `EmailCampaignRecipient`
+  (`@@unique([campaignId, email])`, the dedupe the database enforces) and
+  `EmailSuppression` (`@@unique([email, scope])`, never purged), plus
+  `EmailDelivery.campaignId`. Migration
+  `20260930090000_announcements_changes54_adr171`. `@repo/contracts`
+  `announcements.ts`: `ANNOUNCEMENT_AUDIENCES` (seven cards; no KYC or depositor
+  card, there is no data for either), `ANNOUNCEMENT_KINDS` (COURSE only), the
+  save, audience, schedule and preview schemas, the unsubscribe token's SHAPE,
+  and the refusal and send-error taxonomies. A new permission group
+  `announcements` (`view` / `create` / `send`) after `newsletter`, seeded to
+  `super_admin` and `admin` only. `EMAIL_LINK_SECRET` (+ `_PREVIOUS` for
+  rotation) in `.env.example` and the README.
+- **N2 — `@repo/email`.** The `announcement.course` template (registry,
+  default, sample; `course.url` and `course.coverUrl` are URL-validated
+  variables). `createSendSession(key, { pool })` loads the switch, template,
+  render context, sender and transport ONCE per batch; `sendTemplatedEmail` is
+  now a one-shot session with unchanged behaviour (its 12 existing integration
+  tests pass untouched). A FAILED result carries `failure` (`transient` ·
+  `permanent` · `render` · `config`) from the new `classifySendError`: SMTP
+  4xx and SendGrid 429/5xx/401/403 retry, SMTP 5xx and other SendGrid 4xx do
+  not. `links.ts` signs and verifies the stateless HMAC unsubscribe token and
+  is the only reader of `EMAIL_LINK_SECRET`. Raster track covers
+  `public/email/track-{forex,crypto}.png` from the new
+  `scripts/generate-email-covers.mjs` (Gmail and Outlook do not render SVG).
+- **N3 — `@repo/core`.** `announcement-audience.ts` builds every audience as
+  SQL (counts with `COUNT(DISTINCT email)`, the snapshot with
+  `INSERT IGNORE … SELECT`, learners before subscribers so the account row
+  wins). `announcement-target.ts` decides live / scheduled / unavailable with
+  `publicCourseWhere`, and picks each recipient's words and link language
+  (`isIndexableTranslation`). `announcements.ts`: drafts, reads, the blocker
+  checklist, queue / schedule / unschedule / cancel / retry, the test send,
+  suppression, the public unsubscribe and its undo, and the preview renderer.
+  `announcement-runner.ts`: starts due campaigns, expires leases to FAILED
+  `lease_expired` (never PENDING: at-most-once), claims atomically, re-checks
+  suppression per batch, paces at `email.campaignRatePerMinute`, retries after
+  1 then 5 minutes, and finishes a campaign in one conditional UPDATE. Three
+  settings, each read in the same change (code-style #28):
+  `email.campaignRatePerMinute` (120), `email.campaignBatchSize` (50) and
+  `announcements.inactiveDays` (SELECT 14/30/60/90, default 30). `@repo/i18n`
+  gains `catalogMessage(locale, key)` for server renderers with no request.
+- **N4 — cron.** `POST /api/cron/announcements` (every minute, 240 s budget).
+  The bearer check that four routes had each copied is now
+  `api/cron/_lib/cron-auth.ts`, used by all five; `cron-auth.test.ts` fails if
+  a route copies it back. `housekeeping` purges recipient rows 90 days after a
+  campaign finished. `docs/ops/cron.md` and the README updated.
+- **N5 — public.** `/[locale]/email/unsubscribe` (static shell, `noindex`, the
+  island POSTs) and `POST /api/email/unsubscribe` — the FOURTH anonymous write,
+  with five guards (the HMAC token; the schema, with an `op` that falls back
+  to unsubscribe; 20 per IP per 10 minutes; an idempotent upsert; one answer
+  for every token), declared in `promotions-public.test.ts`'s walk. `email` is
+  reserved in `RESERVED_PATHS`. A consent line under the sign-up form (D1).
+  Public strings in `en` and `ar`.
+- **N6 — admin.** People → Announcements: the list (status includes "Waiting
+  for course" and "Sending n%"), the four-step editor (Content · Subject &
+  message · Audience · Review & send) with live counts from the same resolver
+  the send uses, the isolated preview route's new announcement mode, and the
+  detail page (progress, counts, `LiveRefresh`, cancel, retry failed, the
+  failures table behind `email.log.view`, and a link to the delivery log,
+  which now filters by `?campaign=`). "Announce this course" on the course
+  editor's heading row for a PUBLISHED or SCHEDULED course. A course
+  announcements row on a learner's record with Stop / Resume (resume only
+  for a stop staff made). The email settings section gains an
+  **Announcements** tab for the three settings.
+
+**Decisions.**
+- **D5 in Phase 1** (owner): a SCHEDULED course is announceable; the campaign
+  waits with `sendWhenLive` and starts the first tick the course is public by
+  `publicCourseWhere`, so it does not depend on `publish-due` having run.
+- **The unsubscribe page posts to the one-click route** with `op=undo` /
+  `op=newsletter` rather than through server actions: one anonymous endpoint,
+  one guard stack. The page learns whether to offer the newsletter button from
+  `newsletter: true` in the answer, which an unknown token cannot distinguish
+  from a real one with no subscription.
+- **Public strings live under `announcements.unsubscribe.*`**, not the plan's
+  `email.unsubscribe.*`: a top-level `email` namespace would read as the
+  admin's email section.
+- **Deviation from plan §10.1:** the publish toast carries no "Announce" link.
+  The header button appears on the refreshed page the moment a course is
+  published, and the shared status panel's toast is used by five editors.
+- The pacing keys have an `email.` prefix but are claimed by the Announcements
+  tab before the Sender tab's prefix test (`email-settings.ts`).
+
+**Tests.**
+- `@repo/core` `announcements.integration` on MariaDB: 28 passed. It covers
+  dedupe (case-insensitive, the account row wins, a double Send snapshots
+  once); every exclusion (staff, banned, suspended, deleted, suppressed,
+  enrolled, unsubscribed and pending subscribers); per-card and union counts;
+  three concurrent drains sharing no row; lease expiry failing and never
+  resending; two retries then FAILED, and Retry failed bringing back only
+  those; mid-send suppression; pausing without burning rows; cancel; the D5
+  wait, start and cancel paths; a timed schedule; refusals; permission
+  refusals writing nothing; unsubscribe, undo and newsletter; the preview
+  (real words, raster cover, no working token); the test send (no recipient
+  row); and the 90-day purge.
+- `@repo/email`: 117 unit (links round-trip, tamper, kind swap, rotation and
+  a fast-check property; `classifySendError`; the pool option; the SendGrid
+  status on a refusal) and `send.integration` 15 against MariaDB + Mailpit
+  (one template load for a batch of three, the campaign subject override,
+  transient and render failures).
+- `@repo/contracts` 632, `@repo/i18n` 26 and `@repo/db` 30 unit;
+  `db.integration` (seed + idempotency) 15 and `settings.integration` 19 pass
+  with the new group and settings.
+- `apps/web`: 3300 run, all pass except the six known failures (five
+  `site-url.test.ts` from the root `.env`, one `changes-50-fixes.test.ts`).
+  New: the cron route (4), the `cron-auth` guard (6) and the unsubscribe
+  route's guards (8). The admin form, dialog, page, toolbar and learner-probe
+  guards pass with the new screens (the probe list gains
+  `/keystone/announcements`).
+- `tsc` clean on web, core, email, contracts, db and i18n; ESLint clean on
+  every touched file; check:permission-keys, phantom-deps,
+  catalog-completeness (ar enforced), email-templates (8) and reserved-paths
+  all OK.
+
+**Not done.** N7's E2E journey follows in its own entry.
+
+## 2026-09-30 — Modules 17/14: Announcement emails N7 — the end-to-end journey, and two bugs it found (ADR-171, changes-54)
+
+**What shipped.**
+- **`e2e/admin/announcements.spec.ts`**, five serial tests on one world
+  against the real stack (the E2E database, `next dev`, the dev Mailpit):
+  - an admin opens `/keystone/announcements/new?course=…` (the course
+    editor's button), walks Content → Subject & message → Audience → Review,
+    picks Newsletter subscribers AND both learners by hand (learner A is also
+    a subscriber under the same mailbox in other letter case), and sends. The
+    recipient rows are the three addresses, learner A once with the ACCOUNT's
+    row, and Mailpit holds exactly ONE message per address — the owner's hard
+    rule, end to end. axe passes on the editor's first and last steps;
+  - the delivered message's `List-Unsubscribe` names
+    `/api/email/unsubscribe?t=v1.…` with `List-Unsubscribe-Post`, a GET of the
+    footer link changes nothing, pressing the button writes an UNSUBSCRIBED
+    suppression, and the separate newsletter button is offered. axe passes on
+    the public page;
+  - Duplicate → Send: the second announcement's rows leave learner A out, and
+    Mailpit shows B and the solo subscriber with two messages, A still with one;
+  - `seo_manager` (STAFF, no `announcements.*` key) is not offered the screen,
+    and replaying the admin's recorded save action with a hijacked name writes
+    no row.
+- `packages/db/prisma/e2e-query.ts`: `announcementFixture`, `announcement`,
+  `announcementCount`, `announcementSuppression`; `e2e/db.ts` wraps them.
+- `playwright.config.ts` gives the E2E server a test-only `EMAIL_LINK_SECRET`
+  when the `.env` has none, so the journey runs on a machine that has never
+  configured announcements.
+
+**Bugs the journey found, fixed here.**
+- **The draft's own page threw** "`ANNOUNCEMENT_STEPS.includes` is not a
+  function": the server page imported the step list from the editor, a
+  `"use client"` module, whose non-component exports are client references on
+  the server. The list now lives in a plain `_lib/steps.ts`.
+- **A half-made audience hit the server.** Ticking "Select users" before
+  picking anyone sent an audience the action's schema refuses; the client
+  swallowed it but the server logged a failed action on every keystroke. The
+  editor now counts only a complete audience and asks for card counts alone
+  otherwise.
+- Also from review: a refused save showed "Draft saved" beside the refusal;
+  the refusal is now thrown so `run()` shows only the error.
+
+**Decisions.**
+- The admin axe checks pass `acceptBrandFillLabels`, the promotions spec's
+  opt-in: the one failure was ADR-143's white-on-primary label in the admin
+  chrome (2.57:1), the owner's accepted decision. Every other contrast failure
+  still blocks, and the suite-wide conflict remains the open question the P8
+  entry records.
+
+**Tests.**
+- Playwright admin project: announcements 5/5 (with `auth.setup`), 2.8 min.
+- `apps/web` vitest: 3301 run, all pass except the six known failures (five
+  `site-url.test.ts` from the root `.env`, one `changes-50-fixes.test.ts`);
+  `e2e-projects.test.ts` places the new spec in the admin project.
+- `tsc` and ESLint clean on every touched file.
+
+**Not done.** Phase 2 (videos, articles, glossary) and the later items in the
+plan's §14 (saved segments, bounce and complaint webhooks). The Arabic
+announcement path is covered by the integration suite, not in a browser,
+because only `en` is active on the E2E database.
+
+## 2026-09-30 — Modules 17/10/03: Custom and direct emails, and email designs (ADR-172, changes-55)
+
+**What shipped.**
+- **ADR-172** (Accepted), amending ADR-171 #6 and #8 for two new campaign
+  kinds only. Plan `docs/changes/changes-55-custome-notifications.md`, owner
+  decisions E1–E8 accepted; §16 records where the build departed from it.
+- **Schema** (`20260930120000_custom_emails_changes55_adr172`):
+  `AnnouncementKind` gains `CUSTOM` and `DIRECT`; `EmailCampaign.targetId` is
+  nullable and gains `designId`, `replyToSelf`, `lastTestedAt`, `testedHash`;
+  new `EmailCampaignContent` (words per locale) and `EmailDesign`; an index on
+  `EmailCampaignRecipient.userId`. No drift against the schema.
+- **Contracts** (`custom-emails.ts`): `CAMPAIGN_EMAILS` (`campaign.custom`,
+  `campaign.direct`, outside `EMAIL_TEMPLATES`), the design, content, composer
+  and direct-send schemas (closed variables, an HTML body must carry
+  `{{unsubscribe.url}}`, 200 KB, header-safe subjects), `CUSTOM_EMAIL_AUDIENCES`
+  (the announcement cards plus `staff`), `audiencesForKind`, the `email` media
+  category. A course announcement's save refuses `staff`.
+- **`@repo/email`**: the send session takes a campaign key and per-message
+  `content` and `replyTo`; `renderEmail` accepts either registry's key.
+  Existing callers are unchanged.
+- **`@repo/core`**: `custom-emails.ts` (designs; custom drafts, test send,
+  preview; `sendDirectEmail` with its consent rule and 30-an-hour brake; a
+  user's email history), `campaign-content.ts`; the announcement service,
+  audience builder and runner generalised by kind (no enrolled-course
+  exclusion without a course; a staff select; the runner renders a campaign's
+  own words and skips suppression only for a direct email to an account).
+- **Admin**: "Email campaigns" label; a "New email" menu (custom · course);
+  the three-step composer; shared `audience-cards.tsx`; Custom designs on the
+  Templates tab + design editor; "Send email" on the users list, user record,
+  subscribers list and subscriber record; an Emails tab on the user record;
+  the preview route's design and custom modes. Seed: `announcements.direct`
+  (super_admin, admin) and the "Plain message" design.
+- **Public**: the unsubscribe page's words (en + ar) now cover every campaign
+  kind.
+
+**Fixed while here.**
+- The user record's Newsletter tile compared against `"CONFIRMED"`, a status
+  `SubscriberStatus` never had, so it was never ticked. The field is now typed
+  as the enum and the tile reads `ACTIVE` (regression test
+  `users/[id]/newsletter-tile.test.ts`).
+- The newsletter screen still said sending to the list was unavailable; it now
+  points to Email campaigns.
+- `announcements.spec.ts`'s denial check looked for a "New announcement"
+  button that no longer exists (it would have passed vacuously); it now looks
+  for "New email".
+
+**Incident.** A folder-wide `prettier --write` reformatted eight files of
+other sessions; restoring them from HEAD wiped two uncommitted changes-54 lines
+in `learn/courses/[id]/page.tsx` (`announceCourse`, `canAnnounce`). Both were
+recovered from that session's transcript and re-applied; the other seven diffs
+were formatting only.
+
+**Tests.**
+- `@repo/core` `custom-emails.integration` on MariaDB: 19 passed;
+  `announcements.integration`: 28 passed unchanged. Core unit: 248.
+- `@repo/contracts` 646, `@repo/email` 145 (new `campaign-render.test.ts`),
+  `@repo/db` 45 (seed idempotent with the new rows).
+- `apps/web` vitest: all pass except the six known failures (five
+  `site-url.test.ts`, one `changes-50-fixes.test.ts`).
+- Playwright admin project: `custom-emails.spec.ts` 3/3 and
+  `announcements.spec.ts` with auth setup, 8/8, 7.8 min.
+- `tsc` clean on web, core, email, contracts and db; ESLint clean on touched
+  files; permission-keys, phantom-deps, email-templates (8), reserved-paths
+  and catalog-completeness (ar enforced) OK.
+
+## 2026-09-30 — Modules 11/12: Promotion banners — a third, dismissible surface (ADR-173)
+
+**What shipped.** The owner asked for promotions to be able to show as a small
+banner the visitor closes with a cross, placed at the top, the bottom, or the
+left or right side (a broker's bottom strip was the reference).
+
+- **Schema** (`20260930150000_promotion_banners_adr173`): `Promotion.showAsBar`
+  (default false, so every existing promotion is unchanged) and
+  `barPosition` (`PromotionBarPosition`: TOP/BOTTOM/LEFT/RIGHT, default
+  BOTTOM); `PromotionSurface` gains `BAR`.
+- **Contracts**: `PROMOTION_BAR_POSITIONS`; the save schema takes both fields
+  and a promotion needs at least one of popup, band or banner;
+  `promotionBarSeenKey` (separate from the popup's); counters accept `BAR`,
+  DISMISS from the popup or the banner (never the band);
+  `acceptedPromotionEvents` checks a `BAR` event against `showAsBar`.
+- **Core**: public, admin-list and detail reads carry the two fields; save and
+  duplicate write them; `getPromotionStats` splits out `bar`.
+- **Public**: `PromotionBars` mounted twice in the root layout: `slot="top"` in
+  flow above the header, `slot="fixed"` for the bottom strip and the side
+  cards. One per position, by priority. Sides are logical (start/end) and
+  appear from `xl`; below that the fixed slot shows ONE bottom strip. The
+  strip publishes `--promotion-bar-height` (new token in `globals.css`); the
+  body pads by it and the back-to-top button rises by it. `frequency` decides
+  when a CLOSED banner returns. The popup and banner hosts share one
+  `/api/promotions` read (`_lib/live-promotions.ts`); the endpoint now returns
+  popup OR banner promotions.
+- **Admin**: "Show as a banner" switch and a "Banner position" dropdown in
+  "Where and how"; frequency is enabled for popup or banner and has a hint;
+  a banner picture in the preview; a "Banner · position" badge in the list;
+  banner views and clicks in Results, with dismissals counted from popup and
+  banner.
+- **Catalog**: `promotions.bannerLabel` and `promotions.closeBanner` in `en`
+  and `ar`; admin keys in `en`.
+
+**Decisions.** ADR-173 (new). Nothing reversed.
+
+**Tests.**
+- `@repo/contracts` 650 passed (new: banner save, positions, key, BAR
+  events).
+- `@repo/core` unit: 248 passed. Integration on MariaDB (`promotions`,
+  `promotion-stats`, `promotion-translation`): 48 passed, including the new
+  banner read/duplicate and BAR counter tests. The new migration applied in
+  the containers and on the dev database.
+- `apps/web` vitest: all pass except the six known failures (five
+  `site-url.test.ts`, one `changes-50-fixes.test.ts`); `promotions-public.test.ts`
+  now pins both banner mounts, the top one above the header, and the three BAR
+  events.
+- `tsc` clean on web, core and contracts; ESLint clean on touched files;
+  catalog-completeness OK (ar enforced).
+- Not yet covered: Playwright E2E for the banner.
+
+## 2026-09-30 — Module 12: Promotion surfaces redesigned, banners rotate (ADR-174, changes-56)
+
+**What shipped.** The owner's review of the three promotion surfaces
+(`docs/changes/changes-56-promomotion-updates.md`).
+
+- **Home band ("Don't miss")**: a heading column (eyebrow, title, new lead) at
+  the start from `lg` (`--grid-intro-main`), with the cards in the shared
+  `Carousel`, which plays on its own with a pause button (the ADR-121 §4 guards).
+  Below `lg` the heading sits above the cards. A single promotion is one card
+  with no carousel.
+- **Popup**: edge to edge. The picture fills the top, `PromoCard`'s dialog
+  layout pads the words, and the close is a round button on a translucent
+  disc, sticky while the dialog scrolls. On a phone the dialog keeps a 1rem
+  margin and rounded corners (new token `--width-dialog-inset`). The admin
+  preview draws the same frame.
+- **Banners**: every live banner filed to a position now shows there, one
+  at a time, rotating every 7 s. Rotation stops under reduced motion, while
+  the pointer or focus is on the banner, and while the tab is hidden. The
+  banner has a pause button and one dot per promotion. Below `xl` the one
+  bottom strip rotates through the bottom and both side positions. Which set
+  is drawn is decided in JS, so a banner hidden by the breakpoint no longer
+  reports an impression. Impressions are counted per slide. The cross closes
+  the whole banner: it records and reports DISMISS for every promotion that
+  was shown, and hides the unseen ones on this page only.
+- **Bottom strip close**: a tab above the strip's end, in the strip's
+  colour. It is counted in `--promotion-bar-height`, so the back-to-top
+  button sits above it. The top strip keeps an inline cross. Side cards get
+  the round close button.
+- **Catalog**: `promotions.bandLead`, `bandCarouselLabel`, `pause`, `play`,
+  `slideLabel` in `en` and `ar`.
+
+**Decisions.** ADR-174 (new), superseding ADR-173 #2 (one banner per
+position). Nothing else reversed.
+
+**Tests.**
+- `apps/web` `promotions-public.test.ts`: 39 passed, including five new
+  ADR-174 guards (rotation guards + pause, JS breakpoint, click-through tab
+  row, carousel band, edge-to-edge popup with sticky close).
+  `grid-base`, `radius-scale` and `admin-dialog-conventions` pass.
+- `@repo/ui` `promo-card.test.tsx`: 5 passed.
+- `tsc` clean on web; ESLint clean on touched files; catalog-completeness OK
+  (ar enforced).
+- Checked by hand in the dev server at 375, 820 and 1440 px: popup, top and
+  bottom strips, and band. No horizontal overflow at any width. Rotation was
+  NOT seen on screen, because the dev database has only one banner per
+  position.
+- Not yet covered: Playwright E2E for banner rotation.
+
+## 2026-09-30 — Module 12: The home promotions band is a spotlight (ADR-175, changes-56)
+
+**What shipped.** The owner's second review of the home band, against the
+same "featured listings" reference: one promotion selected, its details under
+it, its description in the start column.
+
+- **Spotlight** (`promotions-band-cards.tsx`, rewritten): the tiles are
+  `tab`s and the start column is the selected promotion's `tabpanel`. The
+  panel shows the kind and the badge, the title as a display `h3`, an accent
+  rule, the body's lead (or `bandLead` when there is none), the event row and
+  the button. The selected tile is wider and raised, with a glass title pill
+  and the admin's badge on the picture. The other tiles sit centred on its
+  height. The track slides by a transform and never past its last tile, so a
+  short row stays put. The previous tile shows whole from `lg` and as a
+  sliver below it.
+- **Facts under the selected tile**: the most urgent true line first ("Live
+  now", "Starts in …", "Ends in …" inside three days, else "Until {date}").
+  Below it: kind, end date, external, and "Recording" only once one can be
+  watched.
+- **Motion**: 7 s autoplay with the ADR-174 #2 stops (reduced motion, mouse
+  hover, focus, under half on screen, hidden tab). The active dash fills over
+  the interval. Arrow keys (flipped in RTL), Home/End and a touch swipe move
+  the selection. No pause button, in line with this change set's banners and
+  carousels.
+- **Counters**: an impression is the selected promotion while the band is at
+  least half on screen, once per promotion per load. A click is the button.
+- **Shared, not copied**: `PromotionCta`, `PromotionEventMeta` and
+  `usePromotionClock` came out of `PromotionCard`, and the popup renders them
+  unchanged. `useMediaQuery`/`usePageVisible` moved to `_lib/document-state.ts`
+  and the banners import them.
+- **Catalog**: `promotions.bandTabsLabel`, `endsIn`, `until`, `recording` in
+  `en` and `ar`.
+- **Styles**: `promo-progress` keyframe plus `.promo-progress` and
+  `.promo-panel-enter` in `@repo/ui` `globals.css`, both behind
+  `prefers-reduced-motion: no-preference`.
+
+**Decisions.** ADR-175 (new), superseding ADR-174 #6. Nothing else reversed.
+
+**Tests.**
+- `apps/web` `promotions-public.test.ts`: 39 passed. The ADR-174 carousel
+  guard is replaced by a spotlight guard: tabs/panel roles, every motion
+  stop, no `scrollIntoView`, the shared CTA, and both BAND events. The banner
+  guard now follows the reduced-motion query into `document-state.ts`.
+  `grid-base` and `radius-scale` pass.
+- `tsc` clean on web; ESLint clean on touched files; catalog-completeness OK
+  (ar enforced).
+- Checked in the dev server with Playwright at 1440, 820 and 375 px against
+  two live band promotions: no horizontal overflow at any width, and autoplay
+  moved from the first promotion to the second.
+- Not yet covered: axe on the band, and a Playwright E2E for keyboard and
+  swipe selection.
+
+## 2026-10-01 — Module 12: Promotion popup and bottom strip fixes (changes-57)
+
+**What shipped.**
+- **No frame around the popup's title.** The dialog focuses its heading on
+  open (`tabIndex={-1}`) by script, which `:focus-visible` can match, so the
+  global focus ring drew a box around the heading as if it were a field. The
+  title now opts out of the ring. It is a heading, not a control.
+- **One height while the popup pages.** With more than one promotion the
+  dialog takes `--height-promo-dialog` (`min(42rem, var(--dialog-max-h))`, a
+  new token in `@repo/ui` `globals.css`). Paging no longer resizes it, and
+  the card's buttons sit at the bottom of the card (`mt-auto`).
+- **Buttons never under the pager.** The dialog no longer scrolls as a
+  whole. The card scrolls inside it and the pager is a `shrink-0` footer, so
+  a long promotion scrolls its own words and the pager cannot cover "Learn
+  more" or "Not now". The sticky round close moved into the scrolling card.
+  `PromotionCard` now passes a `className` through to `PromoCard`.
+- **No white band above the bottom strip on a phone.** The space kept free
+  for the fixed strip (`--promotion-bar-height`) was padding on the BODY,
+  which showed the page's light background between the dark footer and the
+  strip. The padding is now on the footer, so that space is the footer's own
+  colour. ADR-174 #5 still holds: the strip covers neither the footer's last
+  line nor the back-to-top button.
+
+**Decisions.** None new. Only presentation changed. ADR-174 #5 stands.
+
+**Tests.**
+- `promotions-public.test.ts`: 39 passed. The layout guard now checks that
+  the padding is on the footer and not on the body.
+- `tsc` clean on web. ESLint clean on the touched files.
+- Full `apps/web` vitest: 3372 passed, 6 failed, and none of the failures
+  come from this change. `site-url.test.ts` (5) reads a tunnel URL from the
+  local env. `changes-50-fixes.test.ts` (1) fails on the subscribe-strip
+  guard, which is affected by footer edits another session has not yet
+  committed.
+- Not checked in a browser yet.
+
+## 2026-10-01 — Module 12: The promotion popup fits the screen (changes-57, follow-up)
+
+**What shipped.** The fixed-height popup from the entry above still cut off
+"Bitcoin Course" / "Not now" when a promotion had more words than the space
+left under the picture. The card scrolled, but the owner wants the popup to
+fit the screen. In `PromoCard`'s `dialog` layout the picture is now the one
+part that shrinks: its `aspect-video` height is where it starts, `min-h-28`
+is its floor, and the words (basis zero, so they never shrink) and the
+buttons always keep their full height. The article in a dialog is
+`min-h-0` and no longer clips. If a promotion is too long even with the
+picture at its floor, it scrolls inside the dialog instead of hiding its
+buttons. The `card` layout (home band, admin preview) is unchanged.
+
+**Decisions.** None new.
+
+**Tests.**
+- `@repo/ui` `promo-card.test.tsx`: 6 passed, including a new guard that
+  only the picture shrinks in a dialog. `tsc` and ESLint clean.
+- Checked in the dev server with Playwright against the three live
+  promotions, at 1440×900, 1366×650 and 390×700. The card does not scroll at
+  any of these sizes, and the buttons end above the pager. The picture
+  shrinks to 283, 229 and 200 px.
+
+## 2026-10-01 — Module 12: Promotion pictures crop a baked-in edge (changes-57, follow-up 2)
+
+**What shipped.** The thin white line along the popup picture's edge (and,
+in the home band's portrait 3:4 frame, along the top) was in the uploaded
+FILE, not the layout. `/uploads/promo/fd146a4d….webp` is 1920×1080 with
+13 px of white down its right edge and 12 px across its top, and
+`object-cover` drew it exactly as stored. `PROMOTION_PICTURE_CROP`
+(`scale-103`, exported from `promotion-card.tsx`) now draws every promotion
+picture 3% larger than its frame, which crops 1.5% off each side, in all
+four places one is drawn: the popup, the home spotlight band (its hover zoom
+still goes to 105), the bottom strip's thumbnail and the side cards. One
+constant, so no surface shows the line the others hide. The file and the
+upload pipeline are untouched. An edge wider than about 1.5% of the picture
+would still show and needs a cleaner upload.
+
+**Decisions.** None new.
+
+**Tests.**
+- `promotions-public.test.ts`: 39 passed. `tsc` and ESLint clean on the
+  touched files.
+- Checked in the dev server with Playwright at 1440×900 in dark mode. The
+  popup picture and the home band frame both show no white edge.
+
+## 2026-10-01 — Module 17: Test sends ask for an address; the preview shows the logo
+
+**What shipped.** "Send me a test" on a course announcement and on a custom
+email now opens a dialog (`announcements/_components/test-send-dialog.tsx`)
+whose "Send to" field is filled with the admin's own address and can be
+changed. `sendAnnouncementTest` and `sendCustomEmailTest` (`@repo/core`) take
+`{ locale, to }`. The actions parse `to` as `z.email().max(255)`, and a
+missing `to` still means the admin's own address. The custom email's audit
+row records the address. The template editor's test dialog, which opened
+empty, is now prefilled the same way. The new `ownTestAddress(actor)` reads
+the address for all three.
+
+The email preview showed no logo when `SITE_URL` was not the origin the admin
+was browsing (a tunnel, a staging host, another port). The renderer makes the
+logo absolute against `siteOrigin()`, which is right for a sent message. In
+the sandboxed preview frame that host was refused or unreachable. The preview
+route now rewrites only `src` attributes on the site's origin to the
+request's origin (`preview-images.ts`). Links keep the address they will be
+sent with, and sent mail is unchanged.
+
+**Decisions.** None new. A test's unsubscribe link is still minted for the
+acting admin, so a test sent to a colleague unsubscribes the admin and not
+the colleague.
+
+**Tests.**
+- `preview-images.test.ts` (new, 3 tests), plus the email, dialog and form
+  convention suites: 1041 passed. `tsc` clean on `@repo/core` and `web`.
+  ESLint clean on the touched files.
+- Not checked in the running app.
+
+## 2026-10-01 — Module 12: Three seeded promotions with banner pictures (changes-57)
+
+**What shipped.** `packages/db/prisma/seed-promotions.ts`, called from
+`seed.ts` after the article corpus, seeds three promotions. Each one uses a
+different kind, surface and link:
+
+- **WEBINAR**: trading the US jobs report (NFP). It shows as a popup and in
+  the home band on home, learn and news, has its own event time 9 days after
+  the seed run, and links by PATH to `/economic-calendar`.
+- **OFFER**: the free Crypto Foundations course. It shows in the home band
+  and as a BOTTOM banner on every page, and is a CONTENT link to the seeded
+  course (PATH `/learn/crypto` if the course is missing).
+- **ANNOUNCEMENT**: the clocks going back and forex sessions moving by an
+  hour. It shows as a RIGHT banner on tools, news and learn, ONCE per
+  visitor, and links by PATH to `/tools/market-hours`.
+
+Each has a banner picture. `scripts/generate-promotion-art.mjs` draws them as
+committed WebP files in `prisma/seed-assets/promotions/`, with no words in
+the image and the focal shapes inside the 3:4 band crop. The seed copies them
+into the uploads root under `promo/` and creates the `MediaAsset` row plus
+the `ContentReference` that `savePromotion` would write.
+
+**Decisions.**
+- Promotions are ACTIVE outside production and DRAFT when
+  `NODE_ENV=production`, because `scripts/deploy.sh` seeds production and an
+  ACTIVE promotion is a popup in front of real visitors.
+- The copy is real and stays true. It names no date, price or person; every
+  figure is an example.
+- The seed is `create`-only, keyed on fixed promotion ids and on object keys
+  derived from the file name.
+- English only. `untranslated: HIDE` means another language shows none of
+  them until someone translates them.
+
+**Tests.** `tsc` and ESLint clean on `@repo/db`. Seeded twice against the
+local database: 3 created, then 0. `GET /api/promotions?locale=en` returns
+all three with their picture URLs, and `/uploads/promo/*.webp` answers 200
+`image/webp`. No new unit test.
+
+## 2026-10-01 — Module 12: "Add to calendar" opens Google or Outlook (ADR-176)
+
+**What shipped.** On a webinar or event promotion, "Add to calendar" was one
+link that downloaded an `.ics` file, so a reader on Google Calendar got a
+file and no entry. It is now a menu (`AddToCalendarMenu` in
+`promotion-card.tsx`) offering Google Calendar, Outlook.com, Outlook (work or
+school) and "Apple Calendar or other (.ics)". The first three open the
+service's own new-event screen with the event filled in. The fourth is the
+existing download. `googleCalendarUrl` and `outlookCalendarUrl` are new in
+`@repo/utils` (`icalendar.ts`). New `promotions.calendar.*` keys in `en` and
+`ar`.
+
+**Decisions.** ADR-176, which extends ADR-167 #8. The links are plain
+anchors, so nothing reaches Google or Microsoft until the reader picks one,
+and the CSP is unchanged. The description is capped at 600 code points. The
+helpers build their query strings by hand because `@repo/utils` has no DOM
+lib.
+
+**Tests.**
+- `icalendar.test.ts`: 5 new tests, 16 passed.
+- `promotions-public.test.ts`: 39 passed.
+- `tsc` clean on `web`. `@repo/utils` reports only the two existing errors in
+  `site-origin.ts` and `tradingview.ts`. ESLint clean on the touched files.
+  `check:catalog-completeness` OK.
+- Checked in the dev server with Playwright at 1280×900 in dark mode: the
+  menu opens inside the popup and lists all four links with the event filled
+  in.
+
+## 2026-10-01 — Module 12: Seeded promotions take the uploaded photographs
+
+**What shipped.** The three seeded promotions now get their pictures from
+`pnpm seed:live`, from the committed photographs in
+`packages/core/seed-live/media/`, like every other seeded course, lesson,
+quiz, video topic, glossary topic and article. A new `fillPromotionImages`
+step stores each photo through `storeMedia()` in the `promo` category. It
+then saves the promotion through `savePromotion` with everything else
+unchanged, so the `ContentReference`, the audit row and the version bump
+come from the same path as an admin's save. It also sets the translation's
+`imageAlt`, because the public card has no fallback to the library row's alt
+text. The pictures are listed in `DEMO_PROMOTION_IMAGES` (`content.ts`):
+- the jobs-report webinar gets `dollar-rising-arrow`;
+- the crypto course offer gets `bitcoin-circuit-board`, a different photo
+  from the course's own cover;
+- the clocks-change announcement gets `city-skyline-candlesticks`.
+
+`db:seed`'s `seed-promotions.ts` no longer writes bytes: no copying into the
+uploads root, no `MediaAsset` row, no reference. That is the article
+corpus's rule. The generated art from the earlier entry today and
+`scripts/generate-promotion-art.mjs` are deleted. On the local database, the
+three art assets and their references were removed before `seed:live` ran.
+
+**Decisions.** None new. `docs/ops/deploy.md` now lists promotions among the
+rows `seed:live` fills.
+
+**Tests.**
+- `tsc` clean on `@repo/core` and `@repo/db`. ESLint clean on the touched
+  files.
+- `seed:live` against the local database: 3 pictures filled and 3 files
+  uploaded, then 0 and 0 on a second run.
+- `GET /api/promotions?locale=en` returns all three with their photo URL and
+  alt text.
+- Checked the home popup in the dev server with Playwright: it shows the
+  photograph.
+
+## 2026-10-01 — Modules 03/10/11: Roles and permissions audit (ADR-177)
+
+**What shipped.** An audit of every role and permission, and the fixes:
+
+- **Cards follow the sidebar.** The role editor has one card per sidebar
+  entry, in sidebar order, under the sidebar's four headings (Learning,
+  Content, People, System). `learning` split into `courses`, `lessons`,
+  `quizzes` and `videos`; `roles.*` moved to a `roles` card. The registry is
+  `PERMISSION_GROUPS` + `PERMISSION_GROUP_SECTIONS` (`@repo/db`). `tools` got
+  its missing catalog label, and the Announcements card is now "Email
+  campaigns", like its sidebar entry.
+- **Quizzes and videos have their own keys.** Ten new keys
+  (`quizzes.*`, `videos.*`; video categories use `videos.*`). Every quiz and
+  video screen, action, publish transition, purge, dashboard count and AI
+  surface checks them. The seed grants them to every system role that held
+  the lesson twin. Migration `20261001120000_quiz_video_permissions_adr177`
+  does the same for custom roles and copies per-user overrides, including
+  DENY, so nobody's access changes.
+- **Settings can be reached by everyone it admits.** The sidebar's Settings
+  row and the hub share `SETTINGS_ENTRY_KEYS`. Content Manager and Editor hold
+  `translations.view` and had no way to reach the Translation review queue
+  except by typing its URL. `theme.update`, `email.templates.view`,
+  `settings.update` and the translation keys were missing from one list or
+  both.
+- **Offboarding checks `employees.delete`** (relabelled "Offboard
+  employees"), not `employees.update`. The migration grants it wherever
+  `employees.update` was held.
+- **Unused keys are marked.** Ten seeded keys are checked by no code.
+  `UNUSED_PERMISSIONS` lists them and the role editor and the user override
+  picker show "Not used yet". They are kept, at the owner's choice.
+
+**Decisions.** ADR-177, superseding ADR-058 #8 and ADR-068 §3 and amending
+ADR-083.
+
+**Still open (recorded in ADR-177).** The SEO Manager role cannot edit any
+SEO field: editors save SEO through the content key, and `seo.update` is
+checked only by the AI route. Its `redirects.manage` opens a screen under the
+hidden Website Builder. The Moderator role's only real key is `users.view`,
+because there is no comments feature.
+
+**Tests.**
+- New: `permission-usage.test.ts` (3), `settings-entry-keys.test.ts` (3), and
+  an ADR-177 block in `db.integration.test.ts` (2) that runs the migration
+  over a custom role and a DENY override, twice.
+- `@repo/db` unit 35 passed; `db.integration.test.ts` 17 passed against
+  MariaDB 11.4. `@repo/rbac` 29 passed. `@repo/core` unit 248 passed;
+  `quizzes`, `videos`, `quiz-translation` and `video-translation`
+  integration suites 74 passed. `web` admin convention, AI degradation and
+  `(admin)` suites 1760 passed.
+- `check:permission-keys` OK. `check:catalog-completeness` OK. ESLint clean
+  on the touched files. `tsc` on `@repo/db`, `@repo/core` and `web` reports
+  only the two existing errors in `packages/i18n/src/message-shape.ts`
+  (another session's untracked file).
+- Not checked in the running app.
+
+## 2026-10-01 — Module 06: Languages are managed in the admin; interface text is editable (ADR-178, changes-58)
+
+**What shipped.**
+- **More languages, with create / edit / delete.** `SUPPORTED_LOCALES` in
+  `@repo/i18n/routing` lists 28 languages the site can route, each with its
+  name, native name and direction. `routing.locales` and `LOCALE_DIRECTION`
+  are now derived from it. Settings → Translation → Languages gains "Add
+  language" (on the title row), Edit and Delete per row. A new language is
+  added switched off. Its code and direction are not editable. Delete is
+  refused for the default language, a live one, or one with any content
+  translation (`LANGUAGE_CONTENT_TABLES` in `@repo/core` `languages.ts`).
+  Its interface text goes with it, and other languages' fallbacks to it are
+  cleared. Any number of languages can be live; the switch-on gates from
+  ADR-163 are unchanged.
+- **Interface text, one place, any language.** New `MessageOverride` table
+  (migration `20261001150000_message_overrides_adr178`). A language's
+  catalog is its JSON file with the overrides laid over it, read through
+  `getCatalog` (`@repo/i18n` `catalog.ts`, cache tag `messages`) by the
+  request config, `publicCatalogGaps` and `catalogMessage`. A language with
+  no file is made of overrides alone. New tab Settings → Translation →
+  Interface text (`translations.update`): pick a language and a section, see
+  the English beside each string, edit it in a dialog, or reset it. Public
+  keys only, and a value must keep the English message's arguments and tags
+  (`checkMessageShape`). "Translate missing with Google"
+  (`translations.approve`) fills 200 missing keys per press through the
+  existing ICU-safe `translateCatalogMessages` and never replaces a
+  person's text.
+- **Active languages everywhere in the admin.** The article, course,
+  lesson and quiz editors, the writing assistant and the AI Writer now read
+  `getAuthoringLocales()` (the language rows), not `routing.locales`.
+- **Fixed: browser-language detection sent readers to a 404.** next-intl
+  redirected `/` to any routable code, live or not, so a Spanish browser
+  landed on `/es` (inactive, 404). The proxy now checks such a redirect
+  against `GET /api/locales` (the served list) and answers in English when
+  the language is not live.
+
+**Decisions.** ADR-178. The owner chose (2026-10-01): new languages come
+from a built-in list; admin pickers list every language but the admin UI
+stays English (ADR-043); the editor covers public text only; delete is
+refused while a language has content. Interface-text overrides are deleted
+with their language rather than blocking the delete, since they are
+per-language settings rather than content. ADR-177 was taken by a
+concurrent session, so this is ADR-178.
+
+**Lockfile.** `@repo/i18n` now depends on
+`@formatjs/icu-messageformat-parser` 3.5.17 (already in the lockfile via
+`@repo/translate`). `pnpm-lock.yaml` was edited by hand to HEAD plus the
+importer entries for this and for the uncommitted `@repo/translate`
+package, because this machine's pnpm 10 must not install over the pnpm 12
+lockfile. The parser is linked into `packages/i18n/node_modules` with a
+junction. The next real `pnpm install` should change nothing.
+
+**Tests.**
+- `@repo/i18n`: new `catalog.test.ts`, `message-shape.test.ts`,
+  `routing.test.ts`; `catalog-gaps.test.ts` extended (overrides close gaps,
+  English overrides as fallback, a failed read falls back to the file).
+  34 passed.
+- `@repo/core`: `languages.test.ts` (every `*Translation` model is in
+  `LANGUAGE_CONTENT_TABLES`) and `languages.integration.test.ts` on MariaDB
+  11.4 with Google faked by MSW (create, refuse, edit, delete rules, save,
+  reset, machine fill). With the existing `translation-admin` and
+  `setting-translation` integration suites, which read the changed
+  Languages view: 32 passed.
+- `web`: `locale-serving.test.ts` gains two guards (no registry code is a
+  coded first segment; the proxy guard is wired). Admin convention suites
+  (toolbar, form, dialog, settings entry keys) pass. The full suite has
+  six failures in two files this change does not touch: `site-url.test.ts`
+  (reads the machine's `NEXT_PUBLIC_SITE_URL`) and `changes-50-fixes.test.ts`
+  (footer band).
+- `tsc` clean on `@repo/i18n`, `@repo/contracts`, `@repo/core` and `web`.
+  ESLint clean on the touched files. `check:catalog-completeness` and
+  `check:phantom-deps` OK.
+- Checked in the dev server with Playwright: added French, edited a French
+  string (a broken `{oops}` value was refused), saved and reset an Arabic
+  footer string and saw it appear on and leave `/ar`, then deleted French.
+  `curl` with `Accept-Language: es` and `fr` now gets `/` in English; `ar`
+  still redirects to `/ar`. The dev database is back to its four languages
+  with no overrides.
+
+## 2026-10-01 — Module 06: A Live switch on every language (ADR-178 #8)
+
+**What shipped.** Settings → Translation → Languages had a "Switch on"
+button only on a language that was already complete, so Spanish and Urdu
+showed no way to go live. Every row now has a Live / Hidden switch in the
+Status column. Turning it off asks first, then hides the language from the
+public site. Turning it on asks first when the language is ready. When it
+is not ready, it opens a checklist (`go-live-checklist.tsx`) instead:
+interface strings missing and legal site lines missing, each linking to
+Interface text or Site text when the viewer can open them. The old Switch
+on / Switch off buttons are gone. New `admin.translate.languages.checklist.*`,
+`liveSwitch` and `hidden` keys (English only, admin).
+
+**Decisions.** ADR-178 #8 (owner, 2026-10-01): always show the switch, and
+keep the ADR-163 completeness gate rather than allowing "go live anyway".
+
+**Tests.** `tsc` clean on `web`; ESLint clean on the touched files; admin
+form, dialog and toolbar convention suites 1102 passed. Checked in the dev
+server with Playwright: the switches render on all rows; Spanish opens the
+checklist (1,052 strings, 2 legal lines); Arabic asks "Switch Arabic off?"
+(cancelled, so it stays live).

@@ -65,6 +65,9 @@ export async function generateMetadata({
         href: topicPath(alt.locale, alt.slug),
       })),
     }),
+    // ADR-159 #2: machine-written words at their own URL are served, not
+    // indexed. A conditional SPREAD, never `robots: undefined` (ADR-090).
+    ...(view.noIndex ? { robots: { index: false, follow: true } } : {}),
   };
 }
 

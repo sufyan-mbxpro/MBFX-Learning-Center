@@ -26,6 +26,11 @@ import { AiClientError, runAiJson } from "../_lib/ai-client.ts";
 export interface AiTranslateLabels {
   /** "Translate from {source}" — the source locale is interpolated by the page. */
   action: string;
+  /**
+   * ADR-160 #7: the same button when the target already holds a draft —
+   * usually Google's — which the model then corrects rather than replaces.
+   */
+  refineAction: string;
   confirmTitle: string;
   confirmDescription: string;
   confirm: string;
@@ -42,6 +47,12 @@ export function AiTranslateButton({
   targetLocale,
   /** The SOURCE locale's text, field by field. Named fields, never a row. */
   fields,
+  /**
+   * The TARGET locale's current text for the same fields (ADR-160 #7). When
+   * any is present the button refines it: correct sentences stay, errors are
+   * fixed, numbers are kept exactly.
+   */
+  drafts,
   /** Whether the target locale already holds text a human wrote. */
   wouldOverwrite,
   entity,
@@ -51,12 +62,17 @@ export function AiTranslateButton({
   sourceLocale: string;
   targetLocale: string;
   fields: Record<string, string>;
+  drafts?: Record<string, string>;
   wouldOverwrite: boolean;
   entity?: { type: string; id: string };
   onApply: (translated: Record<string, string>) => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const usableDrafts = Object.fromEntries(
+    Object.entries(drafts ?? {}).filter(([name, value]) => name in fields && value.trim() !== ""),
+  );
+  const refining = Object.keys(usableDrafts).length > 0;
 
   async function translate() {
     setBusy(true);
@@ -65,7 +81,12 @@ export function AiTranslateButton({
       const result = await runAiJson(
         {
           feature: "translation",
-          payload: { sourceLocale, targetLocale, fields },
+          payload: {
+            sourceLocale,
+            targetLocale,
+            fields,
+            ...(refining ? { drafts: usableDrafts } : {}),
+          },
           ...(entity ? { entity } : {}),
         },
         (value) => translationSuggestionSchema.parse(value),
@@ -100,7 +121,7 @@ export function AiTranslateButton({
         ) : (
           <Languages aria-hidden data-icon="inline-start" />
         )}
-        {labels.action}
+        {refining ? labels.refineAction : labels.action}
       </Button>
 
       <ConfirmDialog

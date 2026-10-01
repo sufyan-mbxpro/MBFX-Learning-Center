@@ -32,7 +32,7 @@ import {
   db,
   type Prisma,
 } from "@repo/db";
-import { computeSourceHash, pickTranslation, type LocaleFallbackInfo } from "@repo/i18n";
+import { pickTranslation, type LocaleFallbackInfo } from "@repo/i18n";
 import type { Subject } from "@repo/rbac";
 import type {
   CreateVideoTopicInput,
@@ -61,7 +61,21 @@ import {
 } from "./content.ts";
 import { recordAudit } from "./index.ts";
 import { loadLocaleMeta } from "./locale-meta.ts";
-import { applyReadingLocale, type ReadingView } from "./reading-languages.ts";
+import {
+  INDEXABLE_TRANSLATION_STATUSES,
+  applyReadingLocale,
+  advertisedAlternates,
+  isIndexableTranslation,
+  type ReadingView,
+} from "./reading-languages.ts";
+import { translatedLabel } from "./learn-source.ts";
+import {
+  hashVideoCategorySource,
+  hashVideoTopicSource,
+  loadVideoCategorySource,
+  loadVideoTopicSource,
+} from "./video-source.ts";
+import { afterSourceSave, enqueueEntityTranslations } from "./translation-queue.ts";
 
 interface LocaleContext {
   locales: LocaleFallbackInfo[];
@@ -539,13 +553,15 @@ export async function saveVideoTopic(actor: Subject, input: VideoTopicInput): Pr
   const content = input.translation.content ? sanitizeRichText(input.translation.content) : null;
 
   // The hash covers every field a translator reads, which is the lesson
-  // ADR-069 §2 paid for: a hash over a subset means an edit to an uncovered
-  // field leaves every sibling translation claiming to be current.
-  const sourceHash = isSource
-    ? computeSourceHash(
-        `${input.translation.title}${input.translation.summary ?? ""}${content ?? ""}`,
-      )
-    : undefined;
+  // ADR-069 §2 paid for (`video-source.ts`, widened in Phase 5 to the SEO text
+  // and the link labels). A translation records the hash of the English it
+  // was made from; the English row's own hash is read back after the write,
+  // because the links it covers are rewritten in the same transaction.
+  const translatedFrom = isSource
+    ? null
+    : await loadVideoTopicSource(db, input.topicId, defaultLocale).then((s) =>
+        s ? hashVideoTopicSource(s) : null,
+      );
 
   const fields = {
     title: input.translation.title,
@@ -555,7 +571,7 @@ export async function saveVideoTopic(actor: Subject, input: VideoTopicInput): Pr
     seoTitle: input.translation.seoTitle ?? null,
     seoDescription: input.translation.seoDescription ?? null,
     seoFocusKeyword: input.translation.seoFocusKeyword ?? null,
-    ...(sourceHash === undefined ? {} : { sourceHash }),
+    ...(isSource ? {} : { sourceHash: translatedFrom }),
     // changes-29 B3: MACHINE_TRANSLATED only while the AI text is untouched;
     // any other save, a human's review included, writes TRANSLATED.
     translationStatus: input.translation.machineTranslated
@@ -651,6 +667,20 @@ export async function saveVideoTopic(actor: Subject, input: VideoTopicInput): Pr
     entityId: input.topicId,
     changes: { after: { locale, videos: input.videos.length, links: input.links.length } },
   });
+  // An English save: a person's translation whose source moved becomes
+  // OUTDATED, a machine one is re-translated (ADR-161 #3). Links are rewritten
+  // on EVERY save, whichever locale was open, so a Spanish save that changed a
+  // link label is a source change too — hence the sweep reads the source back
+  // rather than trusting `isSource`.
+  const source = await loadVideoTopicSource(db, input.topicId, defaultLocale);
+  const hash = source ? hashVideoTopicSource(source) : null;
+  if (hash) {
+    await db.videoTopicTranslation.updateMany({
+      where: { topicId: input.topicId, locale: defaultLocale },
+      data: { sourceHash: hash },
+    });
+  }
+  await afterSourceSave("video_topic", input.topicId, hash, defaultLocale);
   revalidateTag("content", { expire: 0 });
 }
 
@@ -670,6 +700,7 @@ export async function setVideoTopicDeleted(
     entityId: topicId,
     changes: { after: { deleted } },
   });
+  if (!deleted) await enqueueEntityTranslations("video_topic", topicId);
   revalidateTag("content", { expire: 0 });
 }
 
@@ -741,12 +772,22 @@ export async function saveVideoCategory(
     select: { slug: true },
   });
 
+  const isSource = locale === defaultLocale;
+  // A person's save is TRANSLATED and records the English it was made from
+  // (ADR-161); without the status, saving over a machine row left it machine.
+  const translatedFrom = isSource
+    ? null
+    : await loadVideoCategorySource(db, categoryId, defaultLocale).then((s) =>
+        s ? hashVideoCategorySource(s) : null,
+      );
   const fields = {
     name: input.translation.name,
     slug,
     description: input.translation.description ?? null,
     seoTitle: input.translation.seoTitle ?? null,
     seoDescription: input.translation.seoDescription ?? null,
+    translationStatus: TranslationStatus.TRANSLATED,
+    ...(isSource ? {} : { sourceHash: translatedFrom }),
   };
 
   await db.$transaction(async (tx) => {
@@ -791,6 +832,17 @@ export async function saveVideoCategory(
     entityId: categoryId,
     changes: { after: { locale, name: input.translation.name } },
   });
+  if (isSource) {
+    const source = await loadVideoCategorySource(db, categoryId, defaultLocale);
+    const hash = source ? hashVideoCategorySource(source) : null;
+    if (hash) {
+      await db.videoCategoryTranslation.updateMany({
+        where: { categoryId, locale: defaultLocale },
+        data: { sourceHash: hash },
+      });
+    }
+    await afterSourceSave("video_category", categoryId, hash, defaultLocale);
+  }
   revalidateTag("content", { expire: 0 });
   return categoryId;
 }
@@ -968,6 +1020,7 @@ export async function loadVideoTopicBySlug(
           content: true,
           seoTitle: true,
           seoDescription: true,
+          linkLabels: true,
           translationStatus: true,
         },
       },
@@ -1025,19 +1078,32 @@ export async function loadVideoTopicBySlug(
       return resolved ? [resolved] : [];
     }),
     links: row.links.flatMap((l) => {
-      const resolved = resolveLink(l);
+      // ADR-161 #8: the label in the words' locale, keyed by its English text.
+      const label =
+        words.locale === defaultLocale ? l.label : translatedLabel(l.label, words.linkLabels);
+      const resolved = resolveLink({ ...l, label: label ?? l.label });
       return resolved ? [resolved] : [];
     }),
     seoTitle: words.seoTitle,
     seoDescription: words.seoDescription,
     publishedAt: row.publishedAt,
     updatedAt: row.updatedAt,
+    // ADR-159 #2: machine-written words at their own URL are served, not indexed.
+    noIndex: !isIndexableTranslation(t, defaultLocale),
+    // hreflang (ADR-164 #5): only translations a person approved.
+    alternates: advertisedAlternates(row.translations, defaultLocale),
     ...reading,
   };
 }
 
 /** A topic as its public page reads it: the contract view plus ADR-127's reading fields. */
-export type PublicVideoTopicView = VideoTopicView & ReadingView;
+export type PublicVideoTopicView = VideoTopicView &
+  ReadingView & {
+    /** The words at this URL are machine-written, not yet saved by a person. */
+    noIndex: boolean;
+    /** Indexable translations, for hreflang (ADR-164 #5). */
+    alternates: { locale: string; slug: string }[];
+  };
 
 export async function getVideoTopicBySlug(
   locale: string,
@@ -1125,8 +1191,16 @@ export interface VideoSitemapEntry {
  * either, and a sitemap entry pointing at a 404 is worse than a missing one.
  */
 export async function loadVideoSitemapEntries(): Promise<VideoSitemapEntry[]> {
+  const { defaultLocale } = await localeContext();
   const rows = await db.videoTopicTranslation.findMany({
-    where: { topic: publicVideoWhere() },
+    where: {
+      topic: publicVideoWhere(),
+      // ADR-159 #2: listed once a person has saved it.
+      OR: [
+        { locale: defaultLocale },
+        { translationStatus: { in: [...INDEXABLE_TRANSLATION_STATUSES] } },
+      ],
+    },
     select: {
       locale: true,
       slug: true,

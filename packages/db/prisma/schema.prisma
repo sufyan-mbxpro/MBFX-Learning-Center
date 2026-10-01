@@ -429,14 +429,46 @@ model Setting {
   description    String?     @db.VarChar(500)
   // Public settings are safe to ship to the browser bundle.
   isPublic       Boolean     @default(false)
+  // Mirrors `TRANSLATABLE_SETTINGS` (@repo/contracts, ADR-165 #1): set by the
+  // seed and the migration so the database agrees with the registry. The code
+  // reads the registry, never this column.
   isTranslatable Boolean     @default(false)
   sortOrder      Int         @default(0)
   updatedBy      String?
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 
+  translations SettingTranslation[]
+
   @@index([groupName])
   @@map("settings")
+}
+
+/// A setting's words in another language (ADR-165 #3). Holds ONLY the
+/// translated fields, always as an object: the named fields of a JSON value,
+/// or `value` for a key whose whole value is text. Switches and URLs are never
+/// here — they come from the English row, so a translation cannot change them.
+/// No row is written for the default locale: its text is `settings.value`.
+model SettingTranslation {
+  id        String @id @default(cuid())
+  settingId String
+  locale    String @db.VarChar(10)
+  value     Json
+
+  /// A person's save writes TRANSLATED; only the job writes MACHINE_TRANSLATED,
+  /// and only for a registry key the machine may translate (ADR-165 #6).
+  translationStatus TranslationStatus @default(TRANSLATED)
+  sourceHash        String?           @db.VarChar(64)
+  updatedBy         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  setting Setting @relation(fields: [settingId], references: [id], onDelete: Cascade)
+
+  @@unique([settingId, locale])
+  @@index([locale])
+  @@map("setting_translations")
 }
 
 enum FeatureVisibility {
@@ -484,6 +516,25 @@ model SocialLink {
 
   @@index([isActive, sortOrder])
   @@map("social_links")
+}
+
+// ADR-169 / changes-53: where the "Share your experience" band sends a
+// reader, one row per REVIEW_PLATFORMS key (@repo/contracts). The set of
+// platforms is code; the switch, order, identifier and override are data.
+// The link is `customUrl` when set, else built from `identifier` by the
+// registry. Public identifiers only — no credentials, nothing sealed.
+model ReviewPlatform {
+  id          String   @id @default(cuid())
+  platform    String   @unique @db.VarChar(40) // trustpilot | google | facebook
+  isEnabled   Boolean  @default(false)
+  sortOrder   Int      @default(0)
+  identifier  String?  @db.VarChar(200) // domain | Place ID | Page name
+  customUrl   String?  @db.VarChar(500) // https only; wins over the built link
+  updatedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("review_platforms")
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -615,8 +666,33 @@ model Locale {
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
+  messageOverrides MessageOverride[]
+
   @@index([isActive, sortOrder])
   @@map("locales")
+}
+
+/// One interface string replaced by an admin, in one language (ADR-178 #3).
+/// Laid over that language's catalog file at request time; a language with no
+/// file is made entirely of these. Public namespaces only — the service
+/// refuses an admin key (ADR-043 #2). Deleted with its language.
+model MessageOverride {
+  id     String @id @default(cuid())
+  locale String @db.VarChar(10)
+  /// Dotted catalog key, e.g. `home.hero.title`.
+  key    String @db.VarChar(191)
+  value  String @db.Text
+  /// Written by "Translate missing with Google"; a person's save clears it.
+  isMachine Boolean @default(false)
+  updatedBy String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  language Locale @relation(fields: [locale], references: [code], onDelete: Cascade)
+
+  @@unique([locale, key])
+  @@map("message_overrides")
 }
 
 model Menu {
@@ -670,6 +746,12 @@ model MenuItemTranslation {
   locale     String  @db.VarChar(10)
   label      String  @db.VarChar(150)
   title      String? @db.VarChar(255)
+
+  /// ADR-161 #7: a row here was written by a person or the seed, so it is
+  /// TRANSLATED; only the job runner writes MACHINE_TRANSLATED. Null hash =
+  /// unknown, which sends an existing row through one review pass (#4).
+  translationStatus TranslationStatus @default(TRANSLATED)
+  sourceHash        String?           @db.VarChar(64)
 
   menuItem MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
 
@@ -749,11 +831,13 @@ enum TranslationStatus {
   /// action, so the review IS the promotion and no separate "approve" step is
   /// invented.
   ///
-  /// Public reads do not filter on `translationStatus` (verified across
-  /// `packages/core/src/*` when this landed), so the member is
-  /// admin-workflow-visible and reader-invisible. If a public filter is ever
-  /// added it must exclude this member — ADR-097's consequences say so, and
-  /// this comment is where the next person will look.
+  /// ADR-159 (2026-09-26) replaced the rule this comment used to state:
+  /// machine translations ARE served to readers, on every read path, `?lang=`
+  /// included — but never INDEXED. `isIndexableTranslation` (@repo/core
+  /// `reading-languages.ts`) keeps them out of hreflang and the sitemap and
+  /// sets the page's `noindex`, until a person's Save writes TRANSLATED. Only
+  /// the translation job writes this member unattended (ADR-161 #2), and it
+  /// never writes over any other status.
   MACHINE_TRANSLATED
 }
 
@@ -845,6 +929,10 @@ model CourseTranslation {
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
+  /// ADR-161 #4: the English source's hash when this row was written. Null =
+  /// unknown, never "current".
+  sourceHash String? @db.VarChar(64)
+
   course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
 
   @@unique([courseId, locale])
@@ -880,6 +968,12 @@ model CourseSectionTranslation {
   locale      String  @db.VarChar(10)
   title       String  @db.VarChar(255)
   description String? @db.Text
+
+  /// ADR-161 #7: a row here was written by a person or the seed, so it is
+  /// TRANSLATED; only the job runner writes MACHINE_TRANSLATED. Null hash =
+  /// unknown, which sends an existing row through one review pass (#4).
+  translationStatus TranslationStatus @default(TRANSLATED)
+  sourceHash        String?           @db.VarChar(64)
 
   section CourseSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
 
@@ -976,6 +1070,11 @@ model LessonTranslation {
   translatedBy      String?
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
+
+  /// ADR-161 #8: this lesson's attachment labels, English label → translated
+  /// label. On the parent row, not a table, because `saveLesson` recreates
+  /// every attachment on each save and would delete a table's rows with them.
+  attachmentLabels Json?
 
   lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
 
@@ -1215,6 +1314,12 @@ model QuizQuestionTranslation {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  /// ADR-161 #7: a row here was written by a person or the seed, so it is
+  /// TRANSLATED; only the job runner writes MACHINE_TRANSLATED. Null hash =
+  /// unknown, which sends an existing row through one review pass (#4).
+  translationStatus TranslationStatus @default(TRANSLATED)
+  sourceHash        String?           @db.VarChar(64)
+
   question QuizQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
 
   @@unique([questionId, locale])
@@ -1350,6 +1455,12 @@ model GlossaryTopicTranslation {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  /// ADR-161 #7: a row here was written by a person or the seed, so it is
+  /// TRANSLATED; only the job runner writes MACHINE_TRANSLATED. Null hash =
+  /// unknown, which sends an existing row through one review pass (#4).
+  translationStatus TranslationStatus @default(TRANSLATED)
+  sourceHash        String?           @db.VarChar(64)
+
   topic GlossaryTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
 
   @@unique([topicId, locale])
@@ -1426,6 +1537,12 @@ model VideoCategoryTranslation {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  /// ADR-161 #7: a row here was written by a person or the seed, so it is
+  /// TRANSLATED; only the job runner writes MACHINE_TRANSLATED. Null hash =
+  /// unknown, which sends an existing row through one review pass (#4).
+  translationStatus TranslationStatus @default(TRANSLATED)
+  sourceHash        String?           @db.VarChar(64)
 
   category VideoCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
@@ -1504,6 +1621,10 @@ model VideoTopicTranslation {
   translatedBy      String?
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
+
+  /// ADR-161 #8: this topic's link labels, English label → translated label,
+  /// for the reason `LessonTranslation.attachmentLabels` gives.
+  linkLabels Json?
 
   topic VideoTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
 
@@ -1590,6 +1711,12 @@ model ArticleCategoryTranslation {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  /// ADR-161 #7: a row here was written by a person or the seed, so it is
+  /// TRANSLATED; only the job runner writes MACHINE_TRANSLATED. Null hash =
+  /// unknown, which sends an existing row through one review pass (#4).
+  translationStatus TranslationStatus @default(TRANSLATED)
+  sourceHash        String?           @db.VarChar(64)
+
   category ArticleCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
   @@unique([categoryId, locale])
@@ -1618,6 +1745,12 @@ model ArticleTagTranslation {
   slug      String   @db.VarChar(150)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  /// ADR-161 #7: a row here was written by a person or the seed, so it is
+  /// TRANSLATED; only the job runner writes MACHINE_TRANSLATED. Null hash =
+  /// unknown, which sends an existing row through one review pass (#4).
+  translationStatus TranslationStatus @default(TRANSLATED)
+  sourceHash        String?           @db.VarChar(64)
 
   tag ArticleTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
@@ -2100,6 +2233,8 @@ enum ReferenceSourceType {
   QUIZ
   // ADR-133 — a glossary topic's cover, the same placement.
   GLOSSARY_TOPIC
+  // ADR-167 — a promotion's image.
+  PROMOTION
 }
 
 enum ReferenceType {
@@ -2263,9 +2398,13 @@ model EmailDelivery {
   providerMessageId String?             @db.VarChar(255)
   isTest            Boolean             @default(false)
   triggeredBy       String?
+  /// ADR-171: the announcement this send belongs to. No FK — the log outlives
+  /// nothing it points at, and it filters by this column only.
+  campaignId        String?             @db.VarChar(191)
   createdAt         DateTime            @default(now())
 
   @@index([createdAt])
+  @@index([campaignId])
   @@index([templateKey, createdAt])
   @@index([status, createdAt])
   @@map("email_deliveries")
@@ -2787,4 +2926,532 @@ model AiBudgetPeriod {
   updatedAt DateTime @updatedAt
 
   @@map("ai_budget_periods")
+}
+
+// ─── Automatic translation (ADR-160) ───────────────────────────
+//
+// Google Cloud Translation Basic (v2), owned by `@repo/translate`. A domain
+// package owning its own tables, beside `@repo/ai` and never inside it: this
+// vendor is a fixed endpoint billed per CHARACTER, with no model to choose,
+// which is why none of it fits `AiProvider` / `AiUsage`.
+
+/// The one translation provider. A singleton like CaptchaConfig
+/// (`id = "default"`), edited at Settings → Translation.
+///
+/// `apiKeyCipher` is security.md #10's FIFTH exception: AES-256-GCM under
+/// TRANSLATE_SECRET_KEY, write-only in the UI, and `loadTranslateDriver()`
+/// (@repo/translate) is its ONE reader. There is deliberately no base URL
+/// column: the endpoint is fixed in code, so a changed setting cannot send the
+/// site's content to another host (ADR-160 #5).
+model TranslateProvider {
+  id           String  @id @default("default")
+  /// Off until a connection test has passed with the key being saved.
+  enabled      Boolean @default(false)
+  apiKeyCipher String? @db.Text
+
+  /// USD per 1M characters, admin-editable, copied into each usage row at
+  /// write time (ADR-100 #3). Decimal for the reason AiModel's prices are.
+  pricePerMillionChars Decimal @default(20) @db.Decimal(12, 6)
+  /// Characters per UTC calendar month. Null = no cap. At the cap work
+  /// PAUSES; nothing fails (ADR-160 #6).
+  monthlyCharBudget    Int?
+
+  /// The last "Test connection": when, and its taxonomy result ("ok",
+  /// "auth_failed", …). Never the provider's own message.
+  lastTestedAt   DateTime?
+  lastTestResult String?   @db.VarChar(40)
+
+  updatedBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("translate_provider")
+}
+
+/// One row per request to Google (a batch of segments), or per refusal made
+/// before a request. Holds no text: a count, never the content.
+model TranslateUsage {
+  id     String              @id @default(cuid())
+  status TranslateCallStatus
+  /// Machine-readable taxonomy (`TRANSLATE_REASONS`), never a raw provider
+  /// message.
+  reason String?             @db.VarChar(40)
+
+  sourceLocale String          @db.VarChar(10)
+  targetLocale String          @db.VarChar(10)
+  format       TranslateFormat
+  segments     Int             @default(0)
+  /// What was SENT, markup included: the conservative estimate. Every cost
+  /// figure on screen says "estimated" (ADR-100).
+  characters   Int             @default(0)
+
+  /// Frozen at write time (ADR-100 #3).
+  costUsd    Decimal @default(0) @db.Decimal(12, 6)
+  durationMs Int     @default(0)
+
+  /// Who triggered it; null for the job runner. A plain id rather than a
+  /// relation, as AiUsage's model id is: this row must outlive the account.
+  userId     String? @db.VarChar(191)
+  entityType String? @db.VarChar(40)
+  entityId   String? @db.VarChar(40)
+
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([status, createdAt])
+  @@map("translate_usage")
+}
+
+/// The budget month: read before every request, so the check is one indexed
+/// row rather than a sum (AiBudgetPeriod's reasoning). Incremented with a
+/// single INSERT … ON DUPLICATE KEY UPDATE, which is atomic where Prisma's
+/// upsert is not.
+model TranslateUsagePeriod {
+  /// "YYYY-MM", UTC.
+  period     String   @id @db.VarChar(7)
+  characters BigInt   @default(0)
+  costUsd    Decimal  @default(0) @db.Decimal(14, 6)
+  requests   Int      @default(0)
+  updatedAt  DateTime @updatedAt
+
+  @@map("translate_usage_periods")
+}
+
+enum TranslateCallStatus {
+  OK
+  FAILED
+  /// Refused by us before Google was called: not configured, switched off,
+  /// or the monthly budget. Zero characters billed.
+  REFUSED
+}
+
+enum TranslateFormat {
+  TEXT
+  HTML
+}
+
+/// Automatic translation work (ADR-162), owned by `@repo/translate`. One row
+/// per entity × locale (ITEM), or per locale being backfilled
+/// (BACKFILL_LOCALE, whose entityType and entityId are "*" — never NULL,
+/// because MariaDB treats every NULL as distinct in a unique index).
+///
+/// A job carries NO content: it reads the English source when it runs, so a
+/// later edit is never translated from a stale copy (ADR-162 #5).
+model TranslationJob {
+  id         String               @id @default(cuid())
+  kind       TranslationJobKind
+  entityType String               @db.VarChar(40)
+  /// 191, the width every String id in this schema may have.
+  entityId   String               @db.VarChar(191)
+  locale     String               @db.VarChar(10)
+  status     TranslationJobStatus @default(PENDING)
+  attempts   Int                  @default(0)
+  /// Backoff and pauses: not eligible before this time (ADR-162 #6).
+  runAfter   DateTime             @default(now())
+  /// Set by the atomic claim; the runner reads its rows back by it (#3).
+  claimToken String?              @db.VarChar(40)
+  claimedAt  DateTime?
+  /// Set by an enqueue that found this job RUNNING: the source changed while
+  /// it worked. Finishing then re-queues instead of marking DONE, because the
+  /// job may already have read the old source (ADR-162 #2 as amended).
+  rerun      Boolean              @default(false)
+  /// A BACKFILL_LOCALE job's progress: where the next page starts (#9).
+  cursor     String?              @db.VarChar(200)
+  /// `TRANSLATE_REASONS` taxonomy only, never a provider message.
+  lastError  String?              @db.VarChar(40)
+  createdAt  DateTime             @default(now())
+  updatedAt  DateTime             @updatedAt
+
+  @@unique([kind, entityType, entityId, locale])
+  @@index([status, runAfter])
+  @@index([claimToken])
+  @@index([locale, status])
+  @@map("translation_jobs")
+}
+
+enum TranslationJobKind {
+  ITEM
+  BACKFILL_LOCALE
+}
+
+enum TranslationJobStatus {
+  PENDING
+  RUNNING
+  DONE
+  FAILED
+}
+
+// ─────────────────────────────────────────────────────────────
+// PROMOTIONS (ADR-167, changes-52)
+// A time-boxed webinar, event, offer, news item or announcement, shown as a
+// popup on the pages its `placements` name and, optionally, in the home band.
+// The record is DATA; the slots it appears in are code (ADR-042).
+// ─────────────────────────────────────────────────────────────
+
+enum PromotionKind {
+  WEBINAR
+  EVENT
+  OFFER
+  NEWS
+  ANNOUNCEMENT
+}
+
+/// Only what a person decides. Scheduled / Live / Ended are DERIVED from the
+/// display window when read (ADR-167 #2), so no cron ever changes this.
+enum PromotionStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum PromotionFrequency {
+  ONCE
+  PER_SESSION
+  DAILY
+  EVERY_VISIT
+}
+
+enum PromotionAudience {
+  ALL
+  GUESTS
+  LEARNERS
+}
+
+/// Exactly one destination (ADR-167 #4), enforced in @repo/contracts — the
+/// same reason `VideoTopicVideo` gives for not using a CHECK constraint.
+enum PromotionLinkKind {
+  CONTENT
+  PATH
+  EXTERNAL
+  NONE
+}
+
+enum PromotionTargetType {
+  COURSE
+  LESSON
+  QUIZ
+  ARTICLE
+  VIDEO_TOPIC
+  GLOSSARY_TERM
+  TOOL
+}
+
+/// What a reader in a locale with no usable translation sees (ADR-167 #6).
+enum PromotionUntranslated {
+  HIDE
+  SHOW_DEFAULT
+}
+
+/// Where a promotion's banner sits (ADR-173). LEFT/RIGHT render at the inline
+/// start/end, so they mirror on a right-to-left page.
+enum PromotionBarPosition {
+  TOP
+  BOTTOM
+  LEFT
+  RIGHT
+}
+
+model Promotion {
+  id     String          @id @default(cuid())
+  kind   PromotionKind
+  status PromotionStatus @default(DRAFT)
+
+  /// string[] of `PROMOTION_PLACEMENTS` keys (@repo/contracts), validated on
+  /// write. JSON rather than a join table: the set is a small code registry.
+  placements  Json
+  showAsPopup Boolean              @default(true)
+  showInBand  Boolean              @default(false)
+  /// A small dismissible banner (ADR-173), at `barPosition`.
+  showAsBar   Boolean              @default(false)
+  barPosition PromotionBarPosition @default(BOTTOM)
+  priority    Int                  @default(0)
+
+  /// The display window. `startsAt` inclusive, `endsAt` exclusive.
+  startsAt      DateTime
+  endsAt        DateTime
+  /// A webinar's or event's own time — announced before it happens, so it is
+  /// not the display window.
+  eventStartsAt DateTime?
+  eventEndsAt   DateTime?
+
+  frequency    PromotionFrequency    @default(PER_SESSION)
+  delaySeconds Int                   @default(5)
+  audience     PromotionAudience     @default(ALL)
+  untranslated PromotionUntranslated @default(HIDE)
+
+  // MediaAsset id as a plain String (ADR-035) — no FK, so deleting an asset
+  // cannot cascade into content. `ContentReference` is the integrity index.
+  imageAssetId String?
+
+  linkKind   PromotionLinkKind    @default(NONE)
+  /// CONTENT only. Polymorphic, so no FK: the target is resolved at read time
+  /// by its own module's public rule, and a target that is not public hides
+  /// the promotion (ADR-167 #4).
+  targetType PromotionTargetType?
+  targetId   String?              @db.VarChar(64)
+  /// PATH only — site-relative, no locale prefix (`internalPathSchema`).
+  targetPath String?              @db.VarChar(500)
+  /// EXTERNAL only — https (`externalUrlSchema`).
+  targetUrl  String?              @db.VarChar(500)
+
+  /// A webinar's recording, shown after `eventEndsAt` while it is public.
+  recordingTopicId String? @db.VarChar(64)
+
+  /// Bumped on every save. The popup's "already seen" key includes it, so an
+  /// edited promotion is shown again.
+  version     Int       @default(1)
+  createdById String?
+  updatedById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  translations PromotionTranslation[]
+  dailyStats   PromotionDailyStat[]
+
+  @@index([status, startsAt, endsAt])
+  @@index([deletedAt])
+  @@map("promotions")
+}
+
+model PromotionTranslation {
+  id          String @id @default(cuid())
+  promotionId String
+  locale      String @db.VarChar(10)
+
+  /// Optional: a promotion linked to site content borrows the target's title
+  /// when this is empty. A standalone one must fill it (contracts).
+  title    String? @db.VarChar(160)
+  body     String? @db.Text // short rich text, sanitized on save (security.md #8)
+  badge    String? @db.VarChar(40)
+  ctaLabel String? @db.VarChar(60)
+  imageAlt String? @db.VarChar(250)
+
+  translationStatus TranslationStatus @default(TRANSLATED)
+  sourceHash        String?           @db.VarChar(64)
+  translatedBy      String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  promotion Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+
+  @@unique([promotionId, locale])
+  @@index([translationStatus])
+  @@map("promotion_translations")
+}
+
+/// Where a counted promotion was seen (ADR-170).
+enum PromotionSurface {
+  POPUP
+  BAND
+  BAR
+}
+
+/// A promotion's approximate reach for one UTC day on one surface (ADR-170).
+/// Counts only: no IP, cookie, user, session, user agent or path is stored,
+/// so there is no event log and nothing here identifies a person. Written by
+/// one `INSERT … ON DUPLICATE KEY UPDATE`, never by a Prisma upsert.
+model PromotionDailyStat {
+  promotionId String
+  day         DateTime         @db.Date
+  surface     PromotionSurface
+  impressions Int              @default(0)
+  clicks      Int              @default(0)
+  dismissals  Int              @default(0)
+  updatedAt   DateTime         @updatedAt
+
+  promotion Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+
+  @@id([promotionId, day, surface])
+  @@map("promotion_daily_stats")
+}
+
+// ─────────────────────────────────────────────────────────────
+// ANNOUNCEMENTS (ADR-171, changes-54)
+// One email about one piece of content, sent once to a deduplicated set of
+// recipients through a database job queue (ADR-162's pattern). A recipient
+// row is the job: it holds no rendered body — the runner renders from the
+// template at send time (ADR-078 #10's reasoning, kept).
+// ─────────────────────────────────────────────────────────────
+
+/// What an announcement is about. Phase 2 adds VIDEO_TOPIC, ARTICLE and
+/// GLOSSARY_TERM, each with its own template (changes-54 §14).
+enum AnnouncementKind {
+  COURSE
+  /// ADR-172: a free-form email to chosen audiences; its body is the campaign's.
+  CUSTOM
+  /// ADR-172: a free-form email to exactly one person.
+  DIRECT
+}
+
+enum AnnouncementStatus {
+  DRAFT
+  SCHEDULED
+  SENDING
+  SENT
+  CANCELLED
+}
+
+enum AnnouncementRecipientStatus {
+  PENDING
+  /// Claimed by a runner. A lease older than ten minutes becomes FAILED
+  /// `lease_expired`, never PENDING: at-most-once (ADR-171 #3).
+  SENDING
+  SENT
+  FAILED
+  /// Unsubscribed between the snapshot and the send.
+  SUPPRESSED
+  /// The campaign was cancelled before this row was claimed.
+  SKIPPED
+}
+
+enum EmailSuppressionScope {
+  ANNOUNCEMENTS
+}
+
+enum EmailSuppressionReason {
+  UNSUBSCRIBED
+  ADMIN
+  BOUNCE
+  COMPLAINT
+}
+
+model EmailCampaign {
+  id             String             @id @default(cuid())
+  kind           AnnouncementKind
+  /// The Course.id (for COURSE). No FK: kinds point at different tables.
+  /// Null for CUSTOM and DIRECT, which are about no piece of content (ADR-172).
+  targetId       String?            @db.VarChar(191)
+  /// Admin-facing label, e.g. "Forex Basics — launch".
+  name           String             @db.VarChar(160)
+  /// Null means the template's own subject, per language.
+  subject        String?            @db.VarChar(200)
+  /// Optional plain-text note, escaped like any variable.
+  message        String?            @db.VarChar(500)
+  /// `{ keys: string[], courseIds?: string[], userIds?: string[] }`,
+  /// validated by `announcementAudienceSchema`.
+  audience       Json
+  status         AnnouncementStatus @default(DRAFT)
+  scheduledFor   DateTime?
+  /// ADR-171 #7: the target is SCHEDULED; start the first tick it is public.
+  sendWhenLive   Boolean            @default(false)
+  snapshotAt     DateTime?
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  /// Why a campaign was CANCELLED by the system (`target_unavailable`).
+  cancelReason   String?            @db.VarChar(40)
+  /// Aggregates survive the 90-day recipient purge.
+  recipientCount Int                @default(0)
+  sentCount      Int                @default(0)
+  failedCount    Int                @default(0)
+  skippedCount   Int                @default(0)
+  createdById    String
+  sentById       String?
+  cancelledById  String?
+  /// ADR-172 #3: the design this email was started from. Provenance only —
+  /// the design was COPIED, and editing it later changes nothing here.
+  designId       String?            @db.VarChar(191)
+  /// DIRECT: `Reply-To` is the author's own address instead of the sender's.
+  replyToSelf    Boolean            @default(false)
+  /// ADR-172 #2: a CUSTOM send needs a test since the last edit. The hash is
+  /// of the content at that test; any edit changes the current one.
+  lastTestedAt   DateTime?
+  testedHash     String?            @db.VarChar(64)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  recipients EmailCampaignRecipient[]
+  contents   EmailCampaignContent[]
+
+  @@index([status, scheduledFor])
+  @@index([kind, targetId])
+  @@index([createdAt])
+  @@map("email_campaigns")
+}
+
+model EmailCampaignRecipient {
+  id           String                      @id @default(cuid())
+  campaignId   String
+  /// Normalised (trimmed, lower-cased): the dedupe key (ADR-171 #2).
+  email        String                      @db.VarChar(255)
+  userId       String?
+  subscriberId String?
+  name         String?                     @db.VarChar(255)
+  locale       String                      @db.VarChar(10)
+  status       AnnouncementRecipientStatus @default(PENDING)
+  attempts     Int                         @default(0)
+  runAfter     DateTime                    @default(now())
+  claimToken   String?                     @db.VarChar(40)
+  claimedAt    DateTime?
+  /// A taxonomy code, never a provider message (ADR-162 #1).
+  lastError    String?                     @db.VarChar(40)
+  /// The EmailDelivery row, for the log link.
+  deliveryId   String?
+  sentAt       DateTime?
+
+  campaign EmailCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, email])
+  @@index([status, runAfter])
+  @@index([claimToken])
+  @@index([campaignId, status])
+  /// A person's email history on their record (ADR-172).
+  @@index([userId])
+  @@map("email_campaign_recipients")
+}
+
+/// ADR-172 #2 — the words of a CUSTOM or DIRECT campaign, one row per locale.
+/// Sanitised on save; frozen once the campaign leaves DRAFT. Kept with the
+/// campaign (it is the record of what was sent, and holds no address).
+model EmailCampaignContent {
+  id         String        @id @default(cuid())
+  campaignId String
+  locale     String        @db.VarChar(10)
+  subject    String        @db.VarChar(200)
+  preheader  String?       @db.VarChar(200)
+  mode       EmailBodyMode @default(RICH)
+  bodyHtml   String        @db.MediumText
+  updatedAt  DateTime      @updatedAt
+
+  campaign EmailCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, locale])
+  @@map("email_campaign_contents")
+}
+
+/// ADR-172 #3 — a reusable starting point for a custom email, built on the
+/// Templates screen. NOT a template: it has no key and code never sends it
+/// (ADR-078 #5 stands). Starting an email from it copies it.
+model EmailDesign {
+  id          String        @id @default(cuid())
+  name        String        @db.VarChar(120)
+  description String?       @db.VarChar(300)
+  mode        EmailBodyMode @default(RICH)
+  subject     String?       @db.VarChar(200)
+  preheader   String?       @db.VarChar(200)
+  bodyHtml    String        @db.MediumText
+  archivedAt  DateTime?
+  createdById String
+  updatedById String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([archivedAt, updatedAt])
+  @@map("email_designs")
+}
+
+/// ADR-171 #5 — someone said no. Keyed by ADDRESS, so it covers a learner and
+/// a subscriber-only contact the same way. Never purged: deleting a row would
+/// re-enrol the person who asked to stop.
+model EmailSuppression {
+  id          String                 @id @default(cuid())
+  email       String                 @db.VarChar(255)
+  scope       EmailSuppressionScope
+  reason      EmailSuppressionReason
+  /// Null when the person did it themselves.
+  createdById String?
+  createdAt   DateTime               @default(now())
+
+  @@unique([email, scope])
+  @@map("email_suppressions")
 }

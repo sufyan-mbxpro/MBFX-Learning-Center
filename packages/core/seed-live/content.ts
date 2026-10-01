@@ -894,6 +894,17 @@ export const GLOSSARY_TOPIC_COVERS: Record<string, ImageName> = {
   crypto: "bitcoin-circuit-board",
 };
 
+/**
+ * Pictures for `db:seed`'s promotions (`seed-promotions.ts`), keyed by their
+ * fixed ids. Chosen to differ from the cover of anything a promotion links
+ * to, so the home band never shows the same photograph twice side by side.
+ */
+export const DEMO_PROMOTION_IMAGES: Record<string, ImageName> = {
+  "seed-promo-nfp-webinar": "dollar-rising-arrow",
+  "seed-promo-crypto-foundations": "bitcoin-circuit-board",
+  "seed-promo-dst-session-shift": "city-skyline-candlesticks",
+};
+
 /** Cover and header for seeded articles with none, cycled in slug order. */
 export const ARTICLE_IMAGES: ImageName[] = [
   "analyst-rising-chart",

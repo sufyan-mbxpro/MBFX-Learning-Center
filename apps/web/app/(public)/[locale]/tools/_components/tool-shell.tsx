@@ -24,6 +24,7 @@ import { TOOL_HIGHLIGHT_ICON_COMPONENTS } from "../../../../_lib/tool-highlight-
 // The band order is code. Every word inside every band is data (ADR-086 #1).
 export async function ToolShell({
   title,
+  untranslated = false,
   tagline,
   intro,
   body,
@@ -36,6 +37,12 @@ export async function ToolShell({
   readNext,
 }: {
   title: string;
+  /**
+   * No translation in this locale's chain (ADR-168 #4). The widget's labels
+   * are catalog strings and work regardless; the explainer column carries the
+   * notice instead of prose that does not exist.
+   */
+  untranslated?: boolean;
   tagline: string | null;
   /** Rich text, already sanitised on save (security.md #8). */
   intro: string | null;
@@ -110,9 +117,7 @@ export async function ToolShell({
                   FaqPanel owns its own heading and renders NOTHING when the
                   list is empty — the guard is belt and braces, not a second
                   opinion about the empty state. */}
-              {faq.length > 0 && (
-                <FaqPanel title={t("faqTitle")} lead={t("faqLead")} items={faq} />
-              )}
+              {faq.length > 0 && <FaqPanel title={t("faqTitle")} lead={t("faqLead")} items={faq} />}
             </Reveal>
 
             {/* `aside`, not a second `div`: it is supporting material for the
@@ -120,6 +125,14 @@ export async function ToolShell({
                 screen reader's landmark list is for. */}
             <Reveal variant="end" className="min-w-0">
               <aside className="flex min-w-0 flex-col gap-6">
+                {untranslated && (
+                  <Card>
+                    <CardContent className="flex flex-col gap-1">
+                      <p className="font-medium">{t("untranslated.title")}</p>
+                      <p className="text-sm text-muted-foreground">{t("untranslated.body")}</p>
+                    </CardContent>
+                  </Card>
+                )}
                 {intro && (
                   <Card>
                     <CardContent>

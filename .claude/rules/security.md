@@ -91,10 +91,22 @@ Non-negotiable. A PR violating any numbered rule here does not merge.
     browser token has passed with the keys being saved. An unreadable seal
     turns the check OFF, not "refuse all".
 
+    **ADR-160: the Google Cloud Translation API key.** Stored in
+    `TranslateProvider.apiKeyCipher`, sealed under `TRANSLATE_SECRET_KEY`,
+    write-only, with `loadTranslateDriver()` (`@repo/translate`) its only
+    reader and no key property on `TranslateProviderView`. The owner asked for
+    it to be set in the admin, like the AI key. It is not an `AiProvider` row
+    because that table models chat vendors priced per token, and this one is a
+    fixed endpoint priced per character. The endpoint is fixed in code (no base
+    URL setting), so the key cannot redirect content anywhere; its harm is
+    spend. Gated on **`translations.provider.manage`, seeded to super_admin
+    only**, with a monthly character budget that pauses work at the cap. The
+    driver sends it in a header, never in the URL.
+
     Nothing else may follow this path without its own ADR, which must state
     why the secret cannot live in env, name its single reader, justify its
     gate by blast radius (ADR-087 #5), and — since ADR-098 — say why it is
-    not satisfied by one of the seals that already exist. There are four now:
+    not satisfied by one of the seals that already exist. There are five now:
     past three, a pattern starts looking like a default.
 
 11. Sessions are database-backed (revocable). httpOnly cookies on web; tokens

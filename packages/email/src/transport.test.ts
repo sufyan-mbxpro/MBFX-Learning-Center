@@ -4,6 +4,7 @@
 // transport.integration.test.ts.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  classifySendError,
   logDriver,
   sendgridDriver,
   sendgridKeyShapeNote,
@@ -28,7 +29,36 @@ const message = {
   text: "hi",
 };
 
+describe("classifySendError (ADR-171)", () => {
+  it("retries a 4xx SMTP reply and gives up on a 5xx one", () => {
+    expect(classifySendError(Object.assign(new Error("busy"), { responseCode: 421 }))).toBe(
+      "transient",
+    );
+    expect(classifySendError(Object.assign(new Error("no such user"), { responseCode: 550 }))).toBe(
+      "permanent",
+    );
+  });
+
+  it("retries a SendGrid 429, 5xx or key problem and gives up on a bad message", () => {
+    for (const status of [429, 500, 503, 401, 403]) {
+      expect(classifySendError(Object.assign(new Error("x"), { status }))).toBe("transient");
+    }
+    expect(classifySendError(Object.assign(new Error("x"), { status: 400 }))).toBe("permanent");
+  });
+
+  it("retries anything it does not recognise", () => {
+    expect(classifySendError(new TypeError("fetch failed"))).toBe("transient");
+    expect(classifySendError("string")).toBe("transient");
+    expect(classifySendError(null)).toBe("transient");
+  });
+});
+
 describe("smtpTransportOptions", () => {
+  it("pools connections only when a batch asks", () => {
+    expect(smtpTransportOptions({ ...BASE, security: "NONE" })).not.toHaveProperty("pool");
+    expect(smtpTransportOptions({ ...BASE, security: "NONE" }, { pool: true }).pool).toBe(true);
+  });
+
   it("treats TLS as connect-time encryption", () => {
     const options = smtpTransportOptions({ ...BASE, port: 465, security: "TLS" });
     expect(options.secure).toBe(true);
@@ -229,6 +259,15 @@ describe("sendgridDriver", () => {
     await expect(sendgridDriver({ apiKey: TOO_LONG_KEY, sandbox: false }).verify()).rejects.toThrow(
       "SendGrid 401: unauthorized — the stored key is 77 characters and a SendGrid key is 69",
     );
+  });
+
+  it("carries the HTTP status on a refusal, so a batch can classify it (ADR-171)", async () => {
+    stubFetch(Response.json({ errors: [{ message: "invalid email" }] }, { status: 400 }));
+    const error = await sendgridDriver({ apiKey: "SG.test", sandbox: false })
+      .send(message)
+      .catch((caught: unknown) => caught);
+    expect((error as { status?: number }).status).toBe(400);
+    expect(classifySendError(error)).toBe("permanent");
   });
 
   it("adds no shape note to a 401'd key that is the right shape", async () => {

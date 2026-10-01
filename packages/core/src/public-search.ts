@@ -38,6 +38,7 @@
 // rows), and this module has no subject to evaluate an AUTHENTICATED flag
 // against. The route handler that calls it does the gating.
 import { db } from "@repo/db";
+import { htmlExcerpt } from "@repo/utils";
 
 import { publicArticleWhere } from "./public-articles.ts";
 import { publicCourseWhere, publicLessonWhere } from "./public-courses.ts";
@@ -178,16 +179,17 @@ function rank<T>(
     .map((entry) => entry.row);
 }
 
-/** HTML out, one line in. Summaries are rich text on several of these tables. */
+/**
+ * HTML out, one line in. Summaries are rich text on several of these tables.
+ *
+ * `htmlExcerpt` (@repo/utils) rather than a local regex: this used to turn
+ * every tag into a space, so "Buy <strong>low</strong>." read "Buy low ." in
+ * the palette, and it turned `&amp;` into a space rather than "&".
+ */
 function toPlainExcerpt(value: string | null | undefined, max = 140): string | null {
   if (!value) return null;
-  const text = value
-    .replaceAll(/<[^>]*>/g, " ")
-    .replaceAll(/&(?:nbsp|amp|lt|gt|quot|#39);/g, " ")
-    .replaceAll(/\s+/g, " ")
-    .trim();
-  if (text === "") return null;
-  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+  const text = htmlExcerpt(value, max);
+  return text === "" ? null : text;
 }
 
 // Every query filters on ONE locale, deliberately NOT the fallback chain

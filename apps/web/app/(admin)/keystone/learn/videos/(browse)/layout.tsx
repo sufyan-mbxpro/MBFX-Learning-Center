@@ -16,7 +16,7 @@ import { SubNav } from "../../../_components/sub-nav.tsx";
 // Each page portals its own create button into the heading (ADR-140 §3).
 export default async function VideosBrowseLayout({ children }: { children: React.ReactNode }) {
   // A gate, not the boundary — every page below re-checks (security.md #3).
-  await requirePermission("lessons.view");
+  await requirePermission("videos.view");
   const t = await getTranslations("admin");
 
   return (

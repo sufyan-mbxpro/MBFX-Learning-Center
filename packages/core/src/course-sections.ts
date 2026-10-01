@@ -8,11 +8,13 @@
 // matching courses.ts — sections have no permission key of their own and
 // deliberately get none, because editing a curriculum IS editing the course.
 import { revalidateTag } from "next/cache";
-import { db, type ContentStatus } from "@repo/db";
+import { TranslationStatus, db, type ContentStatus } from "@repo/db";
 import type { Subject } from "@repo/rbac";
 import type { SectionInput } from "@repo/contracts";
 import { SectionNotEmptyError, recomputeLessonCount } from "./courses.ts";
 import { recordAudit } from "./index.ts";
+import { hashSectionSource, loadSectionSource } from "./learn-source.ts";
+import { afterSourceSave, enqueueEntityTranslations } from "./translation-queue.ts";
 
 async function defaultLocaleCode(): Promise<string> {
   return (
@@ -62,11 +64,23 @@ export async function createSection(
     entityId: section.id,
     changes: { after: { courseId, sortOrder } },
   });
+  await enqueueEntityTranslations("course_section", section.id);
   revalidateTag("content", { expire: 0 });
   return section.id;
 }
 
 export async function saveSection(actor: Subject, input: SectionInput): Promise<void> {
+  const defaultLocale = await defaultLocaleCode();
+  const isSource = input.translation.locale === defaultLocale;
+  // A person's save is TRANSLATED and records the English it was made from
+  // (ADR-161): without the status, saving over a machine row left it
+  // MACHINE_TRANSLATED.
+  const translatedFrom = isSource
+    ? null
+    : await loadSectionSource(db, input.sectionId, defaultLocale).then((s) =>
+        s ? hashSectionSource(s) : null,
+      );
+
   await db.$transaction(async (tx) => {
     const section = await tx.courseSection.update({
       where: { id: input.sectionId },
@@ -87,6 +101,8 @@ export async function saveSection(actor: Subject, input: SectionInput): Promise<
     const fields = {
       title: input.translation.title,
       description: input.translation.description ?? null,
+      translationStatus: TranslationStatus.TRANSLATED,
+      ...(isSource ? {} : { sourceHash: translatedFrom }),
     };
     await tx.courseSectionTranslation.upsert({
       where: {
@@ -104,6 +120,17 @@ export async function saveSection(actor: Subject, input: SectionInput): Promise<
     entityId: input.sectionId,
     changes: { after: { title: input.translation.title, locale: input.translation.locale } },
   });
+  if (isSource) {
+    const source = await loadSectionSource(db, input.sectionId, defaultLocale);
+    const hash = source ? hashSectionSource(source) : null;
+    if (hash) {
+      await db.courseSectionTranslation.updateMany({
+        where: { sectionId: input.sectionId, locale: defaultLocale },
+        data: { sourceHash: hash },
+      });
+    }
+    await afterSourceSave("course_section", input.sectionId, hash, defaultLocale);
+  }
   revalidateTag("content", { expire: 0 });
 }
 

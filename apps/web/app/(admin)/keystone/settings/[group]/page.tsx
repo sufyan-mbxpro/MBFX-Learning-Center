@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { can, requirePermission } from "@repo/rbac";
-import { loadAdminMenus, loadBrandAssets } from "@repo/core";
+import { listReviewPlatforms, loadAdminMenus, loadBrandAssets } from "@repo/core";
+import { REVIEW_PLATFORM_KEYS, type ReviewPlatformKey } from "@repo/contracts";
 import { getActiveLocales } from "@repo/i18n";
 import { loadCaptchaSettings } from "@repo/auth";
 import { AdminSection } from "../../_components/admin-page.tsx";
@@ -15,6 +16,7 @@ import {
 import { BrandAssetsForm } from "../../_components/brand-assets-form.tsx";
 import { SettingsGroupForm, type SettingsTab } from "../settings-group-form.tsx";
 import { CaptchaSettingsForm } from "../captcha-settings-form.tsx";
+import { ReviewPlatformsForm } from "../review-platforms-form.tsx";
 
 // One settings category on its own page (changes-01, image-4): sub-sidebar
 // for switching categories, type-driven fields for this group, ONE Save for
@@ -73,12 +75,21 @@ export default async function SettingsGroupPage({
   const tabDefs = (SETTINGS_GROUP_TABS[group] ?? []).filter(
     (tab) =>
       (tab.id !== "branding" || can(subject, "theme.update")) &&
-      (tab.id !== "captcha" || can(subject, "settings.update")),
+      (tab.id !== "captcha" || can(subject, "settings.update")) &&
+      // ADR-169: saved under `settings.update`, so a viewer gets no tab.
+      (tab.id !== "reviews" || can(subject, "settings.update")),
   );
-  const [brandAssets, captchaSettings] = await Promise.all([
+  const [brandAssets, captchaSettings, reviewPlatforms] = await Promise.all([
     tabDefs.some((tab) => tab.id === "branding") ? loadBrandAssets() : null,
     tabDefs.some((tab) => tab.id === "captcha") ? loadCaptchaSettings() : null,
+    tabDefs.some((tab) => tab.id === "reviews") ? listReviewPlatforms() : null,
   ]);
+  // One label per platform, resolved here so the client form holds no catalog.
+  const perPlatform = (make: (platform: ReviewPlatformKey) => string) =>
+    Object.fromEntries(REVIEW_PLATFORM_KEYS.map((p) => [p, make(p)])) as Record<
+      ReviewPlatformKey,
+      string
+    >;
   const tabs: SettingsTab[] | undefined =
     tabDefs.length > 0
       ? tabDefs.map((tab) => ({
@@ -148,7 +159,59 @@ export default async function SettingsGroupPage({
                     />
                   ),
                 }
-              : { keys: tab.keys }),
+              : tab.id === "reviews" && reviewPlatforms
+                ? {
+                    content: (
+                      <ReviewPlatformsForm
+                        initial={reviewPlatforms.map(
+                          ({ platform, isEnabled, identifier, customUrl }) => ({
+                            platform,
+                            isEnabled,
+                            identifier,
+                            customUrl,
+                          }),
+                        )}
+                        labels={{
+                          section: t("reviewPlatforms.section"),
+                          sectionDescription: t("reviewPlatforms.sectionDescription"),
+                          platforms: perPlatform((p) => t(`reviewPlatforms.platforms.${p}`)),
+                          enabled: perPlatform((p) =>
+                            t("reviewPlatforms.enabled", {
+                              platform: t(`reviewPlatforms.platforms.${p}`),
+                            }),
+                          ),
+                          enabledHint: t("reviewPlatforms.enabledHint"),
+                          identifier: perPlatform((p) => t(`reviewPlatforms.identifier.${p}`)),
+                          identifierHint: perPlatform((p) =>
+                            t(`reviewPlatforms.identifierHint.${p}`),
+                          ),
+                          customUrl: t("reviewPlatforms.customUrl"),
+                          customUrlHint: t("reviewPlatforms.customUrlHint"),
+                          preview: t("reviewPlatforms.preview"),
+                          noLink: t("reviewPlatforms.noLink"),
+                          test: t("reviewPlatforms.test"),
+                          moveUp: perPlatform((p) =>
+                            t("reviewPlatforms.moveUp", {
+                              platform: t(`reviewPlatforms.platforms.${p}`),
+                            }),
+                          ),
+                          moveDown: perPlatform((p) =>
+                            t("reviewPlatforms.moveDown", {
+                              platform: t(`reviewPlatforms.platforms.${p}`),
+                            }),
+                          ),
+                          status: {
+                            on: t("reviewPlatforms.status.on"),
+                            off: t("reviewPlatforms.status.off"),
+                            needsLink: t("reviewPlatforms.status.needsLink"),
+                          },
+                          save: t("save"),
+                          saved: t("saved"),
+                        }}
+                      />
+                    ),
+                  }
+                : { keys: tab.keys }),
         }))
       : undefined;
 

@@ -1,6 +1,17 @@
-import { emailPreviewSchema } from "@repo/contracts";
-import { renderEmailPreview } from "@repo/core";
-import { requirePermission } from "@repo/rbac";
+import {
+  announcementPreviewSchema,
+  emailDesignSaveSchema,
+  emailPreviewSchema,
+} from "@repo/contracts";
+import {
+  renderAnnouncementPreview,
+  renderCustomEmailPreview,
+  renderEmailDesignPreview,
+  renderEmailPreview,
+} from "@repo/core";
+import { requireAnyPermission, requirePermission } from "@repo/rbac";
+import { siteUrl } from "../../../../../_lib/site-url";
+import { previewImagesFromViewer } from "./preview-images";
 
 // The email preview, isolated (ADR-078 #8).
 //
@@ -29,11 +40,80 @@ import { requirePermission } from "@repo/rbac";
 // is an unsaved draft that can be 200KB.
 
 export async function POST(request: Request): Promise<Response> {
+  const input = await readInput(request);
+
+  // An announcement's preview (ADR-171, changes-54 §10.3): the SAVED campaign
+  // with its real course variables. Its own key, because the person drafting
+  // an announcement need not be able to read every template — and this route,
+  // not a second one, because it is the ONE framable admin path.
+  if (isAnnouncementPreview(input)) {
+    const subject = await requirePermission("announcements.view");
+    const announcement = announcementPreviewSchema.safeParse(input);
+    if (!announcement.success) {
+      return new Response(document("This preview request was not valid."), {
+        status: 400,
+        headers: previewHeaders(request),
+      });
+    }
+    try {
+      // A custom or direct email has no course to render against: its words
+      // are its own (ADR-172 #2).
+      const rendered =
+        (await renderAnnouncementPreview(subject, announcement.data)) ??
+        (await renderCustomEmailPreview(subject, announcement.data));
+      if (!rendered) {
+        return new Response(document("This announcement has nothing to preview yet."), {
+          status: 404,
+          headers: previewHeaders(request),
+        });
+      }
+      return previewResponse(request, rendered.html);
+    } catch (error) {
+      return new Response(document(error instanceof Error ? error.message : String(error)), {
+        status: 200,
+        headers: previewHeaders(request),
+      });
+    }
+  }
+
+  // An email design's preview (ADR-172 #3): the UNSAVED draft on screen, so
+  // an author sees what they are typing. Anyone who may read designs may
+  // render one; the draft passes the same schema a save does.
+  if (isDesignPreview(input)) {
+    const subject = await requireAnyPermission([
+      "email.templates.view",
+      "announcements.create",
+      "announcements.direct",
+    ]);
+    const design = emailDesignSaveSchema.safeParse(input);
+    if (!design.success) {
+      return new Response(document("This design cannot be previewed until its body is valid."), {
+        status: 200,
+        headers: previewHeaders(request),
+      });
+    }
+    try {
+      const rendered = await renderEmailDesignPreview(subject, { draft: design.data });
+      if (!rendered) {
+        return new Response(document("This design has nothing to preview yet."), {
+          status: 404,
+          headers: previewHeaders(request),
+        });
+      }
+      return previewResponse(request, rendered.html);
+    } catch (error) {
+      return new Response(document(error instanceof Error ? error.message : String(error)), {
+        status: 200,
+        headers: previewHeaders(request),
+      });
+    }
+  }
+
   // The boundary, not the proxy's STAFF gate (security.md #3). `.view` rather
   // than `.update`: rendering a preview changes nothing.
   await requirePermission("email.templates.view");
 
-  const parsed = emailPreviewSchema.safeParse(await readInput(request));
+  const parsed = emailPreviewSchema.safeParse(input);
   if (!parsed.success) {
     return new Response(document("This preview request was not valid."), {
       status: 400,
@@ -48,7 +128,7 @@ export async function POST(request: Request): Promise<Response> {
         status: 404,
         headers: previewHeaders(request),
       });
-    return new Response(rendered.html, { status: 200, headers: previewHeaders(request) });
+    return previewResponse(request, rendered.html);
   } catch (error) {
     // A render error is the useful answer here: a missing required variable or
     // a non-http URL is exactly what an author needs to be told, and as a 500
@@ -60,6 +140,20 @@ export async function POST(request: Request): Promise<Response> {
   }
 }
 
+function isAnnouncementPreview(input: unknown): boolean {
+  return typeof input === "object" && input !== null && "campaignId" in input;
+}
+
+/** The design editor and the direct-email dialog post `preview=design`. */
+function isDesignPreview(input: unknown): boolean {
+  return (
+    typeof input === "object" &&
+    input !== null &&
+    "preview" in input &&
+    (input as { preview: unknown }).preview === "design"
+  );
+}
+
 /** Form-encoded from the editor's frame target; JSON for anything scripted. */
 async function readInput(request: Request): Promise<unknown> {
   const type = request.headers.get("content-type") ?? "";
@@ -67,6 +161,13 @@ async function readInput(request: Request): Promise<unknown> {
   const form = await request.formData().catch(() => null);
   if (!form) return null;
   return Object.fromEntries([...form.entries()].filter(([, value]) => typeof value === "string"));
+}
+
+function previewResponse(request: Request, html: string): Response {
+  return new Response(previewImagesFromViewer(html, siteUrl(), new URL(request.url).origin), {
+    status: 200,
+    headers: previewHeaders(request),
+  });
 }
 
 function previewHeaders(request: Request): Headers {

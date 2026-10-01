@@ -714,6 +714,7 @@ export async function listEmailDeliveries(
       ...(filter.status ? { status: filter.status } : {}),
       ...(filter.templateKey ? { templateKey: filter.templateKey } : {}),
       ...(filter.isTest === undefined ? {} : { isTest: filter.isTest }),
+      ...(filter.campaignId ? { campaignId: filter.campaignId } : {}),
       ...(conditions.length > 0 ? { AND: conditions } : {}),
     },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],

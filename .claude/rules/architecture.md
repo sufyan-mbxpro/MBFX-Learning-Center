@@ -61,6 +61,13 @@ rules named below.
    configuration, because the guard that applies it runs inside Better Auth's
    handler, and it seals Google's secret key through the one shared seal
    rather than a copy.
+   ADR-160 adds `core → translate` and `translate → secrets`:
+   `@repo/translate` is a domain package owning its own tables (provider,
+   usage, jobs) and depending on `db / contracts / secrets`. It
+   sits beside `ai`, not inside it — Google Cloud Translation is a fixed
+   endpoint billed per character, not a chat vendor — and, like `ai`, it is
+   never imported by `auth`: the session path must not acquire a dependency
+   that spends money.
 9. Every package declares every dependency it imports (no phantom deps —
    `pnpm check:phantom-deps` enforces). Granular exports in `@repo/ui` so one
    component doesn't drag the whole tree.
@@ -80,7 +87,9 @@ rules named below.
     `market` for every rate, bar and derived market figure, which is
     deliberately **not** `content`: market data churns on a daily sweep and
     content on editorial action, so sharing a tag would have every article
-    publish drop the rate cache. `part-data:{partKey}` is likewise
+    publish drop the rate cache. `@repo/i18n` mints two of its own:
+    `locales` (the language rows) and — ADR-178 — `messages` (interface-text
+    overrides laid over the catalog files). `part-data:{partKey}` is likewise
     **not** tagged `content` so ordinary content churn never invalidates the
     site shell. Admin writes invalidate by tag; nothing polls. `revalidateTag` always takes its second argument
     (`{ expire: 0 }`). Never `revalidatePath`, never a route-level

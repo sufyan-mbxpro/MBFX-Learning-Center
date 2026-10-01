@@ -4,6 +4,7 @@
 // business keys scoped to itself so tests don't collide with each other's
 // fixture data.
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { PrismaMariaDb } from "@prisma/adapter-mariadb";
@@ -344,5 +345,157 @@ describe("soft-delete convention", () => {
 
     const withDeleted = await db.lesson.findMany({ where: { sectionId: section.id } });
     expect(withDeleted.map((l) => l.id)).toContain(lesson.id);
+  });
+});
+
+describe("data migration — home promotions band (changes-52, ADR-167)", () => {
+  const migration = readFileSync(
+    fileURLToPath(
+      new URL(
+        "../prisma/migrations/20260929120000_home_promotions_band_changes52/migration.sql",
+        import.meta.url,
+      ),
+    ),
+    "utf8",
+  );
+  // The file is one UPDATE after its comments; run it the way `migrate deploy` would.
+  const statement = migration
+    .split("\n")
+    .filter((line) => !line.trimStart().startsWith("--"))
+    .join("\n")
+    .trim();
+
+  type Entry = { key: string; enabled: boolean; order: number };
+  const sections = async () =>
+    (await db.setting.findUniqueOrThrow({ where: { key: "home.sections" } })).value as Entry[];
+
+  it("appends the band to an install that predates it, once, as a real boolean", async () => {
+    if (!(await db.setting.findUnique({ where: { key: "home.sections" } }))) await seed(db);
+    const before = await sections();
+    const withoutBand = before.filter((entry) => entry.key !== "promotions");
+    await db.setting.update({ where: { key: "home.sections" }, data: { value: withoutBand } });
+
+    try {
+      await db.$executeRawUnsafe(statement);
+      await db.$executeRawUnsafe(statement); // bounded: a second run matches nothing
+
+      const after = await sections();
+      const bands = after.filter((entry) => entry.key === "promotions");
+      expect(bands).toEqual([{ key: "promotions", enabled: true, order: 2 }]);
+      // Nothing else moved.
+      expect(after.filter((entry) => entry.key !== "promotions")).toEqual(withoutBand);
+    } finally {
+      await db.setting.update({ where: { key: "home.sections" }, data: { value: before } });
+    }
+  });
+
+  it("leaves an install that already places the band alone", async () => {
+    const before = await sections();
+    const moved = [
+      ...before.filter((entry) => entry.key !== "promotions"),
+      { key: "promotions", enabled: false, order: 9 },
+    ];
+    await db.setting.update({ where: { key: "home.sections" }, data: { value: moved } });
+    try {
+      await db.$executeRawUnsafe(statement);
+      expect((await sections()).filter((entry) => entry.key === "promotions")).toEqual([
+        { key: "promotions", enabled: false, order: 9 },
+      ]);
+    } finally {
+      await db.setting.update({ where: { key: "home.sections" }, data: { value: before } });
+    }
+  });
+});
+
+describe("data migration: quiz and video keys (ADR-177)", () => {
+  const migration = readFileSync(
+    fileURLToPath(
+      new URL(
+        "../prisma/migrations/20261001120000_quiz_video_permissions_adr177/migration.sql",
+        import.meta.url,
+      ),
+    ),
+    "utf8",
+  );
+  // Several statements: drop the comments, then split on the `;` that ends each.
+  const statements = migration
+    .split("\n")
+    .filter((line) => !line.trimStart().startsWith("--"))
+    .join("\n")
+    .split(/;\s*$/m)
+    .map((statement) => statement.trim())
+    .filter(Boolean);
+
+  const roleKeys = async (roleId: string) =>
+    (
+      await db.rolePermission.findMany({
+        where: { roleId },
+        select: { permission: { select: { key: true } } },
+      })
+    )
+      .map((row) => row.permission.key)
+      .sort();
+
+  it("gives a custom role and a user override the twins of what they held", async () => {
+    // The migration itself creates the quiz and video rows, so ask for a key
+    // only the seed writes.
+    if (!(await db.permission.findUnique({ where: { key: "lessons.view" } }))) await seed(db);
+    const key = (k: string) => db.permission.findUniqueOrThrow({ where: { key: k } });
+
+    // A role an admin made: the seed never rewrites it, so only the migration
+    // can keep its Quizzes and Videos screens.
+    const role = await db.role.create({
+      data: { key: "adr177_custom", name: "ADR-177 custom", level: 40 },
+    });
+    for (const k of ["lessons.view", "lessons.update", "employees.update"]) {
+      await db.rolePermission.create({
+        data: { roleId: role.id, permissionId: (await key(k)).id },
+      });
+    }
+    const user = await db.user.create({
+      data: { id: "adr177user", email: "adr177@staff.example", name: "ADR-177", userType: "STAFF" },
+    });
+    await db.userPermission.create({
+      data: { userId: user.id, permissionId: (await key("lessons.delete")).id, effect: "DENY" },
+    });
+
+    for (const statement of statements) await db.$executeRawUnsafe(statement);
+    for (const statement of statements) await db.$executeRawUnsafe(statement); // idempotent
+
+    expect(await roleKeys(role.id)).toEqual(
+      [
+        "employees.delete",
+        "employees.update",
+        "lessons.update",
+        "lessons.view",
+        "quizzes.update",
+        "quizzes.view",
+        "videos.update",
+        "videos.view",
+      ].sort(),
+    );
+    // Not held before, so not granted: no publish appears from nowhere.
+    expect(await roleKeys(role.id)).not.toContain("quizzes.publish");
+
+    const overrides = await db.userPermission.findMany({
+      where: { userId: user.id },
+      select: { effect: true, permission: { select: { key: true } } },
+    });
+    // A DENY on the lesson key is a DENY on its twins, or the split would
+    // hand this user a delete they were refused.
+    expect(overrides.map((row) => `${row.permission.key}:${row.effect}`).sort()).toEqual([
+      "lessons.delete:DENY",
+      "quizzes.delete:DENY",
+      "videos.delete:DENY",
+    ]);
+  });
+
+  it("files the old rows under the new cards", async () => {
+    const group = async (k: string) =>
+      (await db.permission.findUniqueOrThrow({ where: { key: k } })).groupName;
+    expect(await group("courses.view")).toBe("courses");
+    expect(await group("lessons.publish")).toBe("lessons");
+    expect(await group("roles.manage")).toBe("roles");
+    expect(await group("videos.delete")).toBe("videos");
   });
 });

@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { EMAIL_TEMPLATES, GLOBAL_EMAIL_VARIABLES, isEmailTemplateKey } from "@repo/contracts";
-import { isTranslatedAudience, loadEmailTemplate } from "@repo/core";
+import { isTranslatedAudience, loadEmailTemplate, ownTestAddress } from "@repo/core";
 import { getActiveLocales } from "@repo/i18n";
 import { can, requirePermission } from "@repo/rbac";
 import { richTextLabels } from "../../../../_components/editor-labels.ts";
@@ -26,7 +26,7 @@ export default async function EmailTemplatePage({
   if (!isEmailTemplateKey(key)) notFound();
 
   const t = await getTranslations("admin");
-  const [detail, locales, assistant] = await Promise.all([
+  const [detail, locales, assistant, testAddress] = await Promise.all([
     loadEmailTemplate(key),
     getActiveLocales(),
     // changes-46 #4: the toolbar writing assistant on the body, gated on the
@@ -35,6 +35,7 @@ export default async function EmailTemplatePage({
       entity: { type: "email_template", id: key },
       contentKeys: ["email.templates.update"],
     }),
+    ownTestAddress(subject),
   ]);
   if (!detail) notFound();
 
@@ -57,6 +58,7 @@ export default async function EmailTemplatePage({
       {...(assistant ? { ai: assistant } : {})}
       canUpdate={can(subject, "email.templates.update")}
       canTest={can(subject, "email.templates.test")}
+      testAddress={testAddress}
       labels={{
         backToList: t("email.backToTemplates"),
         heading: t("editorHeading.emailTemplate"),

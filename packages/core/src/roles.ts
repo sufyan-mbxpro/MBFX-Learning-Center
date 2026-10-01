@@ -3,7 +3,14 @@
 // level guard applies to editing a role's permissions the same as to
 // assigning it.
 import { revalidateTag } from "next/cache";
-import { db, permissionGroupOrder } from "@repo/db";
+import {
+  db,
+  isUnusedPermission,
+  permissionGroupOrder,
+  permissionGroupSection,
+  type PermissionSectionName,
+  type SubscriberStatus,
+} from "@repo/db";
 import { canAssignRole, type Subject } from "@repo/rbac";
 import { recordAudit } from "./index.ts";
 import { RoleLevelError } from "./users.ts";
@@ -19,7 +26,10 @@ export interface RoleMatrixRow {
 
 export interface PermissionGroup {
   groupName: string;
-  permissions: { key: string; label: string }[];
+  /** The sidebar heading this card sits under (ADR-177). */
+  section: PermissionSectionName;
+  /** `unused`: seeded, grantable, and checked by no code yet (ADR-177). */
+  permissions: { key: string; label: string; unused: boolean }[];
 }
 
 export async function loadRoleMatrix(): Promise<{
@@ -39,8 +49,8 @@ export async function loadRoleMatrix(): Promise<{
   ]);
 
   // Group order is the code registry, NOT the alphabet: the cards mirror the
-  // admin sidebar (People → Learning → Content → System). An unregistered
-  // group sorts last rather than disappearing.
+  // admin sidebar (Learning → Content → People → System, ADR-177). An
+  // unregistered group sorts last rather than disappearing.
   const groupNames = [...new Set(permissions.map((p) => p.groupName))].sort(
     (a, b) => permissionGroupOrder(a) - permissionGroupOrder(b) || a.localeCompare(b),
   );
@@ -55,9 +65,10 @@ export async function loadRoleMatrix(): Promise<{
     })),
     groups: groupNames.map((groupName) => ({
       groupName,
+      section: permissionGroupSection(groupName),
       permissions: permissions
         .filter((p) => p.groupName === groupName)
-        .map((p) => ({ key: p.key, label: p.label })),
+        .map((p) => ({ key: p.key, label: p.label, unused: isUnusedPermission(p.key) })),
     })),
   };
 }
@@ -393,7 +404,7 @@ export interface UserDetail {
   roleKeys: string[];
   overrides: { permissionKey: string; effect: string; reason: string | null }[];
   /** The newest consent row linked to this account, if any (ADR-080 #6). */
-  newsletter: { status: string; source: string; confirmedAt: Date | null } | null;
+  newsletter: { status: SubscriberStatus; source: string; confirmedAt: Date | null } | null;
   /** Unexpired sessions, newest first — the "Devices" tab (changes-45). */
   sessions: {
     id: string;

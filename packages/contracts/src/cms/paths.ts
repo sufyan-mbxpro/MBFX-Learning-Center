@@ -57,6 +57,10 @@ export const RESERVED_PATHS = [
   // has children, and a CMS page here would shadow the page an unsubscribe
   // link in an already-sent email points at.
   "newsletter",
+  // The announcement unsubscribe page (ADR-171). Reserved in the SAME PR that
+  // lands the route: a CMS page here would shadow the page every
+  // announcement's unsubscribe link points at.
+  "email",
   // The learner profile page (ADR-123). Reserved in the SAME PR that lands
   // the route, per the ADR-047 precedent.
   "account",

@@ -72,6 +72,8 @@ export interface CourseEditorLabels {
   updateCourse: string;
   saved: string;
   viewLive: string;
+  /** ADR-171: the header button that opens a new announcement for this course. */
+  announceCourse: string;
   openActions: string;
   softDelete: string;
   restore: string;

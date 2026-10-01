@@ -49,7 +49,10 @@ export const ADMIN_NAMESPACES = new Set(["admin", "cms"]);
  * is a pure file check with no database access, the same static/dynamic
  * trade-off `routing.ts` and `LOCALE_DIRECTION` already make and document.
  */
-export const ENFORCED_LOCALES = new Set(["en"]);
+// `ar` since ADR-166 (2026-09-28): its catalog is complete, so a public key
+// added to en.json without its Arabic now fails CI. Enforcing it does not
+// switch Arabic on — that is Settings → Translation → Languages (ADR-163).
+export const ENFORCED_LOCALES = new Set(["en", "ar"]);
 
 /** Flattens a nested messages object into dotted keys: {a:{b:1}} -> ["a.b"]. */
 export function flattenKeys(obj, prefix = "") {

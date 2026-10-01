@@ -70,12 +70,13 @@ Each seals one provider credential stored in the database. **Losing or
 changing one makes the stored credential unreadable** — back them up with the
 same care as the database.
 
-| Variable             | Seals                                                    |
-| -------------------- | -------------------------------------------------------- |
-| `EMAIL_SECRET_KEY`   | the SMTP password (`EmailTransport`)                     |
-| `MARKET_SECRET_KEY`  | the market data API key (`MarketProvider`)               |
-| `AI_SECRET_KEY`      | the AI provider API key (`AiProvider`)                   |
-| `CAPTCHA_SECRET_KEY` | Google's reCAPTCHA secret key (`CaptchaConfig`, ADR-156) |
+| Variable               | Seals                                                               |
+| ---------------------- | ------------------------------------------------------------------- |
+| `EMAIL_SECRET_KEY`     | the SMTP password (`EmailTransport`)                                |
+| `MARKET_SECRET_KEY`    | the market data API key (`MarketProvider`)                          |
+| `AI_SECRET_KEY`        | the AI provider API key (`AiProvider`)                              |
+| `CAPTCHA_SECRET_KEY`   | Google's reCAPTCHA secret key (`CaptchaConfig`, ADR-156)            |
+| `TRANSLATE_SECRET_KEY` | the Google Cloud Translation API key (`TranslateProvider`, ADR-160) |
 
 **Scheduled jobs**
 
@@ -128,8 +129,8 @@ edits. It creates the super-admin only when `SEED_ADMIN_PASSWORD` is set
 - creates the starting corpus — two courses per school on top of the demo
   course `db:seed` writes (so three each), two quizzes and six video topics —
   and attaches the committed images (`packages/core/seed-live/media/`) to every
-  seeded course, lesson, quiz, video topic, glossary topic and article that has
-  none. Each file is stored through `storeMedia()` into `UPLOADS_DIR`; run it
+  seeded course, lesson, quiz, video topic, glossary topic, article and
+  promotion that has none. Each file is stored through `storeMedia()` into `UPLOADS_DIR`; run it
   with the **same `UPLOADS_DIR`** the app uses (blank means
   `apps/web/storage/uploads`, which is what `next start` uses when blank);
 - applies `packages/core/seed-live/defaults.json` — theme, brand assets,
@@ -322,8 +323,9 @@ rate limit reads it first.
 
 ## 8. Scheduled jobs
 
-Set `CRON_SECRET`, restart, then schedule the three routes as described in
+Set `CRON_SECRET`, restart, then schedule the four routes as described in
 **[cron.md](./cron.md)** — `market-sync` and `publish-due` every 15 minutes,
+`translate` every 5 minutes (it fills in a newly switched-on language), and
 `housekeeping` daily (housekeeping is the one that matters for privacy).
 
 ## 9. Backups

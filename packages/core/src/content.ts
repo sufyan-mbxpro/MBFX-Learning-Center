@@ -11,10 +11,15 @@ import {
   isReservedGlossarySlug,
   type GlossaryFaqItemInput,
 } from "@repo/contracts";
-import { computeSourceHash, isTranslationOutdated } from "@repo/i18n";
 import { can, type Subject } from "@repo/rbac";
 import { parseVideoEmbedUrl, slugify } from "@repo/utils";
 import { recordAudit } from "./index.ts";
+import {
+  afterSourceSave,
+  enqueueEntityTranslations,
+  type TranslatableEntityType,
+} from "./translation-queue.ts";
+import { hashGlossaryTermSource, loadGlossaryTermSource } from "./glossary-source.ts";
 
 // ─── Status machine ──────────────────────────────────────────
 
@@ -138,6 +143,25 @@ export function effectivePublishedAt(row: {
 
 type ContentEntity = "courses" | "lessons" | "glossary" | "quizzes" | "videos";
 
+/**
+ * The translation job type each content entity enqueues on a status change
+ * (ADR-161 #1: every status change, not only publishing — ADR-071's scheduled
+ * items become visible with no code running). An entity is listed only once
+ * its handler exists, so no job is queued that could only fail.
+ */
+const ENTITY_TRANSLATION_TYPE: Partial<Record<ContentEntity, TranslatableEntityType>> = {
+  courses: "course",
+  lessons: "lesson",
+  glossary: "glossary_term",
+  videos: "video_topic",
+  quizzes: "quiz",
+};
+
+async function enqueueFor(entity: ContentEntity, entityId: string): Promise<void> {
+  const type = ENTITY_TRANSLATION_TYPE[entity];
+  if (type) await enqueueEntityTranslations(type, entityId);
+}
+
 const ENTITY_DELEGATE = {
   courses: () => db.course,
   lessons: () => db.lesson,
@@ -149,30 +173,17 @@ const ENTITY_DELEGATE = {
 /**
  * The permission key each entity publishes under.
  *
- * It was `${entity}.publish` until quizzes arrived, and quizzes are the reason
- * this map exists: ADR-058 #8 gates them on the LESSON keys, because there are
- * no `quizzes.*` keys in the seed registry and `changes-11-plan.md` §18 rule #3
- * forbids adding any. Interpolating the entity name would have looked for
- * `quizzes.publish`, which no role can hold, and every quiz publish would have
- * failed with a key that does not exist — the exact silent-403 bug
- * `check:permission-keys` was written to catch.
- *
- * The named cost is in the ADR: quiz authorship cannot be granted independently
- * of lesson authorship, and a `quizzes.*` group is the additive fix if that
- * ever matters.
+ * Quizzes and videos published on `lessons.publish` until ADR-177 gave them
+ * their own keys (superseding ADR-058 #8 and ADR-068 §3). The map stays a map
+ * rather than `${entity}.publish` so that every key is a literal the
+ * permission-key cross-check can read.
  */
 const ENTITY_PUBLISH_PERMISSION: Record<ContentEntity, string> = {
   courses: "courses.publish",
   lessons: "lessons.publish",
   glossary: "glossary.publish",
-  quizzes: "lessons.publish",
-  // ADR-068 §3 — the THIRD entity to publish on the lesson keys, after quizzes
-  // and for the same reason: there are no `videos.*` keys in the seed registry
-  // and adding five with no seeded role behind them is a silent 403 waiting to
-  // happen. The named cost is that video authorship cannot be granted apart
-  // from lesson authorship; this map is the one line that fixes it if it ever
-  // matters.
-  videos: "lessons.publish",
+  quizzes: "quizzes.publish",
+  videos: "videos.publish",
 };
 
 /**
@@ -235,6 +246,7 @@ export async function transitionContentStatus(
       after: { status: to, ...(scheduledFor ? { scheduledFor: scheduledFor.toISOString() } : {}) },
     },
   });
+  await enqueueFor(entity, entityId);
   revalidateTag("content", { expire: 0 });
 }
 
@@ -278,6 +290,7 @@ export async function publishDueContent(now: Date = new Date()): Promise<number>
       entityType: entity,
       changes: { after: { count: due.length, ids: due.map((r) => r.id) } },
     });
+    for (const row of due) await enqueueFor(entity, row.id);
     total += due.length;
   }
   if (total > 0) revalidateTag("content", { expire: 0 });
@@ -554,35 +567,6 @@ function cleanGlossaryProse(input: {
 }
 
 /**
- * What a source edit is measured against (ADR-069 §2).
- *
- * ALL FOUR prose fields, in a fixed order. Before ADR-069 this covered only
- * `simpleExplanation + detailedExplanation`, which was correct while those
- * were the only two fields with a write path. Now that the editor writes the
- * advanced explanation and the worked example too, leaving them out would mean
- * an author could rewrite a term's entire worked example and no translation
- * would ever be marked OUTDATED — the exact failure the sourceHash exists to
- * prevent.
- *
- * A NUL separator rather than bare concatenation: without it, moving a
- * sentence from the end of one field to the start of the next produces an
- * identical hash and the translations silently stay "current".
- */
-function glossarySourceMaterial(prose: {
-  simpleExplanation: string;
-  detailedExplanation: string | null;
-  advancedExplanation: string | null;
-  exampleScenario: string | null;
-}): string {
-  return [
-    prose.simpleExplanation,
-    prose.detailedExplanation ?? "",
-    prose.advancedExplanation ?? "",
-    prose.exampleScenario ?? "",
-  ].join("\u0000");
-}
-
-/**
  * The term-level fields, as the editor sends them.
  *
  * Every field optional, and `undefined` means UNTOUCHED while `null` means
@@ -648,9 +632,11 @@ export async function saveGlossaryTerm(
     select: { slug: true },
   });
 
-  const sourceHash = isSource
-    ? computeSourceHash(glossarySourceMaterial(clean))
-    : await currentGlossarySourceHash(termId, defaultLocale);
+  // What a source edit is measured against (ADR-069 §2, widened in Phase 5 to
+  // everything the job translates — `glossary-source.ts`). A translation
+  // records the hash of the English it was made from; the English row's own
+  // hash is read back after the write, below.
+  const translatedFrom = isSource ? null : await currentGlossarySourceHash(termId, defaultLocale);
 
   const translationData = {
     term: translation.term,
@@ -662,7 +648,7 @@ export async function saveGlossaryTerm(
     ...(translation.faq === undefined ? {} : { faq: translation.faq }),
     seoTitle: translation.seoTitle ?? null,
     seoDescription: translation.seoDescription ?? null,
-    sourceHash,
+    ...(isSource ? {} : { sourceHash: translatedFrom }),
     // changes-29 B3: MACHINE_TRANSLATED only while the AI text is untouched;
     // any other save, a human's review included, writes TRANSLATED.
     translationStatus: translation.machineTranslated
@@ -690,23 +676,22 @@ export async function saveGlossaryTerm(
       update: translationData,
       create: { termId, locale: translation.locale, ...translationData },
     });
-
-    // Source edit → flip stale siblings OUTDATED (Module 06's
-    // isTranslationOutdated, applied to real rows).
-    if (isSource) {
-      const siblings = await tx.glossaryTermTranslation.findMany({
-        where: { termId, locale: { not: defaultLocale } },
-        select: { id: true, sourceHash: true },
-      });
-      const stale = siblings.filter((s) => isTranslationOutdated(sourceHash!, s.sourceHash));
-      if (stale.length > 0) {
-        await tx.glossaryTermTranslation.updateMany({
-          where: { id: { in: stale.map((s) => s.id) } },
-          data: { translationStatus: TranslationStatus.OUTDATED },
-        });
-      }
-    }
   });
+
+  // Source edit: a person's translation whose English moved on becomes
+  // OUTDATED and a machine one is re-translated (ADR-161 #3). The old sweep
+  // flipped every stale sibling, machine rows included, which under ADR-159
+  // would have made stale machine text indexable.
+  if (isSource) {
+    const hash = await currentGlossarySourceHash(termId, defaultLocale);
+    if (hash) {
+      await db.glossaryTermTranslation.updateMany({
+        where: { termId, locale: defaultLocale },
+        data: { sourceHash: hash },
+      });
+    }
+    await afterSourceSave("glossary_term", termId, hash, defaultLocale);
+  }
 
   // Slug change → 301 from the old public path (SEO-preserving detail).
   if (existing && existing.slug !== slug) {
@@ -745,17 +730,8 @@ async function currentGlossarySourceHash(
   termId: string,
   defaultLocale: string,
 ): Promise<string | null> {
-  const source = await db.glossaryTermTranslation.findUnique({
-    where: { termId_locale: { termId, locale: defaultLocale } },
-    select: {
-      simpleExplanation: true,
-      detailedExplanation: true,
-      advancedExplanation: true,
-      exampleScenario: true,
-    },
-  });
-  if (!source) return null;
-  return computeSourceHash(glossarySourceMaterial(source));
+  const source = await loadGlossaryTermSource(db, termId, defaultLocale);
+  return source ? hashGlossaryTermSource(source) : null;
 }
 
 /**
@@ -879,6 +855,7 @@ export async function duplicateGlossaryTerm(actor: Subject, termId: string): Pro
     entityId: copy.id,
     changes: { after: { sourceTermId: termId } },
   });
+  await enqueueEntityTranslations("glossary_term", copy.id);
   revalidateTag("content", { expire: 0 });
   return copy.id;
 }
@@ -900,6 +877,7 @@ export async function setGlossaryTermDeleted(
     entityType: "glossaryTerm",
     entityId: termId,
   });
+  if (!deleted) await enqueueEntityTranslations("glossary_term", termId);
   revalidateTag("content", { expire: 0 });
 }
 

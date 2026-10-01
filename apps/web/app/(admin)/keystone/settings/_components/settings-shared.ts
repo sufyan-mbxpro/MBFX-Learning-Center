@@ -41,6 +41,9 @@ export function emailSectionTabs(subject: Subject, t: TranslateHas): SettingsSec
           { href: EMAIL_ROOT, label: t("email.tabSender"), exact: true },
           { href: `${EMAIL_ROOT}/delivery`, label: t("email.tabDelivery") },
           { href: `${EMAIL_ROOT}/newsletter`, label: t("email.tabNewsletter") },
+          // ADR-171: the announcement runner's pacing and the Inactive card's
+          // threshold. Registry settings under `settings.update`, like Sender.
+          { href: `${EMAIL_ROOT}/announcements`, label: t("email.tabAnnouncements") },
         ]
       : []),
     ...(can(subject, "email.templates.view")
@@ -77,6 +80,44 @@ export function aiSectionTabs(subject: Subject, t: TranslateHas): SettingsSectio
     ...(providers ? [{ href: `${AI_ROOT}/providers`, label: t("ai.navProviders") }] : []),
   ];
 }
+
+const TRANSLATION_ROOT = "/keystone/settings/translation";
+
+/**
+ * Translation's tabs (ADR-163 #1): Overview · Languages · Review · Provider.
+ * Built from what the viewer holds, like the AI tabs. The Provider tab holds
+ * the sealed Google key, so it stays `translations.provider.manage`
+ * (super_admin only, ADR-160); switching a language on is `locales.manage`.
+ */
+export function translationSectionTabs(subject: Subject, t: TranslateHas): SettingsSectionTab[] {
+  const view = can(subject, "translations.view");
+  return [
+    ...(view ? [{ href: TRANSLATION_ROOT, label: t("translate.tabOverview"), exact: true }] : []),
+    ...(can(subject, "locales.manage")
+      ? [{ href: `${TRANSLATION_ROOT}/languages`, label: t("translate.tabLanguages") }]
+      : []),
+    ...(view ? [{ href: `${TRANSLATION_ROOT}/review`, label: t("translate.tabReview") }] : []),
+    // Both keys, as the save needs (ADR-165 #8).
+    // The site's fixed public strings, any language (ADR-178 #4).
+    ...(can(subject, "translations.update")
+      ? [{ href: `${TRANSLATION_ROOT}/interface-text`, label: t("translate.tabInterfaceText") }]
+      : []),
+    ...(can(subject, "settings.update") && can(subject, "translations.update")
+      ? [{ href: `${TRANSLATION_ROOT}/site-text`, label: t("translate.tabSiteText") }]
+      : []),
+    ...(can(subject, "translations.provider.manage")
+      ? [{ href: `${TRANSLATION_ROOT}/provider`, label: t("translate.tabProvider") }]
+      : []),
+  ];
+}
+
+/** The keys that open any Translation tab. */
+export const TRANSLATION_SECTION_KEYS = [
+  "translations.view",
+  "translations.update",
+  "locales.manage",
+  "translations.provider.manage",
+] as const;
 
 /** The keys that open any AI tab — the section's gate and its nav entry's. */
 export const AI_SECTION_KEYS = [
@@ -176,6 +217,10 @@ export async function loadSettingsIndex(subject: Subject, t: TranslateHas): Prom
     ...(can(subject, "market.providers.manage")
       ? [{ href: "/keystone/settings/market", label: t("marketData.providerTitle") }]
       : []),
+    // ADR-163: automatic translation as ONE entry, landing on the first tab
+    // the viewer can open — Overview for an editor, Provider alone for a role
+    // holding only the key's permission.
+    ...sectionEntry(translationSectionTabs(subject, t), TRANSLATION_ROOT, t("translate.title")),
     ...(can(subject, "social.manage")
       ? [{ href: "/keystone/settings/social", label: t("social") }]
       : []),
@@ -197,13 +242,14 @@ export async function loadSettingsIndex(subject: Subject, t: TranslateHas): Prom
  * no keys: it is the logos and favicon, which moved here from the theme
  * editor and save through their own actions. `captcha` holds none either: it
  * is Google reCAPTCHA v3 (ADR-156), whose secret is write-only and sealed, so
- * it is its own form and not a registry setting. A tab's label is
+ * it is its own form and not a registry setting. Nor does `reviews`: one row
+ * per review platform (ADR-169), saved through its own action. A tab's label is
  * `admin.settingsTabs.<id>`.
  */
 export const SETTINGS_GROUP_TABS: Record<string, { id: string; keys: readonly string[] }[]> = {
   general: [
     { id: "site", keys: ["site.name", "site.tagline", "site.description"] },
-    { id: "contact", keys: ["site.contactEmail", "site.supportEmail", "site.reviewsUrl"] },
+    { id: "contact", keys: ["site.contactEmail", "site.supportEmail"] },
     {
       id: "regional",
       keys: ["site.defaultLocale", "site.defaultTimezone", "site.defaultThemeMode"],
@@ -217,6 +263,9 @@ export const SETTINGS_GROUP_TABS: Record<string, { id: string; keys: readonly st
       ],
     },
     { id: "captcha", keys: [] },
+    // ADR-169: the review platforms behind "Share your experience" — its own
+    // form over the `review_platforms` table, like reCAPTCHA's.
+    { id: "reviews", keys: [] },
     { id: "branding", keys: [] },
   ],
 };

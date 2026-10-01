@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { localizedPath, titleTemplate, titleFrom } from "../../../_lib/seo.ts";
+import { titleTemplate, titleFrom, staticPageAlternates } from "../../../_lib/seo.ts";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
@@ -39,7 +39,7 @@ export async function generateMetadata({
   return {
     title: titleFrom(template, t("index.title")),
     description: t("index.lead"),
-    alternates: { canonical: localizedPath(locale, ROUTE_PATHS.tools) },
+    alternates: await staticPageAlternates(locale, ROUTE_PATHS.tools),
   };
 }
 
@@ -77,7 +77,8 @@ export default async function ToolsPage({ params }: PageProps<"/[locale]/tools">
   const cards: ToolCard[] = tools.map((tool) => ({
     key: tool.key,
     href: toolPath(tool.key),
-    title: tool.title,
+    // ADR-168: an untranslated tool is named from the catalog, never by its key.
+    title: tool.title ?? t(`names.${tool.key}`),
     tagline: tool.tagline,
     Icon: TOOL_ICONS[tool.key],
     // What a tool needs, said plainly: five of the eight answer with no

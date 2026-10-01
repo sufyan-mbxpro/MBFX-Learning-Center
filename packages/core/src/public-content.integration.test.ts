@@ -195,7 +195,7 @@ describe("saveGlossaryTranslation machine flag", () => {
 });
 
 describe("loadGlossaryTermBySlug reading language", () => {
-  it("reads a human RTL translation by ?lang=, keeps the URL's slug, and ignores a machine one", async () => {
+  it("reads a translation by ?lang= (a machine one too, ADR-159), keeping the URL's slug", async () => {
     const termId = await publishedTerm("Spread");
     const { slug } = await db.glossaryTermTranslation.findFirstOrThrow({
       where: { termId, locale: "en" },
@@ -228,9 +228,14 @@ describe("loadGlossaryTermBySlug reading language", () => {
     expect(reading?.readingLocale).toBe("ar");
     expect(reading?.contentLocale).toBe("ar");
     expect(reading?.contentDirection).toBe("rtl");
-    expect(reading?.readingLanguages.map((l) => l.locale)).toEqual(["en", "ar"]);
+    // ADR-159 #1: machine translations are readable on every path — one rule.
+    expect(reading?.readingLanguages.map((l) => l.locale)).toEqual(["en", "es", "ar"]);
+    const machine = await pub.loadGlossaryTermBySlug("en", slug, "es");
+    expect(machine?.term).toBe("Diferencial");
+    expect(machine?.readingLocale).toBe("es");
+    expect(machine?.slug).toBe(slug);
 
-    for (const lang of [undefined, "es", "fr"]) {
+    for (const lang of [undefined, "fr"]) {
       const view = await pub.loadGlossaryTermBySlug("en", slug, lang);
       expect(view?.term).toBe("Spread");
       expect(view?.readingLocale).toBeNull();

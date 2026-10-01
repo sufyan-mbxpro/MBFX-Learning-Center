@@ -10,12 +10,10 @@ import { formatDateTime } from "@repo/utils";
 
 // Video topic admin list (changes-16 PR 5, ADR-068).
 //
-// **Gated on `lessons.view`, not `videos.view`** — ADR-068 §3, the third time
-// this repo has refused to add keys for a new content type. There is no
-// `videos.*` group in the seed registry, so a key like that would be one no
-// role can hold and every check would silently 403.
+// Gated on `videos.*` since ADR-177. Until then videos borrowed the lesson
+// keys (ADR-068 §3), so video authorship could not be granted on its own.
 export default async function VideosAdminPage() {
-  const subject = await requirePermission("lessons.view");
+  const subject = await requirePermission("videos.view");
   const [t, rows, categories] = await Promise.all([
     getTranslations("admin"),
     // The trash (changes-49): deleted topics load too, and the table hides
@@ -74,7 +72,7 @@ export default async function VideosAdminPage() {
       {/* The Categories button went with changes-48 #3: categories are a
           TAB of this section now, so a link to them here is the strip twice. */}
       <HeaderActions>
-        {can(subject, "lessons.create") && (
+        {can(subject, "videos.create") && (
           <NewVideoTopicDialog
             categories={categoryOptions}
             labels={{
@@ -114,7 +112,7 @@ export default async function VideosAdminPage() {
         statusKeys={Object.keys(statuses)}
         trackKeys={[...LEARN_TRACK_KEYS]}
         categories={categoryOptions}
-        canDelete={can(subject, "lessons.delete")}
+        canDelete={can(subject, "videos.delete")}
         labels={labels}
       />
     </>

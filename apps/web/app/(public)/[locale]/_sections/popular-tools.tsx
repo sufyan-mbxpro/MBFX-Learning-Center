@@ -68,7 +68,7 @@ export async function PopularTools({ locale, limit }: SectionProps) {
                         href={toolPath(tool.key)}
                         className="font-medium transition-colors duration-(--duration-base) after:absolute after:inset-0 group-hover/tool:text-primary-interactive"
                       >
-                        {tool.title}
+                        {tool.title ?? t(`names.${tool.key}`)}
                       </Link>
                       {tool.tagline && (
                         <p className="line-clamp-2 text-sm text-muted-foreground">{tool.tagline}</p>

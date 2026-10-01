@@ -28,7 +28,7 @@ function roleArrayLiterals(source: string): string[] {
 }
 
 describe("the exclusion list", () => {
-  it("holds exactly the five keys the ADRs name", () => {
+  it("holds exactly the six keys the ADRs name", () => {
     // A sixth entry is a privilege decision and needs its own ADR — this
     // failing is the prompt to write one, not to update the expectation. The
     // fifth arrived that way: ADR-098 argued `ai.providers.manage` here from
@@ -39,7 +39,15 @@ describe("the exclusion list", () => {
       "users.impersonate",
       "email.settings.manage",
       "ai.providers.manage",
+      "translations.provider.manage",
     ]);
+  });
+
+  it("excludes translations.provider.manage but not the translation keys (ADR-160)", () => {
+    expect(isSuperAdminOnlyPermission("translations.provider.manage")).toBe(true);
+    for (const key of ["translations.view", "translations.update", "translations.approve"]) {
+      expect(isSuperAdminOnlyPermission(key)).toBe(false);
+    }
   });
 
   it("excludes ai.providers.manage but none of its three siblings (ADR-098)", () => {

@@ -2,12 +2,12 @@
 
 // Client half of the server-driven users table (changes-01 rework):
 // type/status filters pushed into the URL, status badges, and a per-row
-// actions menu (view / activate / suspend / reset password) — every
+// actions menu (view / send email / activate / suspend / reset password) — every
 // destructive choice behind a confirmation popup, every item gated by the
 // flags the server computed from the subject's real permissions.
 import * as React from "react";
 import Link from "next/link";
-import { MoreHorizontal, Users } from "lucide-react";
+import { Mail, MoreHorizontal, Users } from "lucide-react";
 import type { ColumnDef, PaginationState, SortingState, Updater } from "@tanstack/react-table";
 import { Button } from "@repo/ui/components/button";
 import { Checkbox } from "@repo/ui/components/checkbox";
@@ -26,6 +26,8 @@ import { setUserStatusAction } from "../_actions/user-actions.ts";
 import { AdminCombobox } from "../_components/combobox.tsx";
 import { FilterBarRow } from "@repo/ui/components/filter-bar";
 import { StatusBadge, USER_STATUS_TONE, statusTone } from "../_components/status-badge.tsx";
+import { SendEmailDialog } from "../_components/send-email-dialog.tsx";
+import type { RichTextLabels } from "../_components/rich-text-editor.tsx";
 import { useServerAction } from "../_hooks/use-server-action.ts";
 import { useUrlFilters, useUrlFiltersPending } from "../_hooks/use-url-filters.ts";
 
@@ -43,6 +45,7 @@ export interface UserTableRow {
 // Plain strings only — this crosses the RSC boundary, so the function-
 // valued DataTableLabels entries are constructed HERE, client-side.
 export interface UsersTableLabels {
+  sendEmail: string;
   search: string;
   columns: string;
   export: string;
@@ -95,6 +98,8 @@ export function UsersTable({
   status,
   canUpdate,
   canResetPassword,
+  canEmail,
+  editorLabels,
   labels,
 }: {
   rows: UserTableRow[];
@@ -108,6 +113,9 @@ export function UsersTable({
   status: string;
   canUpdate: boolean;
   canResetPassword: boolean;
+  /** `announcements.direct` — the one-to-one "Send email" (ADR-172 #7). */
+  canEmail: boolean;
+  editorLabels: RichTextLabels;
   labels: UsersTableLabels;
 }) {
   const { run } = useServerAction();
@@ -118,6 +126,7 @@ export function UsersTable({
     status: "ACTIVE" | "SUSPENDED";
   } | null>(null);
   const [resetTarget, setResetTarget] = React.useState<UserTableRow | null>(null);
+  const [emailTarget, setEmailTarget] = React.useState<UserTableRow | null>(null);
 
   const tableLabels: DataTableLabels = {
     search: labels.search,
@@ -222,6 +231,12 @@ export function UsersTable({
             <DropdownMenuItem
               render={<Link href={`/keystone/users/${row.original.id}`}>{labels.view}</Link>}
             />
+            {canEmail && (
+              <DropdownMenuItem onClick={() => setEmailTarget(row.original)}>
+                <Mail aria-hidden data-icon="inline-start" />
+                {labels.sendEmail}
+              </DropdownMenuItem>
+            )}
             {canUpdate && (
               <>
                 <DropdownMenuSeparator />
@@ -364,6 +379,16 @@ export function UsersTable({
         }}
       />
 
+      {emailTarget && (
+        <SendEmailDialog
+          recipient={{ kind: "user", id: emailTarget.id }}
+          open
+          onOpenChange={(open) => {
+            if (!open) setEmailTarget(null);
+          }}
+          editorLabels={editorLabels}
+        />
+      )}
       {resetTarget && (
         <ResetPasswordDialog
           userId={resetTarget.id}

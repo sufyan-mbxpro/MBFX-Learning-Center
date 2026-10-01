@@ -51,7 +51,9 @@ const mediaTagSchema = z.string().trim().toLowerCase().min(1).max(40);
  * Removing one needs a superseding ADR: the key is embedded in `folder`, so
  * dropping it strands every asset filed under it.
  */
-export const MEDIA_CATEGORIES = ["news", "learn", "brand", "general"] as const;
+// `promo` — ADR-167: promotion images (changes-52).
+// `email` — ADR-172 #10: images placed in email designs and custom emails.
+export const MEDIA_CATEGORIES = ["news", "learn", "brand", "promo", "email", "general"] as const;
 export const mediaCategorySchema = z.enum(MEDIA_CATEGORIES);
 export type MediaCategory = z.infer<typeof mediaCategorySchema>;
 
@@ -145,6 +147,8 @@ export const mediaSourceTypeSchema = z.enum([
   "QUIZ",
   // ADR-133 — a glossary topic's cover.
   "GLOSSARY_TOPIC",
+  // ADR-167 — a promotion's image.
+  "PROMOTION",
 ]);
 export type MediaSourceType = z.infer<typeof mediaSourceTypeSchema>;
 

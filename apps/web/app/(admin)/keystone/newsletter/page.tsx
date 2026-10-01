@@ -8,14 +8,14 @@ import { Info } from "lucide-react";
 import { getActiveLocales } from "@repo/i18n";
 import { formatDate, humanizeKey } from "@repo/utils";
 import { AdminPage } from "../_components/admin-page.tsx";
+import { richTextLabels } from "../_components/editor-labels.ts";
 import { SubscribersTable, type SubscribersLabels } from "./subscribers-table.tsx";
 
 // Newsletter subscribers (Module 17, ADR-080 #7).
 //
-// **A list, not a CRM.** It lists, filters, exports and erases, and it says
-// out loud that it cannot send — ADR-080 #8 puts campaigns behind the
-// changes-12 worker, and a disabled "Compose" button would promise a screen
-// that does not exist.
+// **A list, not a CRM.** It lists, filters, exports and erases. Emailing the
+// list is Email campaigns' job (ADR-171, ADR-172 superseded ADR-080 #8), and
+// the notice below points there; one subscriber can be emailed from a row.
 //
 // **Filters are URL state, not client state**, for the delivery log's reason:
 // the list pages by keyset cursor, so filtering has to be a REQUEST. A client
@@ -53,6 +53,7 @@ export default async function NewsletterPage({ searchParams }: PageProps<"/keyst
   const canExport = can(subject, "newsletter.export");
 
   const labels: SubscribersLabels = {
+    sendEmail: t("announcements.direct.open"),
     search: t("newsletterSearch"),
     columns: t("columns"),
     export: t("export"),
@@ -117,10 +118,8 @@ export default async function NewsletterPage({ searchParams }: PageProps<"/keyst
         <MetricCard label={t("newsletterUnsubscribed")} value={String(counts.unsubscribed)} />
       </div>
 
-      {/* ADR-080 #8, said rather than implied. Signup, confirmation and
-          unsubscribe all work; composing and sending needs the background
-          worker, and leaving that unexplained invites someone to look for a
-          Compose button that was never built. */}
+      {/* Where sending lives, said rather than implied: this screen has no
+          Compose button, and without the pointer someone would look for one. */}
       <Alert variant="info">
         <Info aria-hidden />
         <AlertTitle>{t("newsletterNoCampaigns")}</AlertTitle>
@@ -153,6 +152,8 @@ export default async function NewsletterPage({ searchParams }: PageProps<"/keyst
         locales={locales.map((l) => ({ value: l.code, label: `${l.name} (${l.nativeName})` }))}
         canManage={canManage}
         canExport={canExport}
+        canEmail={can(subject, "announcements.direct")}
+        editorLabels={richTextLabels(t)}
         labels={labels}
       />
     </AdminPage>

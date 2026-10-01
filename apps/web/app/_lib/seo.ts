@@ -118,6 +118,27 @@ export async function alternatesFor({
 }
 
 /**
+ * `alternates` for a page that exists in EVERY served locale: a route file
+ * whose words are catalog strings (`/support`, `/tools`, the learn and
+ * glossary indexes…). Canonical to itself, and hreflang to the same path in
+ * each served locale — the homepage's rule, which it had alone.
+ *
+ * A catalog page cannot be half-translated the way a content row can:
+ * `ENFORCED_LOCALES` refuses a served locale whose public catalog is
+ * incomplete (ADR-163), so every locale listed here has the page's words.
+ */
+export async function staticPageAlternates(
+  locale: string,
+  path: string,
+): Promise<NonNullable<Metadata["alternates"]>> {
+  const servable = await getServableLocales();
+  return alternatesFor({
+    canonical: localizedPath(locale, path),
+    languages: servable.map((code) => ({ locale: code, href: localizedPath(code, path) })),
+  });
+}
+
+/**
  * A paginated listing's canonical: its own URL, page number included.
  *
  * Page 3 of an archive is a different set of articles from page 1, so it
@@ -137,14 +158,17 @@ export function pagedCanonical(path: string, page: number): string {
  * A search (`?q=`) is not a page to index: every query would be its own thin
  * listing. It stays `follow`, so the articles it lists still count.
  */
-export function listingMetadata(
+export async function listingMetadata(
   locale: string,
   path: string,
   page: number,
   query?: string,
-): Pick<Metadata, "alternates" | "robots"> {
+): Promise<Pick<Metadata, "alternates" | "robots">> {
+  // hreflang on the listing's FIRST page only: page 3 in English and page 3
+  // in Arabic list different articles, so they are not each other's version.
+  const first = page === 0 && !query ? await staticPageAlternates(locale, path) : null;
   return {
-    alternates: { canonical: pagedCanonical(localizedPath(locale, path), page) },
+    alternates: first ?? { canonical: pagedCanonical(localizedPath(locale, path), page) },
     ...(query ? { robots: { index: false, follow: true } } : {}),
   };
 }

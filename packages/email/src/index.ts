@@ -18,6 +18,7 @@ export {
 
 export {
   TRANSPORT_ID,
+  classifySendError,
   loadTransportDriver,
   logDriver,
   sendgridDriver,
@@ -47,18 +48,35 @@ export {
   renderEmail,
   type EmailShellOptions,
   type RenderEmailInput,
+  type RenderableEmailKey,
   type RenderedEmail,
 } from "./render.ts";
 
 export {
   DEFAULT_EMAIL_LOCALE,
+  createSendSession,
   emailTemplateKeys,
   loadEmailRenderContext,
   sendTemplatedEmail,
   verifyTransport,
   SANDBOX_REASON,
+  type DeliveryFailure,
   type DeliveryResult,
   type DeliveryStatus,
+  type SendSession,
+  type SendSessionOptions,
+  type SessionSendInput,
+  type MessageContent,
   type EmailRenderContext,
   type SendTemplatedEmailInput,
 } from "./send.ts";
+
+export {
+  LinkSecretMissingError,
+  announcementUnsubscribeUrls,
+  hasLinkSecret,
+  signUnsubscribeToken,
+  verifyUnsubscribeToken,
+  type UnsubscribeSubject,
+} from "./links.ts";
+export { listUnsubscribeHeaders, type UnsubscribeLinks } from "./unsubscribe-headers.ts";

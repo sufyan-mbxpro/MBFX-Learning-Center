@@ -162,8 +162,6 @@
     "practiceQuotesLabel": "What learners say",
     "practiceQuotesPrevious": "Previous quote",
     "practiceQuotesNext": "Next quote",
-    "practiceQuotesPause": "Pause the quotes",
-    "practiceQuotesPlay": "Play the quotes",
     "practiceToolsTitle": "Put the numbers to work",
     "practiceToolsLead": "Size a position, price a pip, check when a session opens — the same arithmetic every desk does before it trades.",
     "practiceToolsCta": "Open the tools",
@@ -232,7 +230,11 @@
     "reviews": {
       "title": "Share Your MBFX Experience",
       "lead": "Your feedback helps us improve and helps other traders make informed decisions. It only takes a minute.",
-      "cta": "Review us on Trustpilot",
+      "platforms": {
+        "trustpilot": "Review us on Trustpilot",
+        "google": "Review us on Google",
+        "facebook": "Review us on Facebook"
+      },
       "newTab": "(opens in a new tab)"
     }
   },
@@ -330,6 +332,16 @@
       "terms": "Terms",
       "privacy": "Privacy",
       "agreement": "Agreement"
+    },
+    "columns": {
+      "main": "Main navigation",
+      "footer_learn": "Learn",
+      "footer_markets": "News & Markets",
+      "footer_company": "Company",
+      "footer_learn_forex": "Learn Forex",
+      "footer_learn_crypto": "Learn Crypto",
+      "footer_tools": "Calculators",
+      "footer_tools_markets": "Market data"
     }
   },
   "admin": {
@@ -632,7 +644,8 @@
       "invalidUrl": "Enter a full URL, starting with https://.",
       "invalidFormat": "This isn't in the expected format.",
       "invalid": "Check this value.",
-      "formInvalid": "Some fields need attention before this can be saved."
+      "formInvalid": "Some fields need attention before this can be saved.",
+      "missingToken": "Keep every placeholder in curly braces that the English has."
     },
     "columns": "Columns",
     "export": "Export CSV",
@@ -747,7 +760,41 @@
       "regional": "Language & region",
       "security": "Security",
       "captcha": "reCAPTCHA",
+      "reviews": "Reviews",
       "branding": "Branding"
+    },
+    "reviewPlatforms": {
+      "section": "Review platforms",
+      "sectionDescription": "Choose where the “Share your experience” band on tool pages and Support sends visitors to leave a review. Turn on one or more: each shows as its own button, in the order below.",
+      "platforms": {
+        "trustpilot": "Trustpilot",
+        "google": "Google",
+        "facebook": "Facebook (Meta)"
+      },
+      "enabled": "Show the {platform} button",
+      "enabledHint": "Visitors who click it open the review page in a new tab.",
+      "identifier": {
+        "trustpilot": "Business domain",
+        "google": "Place ID",
+        "facebook": "Page name or ID"
+      },
+      "identifierHint": {
+        "trustpilot": "Your domain as it is listed on Trustpilot, for example mbfx.co.",
+        "google": "Find it with Google's Place ID Finder, or in your Business Profile. It usually starts with ChIJ.",
+        "facebook": "The name in your Page's address, for example mbfxofficial. Reviews must be turned on in the Page's settings."
+      },
+      "customUrl": "Custom link",
+      "customUrlHint": "Replaces the address built from the field beside it, for example the review link your Google Business Profile gives you.",
+      "preview": "Visitors go to:",
+      "noLink": "No link yet, so this button will not show.",
+      "test": "Test link",
+      "moveUp": "Move {platform} up",
+      "moveDown": "Move {platform} down",
+      "status": {
+        "on": "On",
+        "off": "Off",
+        "needsLink": "Needs a link"
+      }
     },
     "captcha": {
       "section": "Google reCAPTCHA",
@@ -780,6 +827,331 @@
         "checkFailed": "Google did not accept a check with these keys. Make sure both keys come from the same Google key, that its type matches the Type above, and that this domain is listed on it.",
         "tokenUnavailable": "Your browser could not run the reCAPTCHA check. Check the site key, and turn off any content blocker for this site.",
         "unchecked": "Tick the reCAPTCHA box below the keys, then save again."
+      }
+    },
+    "translate": {
+      "title": "Translation",
+      "description": "Automatic translation of the public site: how much of each language is done, which languages are live, what needs a person, and the Google Cloud Translation key.",
+      "section": "Google Cloud Translation",
+      "sectionDescription": "New and changed content is translated automatically with Google Cloud Translation (Basic). Machine translations are shown to readers and kept out of search results until someone saves them.",
+      "enabled": "Translate automatically",
+      "enabledHint": "Saving with this on first runs a test translation with the key. It will not switch on if the test fails.",
+      "apiKey": "Google Cloud Translation API key",
+      "apiKeyHint": "From Google Cloud Console → APIs & Services → Credentials. Restrict the key to the Cloud Translation API, and to this server's address if your hosting allows it.",
+      "apiKeySaved": "A key is saved. Leave blank to keep it, or enter a new one to replace it.",
+      "showKey": "Show key",
+      "hideKey": "Hide key",
+      "price": "Price per million characters (USD)",
+      "priceHint": "Used to estimate spend. Check Google's current price for Cloud Translation Basic.",
+      "budget": "Monthly character budget",
+      "budgetHint": "Automatic translation pauses when this is reached, and resumes next month. Leave blank for no limit.",
+      "test": "Test connection",
+      "testOk": "The key works.",
+      "lastTested": "Last test:",
+      "never": "Never",
+      "usageTitle": "This month",
+      "usageDescription": "Characters sent to Google since the first of the month (UTC). Costs are estimated.",
+      "usageCharacters": "Characters",
+      "usageCost": "Estimated cost",
+      "usageRequests": "Requests",
+      "usageRemaining": "Budget remaining",
+      "noBudget": "No limit",
+      "sealKeyMissingTitle": "TRANSLATE_SECRET_KEY is not set",
+      "sealKeyMissingBody": "The key is stored encrypted, and the server needs TRANSLATE_SECRET_KEY in its environment to do that. Set it (32 random bytes, base64) and restart.",
+      "refusals": {
+        "sealKeyMissing": "The key cannot be stored until TRANSLATE_SECRET_KEY is set on the server.",
+        "keyRequired": "Enter an API key first."
+      },
+      "reasons": {
+        "not_configured": "Automatic translation is off, or no key is saved.",
+        "seal_unavailable": "The saved key cannot be opened. Check TRANSLATE_SECRET_KEY on the server, then enter the key again.",
+        "auth_failed": "Google refused the key. Check that it is correct, that the Cloud Translation API is enabled for its project, and that its restrictions allow this server.",
+        "quota_exceeded": "The Google project's translation quota is used up.",
+        "rate_limited": "Google is limiting requests right now. Try again in a minute.",
+        "budget_exceeded": "This month's character budget is reached. Raise it, or wait for next month.",
+        "bad_request": "Google rejected the request.",
+        "provider_error": "Google Translate had an error. Try again later.",
+        "network_error": "Google Translate could not be reached.",
+        "internal_error": "Something went wrong on our side while translating. The failure is logged; try Sync again, and report it if it repeats."
+      },
+      "editor": {
+        "action": "Translate from {source} with Google",
+        "confirmTitle": "Replace this translation?",
+        "confirmDescription": "This language already has text a person wrote. Google's translation will replace it in the form; nothing is saved until you press Save.",
+        "confirm": "Replace",
+        "working": "Translating…",
+        "done": "Translated with Google. Review it, then Save.",
+        "failed": "Could not translate"
+      },
+      "tabOverview": "Overview",
+      "tabLanguages": "Languages",
+      "tabReview": "Review",
+      "tabProvider": "Provider",
+      "liveUpdated": "Live · updated {time}",
+      "liveRefresh": "Refresh now",
+      "entityTypes": {
+        "article": "Article",
+        "course": "Course",
+        "course_section": "Course section",
+        "lesson": "Lesson",
+        "glossary_term": "Glossary term",
+        "glossary_topic": "Glossary topic",
+        "video_topic": "Video topic",
+        "video_category": "Video category",
+        "tool": "Tool",
+        "article_category": "Article category",
+        "article_tag": "Article tag",
+        "menu_item": "Menu item",
+        "quiz": "Quiz",
+        "quiz_question": "Quiz question",
+        "setting": "Site text",
+        "promotion": "Promotion"
+      },
+      "overview": {
+        "offTitle": "Automatic translation is off",
+        "offBody": "Nothing is translated automatically until a Google Cloud Translation key is saved and switched on under Provider. The counts below still show what exists.",
+        "costNote": "Costs are estimated from the price set under Provider.",
+        "languagesTitle": "Languages",
+        "languagesDescription": "How much translatable content each language has, and who wrote it. Machine translations are live but kept out of search results until a person saves them.",
+        "searchLanguages": "Search languages",
+        "searchFailures": "Search failures",
+        "colLanguage": "Language",
+        "colStatus": "Status",
+        "colCoverage": "Translated",
+        "colMachine": "Machine",
+        "colHuman": "Reviewed",
+        "colOutdated": "Outdated",
+        "colNeedsReview": "Needs review",
+        "colMissing": "Not yet translated",
+        "colQueue": "Queue",
+        "live": "Live",
+        "notLive": "Not live",
+        "coverageLabel": "{language} translated",
+        "coverageCount": "{done} of {total}",
+        "queueIdle": "Idle",
+        "queued": "{count} queued",
+        "failedCount": "{count} failed",
+        "backfilling": "Backfilling",
+        "sync": "Sync",
+        "syncAll": "Sync all languages",
+        "retryFailed": "Retry failed",
+        "retryAll": "Retry all failed",
+        "openActions": "Actions for {language}",
+        "syncTitle": "Sync {language}?",
+        "syncAllTitle": "Sync every live language?",
+        "syncBody": "Every item is checked against its English source. Machine translations that are out of date are translated again, which uses characters from the budget. A translation a person saved is never overwritten; if its English changed, it is listed under Review.",
+        "retryTitle": "Retry failed translations?",
+        "retryBody": "The failed jobs are queued again and tried up to three more times. If the reason was the key or the budget, fix that first under Provider.",
+        "syncDone": "Sync started. Work continues in the background every 5 minutes.",
+        "retryDone": "Queued again: {count}.",
+        "refusals": {
+          "inactiveLocale": "That language is not live, so there is nothing to sync.",
+          "noActiveLocale": "No language other than English is live yet. Switch one on under Languages."
+        },
+        "noLocalesTitle": "Only English is set up",
+        "noLocalesBody": "Other languages appear here once they exist in the database.",
+        "failuresTitle": "Recent failures",
+        "failuresDescription": "Jobs that failed three times. The reason says what to fix; Retry queues them again.",
+        "colItem": "Item",
+        "colReason": "Reason",
+        "colAttempts": "Attempts",
+        "colWhen": "When",
+        "noFailuresTitle": "No failures",
+        "noFailuresBody": "Every translation job that ran has finished.",
+        "backfillItem": "Language backfill",
+        "reasonUnknown": "No reason was recorded.",
+        "typesTitle": "By content type",
+        "typesDescription": "The same counts for each kind of content, so a gap in one module is visible rather than averaged away.",
+        "colType": "Content",
+        "searchTypes": "Search content types"
+      },
+      "languages": {
+        "howTitle": "Adding a language",
+        "howBody": "Add a language from the list, then fill its interface text under Interface text, by hand or with Google, and write its legal site text under Site text. Then turn on its Live switch: its pages, its entry in the language menu and its sitemap entries appear at once, and content is translated automatically in the background. Turning it off hides it from the public site again and deletes nothing. Any number of languages can be live at the same time.",
+        "search": "Search languages",
+        "colDirection": "Direction",
+        "colCatalog": "Interface text",
+        "colEstimate": "To translate",
+        "ltr": "Left to right",
+        "rtl": "Right to left",
+        "catalogComplete": "Complete",
+        "catalogMissing": "{count, plural, one {# key missing} other {# keys missing}}",
+        "catalogUnroutable": "Not supported",
+        "estimateNone": "Nothing to translate",
+        "estimateValue": "{characters} characters, about {cost} (estimated)",
+        "activate": "Switch on",
+        "deactivate": "Switch off",
+        "activateTitle": "Switch {language} on?",
+        "activateBody": "{language} goes live at once. Google will translate about {characters} characters (estimated {cost}) in the background, and pages show a “not yet translated” notice until their turn comes.",
+        "activateBudget": "This month's budget has {remaining} characters left; work pauses at the limit and resumes next month.",
+        "offNote": "Automatic translation is switched off under Provider, so no content will be translated until it is switched on.",
+        "deactivateTitle": "Switch {language} off?",
+        "deactivateBody": "Its pages stop being served and it leaves the language menu. No translation is deleted: they are all served again if you switch it back on.",
+        "activated": "{language} is live. Translation has started.",
+        "deactivated": "{language} is switched off.",
+        "refusals": {
+          "notFound": "That language does not exist.",
+          "isDefault": "The default language is always live.",
+          "unroutable": "The site's routing does not know this language, so its pages cannot be served.",
+          "catalogIncomplete": "Its interface text is incomplete. Fill the missing strings under Interface text first.",
+          "siteTextIncomplete": "Its site text is incomplete. Translate the risk disclaimer and the copyright line under Site text first — a legal statement is never machine-translated."
+        },
+        "add": "Add language",
+        "addTitle": "Add a language",
+        "addDescription": "Choose a language the site supports. It is added switched off, so nothing changes for readers yet.",
+        "edit": "Edit",
+        "editTitle": "Edit {language}",
+        "editDescription": "Change how this language is named, which language fills its gaps, and where it sits in the language menu.",
+        "delete": "Delete",
+        "deleteTitle": "Delete {language}?",
+        "deleteBody": "The language and its interface text are removed. Languages that fell back to it will fall back to nothing. This cannot be undone.",
+        "deleteBlocked": "{count, plural, one {# translation is written in this language. Switch it off instead.} other {# translations are written in this language. Switch it off instead.}}",
+        "save": "Save",
+        "created": "{language} added. It is switched off.",
+        "updated": "{language} saved.",
+        "deleted": "{language} deleted.",
+        "noneToAdd": "Every language the site supports has been added.",
+        "colOrder": "Order",
+        "fields": {
+          "language": "Language",
+          "languageHint": "Only languages the site can serve are listed. Text direction comes with the language.",
+          "name": "Name in English",
+          "nativeName": "Name in the language itself",
+          "nativeNameHint": "Shown to readers in the language menu.",
+          "flag": "Flag",
+          "flagHint": "An emoji flag, optional.",
+          "fallback": "When a translation is missing, show",
+          "fallbackHint": "Right-to-left languages usually show a “not yet translated” notice rather than left-to-right text.",
+          "fallbackNone": "A “not yet translated” notice",
+          "order": "Order in the language menu"
+        },
+        "saveRefusals": {
+          "unsupported": "The site cannot serve that language.",
+          "exists": "That language has already been added.",
+          "notFound": "That language no longer exists.",
+          "invalidFallback": "Choose another existing language to fall back to."
+        },
+        "deleteRefusals": {
+          "notFound": "That language no longer exists.",
+          "isDefault": "The default language cannot be deleted.",
+          "isActive": "Switch the language off before deleting it.",
+          "hasContent": "Translations are written in this language. Switch it off instead."
+        },
+        "liveSwitch": "Show on the site:",
+        "checklist": {
+          "title": "{language} is not ready to go live",
+          "description": "A language goes live only when readers would not meet half-translated pages. Finish these, then turn the switch on again.",
+          "interfaceTextTitle": "Interface text",
+          "interfaceTextDone": "Every menu, button and heading is translated.",
+          "interfaceTextMissing": "{count, plural, one {# string is not translated yet.} other {# strings are not translated yet.}}",
+          "interfaceTextAction": "Fill interface text",
+          "siteTextTitle": "Legal site text",
+          "siteTextDone": "The risk disclaimer and copyright line are translated.",
+          "siteTextMissing": "{count, plural, one {# legal line needs a person's translation.} other {# legal lines need a person's translation.}}",
+          "siteTextAction": "Write site text",
+          "googleHint": "On the Interface text screen, “Translate missing with Google” fills up to 200 strings each time you press it. Legal text is never machine-translated.",
+          "close": "Close"
+        },
+        "hidden": "Hidden"
+      },
+      "review": {
+        "intro": "Translations no person has read yet: machine translations, a person's translations whose English has changed since, and translations where a figure changed. All of them are live. Saving one in its editor takes it off this list, and a machine translation becomes visible to search engines only then.",
+        "search": "Search translations",
+        "colTitle": "Title",
+        "colType": "Type",
+        "colUpdated": "Updated",
+        "sourceTitle": "English: {title}",
+        "statusOutdated": "English changed",
+        "statusNeedsReview": "Check figures",
+        "open": "Open",
+        "allLanguages": "All languages",
+        "languageFilter": "Language",
+        "emptyTitle": "Nothing to review",
+        "emptyBody": "Every translation has been saved by a person and matches its English source.",
+        "statusMachine": "Machine translation",
+        "allStatuses": "All states",
+        "statusFilter": "State"
+      },
+      "tabSiteText": "Site text",
+      "tabInterfaceText": "Interface text",
+      "siteText": {
+        "intro": "The words from Settings that readers see: the site description, the footer's legal lines and the header strips. Switches and links always come from the English.",
+        "language": "Language",
+        "noLanguages": "There is no language besides the default to translate into.",
+        "english": "English",
+        "translation": "Translation",
+        "save": "Save",
+        "saved": "Translation saved",
+        "cleared": "Translation removed. The English shows in its place.",
+        "blankHint": "Leave blank to show the English.",
+        "emptyEnglish": "The English is empty, so there is nothing to translate.",
+        "humanOnly": "Written by a person",
+        "humanOnlyHint": "A legal statement is never machine-translated. Until it is translated here, this language shows the English and cannot be switched on.",
+        "machineHint": "Translated automatically while this language is live. Saving here replaces the machine's words with yours.",
+        "statusMissing": "Not translated",
+        "statusMachine": "Machine",
+        "statusTranslated": "Translated",
+        "statusOutdated": "English changed",
+        "statusNeedsReview": "Check figures",
+        "statusDraft": "Draft",
+        "refusals": {
+          "unknownLocale": "That language does not exist.",
+          "isDefault": "The default language is the English itself.",
+          "notSeeded": "This setting is missing from the database. Run the seed."
+        },
+        "fields": {
+          "value": "Text",
+          "text": "Announcement",
+          "promoText": "Promotion text",
+          "label": "Button label"
+        }
+      },
+      "interfaceText": {
+        "intro": "The site's fixed words: menus, buttons, headings and page text. Pick a language and a section, then replace any string. Content such as articles and courses is translated in its own editor, and words from Settings under Site text.",
+        "englishIntro": "You are editing the English text itself. A change here shows on the English site and is the source every other language is translated from.",
+        "language": "Language",
+        "section": "Section",
+        "sectionOption": "{name} · {missing, plural, =0 {complete} other {# missing}}",
+        "search": "Search text",
+        "colKey": "Key",
+        "colEnglish": "English",
+        "colTranslation": "Text",
+        "colState": "State",
+        "states": {
+          "shipped": "Shipped",
+          "edited": "Edited",
+          "machine": "Google",
+          "missing": "Missing"
+        },
+        "missingValue": "Not translated: readers see the English.",
+        "edit": "Edit",
+        "editTitle": "Edit text",
+        "editDescription": "Replace this string for the selected language. Readers see the change at once.",
+        "english": "English",
+        "value": "Text",
+        "valueHint": "Keep every placeholder in curly brackets and every tag in angle brackets exactly as they are in the English. Words between an opening and a closing tag may change.",
+        "save": "Save",
+        "saved": "Text saved.",
+        "reset": "Reset",
+        "resetTitle": "Reset this text?",
+        "resetBody": "Your change is removed and the string goes back to its shipped text, or to missing if it has none.",
+        "resetDone": "Text reset.",
+        "refusals": {
+          "unknownLocale": "That language no longer exists.",
+          "unknownKey": "That string no longer exists in the site.",
+          "adminKey": "Admin text is English only and cannot be changed here.",
+          "invalidSyntax": "The text is not a valid message. Check that every opening curly bracket has a closing one.",
+          "argumentsDiffer": "Keep the same placeholders in curly brackets as the English, with the same names.",
+          "tagsDiffer": "Keep the same tags in angle brackets as the English, with the same names.",
+          "isDefault": "English is the source language and is not machine-translated."
+        },
+        "fill": "Translate missing with Google",
+        "fillTitle": "Translate missing text with Google?",
+        "fillBody": "Up to {limit} missing strings are sent to Google and saved as Google translations, which you can then review and edit. Strings someone has written are never replaced. This uses the translation budget.",
+        "filled": "{translated, plural, one {# string translated.} other {# strings translated.}} {remaining, plural, =0 {Nothing left for Google.} other {# still missing; run it again to continue.}}",
+        "fillFailed": "{failed, plural, one {# string could not be translated and is still missing.} other {# strings could not be translated and are still missing.}}",
+        "fillManual": "{manual, plural, one {# string must be written by hand.} other {# strings must be written by hand.}}",
+        "noLanguages": "No language has been added yet."
       }
     },
     "settingsGroupDesc": {
@@ -833,6 +1205,8 @@
     "selectAllGroup": "Select all",
     "searchPermissions": "Search capabilities…",
     "enabledOf": "of",
+    "permissionUnused": "Not used yet",
+    "permissionUnusedHint": "Not used yet: no screen or action checks this permission, so granting it changes nothing for now.",
     "roleDeleteTitle": "Delete role",
     "roleDeleteConfirm": "This permanently deletes the role:",
     "emailCol": "Email",
@@ -1057,6 +1431,13 @@
       "seo": {
         "titleTemplate": "How page titles are built. %s is the page's own title and %site% is the site name from General, so \"%s | %site%\" gives \"Pip Calculator | Your Site\". The home page shows the site name alone.",
         "googleSiteVerification": "In Google Search Console, add this site as a URL-prefix property and choose the HTML tag method. Paste the whole meta tag or just the code, save, then press Verify in Search Console. Keep it here after verifying: Google checks it again from time to time."
+      },
+      "email": {
+        "campaignRatePerMinute": "How fast announcement emails leave. SendGrid handles thousands a minute; a Google Workspace account allows only a few hundred a day.",
+        "campaignBatchSize": "How many emails each background run takes at a time."
+      },
+      "announcements": {
+        "inactiveDays": "A learner who has not signed in for this long is in the Inactive users group."
       }
     },
     "settingLabels": {
@@ -1070,6 +1451,13 @@
           "audio": "Largest audio upload",
           "document": "Largest document upload"
         }
+      },
+      "email": {
+        "campaignRatePerMinute": "Emails per minute",
+        "campaignBatchSize": "Emails per batch"
+      },
+      "announcements": {
+        "inactiveDays": "Inactive after"
       }
     },
     "settingOptions": {
@@ -1098,6 +1486,14 @@
           "60": "After 1 hour",
           "120": "After 2 hours",
           "never": "Never sign out"
+        }
+      },
+      "announcements": {
+        "inactiveDays": {
+          "14": "After 14 days",
+          "30": "After 30 days",
+          "60": "After 60 days",
+          "90": "After 90 days"
         }
       }
     },
@@ -1211,7 +1607,9 @@
       "news": "News",
       "learn": "Learning",
       "brand": "Branding",
-      "general": "General"
+      "promo": "Promotions",
+      "general": "General",
+      "email": "Email"
     },
     "mediaRecentlyUsed": "Recently used",
     "mediaLoadMore": "Load more",
@@ -1284,7 +1682,8 @@
       "employee": "Edit employee",
       "role": "Edit role",
       "provider": "Edit provider",
-      "emailTemplate": "Edit email template"
+      "emailTemplate": "Edit email template",
+      "promotion": "Edit promotion"
     },
     "viewLive": "View Live",
     "updatePost": "Update",
@@ -1494,7 +1893,9 @@
       "glossaryDetail": "Write the definition, file the term, and move it through review.",
       "videoCategories": "Groups the video library browses by. A topic may sit in one.",
       "learnVideos": "Pages built around a video. Not lessons — nothing here is graded.",
-      "videoDetail": "The page, its videos, and where it links."
+      "videoDetail": "The page, its videos, and where it links.",
+      "promotions": "Webinars, events, offers and notices shown for a set time as a popup on chosen pages, and in the home band.",
+      "announcements": "Write to your learners, subscribers or staff, or announce a new course. Each person gets one copy."
     },
     "editorToolbar": "Formatting toolbar",
     "editorParagraph": "Paragraph",
@@ -2208,7 +2609,46 @@
       "tabDelivery": "Delivery",
       "tabNewsletter": "Newsletter",
       "tabTemplates": "Templates",
-      "tabLog": "Delivery log"
+      "tabLog": "Delivery log",
+      "tabAnnouncements": "Announcements",
+      "announcementsSection": "Announcement emails",
+      "systemTitle": "System emails",
+      "designs": {
+        "title": "Custom designs",
+        "description": "Starting points for custom emails. A design never sends on its own: it is copied into an email when someone starts one.",
+        "create": "New design",
+        "search": "Search designs",
+        "columnName": "Name",
+        "columnMode": "Layout",
+        "columnUpdated": "Updated",
+        "modeRich": "Branded layout",
+        "modeHtml": "Full HTML",
+        "archivedBadge": "Archived",
+        "filterArchived": "Show",
+        "filterActive": "Active designs",
+        "filterAll": "Active and archived",
+        "duplicate": "Duplicate",
+        "duplicated": "Design duplicated",
+        "archive": "Archive",
+        "restore": "Restore",
+        "archiveTitle": "Archive this design?",
+        "archiveBody": "It will no longer be offered when someone starts an email. Emails already made from it are not affected.",
+        "archived": "Design archived",
+        "restored": "Design restored",
+        "empty": "No designs yet",
+        "emptyBody": "Create a design to give custom emails a consistent look.",
+        "newHeading": "New email design",
+        "editHeading": "Edit email design",
+        "editorDescription": "A reusable starting point for custom emails. Starting an email copies it; later edits here do not change that email.",
+        "detailsSection": "Details",
+        "detailsDescription": "How colleagues find this design when they start an email.",
+        "fieldName": "Name",
+        "fieldDescription": "Description",
+        "fieldDescriptionHint": "When to use it. Optional.",
+        "fieldSubject": "Suggested subject",
+        "fieldSubjectHint": "Copied into the email, where it can be changed. Optional.",
+        "saved": "Design saved"
+      }
     },
     "passwordReset": {
       "forgotLink": "Forgot your password?",
@@ -2232,26 +2672,40 @@
       "resetDone": "Your password has been changed. Sign in with it."
     },
     "permissionGroups": {
-      "users": "Users & roles",
+      "users": "Users",
+      "roles": "Roles",
       "employees": "Employees",
-      "learning": "Courses & lessons",
+      "courses": "Courses",
+      "lessons": "Lessons",
+      "quizzes": "Quizzes",
+      "videos": "Videos",
       "glossary": "Glossary",
       "media": "Media library",
       "articles": "News & Analysis",
       "website": "Website builder",
       "market": "Market data",
+      "tools": "Trading tools",
       "translations": "Translations & locales",
       "seo": "SEO & redirects",
       "email": "Email",
       "settings": "Settings & branding",
       "system": "System",
       "newsletter": "Newsletter",
-      "ai": "AI"
+      "announcements": "Email campaigns",
+      "ai": "AI",
+      "promotions": "Promotions"
     },
     "permissionGroupDesc": {
-      "users": "The Users and Roles screens, and who may assign a permission directly.",
+      "users": "The Users screen: accounts, passwords, sign-in sessions, and the roles and permissions given to one person.",
+      "roles": "The Roles screen: creating roles and choosing what each one may do.",
       "employees": "The employee directory, departments and offboarding.",
-      "learning": "Courses, lessons, quizzes and videos under Learning.",
+      "courses": "Courses, their sections and their order, under Learning.",
+      "lessons": "Lessons inside courses, under Learning.",
+      "quizzes": "Quizzes and their questions, under Learning.",
+      "videos": "Video topics and video categories, under Learning.",
+      "tools": "The trading tools' words, settings, and which tools are switched on.",
+      "newsletter": "Newsletter subscribers: the list, unsubscribing and the CSV export.",
+      "announcements": "Course announcements, custom emails and one-to-one emails.",
       "glossary": "Glossary terms and the topics they are filed under.",
       "media": "The media library: uploads, metadata and deletion.",
       "articles": "News & Analysis posts, their taxonomy and comment moderation.",
@@ -2262,9 +2716,303 @@
       "email": "Delivery settings, templates, test sends and the delivery log.",
       "settings": "Settings, theme and branding, navigation, features and integrations.",
       "system": "Audit log, analytics and maintenance tasks.",
-      "ai": "The AI switches, the budget, the provider keys, and who may see what was spent."
+      "ai": "The AI switches, the budget, the provider keys, and who may see what was spent.",
+      "promotions": "Time-boxed webinars, events, offers and notices shown as popups and in the home band."
     },
     "newsletter": "Subscribers",
+    "announcements": {
+      "create": "New announcement",
+      "open": "Open",
+      "newHeading": "New announcement",
+      "editorDescription": "Email a course to the people who should hear about it. Each person gets one email, however many groups they are in.",
+      "defaultName": "{title} — launch",
+      "templateSubject": "The template's own subject",
+      "announceCourse": "Announce this course",
+      "confirmDeleteTitle": "Delete this draft?",
+      "confirmDeleteBody": "The draft is removed. Nothing has been sent, so no one is affected.",
+      "searchPlaceholder": "Search announcements",
+      "columnName": "Announcement",
+      "columnAudience": "Audience",
+      "columnStatus": "Status",
+      "columnRecipients": "Recipients",
+      "columnCreatedBy": "Created by",
+      "columnDate": "Date",
+      "courseMissing": "Course deleted",
+      "statuses": {
+        "DRAFT": "Draft",
+        "SCHEDULED": "Scheduled",
+        "WAITING": "Waiting for course",
+        "SENDING": "Sending",
+        "SENT": "Sent",
+        "CANCELLED": "Cancelled"
+      },
+      "statusSending": "Sending {percent}%",
+      "recipientCount": "{count, plural, one {# recipient} other {# recipients}}",
+      "sentAndFailed": "{sent} sent · {failed} failed",
+      "empty": "No emails yet",
+      "emptyBody": "Write a custom email, or announce a published course to your learners and newsletter subscribers.",
+      "filterStatus": "Status",
+      "filterAllStatuses": "All statuses",
+      "audiences": {
+        "all_learners": {
+          "label": "All users",
+          "description": "Every registered learner who can receive email."
+        },
+        "active": {
+          "label": "Active users",
+          "description": "Learners whose account is active."
+        },
+        "verified": {
+          "label": "Email verified",
+          "description": "Learners who have confirmed their email address."
+        },
+        "inactive": {
+          "label": "Inactive users",
+          "description": "Learners who have not signed in recently (set in Settings → Email → Announcements)."
+        },
+        "subscribers": {
+          "label": "Newsletter subscribers",
+          "description": "Active newsletter subscribers, including people without an account."
+        },
+        "course_learners": {
+          "label": "Learners of a course",
+          "description": "Learners enrolled in one or more courses you pick."
+        },
+        "custom": {
+          "label": "Select users",
+          "description": "Learners you pick by name or email."
+        },
+        "staff": {
+          "label": "Staff",
+          "description": "Every active staff account. Custom emails only."
+        }
+      },
+      "stepsLabel": "Announcement steps",
+      "stepNumber": "{number}.",
+      "steps": {
+        "content": "Content",
+        "message": "Subject & message",
+        "audience": "Audience",
+        "review": "Review & send"
+      },
+      "saveAndContinue": "Save & continue",
+      "saved": "Draft saved",
+      "contentTitle": "Content",
+      "contentDescription": "Pick the course this email is about. Scheduled courses can be announced; the email waits until the course is live.",
+      "fieldCourse": "Course",
+      "goesLiveOn": "Goes live {date}",
+      "changeCourse": "Change course",
+      "announcedBefore": "This course was announced on {date} to {count, plural, one {# person} other {# people}}.",
+      "fieldName": "Name",
+      "fieldNameHint": "Only staff see this. It names the announcement in the list.",
+      "messageTitle": "Subject & message",
+      "messageDescription": "The email's design comes from its template. Here you can change the subject and add a short note.",
+      "fieldSubject": "Subject",
+      "fieldSubjectHint": "Leave empty to use the template's subject, translated for each reader.",
+      "fieldMessage": "Short note",
+      "fieldMessageHint": "Plain text shown above the button. Leave empty for none.",
+      "senderLine": "Sent from {name} ({email}).",
+      "senderChange": "Change the sender",
+      "previewTitle": "Preview",
+      "previewDescription": "The saved draft, as it will arrive, with the real course.",
+      "previewLanguage": "Preview language",
+      "previewNeedsSave": "Save the draft to see a preview.",
+      "audienceTitle": "Audience",
+      "audienceDescription": "Pick one or more groups. Each person gets one email, even if they are in several groups.",
+      "audienceFootnote": "Only people who can receive announcements are counted. Unsubscribed and suspended addresses, staff, and learners already enrolled in this course are left out automatically.",
+      "uniqueRecipients": "{count, plural, one {# unique recipient} other {# unique recipients}} ({duplicates} duplicates and {suppressed} unsubscribed removed)",
+      "pickAudience": "Pick at least one group.",
+      "reviewTitle": "Review",
+      "reviewDescription": "Check what will be sent and to how many people.",
+      "checklistTitle": "Before sending",
+      "checklistDescription": "Every item must pass before the email can be sent.",
+      "checklistReady": "Everything is ready.",
+      "fixIt": "Fix this",
+      "sendsWhenLive": "The course goes live on {date}. The email will be sent then, not now.",
+      "sendTitle": "Send",
+      "sendDescription": "Send a test to yourself first. Emails go out in the background at the rate set in Settings → Email → Announcements.",
+      "sendTest": "Send me a test",
+      "testSent": "Test sent to {to}",
+      "testNotSent": "The test was not sent ({status}). Check the delivery log.",
+      "testDialogTitle": "Send a test email",
+      "testDialogDescription": "Sends this email once to the address below. It is filled with yours; change it to send the test to someone else.",
+      "testRecipient": "Send to",
+      "testSend": "Send test",
+      "scheduleLabel": "Send later",
+      "scheduleHint": "In your own time zone.",
+      "schedule": "Schedule",
+      "scheduled": "Announcement scheduled",
+      "sendNow": "Send now",
+      "sendWhenLive": "Send when the course goes live",
+      "confirmSendTitle": "Send this announcement?",
+      "confirmSendBody": "Send to {count, plural, one {# person} other {# people}}? This cannot be stopped once the emails have gone out.",
+      "confirmSendWhenLiveBody": "It will be sent to about {count, plural, one {# person} other {# people}} when the course goes live. You can cancel it until then.",
+      "confirmSend": "Send",
+      "queued": "{count, plural, one {# email} other {# emails}} queued. They are being sent now.",
+      "waitingForCourse": "Scheduled. It will be sent when the course goes live.",
+      "refusals": {
+        "not_draft": "This announcement has already been sent or scheduled.",
+        "target_unavailable": "The course is not published, so readers could not open it.",
+        "email_disabled": "Sending email is switched off.",
+        "template_inactive": "The course announcement template is switched off.",
+        "no_postal_address": "Add a postal address. Bulk email must include one.",
+        "no_link_secret": "The unsubscribe link cannot be signed: EMAIL_LINK_SECRET is not set on the server.",
+        "no_audience": "Pick at least one group.",
+        "no_recipients": "No one in the chosen groups can receive this email.",
+        "schedule_in_past": "Pick a time in the future.",
+        "forbidden": "You do not have permission to do this.",
+        "no_content": "Write the email's subject and message first.",
+        "test_required": "Send yourself a test first. Any change since the last test needs a new one."
+      },
+      "tracks": {
+        "forex": "Forex",
+        "crypto": "Crypto"
+      },
+      "levels": {
+        "BEGINNER": "Beginner",
+        "INTERMEDIATE": "Intermediate",
+        "ADVANCED": "Advanced"
+      },
+      "courseSearching": "Searching…",
+      "courseNoResults": "No published or scheduled course matches.",
+      "courseScheduledBadge": "Scheduled",
+      "courseSearchPlaceholder": "Search courses",
+      "pickedCourses": "Picked courses",
+      "removeChip": "Remove {name}",
+      "pickedUsers": "Picked users",
+      "pickedUsersCount": "{count} of {max} picked",
+      "userSearchPlaceholder": "Search learners by name or email",
+      "userNoResults": "No learner matches.",
+      "progressTitle": "Progress",
+      "progressDescription": "Emails are sent in the background. This page updates while they go out.",
+      "updatedAt": "Updated {time}",
+      "refresh": "Refresh now",
+      "cancelReasons": {
+        "target_unavailable": "Cancelled because the course is no longer published.",
+        "no_content": "Cancelled because the email had nothing to send."
+      },
+      "paused": "Paused: sending email is switched off. It resumes when it is switched back on.",
+      "scheduledFor": "Scheduled for {date}.",
+      "counts": {
+        "recipients": "Recipients",
+        "sent": "Sent",
+        "failed": "Failed",
+        "skipped": "Skipped",
+        "pending": "Waiting"
+      },
+      "startedAt": "Started {date}",
+      "finishedAt": "Finished {date}",
+      "viewDeliveryLog": "View in the delivery log",
+      "unschedule": "Move back to draft",
+      "unscheduled": "Moved back to draft",
+      "retryFailed": "Retry failed",
+      "retried": "{count, plural, one {# email} other {# emails}} back in the queue",
+      "cancelSend": "Stop sending",
+      "cancelled": "Announcement stopped",
+      "confirmCancelTitle": "Stop this announcement?",
+      "confirmCancelBody": "{count, plural, one {# email that has} other {# emails that have}} not gone out yet will not be sent. Emails already sent cannot be recalled.",
+      "summaryTitle": "Details",
+      "summaryDescription": "What was sent, and to which groups.",
+      "failuresTitle": "Failed recipients",
+      "failuresDescription": "Addresses the email could not be delivered to. Retry failed sends them again.",
+      "failureReason": "Reason",
+      "failureAttempts": "Attempts",
+      "sendErrors": {
+        "transient": "The mail server did not accept it in time",
+        "permanent": "The address was refused",
+        "lease_expired": "The send was interrupted; it may not have gone out",
+        "render_failed": "The email could not be built",
+        "template_missing": "The template is missing"
+      },
+      "suppression": {
+        "label": "Campaign emails",
+        "states": {
+          "none": "Receives them",
+          "UNSUBSCRIBED": "Unsubscribed (their choice)",
+          "ADMIN": "Stopped by staff",
+          "BOUNCE": "Stopped: emails bounced",
+          "COMPLAINT": "Stopped: marked as spam"
+        },
+        "stop": "Stop",
+        "resume": "Resume",
+        "stopped": "Campaign emails stopped for this address",
+        "resumed": "Campaign emails resumed for this address",
+        "failed": "That could not be changed."
+      },
+      "detailDescription": "Where this announcement is, and what happened to each email.",
+      "editHeading": "Announcement: {name}",
+      "newMenu": "New email",
+      "newCustom": "Custom email",
+      "newCustomHint": "Write your own email and send it to the groups you choose.",
+      "newCourse": "Course announcement",
+      "newCourseHint": "Announce a published course with the course template.",
+      "columnKind": "Type",
+      "filterKind": "Type",
+      "filterAllKinds": "All types",
+      "kinds": {
+        "COURSE": "Course announcement",
+        "CUSTOM": "Custom email",
+        "DIRECT": "Direct email"
+      },
+      "custom": {
+        "newHeading": "New custom email",
+        "editorDescription": "Write the email, choose who receives it, then test it and send it.",
+        "detailSubject": "Subject",
+        "contentTitle": "Write the email",
+        "contentDescription": "Start from a design or a blank page. Every group you pick next receives this email.",
+        "startFrom": "Start from",
+        "startFromHint": "Picking a design copies it in. Editing the design later does not change this email.",
+        "blank": "Blank",
+        "replaceTitle": "Replace what you have written?",
+        "replaceBody": "Starting from another design replaces this email's subject and message.",
+        "replace": "Replace",
+        "fieldSubject": "Subject",
+        "fieldPreheader": "Preview text",
+        "fieldPreheaderHint": "Shown after the subject in most inboxes. Optional.",
+        "fieldBody": "Message",
+        "htmlHint": "A full HTML email replaces the branded layout, so it must include the unsubscribe link itself.",
+        "variablesTitle": "Personalise",
+        "variablesDescription": "Copy a placeholder and paste it into the subject or message. Each reader sees their own value.",
+        "unknownVariable": "“{variable}” is not something this email can fill in.",
+        "needsUnsubscribe": "A full HTML email must include the {token} link.",
+        "language": "Language",
+        "languageMissing": "Not written yet: readers in this language get the {fallback} version.",
+        "testTitle": "Test",
+        "testDescription": "A test goes to your own address. The email cannot be sent until a test has gone out since the last change.",
+        "tested": "Tested since the last change",
+        "untested": "Not tested since the last change"
+      },
+      "direct": {
+        "open": "Send email",
+        "title": "Email {name}",
+        "description": "A one-off email to this person. It is sent in the background and appears in the delivery log.",
+        "to": "To",
+        "loading": "Loading…",
+        "startFrom": "Start from",
+        "blank": "Blank",
+        "subject": "Subject",
+        "body": "Message",
+        "replyToSelf": "Replies go to me",
+        "replyToSelfHint": "Replies reach your own email address instead of the site's reply address.",
+        "suppressedNotice": "This person has unsubscribed from campaign emails. Send only if this is about their account.",
+        "showPreview": "Show preview",
+        "hidePreview": "Hide preview",
+        "previewFrame": "Email preview",
+        "send": "Send email",
+        "sent": "Email on its way to {email}",
+        "refusals": {
+          "recipient_unavailable": "This person cannot be emailed: the account is deleted, or the address was never confirmed.",
+          "recipient_unsubscribed": "This subscriber has unsubscribed, so they cannot be emailed.",
+          "rate_limited": "You have sent 30 direct emails in the last hour. Try again later.",
+          "email_disabled": "Sending email is switched off.",
+          "no_link_secret": "The unsubscribe link cannot be signed: EMAIL_LINK_SECRET is not set on the server.",
+          "forbidden": "You do not have permission to email this person.",
+          "not_found": "This person could not be found.",
+          "body_empty": "Write a message first.",
+          "body_too_large": "This message is too large to send."
+        }
+      }
+    },
     "newsletterDescription": "Everyone who has asked for the newsletter, and how far they got through double opt-in.",
     "newsletterActive": "Active",
     "newsletterPending": "Pending confirmation",
@@ -2296,8 +3044,8 @@
     "newsletterDeleteTitle": "Delete this subscriber?",
     "newsletterDeleteBody": "This erases the address and its consent record permanently. This is what an erasure request means — it cannot be undone. To simply stop the emails, unsubscribe instead.",
     "newsletterDeleteConfirm": "Delete permanently",
-    "newsletterNoCampaigns": "Sending to this list is not available yet",
-    "newsletterNoCampaignsDescription": "Signup, confirmation and unsubscribe all work. Composing and sending a campaign needs the background worker, and is a separate piece of work.",
+    "newsletterNoCampaigns": "Emailing this list",
+    "newsletterNoCampaignsDescription": "To write to your subscribers, open Email campaigns, start a custom email or a course announcement, and choose Newsletter subscribers. Each address gets one copy, and every unsubscribe is honoured. To email one subscriber, use Send email on their row.",
     "newsletterUnsubscribedToast": "Address unsubscribed.",
     "newsletterDeletedToast": "Subscriber deleted.",
     "newsletterSourceSignup": "Sign-up checkbox",
@@ -2540,7 +3288,9 @@
     },
     "add": "Add",
     "nav": {
-      "ai": "AI"
+      "ai": "AI",
+      "promotions": "Promotions",
+      "announcements": "Email campaigns"
     },
     "ai": {
       "title": "AI usage",
@@ -2798,6 +3548,7 @@
         "focusKeywords": "Focus keywords"
       },
       "translateAction": "Translate from {source}",
+      "translateRefineAction": "Refine with AI",
       "translateConfirmTitle": "Replace this translation?",
       "translateConfirmDescription": "The text in this locale is replaced by a machine translation. Nothing is saved until you save the article, so you can still discard it by leaving without saving.",
       "translateConfirm": "Translate",
@@ -3183,6 +3934,254 @@
       },
       "showPassword": "Show password",
       "hidePassword": "Hide password"
+    },
+    "promotions": {
+      "create": "New promotion",
+      "newHeading": "New promotion",
+      "editorDescription": "What visitors see, where and when. A promotion reaches the site only once it is active and inside its dates.",
+      "searchPlaceholder": "Search promotions…",
+      "columnTitle": "Promotion",
+      "columnKind": "Type",
+      "columnStatus": "Status",
+      "columnWindow": "Shown",
+      "columnPlacements": "Pages",
+      "columnLanguages": "Languages",
+      "columnResults": "Reach",
+      "columnUpdated": "Updated",
+      "empty": "No promotions yet",
+      "emptyBody": "Create one to announce a webinar, an event, an offer or a piece of news for a set time.",
+      "filterKind": "Type",
+      "filterAllKinds": "All types",
+      "filterStatus": "Status",
+      "filterAllStatuses": "All statuses",
+      "targetHidden": "Hidden: linked content is not public",
+      "asPopup": "Popup",
+      "inBand": "Home band",
+      "morePlacements": "+{count}",
+      "confirmDeleteTitle": "Move this promotion to the trash?",
+      "confirmDeleteBody": "It stops showing on the site at once. You can restore it from the Deleted filter; it comes back as a draft.",
+      "kinds": {
+        "WEBINAR": "Webinar",
+        "EVENT": "Event",
+        "OFFER": "Offer",
+        "NEWS": "News",
+        "ANNOUNCEMENT": "Announcement"
+      },
+      "phases": {
+        "DRAFT": "Draft",
+        "SCHEDULED": "Scheduled",
+        "LIVE": "Live",
+        "ENDED": "Ended",
+        "ARCHIVED": "Archived"
+      },
+      "placements": {
+        "home": "Home page",
+        "learn": "Learning",
+        "news": "News & Analysis",
+        "glossary": "Glossary",
+        "tools": "Tools",
+        "support": "Support",
+        "everywhere": "Every page"
+      },
+      "frequencies": {
+        "ONCE": "Once, ever",
+        "PER_SESSION": "Once per visit",
+        "DAILY": "Once a day",
+        "EVERY_VISIT": "On every page view"
+      },
+      "audiences": {
+        "ALL": "Everyone",
+        "GUESTS": "Visitors who are not signed in",
+        "LEARNERS": "Signed-in learners"
+      },
+      "untranslatedOptions": {
+        "HIDE": "Hide it in that language",
+        "SHOW_DEFAULT": "Show it in English"
+      },
+      "targetTypes": {
+        "COURSE": "Course",
+        "LESSON": "Lesson",
+        "QUIZ": "Quiz",
+        "ARTICLE": "Article",
+        "VIDEO_TOPIC": "Video",
+        "GLOSSARY_TERM": "Glossary term",
+        "TOOL": "Tool"
+      },
+      "targetStatuses": {
+        "ENABLED": "Enabled",
+        "DISABLED": "Disabled"
+      },
+      "linkKinds": {
+        "CONTENT": "Site content",
+        "PATH": "Page on this site",
+        "EXTERNAL": "External link",
+        "NONE": "No link"
+      },
+      "languageStates": {
+        "TRANSLATED": "Translated",
+        "MACHINE_TRANSLATED": "Machine translated",
+        "NEEDS_REVIEW": "Needs review",
+        "OUTDATED": "Out of date",
+        "DRAFT": "Draft",
+        "MISSING": "Missing"
+      },
+      "contentSection": "Content",
+      "contentSectionDescription": "The words visitors read, in the language chosen above.",
+      "kindLabel": "Type",
+      "kindHint": "Sets the badge, and gives a webinar or event its own date and time.",
+      "titleLabel": "Title",
+      "titleHintLinked": "Leave empty to use the linked content's own title.",
+      "bodyLabel": "Message",
+      "bodyHint": "A short paragraph. Leave empty on linked content to use its summary.",
+      "badgeLabel": "Label",
+      "badgeHint": "Optional, a few words beside the type, such as \"Ends Friday\".",
+      "ctaLabel": "Button text",
+      "ctaHint": "What the button says, such as \"Register now\". It needs a link.",
+      "localeLabel": "Language",
+      "languageNotSavedYet": "Save the promotion once before adding other languages.",
+      "linkSection": "Link",
+      "linkSectionDescription": "Where the button goes. Site content hides the promotion while it is not public.",
+      "linkKindLabel": "Link to",
+      "targetLabel": "Content",
+      "targetSearchPlaceholder": "Search by title…",
+      "targetTypeLabel": "Content type",
+      "targetAllTypes": "All types",
+      "targetChange": "Change",
+      "targetNoResults": "Nothing matches.",
+      "targetSearching": "Searching…",
+      "targetNotPublic": "Not public yet. The promotion stays hidden until it is.",
+      "targetMissingNow": "This content was deleted. Choose something else.",
+      "pathLabel": "Page",
+      "pathHint": "A path on this site, starting with /, such as /support.",
+      "urlLabel": "Address",
+      "urlHint": "An https address, such as a Zoom or Teams link. It opens in a new tab.",
+      "imageSection": "Image",
+      "imageSectionDescription": "Optional. Linked content lends its own cover when this is empty.",
+      "imageLabel": "Image",
+      "imageHint": "A wide picture, 16:9, works best.",
+      "imageAltLabel": "Image description",
+      "imageAltHint": "For screen readers. Leave empty if the picture is decoration.",
+      "scheduleSection": "Schedule",
+      "scheduleSectionDescription": "Times are in your own time zone. Visitors see event times in theirs.",
+      "startsAtLabel": "Show from",
+      "endsAtLabel": "Show until",
+      "windowHint": "The promotion appears within about a minute of its start and disappears at its end.",
+      "eventStartsLabel": "Event starts",
+      "eventEndsLabel": "Event ends",
+      "eventHint": "When the webinar or event itself happens. Shown to visitors with a countdown.",
+      "recordingLabel": "Recording",
+      "recordingHint": "Optional. After the event ends, the button offers this video instead.",
+      "recordingNone": "No recording",
+      "displaySection": "Where and how",
+      "displaySectionDescription": "Which pages show it, and how often a visitor sees it.",
+      "placementsLabel": "Pages",
+      "placementsHint": "Every page excludes sign-in, password, legal and newsletter pages, and quizzes in progress.",
+      "popupLabel": "Show as a popup",
+      "popupHint": "Opens over the page after the delay below. One popup at a time.",
+      "bandLabel": "Show in the home band",
+      "bandHint": "A card on the home page. Needs Home page or Every page.",
+      "priorityLabel": "Priority",
+      "priorityHint": "Higher shows first when several are live. 0 to 1000.",
+      "delayLabel": "Popup delay (seconds)",
+      "delayHint": "How long a visitor reads the page before the popup opens. 0 to 60.",
+      "frequencyLabel": "How often",
+      "audienceLabel": "Who sees it",
+      "untranslatedLabel": "In a language with no translation",
+      "untranslatedHint": "A translation flagged for review or out of date counts as missing.",
+      "statusSection": "Status",
+      "statusSectionDescription": "Only an active promotion inside its dates is shown.",
+      "activate": "Activate",
+      "archive": "Archive",
+      "backToDraft": "Back to draft",
+      "activated": "Promotion activated",
+      "archivedToast": "Promotion archived",
+      "draftToast": "Promotion moved back to draft",
+      "publishNeeded": "Activating, and editing a live promotion, needs the Publish permission.",
+      "saveFirst": "Save the promotion first.",
+      "previewSection": "Preview",
+      "previewSectionDescription": "How it looks to a visitor, in the language chosen above.",
+      "previewPopup": "Popup",
+      "previewBand": "Home band card",
+      "previewDismiss": "Not now",
+      "previewEventTime": "{date}",
+      "previewEmpty": "Add a title or link to content to see the preview.",
+      "created": "Promotion created",
+      "refusals": {
+        "notDefaultLocale": "The main save must be in the default language.",
+        "localeNotActive": "That language is not switched on.",
+        "targetMissing": "The linked content no longer exists. Choose something else.",
+        "recordingMissing": "The recording no longer exists. Choose another video.",
+        "imageMissing": "The image is no longer in the media library. Choose another.",
+        "windowEnded": "Its dates have already passed. Move the end date before activating.",
+        "noWords": "Add a title, or link it to content, before activating.",
+        "deleted": "This promotion is in the trash. Restore it first.",
+        "forbidden": "This promotion is live, so changing it needs the Publish permission."
+      },
+      "saveChangesFirst": "Save your changes first.",
+      "errors": {
+        "endBeforeStart": "Must be after the start.",
+        "noSurface": "Show it as a popup, in the home band, as a banner, or any of them.",
+        "bandNeedsHome": "The band is on the home page, so choose Home page or Every page.",
+        "eventStartRequired": "Add the start as well as the end.",
+        "eventEndBeforeStart": "Must be after the event starts.",
+        "recordingNeedsTime": "Add the event's end time, so the site knows when it has ended.",
+        "titleRequired": "Required, unless it links to site content.",
+        "ctaNeedsLink": "A button needs somewhere to go. Choose a link or clear this."
+      },
+      "results": {
+        "title": "Results",
+        "description": "Approximate reach since this promotion was created. Each network is counted at most once a day, so a household or an office counts once, and readers who block scripts are not counted.",
+        "none": "Nothing recorded yet. Views are counted once the promotion is live on the site.",
+        "views": "Views",
+        "viewsDetail": "{popup} in the popup · {band} in the home band · {bar} in the banner",
+        "clicks": "Clicks",
+        "clickRate": "{rate}% of views were followed",
+        "dismissals": "Closed without a click",
+        "dismissRate": "{rate}% of popup and banner views",
+        "recent": "Last {days} days (UTC)",
+        "columnDay": "Day",
+        "columnPopupViews": "Popup views",
+        "columnPopupClicks": "Popup clicks",
+        "columnDismissals": "Closed",
+        "columnBandViews": "Band views",
+        "columnBandClicks": "Band clicks",
+        "approximate": "Approximate: each network counts once a day",
+        "listViews": "{count, plural, one {# view} other {# views}}",
+        "listClicks": "{count, plural, one {# click} other {# clicks}}",
+        "columnBarViews": "Banner views",
+        "columnBarClicks": "Banner clicks"
+      },
+      "barLabel": "Show as a banner",
+      "barHint": "A small strip or side card the visitor can close with ×. Shown on the pages chosen above.",
+      "barPositionLabel": "Banner position",
+      "barPositionHint": "Left and right swap on right-to-left languages. Below 1280px wide, a side banner shows as a strip at the bottom of the screen.",
+      "barPositions": {
+        "TOP": "Top of the page",
+        "BOTTOM": "Bottom of the screen",
+        "LEFT": "Left side",
+        "RIGHT": "Right side"
+      },
+      "asBanner": "Banner · {position}",
+      "frequencyHint": "For a popup, how often it opens. For a banner, how soon it returns after the visitor closes it.",
+      "previewBanner": "Banner · {position}"
+    },
+    "userEmails": {
+      "tab": "Emails",
+      "title": "Emails sent",
+      "description": "Campaign and direct emails sent to this person in the last 90 days.",
+      "columnEmail": "Email",
+      "columnType": "Type",
+      "columnStatus": "Status",
+      "columnDate": "Date",
+      "empty": "No emails in the last 90 days.",
+      "statuses": {
+        "PENDING": "Waiting",
+        "SENDING": "Sending",
+        "SENT": "Sent",
+        "FAILED": "Failed",
+        "SUPPRESSED": "Not sent: unsubscribed",
+        "SKIPPED": "Not sent: cancelled"
+      }
     }
   },
   "glossary": {
@@ -3403,6 +4402,7 @@
     "haveAccount": "Already have an account?",
     "newsletterOptIn": "Send me news, market analysis and platform updates by email",
     "newsletterOptInHint": "Optional. You can unsubscribe from any email we send.",
+    "announcementsNotice": "We'll occasionally email you about new courses. You can unsubscribe at any time.",
     "signInLink": "Sign in",
     "showPassword": "Show password",
     "hidePassword": "Hide password",
@@ -4336,6 +5336,28 @@
     "missingTokenBody": "This page needs the link from your email. Please open it from the message itself.",
     "backHome": "Back to the homepage"
   },
+  "announcements": {
+    "unsubscribe": {
+      "title": "Emails from us",
+      "description": "Choose whether we email you about new courses and other news.",
+      "footerLink": "Unsubscribe from these emails",
+      "body": "Press the button to stop emails about new courses and other news at this address.",
+      "action": "Unsubscribe",
+      "pending": "Updating…",
+      "doneTitle": "You're unsubscribed",
+      "doneBody": "You won't receive emails about new courses and other news at this address any more.",
+      "undo": "Undo — keep sending them",
+      "undoneTitle": "You're subscribed again",
+      "undoneBody": "You'll receive emails about new courses and other news at this address again.",
+      "newsletterPrompt": "This address also receives our newsletter. That is a separate list.",
+      "newsletterAction": "Also unsubscribe from the newsletter",
+      "newsletterDone": "You're also unsubscribed from the newsletter.",
+      "missingTitle": "This link is incomplete",
+      "missingBody": "Open the unsubscribe link from the email again, or copy the whole address into your browser.",
+      "failed": "Something went wrong. Please try again in a moment.",
+      "backHome": "Back to the homepage"
+    }
+  },
   "tools": {
     "eyebrow": "Tools",
     "faqTitle": "Common questions",
@@ -4641,6 +5663,23 @@
     },
     "highlights": {
       "title": "Why use {tool}?"
+    },
+    "names": {
+      "position-size": "Position Size Calculator",
+      "pip-value": "Pip Calculator",
+      "margin": "Margin Calculator",
+      "gain-loss": "Gain & Loss Percentage Calculator",
+      "pivot-points": "Pivot Point Calculator",
+      "profit-loss": "Profit Calculator",
+      "market-hours": "Forex Market Hours",
+      "risk-reward": "Risk Calculator",
+      "currency-converter": "Currency Converter",
+      "correlation": "Currency Correlation",
+      "risk-sentiment": "Risk-On / Risk-Off Meter"
+    },
+    "untranslated": {
+      "title": "This tool's guide has not been translated yet",
+      "body": "The calculator works in full. Its guide and common questions will appear here once they are translated."
     }
   },
   "marketNews": {
@@ -4808,7 +5847,37 @@
     },
     "faq": {
       "title": "Frequently Asked Questions",
-      "lead": "Find quick answers to the most common questions about trading with MBFX."
+      "lead": "Find quick answers to the most common questions about trading with MBFX.",
+      "items": {
+        "openAccount": {
+          "question": "How do I open a trading account?",
+          "answer": "Opening an account is simple. Click 'Sign Up' on our homepage, choose your account type, complete the registration form, verify your identity, and make your first deposit. The entire process typically takes {fromMinutes}-{toMinutes} minutes."
+        },
+        "minimumDeposit": {
+          "question": "What is the minimum deposit required?",
+          "answer": "The minimum deposit depends on the payment method you choose. Our deposit and withdrawal requests are typically processed within a minimum of {fromMinutes} minutes and up to a maximum of {toHours} hours. To view your exact deposit limits and available methods, please log in to your client portal. You can start trading with as little as {minimumDeposit}."
+        },
+        "withdraw": {
+          "question": "How can I withdraw my funds?",
+          "answer": "You can withdraw funds using the same method you used for your deposit. Withdrawals are processed within a minimum of {fromMinutes} minutes and up to a maximum of {toHours} hours. During weekends and public holidays, processing may take up to {holidayHours} hours. We also offer instant withdrawal services for selected payment methods."
+        },
+        "platforms": {
+          "question": "What trading platforms do you offer?",
+          "answer": "We are licensed by MetaQuotes and provide you with the industry-leading {platform} trading platform. Our clients can access {platformShort} through the web terminal, mobile apps for iOS and Android, and desktop applications for Windows and Mac. All versions offer advanced charting tools, real-time price feeds, fast execution, and a full suite of professional trading features."
+        },
+        "hours": {
+          "question": "What are your trading hours?",
+          "answer": "The forex market operates {hoursPerDay} hours a day, {daysPerWeek} days a week. Trading opens on Sunday at {opens} and closes on Friday at {closes}. On our platform, market hours are displayed in {platformTimeZone} for your convenience. Additionally, cryptocurrency trading is available {cryptoHours}, allowing you to trade anytime — even on weekends and public holidays."
+        },
+        "education": {
+          "question": "Do you offer educational resources?",
+          "answer": "Yes, we provide comprehensive educational materials including trading courses, live webinars, platform tutorials, market analysis, and a complete trading glossary. All resources are free for our clients."
+        },
+        "leverage": {
+          "question": "What is leverage and how does it work?",
+          "answer": "Leverage allows you to control larger positions with smaller capital. For example, with {leverage} leverage, you can control {position} with just {margin}. While leverage can amplify profits, it also increases risk, so proper risk management is essential."
+        }
+      }
     },
     "contact": {
       "title": "Still Need Help?",
@@ -4861,5 +5930,47 @@
   "impersonation": {
     "viewingAs": "You are viewing the site as {name}. Everything you do here happens in their account.",
     "returnToAdmin": "Return to admin"
+  },
+  "promotions": {
+    "dialogDescription": "A current announcement from us. Close it at any time.",
+    "notNow": "Not now",
+    "close": "Close",
+    "previous": "Previous",
+    "next": "Next",
+    "position": "{current} of {total}",
+    "learnMore": "Learn more",
+    "external": "External",
+    "opensInNewTab": "opens in a new tab",
+    "eventTime": "Starts {date}",
+    "kinds": {
+      "WEBINAR": "Webinar",
+      "EVENT": "Event",
+      "OFFER": "Offer",
+      "NEWS": "News",
+      "ANNOUNCEMENT": "Announcement"
+    },
+    "bandEyebrow": "Happening now",
+    "bandTitle": "Don't miss",
+    "startsIn": "Starts in {time}",
+    "startingNow": "Starting now",
+    "liveNow": "Live now",
+    "eventEnded": "Took place {date}",
+    "addToCalendar": "Add to calendar",
+    "calendar": {
+      "google": "Google Calendar",
+      "outlook": "Outlook.com",
+      "office": "Outlook (work or school)",
+      "ics": "Apple Calendar or other (.ics)"
+    },
+    "watchRecording": "Watch the recording",
+    "bannerLabel": "Announcement",
+    "closeBanner": "Close this announcement",
+    "bandLead": "Webinars, events and offers from us, each for a limited time.",
+    "bandCarouselLabel": "Current promotions",
+    "slideLabel": "Promotion {current} of {total}",
+    "bandTabsLabel": "Choose a promotion",
+    "endsIn": "Ends in {time}",
+    "until": "Until {date}",
+    "recording": "Recording"
   }
 }

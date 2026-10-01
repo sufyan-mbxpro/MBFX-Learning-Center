@@ -35,6 +35,8 @@ export interface EmailTransportDriver {
   send(message: OutgoingEmail): Promise<SentEmail>;
   /** Throws when the transport cannot be reached or authenticated. */
   verify(): Promise<void>;
+  /** Releases pooled connections (a batch send session, ADR-171). */
+  close?(): void;
 }
 
 export type SmtpSecurity = "NONE" | "STARTTLS" | "TLS";
@@ -56,18 +58,24 @@ export interface SmtpConfig {
  * when a server declines, which is the difference between "encrypted" and
  * "encrypted when convenient".
  */
-export function smtpTransportOptions(config: SmtpConfig) {
+export function smtpTransportOptions(config: SmtpConfig, options: { pool?: boolean } = {}) {
   return {
     host: config.host,
     port: config.port,
     secure: config.security === "TLS",
     requireTLS: config.security === "STARTTLS",
     auth: config.username ? { user: config.username, pass: config.password ?? "" } : undefined,
+    // ADR-171: a batch reuses its connections instead of a handshake per
+    // message. A one-shot send keeps nodemailer's default (no pool).
+    ...(options.pool ? { pool: true } : {}),
   };
 }
 
-export function smtpDriver(config: SmtpConfig): EmailTransportDriver {
-  const transporter = createTransport(smtpTransportOptions(config));
+export function smtpDriver(
+  config: SmtpConfig,
+  options: { pool?: boolean } = {},
+): EmailTransportDriver {
+  const transporter = createTransport(smtpTransportOptions(config, options));
   return {
     kind: "smtp",
     async send(message) {
@@ -84,6 +92,9 @@ export function smtpDriver(config: SmtpConfig): EmailTransportDriver {
     },
     async verify() {
       await transporter.verify();
+    },
+    close() {
+      transporter.close();
     },
   };
 }
@@ -163,7 +174,11 @@ export function sendgridDriver(config: SendgridConfig): EmailTransportDriver {
   const refusal = async (response: Response): Promise<Error> => {
     const message = await sendgridError(response);
     const note = response.status === 401 ? sendgridKeyShapeNote(config.apiKey) : null;
-    return new Error(note ? `${message} — ${note}` : message);
+    // The HTTP status rides along so a batch can tell "try later" (429/5xx)
+    // from "this address will never work" (ADR-171, `classifySendError`).
+    return Object.assign(new Error(note ? `${message} — ${note}` : message), {
+      status: response.status,
+    });
   };
   return {
     kind: "sendgrid",
@@ -278,7 +293,9 @@ function randomId(): string {
  * The ONE reader of `passwordCipher` (ADR-078 #3). Everything else reads
  * `EmailTransportView`, which has no password property at all.
  */
-export async function loadTransportDriver(): Promise<EmailTransportDriver> {
+export async function loadTransportDriver(
+  options: { pool?: boolean } = {},
+): Promise<EmailTransportDriver> {
   const row = await db.emailTransport.findUnique({ where: { id: TRANSPORT_ID } });
   // An incomplete row falls back to the log driver rather than throwing:
   // a half-filled form must not take sign-up down with it.
@@ -288,11 +305,36 @@ export async function loadTransportDriver(): Promise<EmailTransportDriver> {
     return sendgridDriver({ apiKey: openSecret(row.passwordCipher), sandbox: row.sandboxMode });
   }
   if (!row.host || !row.port) return logDriver();
-  return smtpDriver({
-    host: row.host,
-    port: row.port,
-    security: row.security,
-    username: row.username,
-    password: row.passwordCipher ? openSecret(row.passwordCipher) : null,
-  });
+  return smtpDriver(
+    {
+      host: row.host,
+      port: row.port,
+      security: row.security,
+      username: row.username,
+      password: row.passwordCipher ? openSecret(row.passwordCipher) : null,
+    },
+    options,
+  );
+}
+
+/**
+ * Whether a failed send is worth retrying (ADR-171, plan §8.2). A connection
+ * that dropped, a 4xx SMTP reply ("try later") or a 429/5xx from SendGrid is
+ * transient, as is a SendGrid 401/403 (a bad key); a 5xx SMTP reply or any
+ * other 4xx from SendGrid ("this message will never
+ * be accepted") is permanent. Anything unrecognised is transient, because a
+ * wrongly retried message costs one attempt and a wrongly abandoned one costs
+ * a reader.
+ */
+export function classifySendError(error: unknown): "transient" | "permanent" {
+  if (typeof error !== "object" || error === null) return "transient";
+  const { responseCode, status } = error as { responseCode?: unknown; status?: unknown };
+  if (typeof responseCode === "number") return responseCode >= 500 ? "permanent" : "transient";
+  if (typeof status === "number") {
+    // 401/403 is the KEY, not the address: every recipient would fail the
+    // same way, and marking them all permanent would bury a config mistake.
+    if (status === 429 || status >= 500 || status === 401 || status === 403) return "transient";
+    if (status >= 400) return "permanent";
+  }
+  return "transient";
 }

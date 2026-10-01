@@ -6,13 +6,26 @@
 // anywhere near an `href`, because the sanitiser saw `{{reset.url}}` as a
 // harmless relative path.
 import {
+  CAMPAIGN_EMAILS,
   EMAIL_TEMPLATES,
+  isCampaignEmailKey,
   findTemplateVariables,
   isUrlEmailVariable,
   replaceTemplateVariables,
+  type CampaignEmailKey,
   type EmailBodyMode,
   type EmailTemplateKey,
 } from "@repo/contracts";
+
+/**
+ * A key a message renders and is logged under: a registry template, or one of
+ * the two campaign keys whose body is the campaign's own (ADR-172 #4).
+ */
+export type RenderableEmailKey = EmailTemplateKey | CampaignEmailKey;
+
+function definitionOf(key: RenderableEmailKey): { required: readonly string[] } {
+  return isCampaignEmailKey(key) ? CAMPAIGN_EMAILS[key] : EMAIL_TEMPLATES[key];
+}
 import { inlineEditorialStyles, renderEmailShell, type EmailPalette } from "./layout.ts";
 import { sanitizeEmailHtml } from "./sanitize.ts";
 
@@ -33,7 +46,7 @@ export interface EmailShellOptions {
 }
 
 export interface RenderEmailInput {
-  key: EmailTemplateKey;
+  key: RenderableEmailKey;
   mode: EmailBodyMode;
   subject: string;
   preheader?: string | undefined;
@@ -66,7 +79,7 @@ function singleLine(value: string): string {
 function resolveValue(
   name: string,
   variables: Readonly<Record<string, string>>,
-  key: EmailTemplateKey,
+  key: RenderableEmailKey,
 ): string {
   const value = variables[name];
   if (value === undefined) {
@@ -124,7 +137,7 @@ export function htmlToText(html: string): string {
 }
 
 export function renderEmail(input: RenderEmailInput): RenderedEmail {
-  const definition = EMAIL_TEMPLATES[input.key];
+  const definition = definitionOf(input.key);
 
   // A required variable missing from the BODY is a save-time failure
   // (@repo/contracts). Missing from the CALLER is this one.

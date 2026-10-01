@@ -39,15 +39,21 @@ export default async function SignUpPage({ params }: PageProps<"/[locale]/sign-u
       title={t("signUpTitle")}
       description={t("signUpDescription")}
       footer={
-        <p className="text-center text-sm text-muted-foreground">
-          {t("haveAccount")}{" "}
-          <Link
-            href="/sign-in"
-            className="font-medium text-primary-interactive underline-offset-4 hover:underline"
-          >
-            {t("signInLink")}
-          </Link>
-        </p>
+        <div className="flex flex-col gap-3">
+          {/* ADR-171 #4: soft opt-in is only fair if it is said at the moment of
+              registration — every account can be sent course announcements,
+              each carrying a one-click unsubscribe. */}
+          <p className="text-center text-xs text-muted-foreground">{t("announcementsNotice")}</p>
+          <p className="text-center text-sm text-muted-foreground">
+            {t("haveAccount")}{" "}
+            <Link
+              href="/sign-in"
+              className="font-medium text-primary-interactive underline-offset-4 hover:underline"
+            >
+              {t("signInLink")}
+            </Link>
+          </p>
+        </div>
       }
     >
       <SignUpForm

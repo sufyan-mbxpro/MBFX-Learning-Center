@@ -1,17 +1,24 @@
 # Running the scheduled jobs
 
-Three routes do work on a timer. They share one bearer token, one shape and one
-guarantee: **no page breaks if they never run.** A page falls back to its last
-good data and says so. Schedule `market-sync` and `publish-due` because data
-goes stale; schedule `housekeeping` because it is a **retention obligation** —
-if it never runs, email-delivery rows, unconfirmed newsletter addresses and
-per-user AI usage rows (all PII) are kept forever.
+Five routes do work on a timer. They share one bearer token (checked by one
+helper, `app/api/cron/_lib/cron-auth.ts`), one shape and one guarantee: **no
+page breaks if they never run.** A page falls back to its last good data and
+says so. Schedule `market-sync` and `publish-due` because data goes stale;
+schedule `translate` so a newly switched-on language fills in without anyone
+saving anything; schedule `announcements` because a scheduled announcement
+email starts ONLY there, and a large one finishes only there; schedule
+`housekeeping` because it is a **retention obligation** — if it never runs,
+email-delivery rows, announcement recipient lists, unconfirmed newsletter
+addresses and per-user AI and translation usage rows (all PII) are kept
+forever.
 
-| Route                         | What it does                                                           | Sensible cadence |
-| ----------------------------- | ---------------------------------------------------------------------- | ---------------- |
-| `POST /api/cron/market-sync`  | Fetches daily price bars for active instruments                        | every 15 min †   |
-| `POST /api/cron/publish-due`  | Moves due scheduled content to `PUBLISHED`                             | every 15 min     |
-| `POST /api/cron/housekeeping` | Deletes email deliveries > 90d, pending subs > 7d, AI usage rows > 90d | daily            |
+| Route                          | What it does                                                                                                                                                                          | Sensible cadence |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
+| `POST /api/cron/market-sync`   | Fetches daily price bars for active instruments                                                                                                                                       | every 15 min †   |
+| `POST /api/cron/publish-due`   | Moves due scheduled content to `PUBLISHED`                                                                                                                                            | every 15 min     |
+| `POST /api/cron/translate`     | Drains the translation queue: language backfills, retries, pauses                                                                                                                     | every 5 min      |
+| `POST /api/cron/announcements` | Starts due announcement emails and drains their queue: sends, retries, expired leases (ADR-171)                                                                                       | every minute     |
+| `POST /api/cron/housekeeping`  | Deletes email deliveries > 90d, pending subs > 7d, AI and translation usage rows > 90d, finished translation jobs > 7d, announcement recipient rows 90d after their campaign finished | daily            |
 
 † **Not a typo, and this is the part worth understanding.** `market-sync` asks
 the database whether enough time has passed before it calls the data provider.
@@ -20,7 +27,7 @@ How often it actually fetches is **Sync interval** on `/admin/market/provider`
 decide; a call that arrives early returns `{"swept": false, "reason":
 "not_due"}` with HTTP 200 and spends nothing.
 
-All three routes export **only `POST`**. A `GET` answers **405**.
+All five routes export **only `POST`**. A `GET` answers **405**.
 
 ## Before anything: the token
 
@@ -115,6 +122,91 @@ and/or `courses.publishDue`, `lessons.publishDue`, `glossary.publishDue`,
 `quizzes.publishDue`, `videos.publishDue` (no user; `changes.after` lists the
 ids). A run with nothing due writes no audit row.
 
+### `translate`
+
+```bash
+curl -fsS -X POST "$BASE/api/cron/translate" -H "Authorization: Bearer $S"
+```
+
+```json
+{
+  "startedAt": "2026-09-28T10:05:00.000Z",
+  "claimed": 25,
+  "done": 24,
+  "skipped": 0,
+  "backfillEnqueued": 200,
+  "requeued": 0,
+  "retrying": 1,
+  "paused": 0,
+  "failed": 0,
+  "batches": 9,
+  "stoppedBy": "time"
+}
+```
+
+Saving an article translates it inline, seconds after the save; this route
+does everything else (ADR-162 #7, ADR-163 #7). It keeps draining batches of 25
+for up to **240 seconds** and stops early when the queue is empty
+(`"stoppedBy": "empty"`) or a batch was paused by the monthly character budget
+or Google's quota (`"paused"`), because every later job would pause too.
+`backfillEnqueued` is how many items a language backfill queued this call —
+switching a language on (Settings → Translation → Languages) queues one
+backfill, which expands 200 items at a time. `skipped` counts jobs for a
+language that has since been switched off: they finish without calling Google.
+
+It is **optional in the way `publish-due` is**: if it never runs, saved
+articles are still translated inline, but a newly switched-on language keeps
+its "not yet translated" notices until something drains the backfill. Every
+Google request is metered (`TranslateUsage`); the route writes no audit row —
+the activation, Sync and Retry that cause work are audited where a person
+pressed them.
+
+**Verify:** Settings → Translation → Overview shows each language's coverage,
+the queue and recent failures, and refreshes itself while work is pending.
+
+### `announcements`
+
+```bash
+curl -fsS -X POST "$BASE/api/cron/announcements" -H "Authorization: Bearer $S"
+```
+
+```json
+{
+  "startedAt": "2026-10-14T09:01:00.000Z",
+  "started": 1,
+  "cancelled": 0,
+  "sent": 118,
+  "failed": 0,
+  "retried": 2,
+  "suppressed": 1,
+  "leaseExpired": 0,
+  "paused": false
+}
+```
+
+Pressing **Send** on `/keystone/announcements` sends the first batches from the
+action itself (`after()`); this route does everything else (ADR-171). It
+starts scheduled announcements whose time has come — and, for a course that was
+still SCHEDULED when it was announced, the first minute the course is live —
+then claims batches (`email.campaignBatchSize`, default 50) and sends them at
+`email.campaignRatePerMinute` (default 120), for up to **240 seconds**. Two
+overlapping calls cannot send one message twice: every row is claimed
+atomically. A row a crashed run was holding becomes **failed**, never pending
+again, so nobody gets a duplicate; a person can retry it from the detail page.
+
+`paused: true` means **Send email** is switched off: nothing was claimed and
+nothing was lost. `retried` counts messages the provider refused for now
+(retried after 1 then 5 minutes); `suppressed` counts people who unsubscribed
+after the audience was taken.
+
+Run it **every minute**. If it never runs, nothing leaks, but a scheduled
+announcement never starts and a large one sits at "Sending" with rows pending.
+Announcements refuse to send until `EMAIL_LINK_SECRET` is set (every message
+carries a signed unsubscribe link).
+
+**Verify:** the announcement's detail page shows sent · failed · skipped ·
+pending, and the delivery log filters by announcement.
+
 ### `housekeeping`
 
 ```bash
@@ -122,7 +214,15 @@ curl -fsS -X POST "$BASE/api/cron/housekeeping" -H "Authorization: Bearer $S"
 ```
 
 ```json
-{ "sweptAt": "2026-09-20T03:30:00.000Z", "pendingSubscribers": 0, "deliveries": 0, "aiUsage": 0 }
+{
+  "sweptAt": "2026-09-20T03:30:00.000Z",
+  "pendingSubscribers": 0,
+  "deliveries": 0,
+  "aiUsage": 0,
+  "translationJobs": 0,
+  "translateUsage": 0,
+  "announcementRecipients": 0
+}
 ```
 
 Each number is rows deleted. **It writes no audit row** by design — an age
@@ -156,11 +256,11 @@ MBX_BASE_URL=https://example.com
 
 ```bash
 #!/bin/sh
-# /usr/local/bin/mbx-cron  (chmod 755) — usage: mbx-cron <market-sync|publish-due|housekeeping>
+# /usr/local/bin/mbx-cron  (chmod 755) — usage: mbx-cron <market-sync|publish-due|translate|announcements|housekeeping>
 set -eu
 . /etc/mbx/cron.env
 case "$1" in
-  market-sync|publish-due|housekeeping) ;;
+  market-sync|publish-due|translate|announcements|housekeeping) ;;
   *) echo "unknown route: $1" >&2; exit 2 ;;
 esac
 # The token goes through a header file on stdin so it never appears in argv.
@@ -176,13 +276,15 @@ echo
 ```cron
 */15 * * * * /usr/local/bin/mbx-cron market-sync  >>/var/log/mbx-cron.log 2>&1
 */15 * * * * /usr/local/bin/mbx-cron publish-due  >>/var/log/mbx-cron.log 2>&1
+*/5 * * * *  /usr/local/bin/mbx-cron translate    >>/var/log/mbx-cron.log 2>&1
+* * * * *    /usr/local/bin/mbx-cron announcements >>/var/log/mbx-cron.log 2>&1
 30 3 * * *   /usr/local/bin/mbx-cron housekeeping >>/var/log/mbx-cron.log 2>&1
 ```
 
 ### Linux: systemd timers
 
 Better logs, and a run missed while the machine was off fires on boot (`Persistent=true` applies to `OnCalendar=` timers). One templated
-service serves all three routes; the instance name is the route.
+service serves all five routes; the instance name is the route.
 
 ```ini
 # /etc/systemd/system/mbx-cron@.service
@@ -211,6 +313,32 @@ WantedBy=timers.target
 ```
 
 ```ini
+# /etc/systemd/system/mbx-cron@translate.timer
+[Unit]
+Description=MBX cron: translate every 5 minutes
+
+[Timer]
+OnCalendar=*:0/5
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+```
+
+```ini
+# /etc/systemd/system/mbx-cron@announcements.timer
+[Unit]
+Description=MBX cron: announcements every minute
+
+[Timer]
+OnCalendar=*:*
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+```
+
+```ini
 # /etc/systemd/system/mbx-cron@housekeeping.timer
 [Unit]
 Description=MBX cron: housekeeping daily
@@ -225,7 +353,7 @@ WantedBy=timers.target
 
 ```bash
 systemctl daemon-reload
-systemctl enable --now mbx-cron@market-sync.timer mbx-cron@publish-due.timer mbx-cron@housekeeping.timer
+systemctl enable --now mbx-cron@market-sync.timer mbx-cron@publish-due.timer mbx-cron@translate.timer mbx-cron@announcements.timer mbx-cron@housekeeping.timer
 systemctl list-timers 'mbx-cron@*'
 journalctl -u 'mbx-cron@*' --since today
 systemctl start mbx-cron@publish-due.service   # run one now
@@ -242,6 +370,8 @@ $base = "http://localhost:3000"
 $jobs = @(
   @{ Route = "market-sync";  Trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 15) },
   @{ Route = "publish-due";  Trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 15) },
+  @{ Route = "translate";    Trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 5) },
+  @{ Route = "announcements"; Trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 1) },
   @{ Route = "housekeeping"; Trigger = New-ScheduledTaskTrigger -Daily -At 3:30am }
 )
 foreach ($j in $jobs) {
@@ -263,6 +393,7 @@ name: cron
 on:
   schedule:
     - cron: "*/15 * * * *" # market-sync + publish-due
+    - cron: "*/5 * * * *" # translate + announcements (GitHub's floor is 5 minutes)
     - cron: "30 3 * * *" # housekeeping
   workflow_dispatch:
 jobs:
@@ -271,11 +402,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        route: [market-sync, publish-due, housekeeping]
+        route: [market-sync, publish-due, translate, announcements, housekeeping]
     steps:
       - name: POST /api/cron/${{ matrix.route }}
-        # Every-15 ticks skip housekeeping; the daily tick runs all three.
-        if: matrix.route != 'housekeeping' || github.event.schedule == '30 3 * * *' || github.event_name == 'workflow_dispatch'
+        # Each schedule runs its own routes; a manual dispatch runs all five.
+        if: >-
+          github.event_name == 'workflow_dispatch' ||
+          (github.event.schedule == '*/15 * * * *' && (matrix.route == 'market-sync' || matrix.route == 'publish-due')) ||
+          (github.event.schedule == '*/5 * * * *' && (matrix.route == 'translate' || matrix.route == 'announcements')) ||
+          (github.event.schedule == '30 3 * * *' && matrix.route == 'housekeeping')
         run: curl -fsS --max-time 300 -X POST "$URL/api/cron/${{ matrix.route }}" -H "Authorization: Bearer $SECRET"
         env:
           URL: ${{ secrets.SITE_URL }}
@@ -286,14 +421,14 @@ jobs:
 
 Create one job per route:
 
-| Field          | Value                                                                     |
-| -------------- | ------------------------------------------------------------------------- |
-| URL            | `https://example.com/api/cron/<route>`                                    |
-| Request method | **POST** (the default GET gets 405)                                       |
-| Headers        | `Authorization: Bearer <CRON_SECRET>`                                     |
-| Schedule       | every 15 min (`market-sync`, `publish-due`), daily 03:30 (`housekeeping`) |
-| Timeout        | the maximum the plan allows (`market-sync` can take a while)              |
-| Notify on      | failure (non-2xx) — `not_due` is a 200 and will not alert                 |
+| Field          | Value                                                                                                                                |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| URL            | `https://example.com/api/cron/<route>`                                                                                               |
+| Request method | **POST** (the default GET gets 405)                                                                                                  |
+| Headers        | `Authorization: Bearer <CRON_SECRET>`                                                                                                |
+| Schedule       | every 15 min (`market-sync`, `publish-due`), every 5 min (`translate`), every minute (`announcements`), daily 03:30 (`housekeeping`) |
+| Timeout        | the maximum the plan allows (`market-sync` can take a while)                                                                         |
+| Notify on      | failure (non-2xx) — `not_due` is a 200 and will not alert                                                                            |
 
 The token is stored by the third party; rotate it if you stop using them.
 
@@ -308,6 +443,7 @@ token goes in this file:
   "crons": [
     { "path": "/api/cron/market-sync", "schedule": "*/15 * * * *" },
     { "path": "/api/cron/publish-due", "schedule": "*/15 * * * *" },
+    { "path": "/api/cron/translate", "schedule": "*/5 * * * *" },
     { "path": "/api/cron/housekeeping", "schedule": "30 3 * * *" }
   ]
 }
@@ -355,19 +491,21 @@ and every AI call is something a member of staff pressed.
 
 ## When something looks wrong
 
-| Symptom                                   | Cause / fix                                                                                                                       |
-| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| 503 `{"error":"not_configured"}`          | `CRON_SECRET` unset — or set, but the app was not restarted                                                                       |
-| 401 `{"error":"unauthorized"}`            | Token missing or wrong. Check for a trailing newline/`\r` or quotes in the stored secret, and that the header is `Bearer <token>` |
-| 405                                       | The scheduler sent GET (Vercel Cron, cron-job.org's default). Switch to POST                                                      |
-| 404                                       | Wrong path or base URL (e.g. a locale prefix, or `/admin/api/...`). The routes are exactly `/api/cron/<route>`                    |
-| 502 / 504 from nginx                      | The proxy, not the app: raise `proxy_read_timeout` (see [deploy.md](./deploy.md)) and the scheduler's timeout                     |
-| curl exit 28 / scheduler "timeout"        | `market-sync` with many instruments on a slow provider. Raise the client timeout to 300 s; the next run resumes stalest-first     |
-| `{"swept": false, "reason": "not_due"}`   | Working as intended. Shorten **Sync interval**, or pass `?force=1`                                                                |
-| Every symbol in `failures`                | The provider rejected the key, or `MARKET_SECRET_KEY` changed and the stored key no longer opens                                  |
-| Tools show an empty state with an "as of" | No bars yet. Press **Sync now** — this is the pre-first-sync state                                                                |
-| AI features are absent from every editor  | `ai.enabled` is off, the feature is off, or the month's budget is spent — `/admin/ai` says which                                  |
-| An AI call fails with `secret_unreadable` | `AI_SECRET_KEY` is unset or changed, so the stored provider key no longer opens                                                   |
+| Symptom                                          | Cause / fix                                                                                                                                      |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 503 `{"error":"not_configured"}`                 | `CRON_SECRET` unset — or set, but the app was not restarted                                                                                      |
+| 401 `{"error":"unauthorized"}`                   | Token missing or wrong. Check for a trailing newline/`\r` or quotes in the stored secret, and that the header is `Bearer <token>`                |
+| 405                                              | The scheduler sent GET (Vercel Cron, cron-job.org's default). Switch to POST                                                                     |
+| 404                                              | Wrong path or base URL (e.g. a locale prefix, or `/admin/api/...`). The routes are exactly `/api/cron/<route>`                                   |
+| 502 / 504 from nginx                             | The proxy, not the app: raise `proxy_read_timeout` (see [deploy.md](./deploy.md)) and the scheduler's timeout                                    |
+| curl exit 28 / scheduler "timeout"               | `market-sync` with many instruments on a slow provider. Raise the client timeout to 300 s; the next run resumes stalest-first                    |
+| `{"swept": false, "reason": "not_due"}`          | Working as intended. Shorten **Sync interval**, or pass `?force=1`                                                                               |
+| Every symbol in `failures`                       | The provider rejected the key, or `MARKET_SECRET_KEY` changed and the stored key no longer opens                                                 |
+| Tools show an empty state with an "as of"        | No bars yet. Press **Sync now** — this is the pre-first-sync state                                                                               |
+| AI features are absent from every editor         | `ai.enabled` is off, the feature is off, or the month's budget is spent — `/admin/ai` says which                                                 |
+| An AI call fails with `secret_unreadable`        | `AI_SECRET_KEY` is unset or changed, so the stored provider key no longer opens                                                                  |
+| `translate` answers `"stoppedBy": "paused"`      | The month's character budget or Google's quota is reached. Jobs wait and nothing fails; raise the budget under Settings → Translation → Provider |
+| A new language's pages stay "not yet translated" | `translate` is not scheduled, or automatic translation is off under Provider — the Overview tab shows the queue                                  |
 
 The last sweep's outcome is also on `/admin/market/provider` (last run, last
 error, next scheduled sync) and in the audit log as `market.sync` for an

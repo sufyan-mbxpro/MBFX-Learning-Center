@@ -41,3 +41,34 @@ export function formatDurationSeconds(seconds: number, locale = "en"): string {
     unitDisplay: "long",
   }).format(amount);
 }
+
+export interface DurationParts {
+  days?: number;
+  hours?: number;
+  minutes?: number;
+}
+
+const PART_UNITS = [
+  ["days", "day"],
+  ["hours", "hour"],
+  ["minutes", "minute"],
+] as const;
+
+/**
+ * `formatDurationParts({ days: 2, hours: 4 })` → "2d 4h" — a countdown's
+ * compact reading (changes-52 P5). Narrow units joined by the locale's own
+ * list rule, so Arabic gets its own abbreviations and conjunction without a
+ * catalog key per plural form. A zero part is dropped ("2d", not "2d 0h")
+ * unless it is the only one.
+ */
+export function formatDurationParts(parts: DurationParts, locale = "en"): string {
+  const present = PART_UNITS.filter(([key]) => parts[key] !== undefined).map(
+    ([key, unit]) => [Math.max(0, Math.floor(parts[key] ?? 0)), unit] as const,
+  );
+  const nonZero = present.filter(([amount]) => amount > 0);
+  const shown = nonZero.length > 0 ? nonZero : present.slice(-1);
+  const words = shown.map(([amount, unit]) =>
+    new Intl.NumberFormat(locale, { style: "unit", unit, unitDisplay: "narrow" }).format(amount),
+  );
+  return new Intl.ListFormat(locale, { type: "unit", style: "narrow" }).format(words);
+}

@@ -1,0 +1,35 @@
+{
+  "name": "@repo/translate",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/testing.ts"
+  },
+  "scripts": {
+    "lint": "eslint src scripts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "catalog": "tsx scripts/translate-catalog.ts"
+  },
+  "dependencies": {
+    "@formatjs/icu-messageformat-parser": "3.5.17",
+    "@repo/contracts": "workspace:*",
+    "@repo/db": "workspace:*",
+    "@repo/secrets": "workspace:*"
+  },
+  "devDependencies": {
+    "@repo/eslint-config": "workspace:*",
+    "@repo/typescript-config": "workspace:*",
+    "@testcontainers/mariadb": "^12.1.0",
+    "@types/node": "^22.20.4",
+    "@vitest/coverage-v8": "^4.1.11",
+    "eslint": "^9.39.5",
+    "msw": "2.15.0",
+    "testcontainers": "^12.1.0",
+    "tsx": "^4.19.2",
+    "typescript": "6.0.3",
+    "vitest": "^4.1.11"
+  }
+}

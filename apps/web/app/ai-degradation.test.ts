@@ -242,7 +242,7 @@ describe("B2 — auto-SEO reviews before it applies", () => {
     const editors: [string, string][] = [
       [join(admin, "learn", "courses", "[id]", "course-editor.tsx"), "courses.update"],
       [join(admin, "learn", "lessons", "[id]", "lesson-editor.tsx"), "lessons.update"],
-      [join(admin, "learn", "videos", "[id]", "video-editor.tsx"), "lessons.update"],
+      [join(admin, "learn", "videos", "[id]", "video-editor.tsx"), "videos.update"],
       [join(admin, "glossary", "[id]", "glossary-editor.tsx"), "glossary.update"],
       [join(admin, "glossary", "topics", "[id]", "topic-editor.tsx"), "glossary.update"],
       [join(admin, "tools", "[key]", "tool-editor.tsx"), "tools.update"],
@@ -447,7 +447,7 @@ describe("B6 — a generated quiz is unsaved until somebody saves it", () => {
     // A standalone quiz has no source. Absence, not a disabled button.
     expect(page).toContain("getQuizSourceLesson(");
     expect(page).toContain("sourceLesson");
-    expect(page).toContain('can(subject, "lessons.update")');
+    expect(page).toContain('can(subject, "quizzes.update")');
     expect(page).toContain('can(subject, "ai.use")');
   });
 
@@ -534,6 +534,7 @@ describe("ADR-126 — a brief fills the form, and nothing is saved until Save", 
       join(admin, "glossary", "[id]", "page.tsx"),
       join(admin, "glossary", "topics", "[id]", "page.tsx"),
       join(admin, "tools", "[key]", "page.tsx"),
+      join(admin, "promotions", "[id]", "page.tsx"),
     ];
     for (const page of pages) {
       expect(stripped(page), relative(APP_ROOT, page)).toContain("loadEditorAi(subject");

@@ -12,7 +12,7 @@ import {
   seoScore,
   type SeoCheckId,
 } from "./content-analysis.ts";
-import { countWords, htmlLead, htmlToText } from "./html-text.ts";
+import { countWords, htmlExcerpt, htmlLead, htmlToText, stripInlineTags } from "./html-text.ts";
 
 describe("htmlToText", () => {
   it("strips tags and collapses whitespace", () => {
@@ -411,5 +411,36 @@ describe("htmlLead", () => {
 
   it("cuts mid-word only when there is no usable space", () => {
     expect(htmlLead(`<p>${"x".repeat(80)}</p>`, 20)).toBe(`${"x".repeat(19)}…`);
+  });
+});
+
+describe("stripInlineTags / htmlExcerpt — display text", () => {
+  it("glues inline markup to its words, so punctuation stays attached", () => {
+    // The regression: "Start <strong>here</strong>." read "Start here ." in
+    // search hits and promotion summaries, because htmlToText spaces EVERY tag.
+    expect(htmlExcerpt("<p>Start <strong>here</strong>.</p>", 200)).toBe("Start here.");
+    expect(htmlExcerpt('<p>See <a href="/x">the <em>pip</em></a>, then go.</p>', 200)).toBe(
+      "See the pip, then go.",
+    );
+  });
+
+  it("keeps block tags as word separators", () => {
+    expect(htmlExcerpt("<p>one</p><p>two</p><ul><li>three</li></ul>", 200)).toBe("one two three");
+  });
+
+  it("does not mistake a block tag that shares a prefix for an inline one", () => {
+    // `<b` must not match `<br>` or `<blockquote>`, nor `<s` match `<section>`.
+    expect(stripInlineTags("a<br>b<blockquote>c</blockquote><section>d</section>")).toBe(
+      "a<br>b<blockquote>c</blockquote><section>d</section>",
+    );
+  });
+
+  it("cuts at the limit with an ellipsis", () => {
+    expect(htmlExcerpt("<p>abcdefghij</p>", 5)).toBe("abcd…");
+    expect(htmlExcerpt("<p>abc</p>", 5)).toBe("abc");
+  });
+
+  it("leaves word counts on htmlToText's rule, which never merges words", () => {
+    expect(countWords(htmlToText("<p>one<strong>two</strong></p>"))).toBe(2);
   });
 });

@@ -20,14 +20,19 @@ export async function signInAsStaff(
   await page.goto(`/keystone?redirect=${encodeURIComponent(redirectTo)}`);
   await waitForHydration(page, "#admin-signin-email");
 
-  await page.getByLabel("Email", { exact: true }).fill(email);
-  await page.getByLabel("Password", { exact: true }).fill(password);
+  // By the form's own ids, not its words. The screen's copy was rewritten
+  // ("Admin Email", "Sign In to Admin") while the admin project matched no spec
+  // (see playwright.config.ts), so a label-based helper broke with nobody
+  // running it. The ids are the form's structure; the words are catalog data.
+  const form = page.locator("form").filter({ has: page.locator("#admin-signin-email") });
+  await form.locator("#admin-signin-email").fill(email);
+  await form.locator("#admin-signin-password").fill(password);
 
   // Pairing the click with waitForResponse is what makes a form that did not
   // post loud rather than silent.
   const [credentialResponse] = await Promise.all([
     page.waitForResponse((r) => r.url().includes("/api/auth/sign-in/email")),
-    page.getByRole("button", { name: "Sign in" }).click(),
+    form.locator('button[type="submit"]').click(),
   ]);
   expect(credentialResponse.status()).toBe(200);
 }

@@ -5,7 +5,6 @@ import {
   articleTagPath,
   glossaryTermPath,
   getSitemapEntries,
-  getEnabledTools,
 } from "@repo/core";
 import {
   learnTrackGlossaryPath,
@@ -36,9 +35,8 @@ import { siteUrl } from "./_lib/site-url.ts";
 // crawler hit, alone among the public surfaces.
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base = siteUrl();
-  const [entries, enabledTools, flags, legalStored] = await Promise.all([
+  const [entries, flags, legalStored] = await Promise.all([
     getSitemapEntries(),
-    getEnabledTools(),
     // The same anonymous-subject flag reads the pages themselves 404 on. A
     // section switched off is a 404, and a sitemap entry for a 404 is a crawl
     // hint pointing at an error page — the rule this file already applied to
@@ -122,13 +120,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
           ]),
         ]
       : []),
-    // The tools index plus every ENABLED tool (ADR-086 #5): a disabled tool
-    // 404s, and listing a 404 in a sitemap is a crawl hint pointing at an
-    // error page.
+    // The tools index. The tools THEMSELVES are loaded below, per locale
+    // (ADR-159 #2): a tool page's words are content, and machine-written ones
+    // are not submitted until a person saves them.
     ...(flags.calculators
       ? [
           ROUTE_PATHS.tools,
-          ...enabledTools.map((tool) => toolPath(tool.key)),
           // The market boards (ADR-136 §5): route files, not `Tool` rows.
           ROUTE_PATHS.volatility,
         ]
@@ -214,6 +211,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // same topics, so every URL they contain is already here on its own page.
   const videoPages: MetadataRoute.Sitemap =
     flags.courses && flags.videos ? localised(videoEntries) : [];
+  // Every ENABLED tool (ADR-086 #5: a disabled one 404s), in each locale whose
+  // words a person saved (ADR-159 #2).
+  const toolPages: MetadataRoute.Sitemap = flags.calculators
+    ? localised(
+        entries.tools.map((tool) => ({
+          path: toolPath(tool.key),
+          locale: tool.locale,
+          updatedAt: new Date(),
+        })),
+      )
+    : [];
 
   return [
     ...staticPages,
@@ -224,5 +232,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...learnPages,
     ...topicPages,
     ...videoPages,
+    ...toolPages,
   ];
 }

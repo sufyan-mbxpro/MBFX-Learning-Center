@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getAiAvailability } from "@repo/ai";
 import { getQuizAdmin, getQuizSourceLesson } from "@repo/core";
+import { getAuthoringLocales } from "@repo/i18n";
 import { routing } from "@repo/i18n/routing";
 import { can, requirePermission } from "@repo/rbac";
 import { EditorPage } from "../../../_components/admin-page.tsx";
@@ -18,8 +19,8 @@ import { formatDateTime, siteOrigin } from "@repo/utils";
 
 // Quiz editor (changes-11 Phase 6, ADR-058).
 //
-// Read gate here on `lessons.view`; every write re-gates in its own action
-// (security.md #1), and the publish transition adds `lessons.publish` inside
+// Read gate here on `quizzes.view`; every write re-gates in its own action
+// (security.md #1), and the publish transition adds `quizzes.publish` inside
 // `transitionContentStatus`. The `can()` calls below only decide what to
 // render — a hidden button is not security.
 //
@@ -31,15 +32,17 @@ export default async function QuizEditPage({
   params,
   searchParams,
 }: PageProps<"/keystone/learn/quizzes/[id]">) {
-  const subject = await requirePermission("lessons.view");
+  const subject = await requirePermission("quizzes.view");
   const { id } = await params;
   // The language being edited. A search parameter rather than client state,
   // unlike the other editors: a question's words for another locale are a
   // second read, and the structure they hang on must come from the server.
   // An unknown value is the default locale, never an error.
   const requested = (await searchParams).locale;
+  // Every language row, live or not (ADR-178 #6), never the routing list.
+  const locales = (await getAuthoringLocales()).map((row) => row.code);
   const locale =
-    typeof requested === "string" && (routing.locales as readonly string[]).includes(requested)
+    typeof requested === "string" && locales.includes(requested)
       ? requested
       : routing.defaultLocale;
   const translating = locale !== routing.defaultLocale;
@@ -64,13 +67,13 @@ export default async function QuizEditPage({
     loadEditorAi(subject, {
       module: "quiz",
       entity: { type: "quiz", id: detail.id },
-      contentKeys: ["lessons.update"],
+      contentKeys: ["quizzes.update"],
     }),
   ]);
   const ai =
     availability.features.quiz_generation &&
     can(subject, "ai.use") &&
-    can(subject, "lessons.update") &&
+    can(subject, "quizzes.update") &&
     sourceLesson
       ? {
           labels: aiQuizLabels(
@@ -141,7 +144,7 @@ export default async function QuizEditPage({
       <QuizEditor
         // A fresh editor per language: its state is one locale's words.
         key={locale}
-        locales={[...routing.locales]}
+        locales={locales}
         defaultLocale={routing.defaultLocale}
         {...(translating
           ? {
@@ -160,8 +163,8 @@ export default async function QuizEditPage({
         {...(editorAi?.fill ? { fillAi: editorAi.fill } : {})}
         liveSlug={sourceTranslation?.slug ?? ""}
         siteUrl={siteOrigin()}
-        canPublish={can(subject, "lessons.publish")}
-        canUpdate={can(subject, "lessons.update")}
+        canPublish={can(subject, "quizzes.publish")}
+        canUpdate={can(subject, "quizzes.update")}
         statusLabels={statusLabels}
         initial={{
           quizId: detail.id,

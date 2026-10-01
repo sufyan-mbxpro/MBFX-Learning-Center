@@ -9,8 +9,14 @@
 // is row-dependent gating, which means publishing goes through
 // `transitionContentStatus` and needs `lessons.publish`.
 import { revalidateTag } from "next/cache";
-import { ContentStatus, TranslationStatus, db, type Difficulty, type Prisma } from "@repo/db";
-import { computeSourceHash, isTranslationOutdated } from "@repo/i18n";
+import {
+  ContentStatus,
+  DbNull,
+  TranslationStatus,
+  db,
+  type Difficulty,
+  type Prisma,
+} from "@repo/db";
 import type { Subject } from "@repo/rbac";
 import { parseVideoUrl } from "@repo/utils";
 import type { CreateLessonInput, LessonAttachmentInput, LessonInput } from "@repo/contracts";
@@ -26,6 +32,8 @@ import {
   transitionContentStatus,
 } from "./content.ts";
 import { recordAudit } from "./index.ts";
+import { hashLessonSource, loadLessonSource } from "./learn-source.ts";
+import { afterSourceSave, enqueueEntityTranslations } from "./translation-queue.ts";
 
 // ─── Errors ──────────────────────────────────────────────────
 
@@ -317,8 +325,11 @@ export async function saveLesson(actor: Subject, input: LessonInput): Promise<vo
     select: { slug: true },
   });
 
-  const sourceHash = isSource
-    ? computeSourceHash(`${input.translation.title}${content ?? ""}`)
+  // Phase 5 (ADR-161): a translation records the hash of the English it was
+  // made from. The English row's own hash covers its attachments' labels too,
+  // which this same transaction rewrites, so it is read back after the write.
+  const translatedFrom = isSource
+    ? null
     : await currentLessonSourceHash(input.lessonId, defaultLocale);
 
   const metaData: Prisma.LessonUpdateInput = {};
@@ -354,7 +365,7 @@ export async function saveLesson(actor: Subject, input: LessonInput): Promise<vo
     seoTitle: input.translation.seoTitle ?? null,
     seoDescription: input.translation.seoDescription ?? null,
     seoFocusKeyword: input.translation.seoFocusKeyword ?? null,
-    sourceHash,
+    ...(isSource ? {} : { sourceHash: translatedFrom }),
     // changes-29 B3: MACHINE_TRANSLATED only while the AI text is untouched;
     // any other save, a human's review included, writes TRANSLATED.
     translationStatus: input.translation.machineTranslated
@@ -393,19 +404,11 @@ export async function saveLesson(actor: Subject, input: LessonInput): Promise<vo
     }
   }
 
-  if (isSource && sourceHash) {
-    const siblings = await db.lessonTranslation.findMany({
-      where: { lessonId: input.lessonId, locale: { not: defaultLocale } },
-      select: { id: true, sourceHash: true },
-    });
-    const stale = siblings.filter((s) => isTranslationOutdated(sourceHash, s.sourceHash));
-    if (stale.length > 0) {
-      await db.lessonTranslation.updateMany({
-        where: { id: { in: stale.map((s) => s.id) } },
-        data: { translationStatus: TranslationStatus.OUTDATED },
-      });
-    }
-  }
+  // An English save: a person's translation whose source moved becomes
+  // OUTDATED and a machine one is re-translated (ADR-161 #3). The old sweep
+  // flipped EVERY stale sibling, machine rows included, which under ADR-159
+  // would have made stale machine text indexable.
+  if (isSource) await afterLessonSourceChange(input.lessonId, defaultLocale);
 
   await recordAudit({
     userId: actor.id,
@@ -437,12 +440,20 @@ async function currentLessonSourceHash(
   lessonId: string,
   defaultLocale: string,
 ): Promise<string | null> {
-  const source = await db.lessonTranslation.findUnique({
-    where: { lessonId_locale: { lessonId, locale: defaultLocale } },
-    select: { title: true, content: true },
-  });
-  if (!source) return null;
-  return computeSourceHash(`${source.title}${source.content ?? ""}`);
+  const source = await loadLessonSource(db, lessonId, defaultLocale);
+  return source ? hashLessonSource(source) : null;
+}
+
+/** Stores the English row's hash, sweeps its siblings and enqueues (ADR-161). */
+async function afterLessonSourceChange(lessonId: string, defaultLocale: string): Promise<void> {
+  const hash = await currentLessonSourceHash(lessonId, defaultLocale);
+  if (hash) {
+    await db.lessonTranslation.updateMany({
+      where: { lessonId, locale: defaultLocale },
+      data: { sourceHash: hash },
+    });
+  }
+  await afterSourceSave("lesson", lessonId, hash, defaultLocale);
 }
 
 // ─── Attachments ─────────────────────────────────────────────
@@ -481,6 +492,8 @@ export async function setLessonAttachments(
     entityId: lessonId,
     changes: { after: { count: items.length } },
   });
+  // The labels are part of the lesson's source (ADR-161 #8).
+  await afterLessonSourceChange(lessonId, await defaultLocaleCode());
   revalidateTag("content", { expire: 0 });
 }
 
@@ -620,6 +633,7 @@ export async function duplicateLesson(actor: Subject, lessonId: string): Promise
             seoFocusKeyword: t.seoFocusKeyword,
             sourceHash: t.sourceHash,
             translationStatus: t.translationStatus,
+            attachmentLabels: t.attachmentLabels ?? DbNull,
           })),
         },
         attachments: {
@@ -643,6 +657,8 @@ export async function duplicateLesson(actor: Subject, lessonId: string): Promise
     entityId: copy.id,
     changes: { after: { sourceLessonId: lessonId } },
   });
+  // The copy's English title gained " (copy)", so its machine rows are stale.
+  await enqueueEntityTranslations("lesson", copy.id);
   revalidateTag("content", { expire: 0 });
   return copy.id;
 }
@@ -670,6 +686,7 @@ export async function setLessonDeleted(
     entityType: "lesson",
     entityId: lessonId,
   });
+  if (!deleted) await enqueueEntityTranslations("lesson", lessonId);
   revalidateTag("content", { expire: 0 });
 }
 

@@ -17,8 +17,8 @@ import {
   type ToolKey,
 } from "@repo/contracts";
 import { db, TranslationStatus, type Prisma } from "@repo/db";
+import { pickTranslation, type LocaleFallbackInfo } from "@repo/i18n";
 import { htmlLead } from "@repo/utils";
-import { computeSourceHash, isTranslationOutdated } from "@repo/i18n";
 import type { Subject } from "@repo/rbac";
 import { cacheLife, cacheTag } from "next/cache";
 
@@ -31,6 +31,9 @@ import {
   type MixedRelation,
 } from "./content-relations.ts";
 import { recordAudit } from "./index.ts";
+import { INDEXABLE_TRANSLATION_STATUSES, isIndexableTranslation } from "./reading-languages.ts";
+import { hashToolSource, loadToolSource } from "./tool-source.ts";
+import { afterSourceSave } from "./translation-queue.ts";
 import { publicArticleWhere } from "./public-articles.ts";
 import { publicGlossaryTermWhere } from "./public-content.ts";
 import { publicCourseWhere, publicLessonWhere } from "./public-courses.ts";
@@ -99,7 +102,18 @@ export interface ToolEditorView {
 /** What a public tool page renders, once the registry has approved the key. */
 export interface ToolPageView {
   key: ToolKey;
-  title: string;
+  /**
+   * The words at this URL are not a person's: machine-written, or absent
+   * altogether (ADR-168 #5).
+   */
+  noIndex: boolean;
+  /**
+   * `null` when no translation exists anywhere in the locale's fallback chain
+   * (ADR-168 #2). The page names the tool from the catalog instead
+   * (`tools.names.<key>`) and shows the calculator with a notice — never the
+   * registry key, which is what a reader on `/ar` used to see.
+   */
+  title: string | null;
   tagline: string | null;
   intro: string | null;
   body: string | null;
@@ -114,6 +128,11 @@ export interface ToolPageView {
    * reach the page as a picture that 404s.
    */
   coverUrl: string | null;
+  /**
+   * The locales whose words a person approved, for hreflang (ADR-164 #5). A
+   * tool's path is its registry key in every locale, so a locale is enough.
+   */
+  alternateLocales: string[];
   config: unknown;
   showRelated: boolean;
   relatedCount: number;
@@ -239,49 +258,13 @@ export async function loadTool(key: string, locale = "en"): Promise<ToolEditorVi
 // ─── Admin writes ────────────────────────────────────────────
 
 /**
- * Everything a tool's prose says, in one string, for the source hash.
- *
- * **`faq` and `highlights` are in it — every entry, both fields.** ADR-069's
- * rule:
- * an FAQ-only edit must flip sibling translations OUTDATED exactly as a body
- * edit does. The glossary term found this the hard way (its hash covered two
- * of four prose fields, so an example-only edit left translations claiming to
- * be current), and this is the same mistake refused in advance.
- */
-function toolSourceMaterial(input: {
-  title: string;
-  tagline?: string | null;
-  intro?: string | null;
-  body?: string | null;
-  faq?: readonly ToolFaqEntry[] | null;
-  highlights?: readonly ToolHighlight[] | null;
-}): string {
-  return [
-    input.title,
-    input.tagline ?? "",
-    input.intro ?? "",
-    input.body ?? "",
-    ...(input.faq ?? []).flatMap((entry) => [entry.question, entry.answer]),
-    // The highlights band, title AND text (ADR-114). Same rule, third
-    // application: a translator who has not seen the new benefit copy is
-    // OUTDATED, and the `icon` is deliberately absent — swapping a glyph
-    // changes nothing a translator would have to re-read.
-    ...(input.highlights ?? []).flatMap((entry) => [entry.title, entry.text]),
-    // A separator that cannot occur in prose, written as an ESCAPE rather
-    // than as a raw byte: a NUL in a source file survives git but not every
-    // editor. A space would be wrong — ["a b", "c"] and ["a", "b c"] hash
-    // the same, so moving a word from the title into the tagline would leave
-    // sibling translations claiming to be current.
-  ].join("\u0000");
-}
-
-/**
  * One transaction: tool fields, one translation, and the mixed relation set.
  *
  * All three or none — a save that wrote the copy and dropped the related list
  * would leave an editor looking at a screen that disagrees with itself.
  */
-export async function saveTool(subject: Subject, input: SaveToolInput): Promise<void> {
+/** Returns the tool's id, which its translation jobs are keyed by. */
+export async function saveTool(subject: Subject, input: SaveToolInput): Promise<string> {
   if (!isToolKey(input.key)) throw new UnknownToolError(input.key);
   const key: ToolKey = input.key;
 
@@ -321,20 +304,18 @@ export async function saveTool(subject: Subject, input: SaveToolInput): Promise<
     })),
   };
 
-  const sourceHash = isSource
-    ? computeSourceHash(
-        toolSourceMaterial({
-          title: input.translation.title,
-          tagline: input.translation.tagline,
-          ...clean,
-        }),
-      )
-    : ((
-        await db.toolTranslation.findFirst({
-          where: { tool: { key }, locale: defaultLocale },
-          select: { sourceHash: true },
-        })
-      )?.sourceHash ?? null);
+  // What a translation is measured against: every word the job translates
+  // (`tool-source.ts`, ADR-069's rule for FAQ and highlights, plus the SEO
+  // text since Phase 5). A translation records the hash of the English it was
+  // made from, COMPUTED from that row — the stored one was copied before, and
+  // a seeded English row has none, so every person's translation looked stale.
+  const existingTool = await db.tool.findUnique({ where: { key }, select: { id: true } });
+  const translatedFrom =
+    isSource || !existingTool
+      ? null
+      : await loadToolSource(db, existingTool.id, defaultLocale).then((s) =>
+          s ? hashToolSource(s) : null,
+        );
 
   await db.$transaction(async (tx) => {
     const tool = await tx.tool.upsert({
@@ -371,7 +352,7 @@ export async function saveTool(subject: Subject, input: SaveToolInput): Promise<
       seoTitle: input.translation.seoTitle ?? null,
       seoDescription: input.translation.seoDescription ?? null,
       seoFocusKeyword: input.translation.seoFocusKeyword ?? null,
-      sourceHash,
+      ...(isSource ? {} : { sourceHash: translatedFrom }),
       translationStatus: TranslationStatus.TRANSLATED,
     };
 
@@ -380,22 +361,6 @@ export async function saveTool(subject: Subject, input: SaveToolInput): Promise<
       update: translationData,
       create: { toolId: tool.id, locale: input.translation.locale, ...translationData },
     });
-
-    // A source edit flips stale siblings OUTDATED (Module 06's
-    // isTranslationOutdated over real rows).
-    if (isSource && sourceHash) {
-      const siblings = await tx.toolTranslation.findMany({
-        where: { toolId: tool.id, locale: { not: defaultLocale } },
-        select: { id: true, sourceHash: true },
-      });
-      const stale = siblings.filter((s) => isTranslationOutdated(sourceHash, s.sourceHash));
-      if (stale.length > 0) {
-        await tx.toolTranslation.updateMany({
-          where: { id: { in: stale.map((s) => s.id) } },
-          data: { translationStatus: TranslationStatus.OUTDATED },
-        });
-      }
-    }
 
     await replaceMixedRelations(tx, {
       sourceType: TOOL,
@@ -412,6 +377,24 @@ export async function saveTool(subject: Subject, input: SaveToolInput): Promise<
     entityId: key,
     changes: { after: { key, isEnabled: input.isEnabled, locale: input.translation.locale } },
   });
+
+  // An English save: a person's translation whose source moved becomes
+  // OUTDATED and a machine one is re-translated (ADR-161 #3). The old sweep
+  // flipped EVERY stale sibling, machine rows included — under ADR-159 that
+  // would have made stale machine text indexable.
+  const tool = await db.tool.findUniqueOrThrow({ where: { key }, select: { id: true } });
+  if (isSource) {
+    const source = await loadToolSource(db, tool.id, defaultLocale);
+    const hash = source ? hashToolSource(source) : null;
+    if (hash) {
+      await db.toolTranslation.updateMany({
+        where: { toolId: tool.id, locale: defaultLocale },
+        data: { sourceHash: hash },
+      });
+    }
+    await afterSourceSave("tool", tool.id, hash, defaultLocale);
+  }
+  return tool.id;
 }
 
 /** The on/off switch, which is `tools.publish` rather than `tools.update`. */
@@ -449,9 +432,25 @@ export async function reorderTools(
 
 // ─── Public reads ────────────────────────────────────────────
 
+interface LocaleContext {
+  locales: LocaleFallbackInfo[];
+  defaultLocale: string;
+}
+
+async function localeContext(): Promise<LocaleContext> {
+  const locales = await db.locale.findMany({
+    select: { code: true, fallbackCode: true, isDefault: true },
+  });
+  return {
+    locales: locales.map((l) => ({ code: l.code, fallbackCode: l.fallbackCode })),
+    defaultLocale: locales.find((l) => l.isDefault)?.code ?? "en",
+  };
+}
+
 export interface EnabledTool {
   key: ToolKey;
-  title: string;
+  /** `null` when untranslated in this locale's chain — see `ToolPageView.title`. */
+  title: string | null;
   tagline: string | null;
   icon: string;
   sortOrder: number;
@@ -470,24 +469,33 @@ export async function getEnabledTools(locale = "en"): Promise<EnabledTool[]> {
   cacheTag("content");
   cacheLife({ revalidate: 3600 });
 
-  const rows = await db.tool.findMany({
-    where: { isEnabled: true },
-    orderBy: [{ sortOrder: "asc" }, { key: "asc" }],
-    include: { translations: { where: { locale }, select: { title: true, tagline: true } } },
-  });
+  const [rows, { locales, defaultLocale }] = await Promise.all([
+    db.tool.findMany({
+      where: { isEnabled: true },
+      orderBy: [{ sortOrder: "asc" }, { key: "asc" }],
+      include: {
+        translations: { select: { locale: true, title: true, tagline: true } },
+      },
+    }),
+    localeContext(),
+  ]);
 
   return rows
     .filter((row): row is typeof row & { key: ToolKey } => isToolKey(row.key))
-    .map((row) => ({
-      key: row.key,
-      // A tool with no translation in this locale still has a name: its
-      // registry key humanised. An untranslated card is better than a gap.
-      title: row.translations[0]?.title ?? row.key,
-      tagline: row.translations[0]?.tagline ?? null,
-      icon: TOOLS[row.key].icon,
-      sortOrder: row.sortOrder,
-      coverAssetId: row.coverAssetId,
-    }));
+    .map((row) => {
+      // The fallback chain every other module uses (ADR-168 #1). A tool with
+      // no row in the chain is still listed — its calculator works in every
+      // locale — and the caller names it from the catalog.
+      const picked = pickTranslation(row.translations, locale, defaultLocale, locales);
+      return {
+        key: row.key,
+        title: picked?.title ?? null,
+        tagline: picked?.tagline ?? null,
+        icon: TOOLS[row.key].icon,
+        sortOrder: row.sortOrder,
+        coverAssetId: row.coverAssetId,
+      };
+    });
 }
 
 /** One tool's page, or `null` when it does not exist or is switched off. */
@@ -498,18 +506,24 @@ export async function getToolPage(locale: string, key: string): Promise<ToolPage
 
   if (!isToolKey(key)) return null;
 
-  const row = await db.tool.findUnique({
-    where: { key },
-    include: { translations: { where: { locale } } },
-  });
+  const [row, { locales, defaultLocale }] = await Promise.all([
+    db.tool.findUnique({ where: { key }, include: { translations: true } }),
+    localeContext(),
+  ]);
   // A disabled tool 404s (ADR-086 #5) — the same `null` an unknown key gets,
   // so the page cannot accidentally distinguish them.
   if (!row || !row.isEnabled) return null;
 
-  const translation = row.translations[0];
+  // The words through the fallback chain (ADR-168 #1); the row this URL NAMES
+  // decides indexing, as it does for a glossary term.
+  const translation = pickTranslation(row.translations, locale, defaultLocale, locales);
+  const own = row.translations.find((t) => t.locale === locale);
   return {
     key,
-    title: translation?.title ?? key,
+    // ADR-159 #2: machine-written words at their own URL are served, not
+    // indexed — and ADR-168 #5: neither is an address with no words of its own.
+    noIndex: own ? !isIndexableTranslation(own, defaultLocale) : locale !== defaultLocale,
+    title: translation?.title ?? null,
     tagline: translation?.tagline ?? null,
     intro: translation?.intro ?? null,
     body: translation?.body ?? null,
@@ -519,6 +533,9 @@ export async function getToolPage(locale: string, key: string): Promise<ToolPage
     seoDescription: translation?.seoDescription ?? null,
     coverAssetId: row.coverAssetId,
     coverUrl: await resolveCoverUrl(row.coverAssetId),
+    alternateLocales: row.translations
+      .filter((t) => isIndexableTranslation(t, defaultLocale))
+      .map((t) => t.locale),
     config: row.config,
     showRelated: row.showRelated,
     relatedCount: row.relatedCount,
@@ -903,4 +920,30 @@ async function resolveMixedTargets(
   return targets
     .map((target) => map.get(`${target.targetType}:${target.targetId}`))
     .filter((item): item is ToolRelatedItem => item !== undefined);
+}
+
+/**
+ * The (tool, locale) pairs the sitemap may list (ADR-159 #2): every enabled
+ * tool in the default locale, and in another locale once a person has saved
+ * its words there. A tool page with no row in a locale still renders (the
+ * calculator, a catalog name and a notice — ADR-168), but it is `noindex`
+ * and not a page worth submitting.
+ */
+export async function loadToolSitemapEntries(): Promise<{ key: ToolKey; locale: string }[]> {
+  const defaultLocale =
+    (await db.locale.findFirst({ where: { isDefault: true }, select: { code: true } }))?.code ??
+    "en";
+  const rows = await db.toolTranslation.findMany({
+    where: {
+      tool: { isEnabled: true },
+      OR: [
+        { locale: defaultLocale },
+        { translationStatus: { in: [...INDEXABLE_TRANSLATION_STATUSES] } },
+      ],
+    },
+    select: { locale: true, tool: { select: { key: true } } },
+  });
+  return rows.flatMap((row) =>
+    isToolKey(row.tool.key) ? [{ key: row.tool.key, locale: row.locale }] : [],
+  );
 }

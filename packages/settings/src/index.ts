@@ -19,9 +19,11 @@ import { db, type FeatureVisibility } from "@repo/db";
 import {
   SETTINGS_SCHEMAS,
   SETTING_GROUPS,
+  applySettingTranslation,
   isKnownSettingKey,
   type SettingKey,
   type SettingValue,
+  type TranslatableSettingKey,
 } from "@repo/contracts";
 
 // ─────────────────────────────────────────────────────────────
@@ -57,6 +59,47 @@ export async function getSetting<K extends SettingKey>(key: K): Promise<SettingV
   cacheTag(`settings:${SETTING_GROUPS[key]}`);
   cacheLife({ revalidate: 300 });
   return loadSetting(key);
+}
+
+/**
+ * A translatable setting in `locale` (ADR-165 #4): the English value with that
+ * locale's translated words laid over it. Switches and URLs always come from
+ * English; a blank, missing or malformed translation is the English. Pure DB
+ * read, for tests; the production entry point is `getLocalizedSetting`.
+ */
+export async function loadLocalizedSetting<K extends TranslatableSettingKey>(
+  key: K,
+  locale: string,
+): Promise<SettingValue<K> | null> {
+  const row = await db.setting.findUnique({
+    where: { key },
+    select: { value: true, translations: { where: { locale }, select: { value: true } } },
+  });
+  if (!row) return null;
+  const english = SETTINGS_SCHEMAS[key].parse(row.value) as SettingValue<K>;
+  return applySettingTranslation(key, english, row.translations[0]?.value);
+}
+
+/**
+ * Production entry point for a setting a reader sees in their language. Typed
+ * to registry keys only, so the choice is visible at the call site; a public
+ * render of a registry key through `getSetting` fails the web app's source
+ * guard. Cached under the key's own `settings:{group}` tag — a translation
+ * write drops the same tag an English write does.
+ */
+export async function getLocalizedSetting<K extends TranslatableSettingKey>(
+  key: K,
+  locale: string,
+): Promise<SettingValue<K> | null> {
+  "use cache";
+  cacheTag(`settings:${SETTING_GROUPS[key]}`);
+  cacheLife({ revalidate: 300 });
+  return loadLocalizedSetting(key, locale);
+}
+
+/** Drops a group's cached reads, after a write this package did not make. */
+export function invalidateSettingGroup(group: string): void {
+  revalidateTag(`settings:${group}`, { expire: 0 });
 }
 
 /**

@@ -89,7 +89,8 @@ export async function generateMetadata({
     }),
     // ADR-127 #4: a `?lang=` reading view is never indexed. A conditional
     // SPREAD, never `robots: undefined` (ADR-090).
-    ...(view.readingLocale ? { robots: { index: false, follow: true } } : {}),
+    // ADR-159 #2: machine-written words at their own URL are not indexed either.
+    ...(view.readingLocale || view.noIndex ? { robots: { index: false, follow: true } } : {}),
     ...(await shareMetadata({
       locale,
       siteName: brand,

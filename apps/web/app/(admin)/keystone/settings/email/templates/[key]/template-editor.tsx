@@ -147,6 +147,7 @@ export function EmailTemplateEditor({
   sample,
   canUpdate,
   canTest,
+  testAddress,
   labels,
   editorLabels,
   ai,
@@ -157,6 +158,8 @@ export function EmailTemplateEditor({
   sample: Readonly<Record<string, string>>;
   canUpdate: boolean;
   canTest: boolean;
+  /** The acting admin's address, prefilled in the test dialog. */
+  testAddress: string;
   labels: EmailTemplateEditorLabels;
   /** Built on the server, the way every other RichTextEditor host does it. */
   editorLabels: RichTextLabels;
@@ -194,7 +197,7 @@ export function EmailTemplateEditor({
   const [replyTo, setReplyTo] = React.useState(template.replyTo ?? "");
 
   const [testOpen, setTestOpen] = React.useState(false);
-  const [testTo, setTestTo] = React.useState("");
+  const [testTo, setTestTo] = React.useState(testAddress);
   const [resetOpen, setResetOpen] = React.useState(false);
   const [previewWidth, setPreviewWidth] = React.useState<"desktop" | "mobile">("desktop");
 

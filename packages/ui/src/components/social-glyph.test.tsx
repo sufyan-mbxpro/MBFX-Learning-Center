@@ -15,6 +15,12 @@ describe("resolveSocialGlyph", () => {
     }
   });
 
+  it("resolves the review platforms' marks (ADR-169)", () => {
+    for (const platform of ["google", "trustpilot", "facebook"]) {
+      expect(resolveSocialGlyph(platform)).toBe(platform);
+    }
+  });
+
   it("maps the seed's legacy `twitter` icon value onto X", () => {
     expect(resolveSocialGlyph("twitter")).toBe("x");
   });

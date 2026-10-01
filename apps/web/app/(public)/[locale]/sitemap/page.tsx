@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { localizedPath, titleTemplate, titleFrom } from "../../../_lib/seo.ts";
+import { titleTemplate, titleFrom, staticPageAlternates } from "../../../_lib/seo.ts";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { ExternalLink } from "lucide-react";
 
@@ -51,7 +51,7 @@ export async function generateMetadata({
   return {
     title: titleFrom(template, t("sitemap.title")),
     description: t("sitemap.lead"),
-    alternates: { canonical: localizedPath(locale, ROUTE_PATHS.sitemap) },
+    alternates: await staticPageAlternates(locale, ROUTE_PATHS.sitemap),
     // Deliberately NO `robots` key, not even `{ index: true }`: a present key
     // replaces the root layout's site-wide directive rather than inheriting
     // it (code-style.md #26, ADR-090). This page is indexable, which is what
@@ -105,7 +105,10 @@ export default async function SitemapPage({ params }: PageProps<"/[locale]/sitem
                     className="flex h-full flex-col gap-4 rounded-xl border bg-card p-6"
                   >
                     <h2 id={headingId} className="text-base font-semibold text-card-foreground">
-                      {column.name ?? ""}
+                      {/* The footer's own heading rule, so the two agree. */}
+                      {tFooter.has(`columns.${column.key}`)
+                        ? tFooter(`columns.${column.key}`)
+                        : (column.name ?? "")}
                     </h2>
                     <ul className="flex flex-col gap-1">
                       {column.items.map((item) => (

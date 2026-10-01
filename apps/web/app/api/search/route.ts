@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { getTranslations } from "next-intl/server";
 
 import { rateLimit } from "@repo/auth";
 import { publicSearchQuerySchema, ROUTE_PATHS } from "@repo/contracts";
@@ -86,13 +87,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // Tools are CODE plus a row (ADR-086), not a translation table, so they are
   // matched from the enabled list rather than queried — which also keeps the
   // service free of a `@repo/contracts` route-path dependency.
-  const tools = kinds.includes("tool") ? await getEnabledTools(locale) : [];
+  const [tools, tTools] = await Promise.all([
+    kinds.includes("tool") ? getEnabledTools(locale) : [],
+    getTranslations({ locale, namespace: "tools" }),
+  ]);
 
   const result = await searchPublicContent(locale, q, {
     kinds,
     staticPages: tools.map((tool) => ({
       id: tool.key,
-      title: tool.title,
+      // ADR-168: an untranslated tool is found by its catalog name, never its key.
+      title: tool.title ?? tTools(`names.${tool.key}`),
       excerpt: tool.tagline,
       href: `${ROUTE_PATHS.tools}/${tool.key}`,
     })),

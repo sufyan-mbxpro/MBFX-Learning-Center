@@ -16,7 +16,8 @@ import { describe, expect, it } from "vitest";
 import {
   SUPPORT_CHANNELS,
   SUPPORT_CONTACT,
-  SUPPORT_FAQ,
+  SUPPORT_FAQ_FIGURES,
+  SUPPORT_FAQ_KEYS,
 } from "./(public)/[locale]/support/_content/support-facts.ts";
 
 const APP_ROOT = resolve(process.cwd(), "app");
@@ -100,27 +101,51 @@ describe("the three channels reach a person", () => {
   });
 });
 
-describe("the FAQ", () => {
-  it("carries the owner's seven questions", () => {
-    expect(SUPPORT_FAQ).toHaveLength(7);
+describe("the FAQ (ADR-159 #6: words in the catalog, figures in the facts file)", () => {
+  const catalog = JSON.parse(raw("../../../packages/i18n/messages/en.json")) as {
+    support: { faq: { items: Record<string, { question: string; answer: string }> } };
+  };
+  const items = catalog.support.faq.items;
+
+  it("carries the owner's seven questions, each with its message and its figures", () => {
+    expect(SUPPORT_FAQ_KEYS).toHaveLength(7);
+    expect(Object.keys(items).sort()).toEqual([...SUPPORT_FAQ_KEYS].sort());
+    expect(Object.keys(SUPPORT_FAQ_FIGURES).sort()).toEqual([...SUPPORT_FAQ_KEYS].sort());
   });
 
   it("gives every question a non-empty answer", () => {
-    for (const item of SUPPORT_FAQ) {
-      expect(item.question.trim()).not.toBe("");
-      expect(item.answer.trim()).not.toBe("");
+    for (const key of SUPPORT_FAQ_KEYS) {
+      expect(items[key]!.question.trim()).not.toBe("");
+      expect(items[key]!.answer.trim()).not.toBe("");
     }
   });
 
-  // These are plain strings from a `.ts` file, never editor HTML, so
-  // `FaqPanel` must be told so — `format="html"` would render them through the
-  // rich-text path and any stray angle bracket with it.
+  // The rule the move rests on: a figure is a claim about the brokerage, so it
+  // lives in the facts file and reaches a message only as an argument. A
+  // digit in a catalog message is a figure a translator — or Google — could
+  // change without anyone noticing.
+  it("holds no digit in any FAQ message", () => {
+    for (const key of SUPPORT_FAQ_KEYS) {
+      expect(items[key]!.question).not.toMatch(/\d/);
+      expect(items[key]!.answer).not.toMatch(/\d/);
+    }
+  });
+
+  it("names exactly the arguments the facts file supplies", () => {
+    for (const key of SUPPORT_FAQ_KEYS) {
+      const used = [...items[key]!.answer.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
+      expect(used).toEqual(Object.keys(SUPPORT_FAQ_FIGURES[key]).sort());
+    }
+  });
+
+  // Plain strings rendered with `format="text"` — the rich-text path would
+  // render any stray angle bracket.
   it("renders them as text, not HTML", () => {
     expect(read(PAGE)).toContain('format="text"');
   });
 
   it("holds no markup, which is what makes the text renderer correct", () => {
-    for (const item of SUPPORT_FAQ) expect(item.answer).not.toMatch(/<[a-z/]/i);
+    for (const key of SUPPORT_FAQ_KEYS) expect(items[key]!.answer).not.toMatch(/<[a-z/]/i);
   });
 });
 
@@ -215,7 +240,9 @@ describe("the anonymous mutation keeps all five of its guards", () => {
   // Two is a pattern; a third without its own ADR is how a repo ends up with
   // an anonymous write nobody audited. A honeypot constant is the marker,
   // because it is the one thing ONLY a subject-less mutation needs: a form
-  // behind a session has a session to check instead.
+  // behind a session has a session to check instead. The third (ADR-170, the
+  // promotion counters) is a route handler with no form, so it is declared and
+  // policed in `promotions-public.test.ts` instead of here.
   it("is the SECOND such action, and a third has to be declared", () => {
     const dir = resolve(APP_ROOT, "(public)/[locale]/_actions");
     const anonymous = readdirSync(dir)

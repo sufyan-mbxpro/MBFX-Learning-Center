@@ -111,11 +111,16 @@ these.
 ### Permission groups (ADR-083)
 
 11b. **A permission belongs to the SCREEN it governs, and the card order is
-code.** `Permission.groupName` is page-shaped: `learning` (courses,
-lessons, and so quizzes and videos, which share the lesson keys),
-`glossary`, `media`, `articles`, `website`, `users`, `employees`,
-`newsletter`, `market`, `tools`, `translations`, `seo`, `email`, `settings`,
-`system`. `tools` is the fourteenth, added by ADR-086 #6 and the first use of
+code.** `Permission.groupName` is page-shaped, ONE CARD PER SIDEBAR ENTRY
+since ADR-177: `courses`, `lessons`, `quizzes`, `videos`, `glossary`,
+`articles`, `promotions`, `tools`, `market`, `media`, `website`, `users`,
+`roles`, `employees`, `newsletter`, `announcements`, `settings`, `email`, `ai`,
+`translations`, `seo`, `system`, each filed under the sidebar heading it sits
+under (`PERMISSION_GROUP_SECTIONS`), which the role editor draws. Quizzes and
+videos have their own keys (ADR-177 superseded ADR-058 #8 and ADR-068 §3). A
+seeded key that no code checks must be listed in `UNUSED_PERMISSIONS`, which
+the editor marks "Not used yet" (`permission-usage.test.ts` fails both ways).
+`tools` was the fourteenth group, added by ADR-086 #6 and the first use of
 this rule's own escape hatch — `/admin/tools` is its own screen, so its keys
 are its own. Instruments got none: `market.*` has been seeded since Module 01.
 A new key names one of those; adding a group means adding it to

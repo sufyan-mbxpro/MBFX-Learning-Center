@@ -125,7 +125,10 @@ export async function cloneRoleAction(
 }
 
 export async function offboardEmployeeAction(employeeId: string): Promise<void> {
-  const subject = await requirePermission("employees.update");
+  // `employees.delete` ("Offboard employees"), not `.update` (ADR-177):
+  // offboarding ends someone's staff access, and the key that says so had
+  // governed nothing while this sat on the editing key.
+  const subject = await requirePermission("employees.delete");
   const userId = await offboardEmployee(subject.id, id.parse(employeeId));
   if (userId) await revokeAllSessions(userId);
 }

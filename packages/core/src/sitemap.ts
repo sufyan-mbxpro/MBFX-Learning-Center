@@ -25,6 +25,8 @@ import {
   type GlossaryTopicSitemapEntry,
 } from "./glossary-topics.ts";
 import { loadVideoSitemapEntries, type VideoSitemapEntry } from "./videos.ts";
+import { loadToolSitemapEntries } from "./tools.ts";
+import type { ToolKey } from "@repo/contracts";
 
 /** A row addressed by its own slug — the sitemap builds the path from it. */
 export interface SlugSitemapEntry {
@@ -51,6 +53,8 @@ export interface SitemapEntries {
   learn: LearnSitemapEntry[];
   glossaryTopics: GlossaryTopicSitemapEntry[];
   videos: VideoSitemapEntry[];
+  /** Enabled tools, per locale where a person saved the words (ADR-159 #2). */
+  tools: { key: ToolKey; locale: string }[];
 }
 
 /**
@@ -67,15 +71,17 @@ export async function getSitemapEntries(): Promise<SitemapEntries> {
   cacheTag("content");
   cacheLife({ revalidate: 3600 });
 
-  const [glossary, articles, taxonomy, pages, learn, glossaryTopics, videos] = await Promise.all([
-    loadGlossarySitemapEntries(),
-    loadArticleSitemapEntries(),
-    loadArticleTaxonomySitemapEntries(),
-    loadPageSitemapEntries(),
-    loadLearnSitemapEntries(),
-    loadGlossaryTopicSitemapEntries(),
-    loadVideoSitemapEntries(),
-  ]);
+  const [glossary, articles, taxonomy, pages, learn, glossaryTopics, videos, tools] =
+    await Promise.all([
+      loadGlossarySitemapEntries(),
+      loadArticleSitemapEntries(),
+      loadArticleTaxonomySitemapEntries(),
+      loadPageSitemapEntries(),
+      loadLearnSitemapEntries(),
+      loadGlossaryTopicSitemapEntries(),
+      loadVideoSitemapEntries(),
+      loadToolSitemapEntries(),
+    ]);
 
   return {
     glossary,
@@ -86,5 +92,6 @@ export async function getSitemapEntries(): Promise<SitemapEntries> {
     learn,
     glossaryTopics,
     videos,
+    tools,
   };
 }

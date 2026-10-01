@@ -102,7 +102,73 @@ export interface SeededTool {
   translations: { locale: string; title: string; tagline: string | null }[];
 }
 
+export interface PromotionRow {
+  id: string;
+  status: "DRAFT" | "ACTIVE" | "ARCHIVED";
+  deletedAt: string | null;
+  frequency: string;
+  untranslated: string;
+  translations: { locale: string; title: string | null }[];
+}
+
+/** One promotion (changes-52 P8), or null when the id names nothing. */
+export function promotion(id: string): PromotionRow | null {
+  return query<PromotionRow | null>("promotion", { id });
+}
+
+/** A promotion's popup counters, summed over every day (ADR-170). */
+export function promotionPopupTotals(id: string): {
+  impressions: number;
+  clicks: number;
+  dismissals: number;
+} {
+  return query("promotionPopupTotals", { id });
+}
+
 /** One tool row, for the admin suite's database-level assertions. */
 export function seededTool(key: string): SeededTool {
   return query<SeededTool>("tool", { key });
+}
+
+// ─── Announcements (ADR-171, changes-54 N7) ──────────────────
+
+export interface AnnouncementFixture {
+  addresses: { a: string; b: string; solo: string };
+  users: { id: string; email: string; name: string }[];
+  courseId: string;
+  courseTitle: string | undefined;
+}
+
+/** Two learners, two subscribers (one overlapping), delivery pointed at Mailpit. */
+export function announcementFixture(args: {
+  stamp: string;
+  smtpHost: string;
+  smtpPort: number;
+}): AnnouncementFixture {
+  return query<AnnouncementFixture>("announcementFixture", args);
+}
+
+export interface AnnouncementRow {
+  id: string;
+  status: string;
+  recipientCount: number;
+  sentCount: number;
+  recipients: {
+    email: string;
+    status: string;
+    userId: string | null;
+    subscriberId: string | null;
+  }[];
+}
+
+export function announcement(id: string): AnnouncementRow | null {
+  return query<AnnouncementRow | null>("announcement", { id });
+}
+
+export function announcementCount(name: string): number {
+  return query<number>("announcementCount", { name });
+}
+
+export function announcementSuppression(email: string): { reason: string } | null {
+  return query<{ reason: string } | null>("announcementSuppression", { email });
 }

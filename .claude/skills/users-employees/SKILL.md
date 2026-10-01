@@ -12,12 +12,15 @@ employees = HR context. Separate tables, nullable `userId` link.
   and permissions (ADR-016); their key and level are locked and they are
   never deleted (lockout risk). `canAssignRole` strict-`<` level guard
   enforced SERVER-side (this alone keeps `super_admin` untouchable);
-  permission panel grouped by `groupName`, autosaving.
+  permission panel grouped by `groupName`, one card per sidebar entry under
+  the sidebar's four headings (ADR-177), autosaving. Keys no code checks
+  carry a "Not used yet" badge (`UNUSED_PERMISSIONS`).
 - **Per-user overrides:** grant or DENY with a required reason field —
   audited. DENY beats everything (frozen rbac semantics).
 - **Employees:** CRUD, department/designation admin, org chart from
   `reportingToId`, **offboarding**: employee → TERMINATED, user deactivated,
-  and sessions revoked — one transactional server action.
+  and sessions revoked — one transactional server action, gated on
+  `employees.delete` since ADR-177 (it was `employees.update`).
 - Last super_admin cannot be demoted/deactivated.
 
 ## Required tests

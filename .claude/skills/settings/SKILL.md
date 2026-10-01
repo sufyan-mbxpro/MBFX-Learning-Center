@@ -125,3 +125,48 @@ is gone from the registry, so nothing can read it either way.
 `20260916150000_settings_cleanup_changes36` also moves `footer.menuColumns` to
 its five-column value, bounded to a row still holding the previous seeded
 three (ADR-108's migration is the template).
+
+## Translatable settings (ADR-165)
+
+`Setting.isTranslatable` was seeded false and read by nothing from Module 01
+to 2026-09-28. Six keys now carry words a reader sees in their language:
+`site.description`, `legal.riskDisclaimer`, `legal.copyrightNotice`, and the
+text fields of `header.announcementBar` / `header.topBar` / `header.cta`.
+
+- **The registry is code.** `TRANSLATABLE_SETTINGS` (`@repo/contracts`) names
+  each key, WHICH FIELDS are words (`value` for a whole-string key), each
+  field's maximum, and whether the machine may translate it. The column is
+  written from it (seed + migration) and read by nothing; `@repo/db` keeps a
+  copy of the key list for the seed, held equal by `src/index.test.ts` here.
+- **`SettingTranslation` holds only words**, always as an object of fields.
+  A URL, a switch or a phone number is never there — the reader ignores one
+  if a row carries it — so a translation cannot repoint the header button.
+- **Read with `getLocalizedSetting(key, locale)`**, typed to registry keys,
+  cached under the key's existing `settings:{group}` tag. Blank, missing or
+  malformed ⇒ the English. `apps/web/app/translatable-settings.test.ts` fails
+  on a public `getSetting("<registry key>")`, and on a registry key nothing
+  renders through the localized reader (code-style.md #28).
+- **The `legal` group is human-only** (`machine: false`): no job, no backfill,
+  never sent to Google. A language cannot be switched on while either legal
+  key has no translation (`siteTextIncomplete`). Written at Settings →
+  Translation → Site text, behind `settings.update` AND `translations.update`.
+- **Excluded on purpose**: `site.name` (brand), `site.tagline` (read by
+  nothing — delete it or wire it before translating it), `seo.titleTemplate`,
+  the two legal identity lines (ADR-110), the `email` group.
+- Adding a key: a registry entry, the `@repo/db` list entry the test demands,
+  its public call site moved to `getLocalizedSetting`, a field label under
+  `admin.translate.siteText.fields` if the field name is new.
+
+## `site.reviewsUrl` is gone (changes-53, ADR-169)
+
+The reviews band's one Trustpilot link became a table, `review_platforms`, one
+row per `REVIEW_PLATFORM_KEYS` entry (switch, order, public identifier,
+optional https override). It is edited at Settings → General → **Reviews**, a
+keyless tab with its own form and action (the reCAPTCHA precedent), under
+`settings.update`, cached under the old key's `settings:general` tag.
+`20260929150000_review_platforms_changes53_adr169` carried a non-empty value
+into the Trustpilot row's custom link (switched on) and deleted the setting
+row; the key is gone from the schema, the group map, the seed and
+`seed-live/defaults.json`. Not a setting because each platform has four
+values, and a JSON blob in one setting would have had no per-field
+validation or error paths.

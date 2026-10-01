@@ -38,3 +38,69 @@ untouched); fallback resolution table incl. ar-no-fallback; sourceHash
 lifecycle (edit EN → ES flips OUTDATED → retranslate → TRANSLATED); catalog
 completeness (non-default missing keys = CI warning; default missing a used
 key = CI error); RTL smoke suite (Part C) wired here. 80% floor.
+
+## Translatable settings (ADR-165)
+
+Settings are a translatable type like any other (`setting`, first in
+`TRANSLATABLE_TYPES`), but their English lives in `settings.value`, not in a
+row of their own translation table. So the type runs the engine's job
+handler (`translationJobHandler`, with `lockSource` locking the `settings`
+row and `acceptResult` holding back a result that lost a `{token}`) and
+writes its walk, counts, estimate and review rows by hand, as articles do.
+`afterWrite` drops the key's `settings:{group}` tag after the transaction
+commits — the runner's per-batch revalidation covers `content` and
+`navigation` only. The `legal` group is never machine-translated, and
+activation refuses a language whose legal keys a person has not written.
+Full rules: the settings skill, "Translatable settings".
+
+## Arabic is enforced (ADR-166)
+
+`ar` is in `ENFORCED_LOCALES` since 2026-09-28: a public key added to
+`en.json` without its Arabic fails `check:catalog-completeness`. Write the
+Arabic in the same PR. A plural needs all six Arabic categories (`zero one
+two few many other`); keep every `{argument}` and tag the English has; keep
+figures as ICU arguments, never digits typed into prose; keep brand and
+product names in Latin script. A count that reads "{done} of {total}
+lessons" is phrased neutrally ("الدروس: {done} من {total}"), because the
+Arabic noun's form depends on the number.
+
+## Phase 6: serving a second language (2026-09-29)
+
+- **Every content type resolves through `pickTranslation`**, tools included
+  since ADR-168. An untranslated tool keeps its calculator (its labels are
+  catalog strings), takes its name from `tools.names.<key>` and is `noindex`.
+  Never print a registry key as a title; `tools-fallback.test.ts` guards it.
+- **A coded page that exists in every served locale declares hreflang** through
+  `staticPageAlternates(locale, path)` (`app/_lib/seo.ts`); a listing's first
+  page does too via `listingMetadata`. A content page uses `alternatesFor` over
+  indexable translations only. `seo-metadata.test.ts` lists the static routes.
+- **The E2E database serves Arabic** (`e2e-fixtures.ts` → `activateArabic`), so
+  `e2e/public/rtl-smoke.spec.ts` (dir, lang, no sideways scroll at desktop and
+  phone widths, axe) and every RTL case in the other public specs actually run.
+
+## Languages are admin-managed; interface text has overrides (ADR-178)
+
+- **`SUPPORTED_LOCALES` (`@repo/i18n/routing`) is the routable set** — 28
+  languages; `routing.locales` and `LOCALE_DIRECTION` derive from it. The
+  admin adds a `Locale` row from it at Settings → Translation → Languages
+  (create / edit / delete, `locales.manage`); a code outside it is a code
+  change. Delete is refused for the default, a live language, or one with
+  any row in `LANGUAGE_CONTENT_TABLES` (`@repo/core` `languages.ts`;
+  `languages.test.ts` fails when a new `*Translation` model is missing).
+- **A catalog is FILE + `MessageOverride` rows.** Read it only through
+  `loadMergedCatalog` / `getCatalog` (`catalog.ts`, tag `messages`): the
+  request config, `publicCatalogGaps` and `catalogMessage` all do, so the
+  page, the activation gate and emails agree. A language with no file
+  (`CATALOG_FILES`) is all overrides. Never `import()` a catalog by a
+  string-built path.
+- **Interface text** (Settings → Translation → Interface text,
+  `translations.update`) edits public keys only; a value must keep the
+  English message's `{arguments}` and `<tags>` (`checkMessageShape`).
+  "Translate missing with Google" (`translations.approve`) fills 200 keys a
+  press through `translateCatalogMessages` and never overwrites a person's
+  row.
+- **Admin pickers read `getAuthoringLocales()`**, never `routing.locales`
+  (which is now 28 codes).
+- **The proxy only lets browser-language detection land on a SERVED
+  language** (`intlServed` + `GET /api/locales`); otherwise `/` answers in
+  the default language.

@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import { TranslationStatus } from "@repo/db";
 import {
   advertisedAlternates,
+  INDEXABLE_TRANSLATION_STATUSES,
   READABLE_TRANSLATION_STATUSES,
+  isIndexableTranslation,
   applyReadingLocale,
   resolveReadingLanguages,
   type LocaleMeta,
@@ -23,12 +25,33 @@ const row = (locale: string, translationStatus: TranslationStatus) => ({
 });
 
 describe("READABLE_TRANSLATION_STATUSES", () => {
-  it("admits only what a human wrote (ADR-097's consequence)", () => {
+  it("admits a person's rows and, since ADR-159, a machine's", () => {
     expect(READABLE_TRANSLATION_STATUSES).toContain(TranslationStatus.TRANSLATED);
     expect(READABLE_TRANSLATION_STATUSES).toContain(TranslationStatus.OUTDATED);
-    expect(READABLE_TRANSLATION_STATUSES).not.toContain(TranslationStatus.MACHINE_TRANSLATED);
+    expect(READABLE_TRANSLATION_STATUSES).toContain(TranslationStatus.MACHINE_TRANSLATED);
+  });
+
+  it("keeps out what is waiting for a person: drafts and flagged figures", () => {
     expect(READABLE_TRANSLATION_STATUSES).not.toContain(TranslationStatus.DRAFT);
     expect(READABLE_TRANSLATION_STATUSES).not.toContain(TranslationStatus.NEEDS_REVIEW);
+  });
+});
+
+describe("INDEXABLE_TRANSLATION_STATUSES (ADR-159 #2)", () => {
+  it("indexes only what a person saved — never machine prose", () => {
+    expect([...INDEXABLE_TRANSLATION_STATUSES].sort()).toEqual(["OUTDATED", "TRANSLATED"]);
+  });
+
+  it("always indexes the default locale's row, whatever its status", () => {
+    expect(
+      isIndexableTranslation({ locale: "en", translationStatus: TranslationStatus.DRAFT }, "en"),
+    ).toBe(true);
+    expect(
+      isIndexableTranslation(
+        { locale: "es", translationStatus: TranslationStatus.MACHINE_TRANSLATED },
+        "en",
+      ),
+    ).toBe(false);
   });
 });
 
@@ -50,7 +73,7 @@ describe("resolveReadingLanguages", () => {
     ]);
   });
 
-  it("drops a machine translation and a draft", () => {
+  it("lists a machine translation (ADR-159) but drops a draft", () => {
     const languages = resolveReadingLanguages(
       [
         row("en", TranslationStatus.TRANSLATED),
@@ -60,7 +83,7 @@ describe("resolveReadingLanguages", () => {
       known,
       ["en"],
     );
-    expect(languages.map((l) => l.locale)).toEqual(["en"]);
+    expect(languages.map((l) => l.locale)).toEqual(["en", "es"]);
   });
 
   it("always lists the translation on screen, whatever its status", () => {
@@ -88,6 +111,7 @@ describe("applyReadingLocale", () => {
     en,
     row("ar", TranslationStatus.TRANSLATED),
     row("es", TranslationStatus.MACHINE_TRANSLATED),
+    row("fa", TranslationStatus.DRAFT),
   ];
 
   it("swaps in a human translation the reader chose, with its direction", () => {
@@ -96,11 +120,17 @@ describe("applyReadingLocale", () => {
     expect(result.readingLocale).toBe("ar");
     expect(result.contentLocale).toBe("ar");
     expect(result.contentDirection).toBe("rtl");
-    expect(result.readingLanguages.map((l) => l.locale)).toEqual(["en", "ar"]);
+    expect(result.readingLanguages.map((l) => l.locale)).toEqual(["en", "ar", "es"]);
   });
 
-  it("ignores a machine translation, an unknown code and the language already shown", () => {
-    for (const lang of ["es", "fr", "en", undefined]) {
+  it("swaps in a machine translation the reader chose (ADR-159 #1)", () => {
+    const result = applyReadingLocale(translations, en, "es", known, "en");
+    expect(result.picked?.locale).toBe("es");
+    expect(result.readingLocale).toBe("es");
+  });
+
+  it("ignores a draft, an unknown code and the language already shown", () => {
+    for (const lang of ["fa", "fr", "en", undefined]) {
       const result = applyReadingLocale(translations, en, lang, known, "en");
       expect(result.picked).toBe(en);
       expect(result.readingLocale).toBeNull();

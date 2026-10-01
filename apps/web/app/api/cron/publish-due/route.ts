@@ -1,6 +1,6 @@
-import { createHash, timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { publishDueArticles, publishDueContent } from "@repo/core";
+import { cronAuthFailure } from "../_lib/cron-auth.ts";
 
 // The scheduled-publishing sweep (ADR-071 #3) — this repo's first scheduled-job
 // seam, and deliberately the thinnest one that works.
@@ -33,36 +33,11 @@ import { publishDueArticles, publishDueContent } from "@repo/core";
 // request headers is dynamic already. architecture.md #12 bars the sibling
 // `export const revalidate` for the same reason.
 
-function unauthorized(): NextResponse {
-  return NextResponse.json(
-    { error: "unauthorized" },
-    { status: 401, headers: { "cache-control": "no-store" } },
-  );
-}
-
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  const secret = process.env.CRON_SECRET;
-
-  // Absent secret FAILS CLOSED. An unset variable must never mean "anyone may
-  // publish content" — 503 says the endpoint is not configured, which is true,
-  // and leaves the product correct because of the query-side rule above.
-  if (!secret) {
-    return NextResponse.json(
-      { error: "not_configured" },
-      { status: 503, headers: { "cache-control": "no-store" } },
-    );
-  }
-
-  const header = request.headers.get("authorization") ?? "";
-  const presented = header.startsWith("Bearer ") ? header.slice(7) : "";
-
-  // Compare SHA-256 digests, not the strings. `timingSafeEqual` THROWS on a
-  // length mismatch, so feeding it raw secrets of different lengths would
-  // force an early return that leaks the length through timing — the exact
-  // thing the function exists to prevent. Digests are always 32 bytes, so the
-  // comparison is constant-width and constant-time for every input.
-  const digest = (v: string) => createHash("sha256").update(v).digest();
-  if (!timingSafeEqual(digest(presented), digest(secret))) return unauthorized();
+  // The shared bearer check (`_lib/cron-auth.ts`): 503 with no secret, 401
+  // for anything but the right token.
+  const refused = cronAuthFailure(request);
+  if (refused) return refused;
 
   const now = new Date();
   const [articles, content] = await Promise.all([publishDueArticles(now), publishDueContent(now)]);

@@ -5,14 +5,17 @@
 // service writes the audit row, tags revalidate inside the service. These
 // stay thin — the logic lives in @repo/core / @repo/settings where it's
 // integration-tested at the DB level.
+import { after } from "next/server";
 import { z } from "zod";
 import {
   activateTheme,
+  afterSettingsSaved,
   createSocialLink,
   deleteSocialLink,
   deleteThemePreset,
   moveMenuItem,
   recordAudit,
+  runTranslationWork,
   saveTheme,
   saveThemePreset,
   setMenuItemActive,
@@ -58,6 +61,15 @@ export async function updateSettingsAction(input: unknown): Promise<void> {
       entityType: "setting",
       entityId: result.key,
       changes: { before: result.before, after: result.after },
+    });
+  }
+  // A translatable setting's English moved (ADR-165 #7): a person's stale
+  // translation is flagged now, and a machine key is translated after the
+  // response rather than before it (ADR-162 #7).
+  const queued = await afterSettingsSaved(results.map((result) => result.key));
+  if (queued.length > 0) {
+    after(async () => {
+      for (const id of queued) await runTranslationWork({ entity: { type: "setting", id } });
     });
   }
 }

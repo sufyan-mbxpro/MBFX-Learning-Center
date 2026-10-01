@@ -74,6 +74,10 @@ import {
   AiTranslateButton,
   type AiTranslateLabels,
 } from "../../_components/ai-translate-button.tsx";
+import {
+  GoogleTranslateButton,
+  type GoogleTranslateLabels,
+} from "../../_components/google-translate-button.tsx";
 import { TakeawaysField, type TakeawaysLabels } from "../../_components/takeaways-field.tsx";
 import {
   duplicateArticleAction,
@@ -163,6 +167,7 @@ export function ArticleEditor({
   tags,
   relatedOptions,
   locales,
+  initialLocale,
   siteUrl,
   defaultLocale,
   canPublish,
@@ -171,12 +176,15 @@ export function ArticleEditor({
   labels,
   takeawaysLabels,
   ai,
+  google,
 }: {
   article: ArticleData;
   categories: { id: string; name: string; count: number }[];
   tags: { id: string; name: string; count: number }[];
   relatedOptions: { id: string; title: string }[];
   locales: string[];
+  /** The language tab to open on (`?locale=`); the first locale otherwise. */
+  initialLocale?: string;
   siteUrl: string;
   defaultLocale: string;
   canPublish: boolean;
@@ -202,11 +210,17 @@ export function ArticleEditor({
     fill?: AiFillConfig;
   };
   takeawaysLabels: TakeawaysLabels;
+  /**
+   * "Translate with Google" (ADR-160), or nothing: present only when automatic
+   * translation is switched on — the same presence-is-availability rule as
+   * `ai` above.
+   */
+  google?: { labels: GoogleTranslateLabels };
 }) {
   const router = useRouter();
   const { run, pending } = useServerAction();
 
-  const [locale, setLocale] = useState(locales[0] ?? defaultLocale);
+  const [locale, setLocale] = useState(initialLocale ?? locales[0] ?? defaultLocale);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   // Every locale's draft, so switching away and back keeps unsaved edits.
@@ -567,6 +581,29 @@ export function ArticleEditor({
                 {/* changes-29 B3. Absent on the SOURCE locale — there is
                     nothing to translate from — and absent entirely when the
                     feature is off. */}
+                {/* ADR-160: Google fills the form from the source locale's
+                    CURRENT text — body as HTML, the rest as plain text, never
+                    the slug. Marked machine-written like the AI's result, so
+                    an untouched Save keeps it MACHINE_TRANSLATED. */}
+                {google && locale !== defaultLocale && (
+                  <GoogleTranslateButton
+                    labels={google.labels}
+                    entity={{ type: "article", id: article.id }}
+                    sourceLocale={defaultLocale}
+                    targetLocale={locale}
+                    texts={Object.fromEntries(
+                      Object.entries(translatableFields(drafts[defaultLocale])).filter(
+                        ([name]) => name !== "body",
+                      ),
+                    )}
+                    html={drafts[defaultLocale]?.body ? { body: drafts[defaultLocale]!.body } : {}}
+                    wouldOverwrite={
+                      tr.translationStatus !== "MACHINE_TRANSLATED" &&
+                      [tr.title, tr.excerpt, tr.body].some((value) => value.trim().length > 0)
+                    }
+                    onApply={(translated) => setTr({ ...translated, machineTranslated: true })}
+                  />
+                )}
                 {ai?.translate && locale !== defaultLocale && (
                   <AiTranslateButton
                     labels={ai.translate.labels}
@@ -577,6 +614,9 @@ export function ArticleEditor({
                     // and never `slug`: a slug change writes a Redirect and is
                     // an SEO act, so it stays a human decision.
                     fields={translatableFields(drafts[defaultLocale])}
+                    // ADR-160 #7: text already in this locale — usually
+                    // Google's — is refined rather than replaced.
+                    drafts={translatableFields(tr)}
                     wouldOverwrite={
                       tr.translationStatus !== "MACHINE_TRANSLATED" &&
                       [tr.title, tr.excerpt, tr.body].some((value) => value.trim().length > 0)

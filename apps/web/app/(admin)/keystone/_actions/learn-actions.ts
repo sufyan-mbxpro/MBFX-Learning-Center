@@ -55,6 +55,7 @@ import {
 } from "@repo/contracts";
 import { requirePermission } from "@repo/rbac";
 import { parseScheduledFor } from "./scheduled-for.ts";
+import { translateSoon } from "./translate-soon.ts";
 
 const id = z.string().min(1);
 
@@ -67,7 +68,9 @@ export async function createCourseAction(input: CreateCourseInput): Promise<stri
 
 export async function saveCourseAction(input: CourseInput): Promise<void> {
   const subject = await requirePermission("courses.update");
-  await saveCourse(subject, courseInputSchema.parse(input));
+  const parsed = courseInputSchema.parse(input);
+  await saveCourse(subject, parsed);
+  translateSoon("course", parsed.courseId);
 }
 
 export async function setCourseStatusAction(
@@ -85,11 +88,13 @@ export async function setCourseStatusAction(
     contentStatusSchema.parse(to),
     parseScheduledFor(scheduledForIso),
   );
+  translateSoon("course", courseId);
 }
 
 export async function setCourseDeletedAction(courseId: string, deleted: boolean): Promise<void> {
   const subject = await requirePermission("courses.delete");
   await setCourseDeleted(subject, id.parse(courseId), z.boolean().parse(deleted));
+  if (!deleted) translateSoon("course", courseId);
 }
 
 export async function reorderCoursesAction(ids: string[]): Promise<void> {
@@ -101,16 +106,20 @@ export async function reorderCoursesAction(ids: string[]): Promise<void> {
 
 export async function createSectionAction(courseId: string, title?: string): Promise<string> {
   const subject = await requirePermission("courses.update");
-  return createSection(
+  const sectionId = await createSection(
     subject,
     id.parse(courseId),
     title === undefined ? undefined : z.string().trim().min(1).max(255).parse(title),
   );
+  translateSoon("course_section", sectionId);
+  return sectionId;
 }
 
 export async function saveSectionAction(input: SectionInput): Promise<void> {
   const subject = await requirePermission("courses.update");
-  await saveSection(subject, sectionInputSchema.parse(input));
+  const parsed = sectionInputSchema.parse(input);
+  await saveSection(subject, parsed);
+  translateSoon("course_section", parsed.sectionId);
 }
 
 export async function reorderSectionsAction(input: ReorderSectionsInput): Promise<void> {
@@ -133,13 +142,16 @@ export async function createLessonAction(input: CreateLessonInput): Promise<stri
 
 export async function saveLessonAction(input: LessonInput): Promise<void> {
   const subject = await requirePermission("lessons.update");
-  await saveLesson(subject, lessonInputSchema.parse(input));
+  const parsed = lessonInputSchema.parse(input);
+  await saveLesson(subject, parsed);
+  translateSoon("lesson", parsed.lessonId);
 }
 
 export async function setLessonAttachmentsAction(input: LessonAttachmentsInput): Promise<void> {
   const subject = await requirePermission("lessons.update");
   const parsed = lessonAttachmentsSchema.parse(input);
   await setLessonAttachments(subject, parsed.lessonId, parsed.items);
+  translateSoon("lesson", parsed.lessonId);
 }
 
 export async function moveLessonAction(input: MoveLessonInput): Promise<void> {
@@ -156,12 +168,15 @@ export async function reorderLessonsAction(input: ReorderLessonsInput): Promise<
 
 export async function duplicateLessonAction(lessonId: string): Promise<string> {
   const subject = await requirePermission("lessons.create");
-  return duplicateLesson(subject, id.parse(lessonId));
+  const copyId = await duplicateLesson(subject, id.parse(lessonId));
+  translateSoon("lesson", copyId);
+  return copyId;
 }
 
 export async function setLessonDeletedAction(lessonId: string, deleted: boolean): Promise<void> {
   const subject = await requirePermission("lessons.delete");
   await setLessonDeleted(subject, id.parse(lessonId), z.boolean().parse(deleted));
+  if (!deleted) translateSoon("lesson", lessonId);
 }
 
 export async function setLessonStatusAction(
@@ -176,4 +191,5 @@ export async function setLessonStatusAction(
     contentStatusSchema.parse(to),
     parseScheduledFor(scheduledForIso),
   );
+  translateSoon("lesson", lessonId);
 }

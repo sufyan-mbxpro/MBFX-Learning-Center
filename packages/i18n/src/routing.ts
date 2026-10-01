@@ -2,19 +2,66 @@
 //
 // `locales` is the STATIC superset next-intl's proxy middleware and
 // generateStaticParams need at build/request time — next-intl has no
-// mechanism to read a dynamic list per request. The DB-driven `Locale`
-// table (packages/db/prisma/schema.prisma) is the actual runtime source of
-// truth for which locales are ACTIVE (`isActive`) — see locales.ts. Named
-// trade-off (SKILL.md): an admin flipping a locale active is instant for
-// everything that reads `getActiveLocales()` (the switcher, content
-// resolution), but a brand-new locale code showing up here for the first
-// time needs this array updated and a rebuild — next-intl can't route a
-// prefix it doesn't know about. The four codes below are exactly
-// packages/db/prisma/seed.ts's seeded rows, kept in sync by hand.
+// mechanism to read a dynamic list per request. It is derived from
+// `SUPPORTED_LOCALES` below, the registry of every language the site CAN
+// route (ADR-178 #1). The DB-driven `Locale` table is the runtime source of
+// truth for which of them EXIST (an admin adds a row from this registry) and
+// which are ACTIVE (`isActive`) — see locales.ts. A language outside the
+// registry still needs a code change and a rebuild: next-intl can't route a
+// prefix it doesn't know about.
 import { defineRouting } from "next-intl/routing";
 
+/**
+ * Every language the site can route (ADR-178 #1). Data about each language
+ * that must be known BEFORE any database read: `direction` decides
+ * `<html dir>`, and the names prefill the admin's "Add language" form. The
+ * admin creates `Locale` rows from this list; it never types a code.
+ *
+ * Plain ISO 639-1 codes only, each one Google Cloud Translation accepts as a
+ * target, because the code is also what the translation queue sends. A code
+ * here is a URL prefix, so it must never equal a coded first segment
+ * (`routing.test.ts`). The first four are the seeded rows.
+ */
+export const SUPPORTED_LOCALES = [
+  { code: "en", name: "English", nativeName: "English", direction: "ltr" },
+  { code: "es", name: "Spanish", nativeName: "Español", direction: "ltr" },
+  { code: "ar", name: "Arabic", nativeName: "العربية", direction: "rtl" },
+  { code: "ur", name: "Urdu", nativeName: "اردو", direction: "rtl" },
+  { code: "fr", name: "French", nativeName: "Français", direction: "ltr" },
+  { code: "de", name: "German", nativeName: "Deutsch", direction: "ltr" },
+  { code: "it", name: "Italian", nativeName: "Italiano", direction: "ltr" },
+  { code: "pt", name: "Portuguese", nativeName: "Português", direction: "ltr" },
+  { code: "nl", name: "Dutch", nativeName: "Nederlands", direction: "ltr" },
+  { code: "pl", name: "Polish", nativeName: "Polski", direction: "ltr" },
+  { code: "ro", name: "Romanian", nativeName: "Română", direction: "ltr" },
+  { code: "sv", name: "Swedish", nativeName: "Svenska", direction: "ltr" },
+  { code: "el", name: "Greek", nativeName: "Ελληνικά", direction: "ltr" },
+  { code: "ru", name: "Russian", nativeName: "Русский", direction: "ltr" },
+  { code: "uk", name: "Ukrainian", nativeName: "Українська", direction: "ltr" },
+  { code: "tr", name: "Turkish", nativeName: "Türkçe", direction: "ltr" },
+  { code: "fa", name: "Persian", nativeName: "فارسی", direction: "rtl" },
+  { code: "he", name: "Hebrew", nativeName: "עברית", direction: "rtl" },
+  { code: "hi", name: "Hindi", nativeName: "हिन्दी", direction: "ltr" },
+  { code: "bn", name: "Bengali", nativeName: "বাংলা", direction: "ltr" },
+  { code: "id", name: "Indonesian", nativeName: "Bahasa Indonesia", direction: "ltr" },
+  { code: "ms", name: "Malay", nativeName: "Bahasa Melayu", direction: "ltr" },
+  { code: "th", name: "Thai", nativeName: "ไทย", direction: "ltr" },
+  { code: "vi", name: "Vietnamese", nativeName: "Tiếng Việt", direction: "ltr" },
+  { code: "zh", name: "Chinese (Simplified)", nativeName: "简体中文", direction: "ltr" },
+  { code: "ja", name: "Japanese", nativeName: "日本語", direction: "ltr" },
+  { code: "ko", name: "Korean", nativeName: "한국어", direction: "ltr" },
+  { code: "sw", name: "Swahili", nativeName: "Kiswahili", direction: "ltr" },
+] as const satisfies ReadonlyArray<{
+  code: string;
+  name: string;
+  nativeName: string;
+  direction: "ltr" | "rtl";
+}>;
+
+export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
+
 export const routing = defineRouting({
-  locales: ["en", "es", "ar", "ur"],
+  locales: SUPPORTED_LOCALES.map((locale) => locale.code),
   defaultLocale: "en",
   // Default locale has no prefix: "/" not "/en" — keeps the highest-traffic
   // path stable and avoids a redirect hop.
@@ -39,19 +86,17 @@ export const routing = defineRouting({
 export type AppLocale = (typeof routing.locales)[number];
 
 /**
- * Static per-locale metadata needed before any DB call is possible — most
- * importantly `direction`, which the public root layout needs synchronously
- * for `<html dir>` (architecture doc §4.3). This is the STATIC half of the
- * same static/dynamic split `locales.ts` documents for the locale list
- * itself: `Locale.direction` in the DB is the editable source of truth for
- * admin-facing screens, but the app shell can't wait on a DB round trip
- * just to pick a text direction, so the four seeded locales' directions are
- * duplicated here too. Keep in sync with packages/db/prisma/seed.ts by
- * hand — same trade-off @repo/theme's default tokens already accepted.
+ * `<html dir>` per routable locale, needed synchronously by the public root
+ * layout (architecture doc §4.3) before any DB call is possible. Derived from
+ * the registry, so a language cannot be routable without a direction.
+ * `Locale.direction` in the database is written from the same registry when
+ * an admin adds the row, and is not editable (ADR-178 #2).
  */
-export const LOCALE_DIRECTION: Record<AppLocale, "ltr" | "rtl"> = {
-  en: "ltr",
-  es: "ltr",
-  ar: "rtl",
-  ur: "rtl",
-};
+export const LOCALE_DIRECTION = Object.fromEntries(
+  SUPPORTED_LOCALES.map((locale) => [locale.code, locale.direction]),
+) as Record<AppLocale, "ltr" | "rtl">;
+
+/** The registry entry for a code, or undefined when the site cannot route it. */
+export function supportedLocale(code: string): SupportedLocale | undefined {
+  return SUPPORTED_LOCALES.find((locale) => locale.code === code);
+}

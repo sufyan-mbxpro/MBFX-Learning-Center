@@ -31,7 +31,13 @@ export function LocaleSwitcher({ locales }: { locales: SwitcherLocale[] }) {
         render={
           <Button variant="ghost" size="sm" aria-label={t("chooseLanguage")}>
             <Languages data-icon="inline-start" aria-hidden />
-            {locales.find((l) => l.code === current)?.nativeName ?? current}
+            {/* The name only where the row has room for it. Serving a second
+                language is what makes this button appear at all, and at 1280px
+                it pushed the header's end cluster off the screen (Phase 6 RTL
+                smoke). The button keeps its label for assistive tech. */}
+            <span className="max-2xl:hidden">
+              {locales.find((l) => l.code === current)?.nativeName ?? current}
+            </span>
           </Button>
         }
       />

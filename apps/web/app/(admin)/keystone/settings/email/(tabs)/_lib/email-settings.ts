@@ -8,7 +8,25 @@ import type { Subject } from "@repo/rbac";
 import { loadSettingsIndex } from "../../../_components/settings-shared.ts";
 
 /** Which slice of the `email` group a tab edits. */
-export type EmailSettingsSlice = "sender" | "newsletter";
+export type EmailSettingsSlice = "sender" | "newsletter" | "announcements";
+
+/**
+ * The announcement keys (ADR-171 #12): the pacing the runner reads and the
+ * Inactive users threshold. They carry an `email.` prefix only because pacing
+ * belongs to the provider, so they are claimed here BEFORE the Sender slice's
+ * prefix test — a send rate is not part of who an email is from.
+ */
+const ANNOUNCEMENT_KEYS = new Set([
+  "email.campaignRatePerMinute",
+  "email.campaignBatchSize",
+  "announcements.inactiveDays",
+]);
+
+function inSlice(key: string, slice: EmailSettingsSlice): boolean {
+  if (ANNOUNCEMENT_KEYS.has(key)) return slice === "announcements";
+  if (slice === "announcements") return false;
+  return key.startsWith(slice === "sender" ? "email." : "newsletter.");
+}
 
 export async function loadEmailSettingsForm(subject: Subject, slice: EmailSettingsSlice) {
   const t = await getTranslations("admin");
@@ -21,9 +39,8 @@ export async function loadEmailSettingsForm(subject: Subject, slice: EmailSettin
   // Two tabs out of one registry group: a sender address and "show the signup
   // form in the footer" are different questions, and one Save over both reads
   // as a single decision (ADR-044 #8).
-  const prefix = slice === "sender" ? "email." : "newsletter.";
   const group = settings
-    .filter((s) => s.groupName === "email" && s.key.startsWith(prefix))
+    .filter((s) => s.groupName === "email" && inSlice(s.key, slice))
     // ADR-044 #5's order of preference, as `settings/[group]` applies it.
     .map((s) =>
       t.has(`settingLabels.${s.key}`) ? { ...s, label: t(`settingLabels.${s.key}`) } : s,

@@ -5,14 +5,20 @@
 // fallback to the default locale, not the primary guard.
 import { hasLocale, type IntlErrorCode } from "next-intl";
 import { getRequestConfig } from "next-intl/server";
+import { catalogValueAt, getCatalog } from "./catalog.ts";
 import { routing } from "./routing.ts";
-import defaultMessages from "../messages/en.json" with { type: "json" };
 
 export default getRequestConfig(async ({ requestLocale }) => {
   const requested = await requestLocale;
   const locale = hasLocale(routing.locales, requested) ? requested : routing.defaultLocale;
 
-  const messages = (await import(`../messages/${locale}.json`)).default as Record<string, unknown>;
+  // The file with the admin's overrides over it (ADR-178 #3). A language
+  // added in the admin ships no file, so its text is all overrides, and a
+  // key it lacks reads from English below.
+  const [messages, defaultMessages] = await Promise.all([
+    getCatalog(locale),
+    getCatalog(routing.defaultLocale),
+  ]);
 
   return {
     locale,
@@ -28,17 +34,8 @@ export default getRequestConfig(async ({ requestLocale }) => {
     },
     getMessageFallback({ key, namespace }) {
       const path = namespace ? `${namespace}.${key}` : key;
-      return (
-        (path
-          .split(".")
-          .reduce<unknown>(
-            (acc, segment) =>
-              acc && typeof acc === "object"
-                ? (acc as Record<string, unknown>)[segment]
-                : undefined,
-            defaultMessages,
-          ) as string | undefined) ?? path
-      );
+      const value = catalogValueAt(defaultMessages, path);
+      return typeof value === "string" ? value : path;
     },
   };
 });

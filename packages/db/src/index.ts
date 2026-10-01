@@ -6,10 +6,20 @@
 // @repo/core, which imports this singleton).
 import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 import { PrismaClient } from "./generated/client/client.ts";
+import * as generatedNamespace from "./generated/client/internal/prismaNamespace.ts";
 
 declare global {
-  var __prisma: PrismaClient | undefined;
+  var __prisma: { client: PrismaClient; shape: string } | undefined;
 }
+
+// The generated schema's SHAPE: every model and every column, as the model-name
+// and scalar-field enums spell them. Two copies of the same generated client
+// agree on it; a client generated from a different schema does not.
+const SCHEMA_SHAPE = JSON.stringify(
+  Object.entries(generatedNamespace)
+    .filter(([name]) => name === "ModelName" || name.endsWith("ScalarFieldEnum"))
+    .sort(([a], [b]) => a.localeCompare(b)),
+);
 
 function createClient() {
   const url = process.env.DATABASE_URL;
@@ -27,11 +37,28 @@ function createClient() {
 // exactly right.
 //
 // Reused across Next.js dev-server hot reloads so each edit doesn't open a
-// fresh MariaDB connection pool.
+// fresh MariaDB connection pool — but only while the generated SCHEMA is the
+// same one. `prisma generate` after a schema change reloads this module with a
+// new PrismaClient, and an instance of the old one has no delegate for the new
+// model: `db.reviewPlatform` was `undefined` until the dev server restarted.
+//
+// The test is the schema's shape, NOT the class's identity. Next's dev server
+// bundles this package once per layer (RSC, SSR, route handlers), each with
+// its own PrismaClient class, so `ctor === PrismaClient` failed on every
+// cross-layer call: each layer disconnected the other's pool mid-query, and
+// Better Auth's session update died with "connection closed" (45013).
+function currentClient(): PrismaClient {
+  const cached = globalThis.__prisma;
+  if (cached?.shape === SCHEMA_SHAPE) return cached.client;
+  void cached?.client.$disconnect().catch(() => {});
+  const client = createClient();
+  globalThis.__prisma = { client, shape: SCHEMA_SHAPE };
+  return client;
+}
+
 export const db = new Proxy({} as PrismaClient, {
   get(_target, prop, receiver) {
-    const client = (globalThis.__prisma ??= createClient());
-    return Reflect.get(client as object, prop, receiver);
+    return Reflect.get(currentClient() as object, prop, receiver);
   },
 });
 
@@ -75,6 +102,21 @@ export {
 export {
   PERMISSION_GROUPS,
   CONTENT_LIFECYCLE_GROUPS,
+  PERMISSION_SECTIONS,
+  PERMISSION_GROUP_SECTIONS,
+  UNUSED_PERMISSIONS,
+  isUnusedPermission,
   permissionGroupOrder,
+  permissionGroupSection,
   type PermissionGroupName,
+  type PermissionSectionName,
 } from "./permission-groups.ts";
+
+// Which settings are translatable (ADR-165 #1), for the seed's
+// `isTranslatable` column. Mirrors `TRANSLATABLE_SETTINGS` in @repo/contracts;
+// @repo/settings' test holds the two equal.
+export { TRANSLATABLE_SETTING_KEY_LIST } from "./translatable-settings.ts";
+
+// ADR-169: the review platforms the seed creates, held equal to
+// `REVIEW_PLATFORM_KEYS` (@repo/contracts) by a @repo/core test.
+export { REVIEW_PLATFORM_SEED_KEYS, REVIEW_PLATFORM_SEED_DEFAULTS } from "./review-platforms.ts";

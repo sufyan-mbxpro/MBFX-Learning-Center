@@ -934,7 +934,7 @@ describe("lesson detail", () => {
   });
 
   // ADR-127: a course and a lesson read in another language.
-  it("reads a course and a lesson in a human translation by ?lang=, never moving their address", async () => {
+  it("reads a course and a lesson by ?lang= — a machine lesson too (ADR-159) — never moving their address", async () => {
     const { courseId, lessonId, slug } = await makeCourse();
     const lessonSlug = (
       await db.lessonTranslation.findFirstOrThrow({
@@ -974,10 +974,13 @@ describe("lesson detail", () => {
     // The curriculum is navigation, and stays in the page's locale.
     expect(course?.sections[0]?.lessons[0]?.slug).toBe(lessonSlug);
 
-    // The lesson's Spanish is a machine translation: not readable (ADR-097).
+    // The lesson's Spanish is a machine translation: readable since ADR-159
+    // #1, at the same address, and never advertised as an alternate (#2).
     const machine = await publicCourses.loadLessonBySlug("en", slug, lessonSlug, "es");
-    expect(machine?.readingLocale).toBeNull();
-    expect(machine?.content).toBe("<p>Body.</p>");
+    expect(machine?.readingLocale).toBe("es");
+    expect(machine?.content).toBe("<p>Cuerpo</p>");
+    expect(machine?.slug).toBe(lessonSlug);
+    expect(machine?.alternates.map((a) => a.locale)).toEqual(["en"]);
     expect(machine?.courseAlternates.map((a) => a.locale).sort()).toEqual(["en", "es"]);
 
     await db.lessonTranslation.update({
@@ -1241,13 +1244,32 @@ describe("the OUTDATED sweep", () => {
     expect(es.translationStatus).toBe("OUTDATED");
   });
 
-  it("leaves siblings alone when only an SEO field changed", async () => {
+  it("leaves siblings alone when the English is saved unchanged", async () => {
+    const { courseId } = await makeCourse({ title: "Unchanged Source" });
+    await withSpanish(courseId, "Sin cambios");
+
+    // Phase 5 (ADR-161): a translation records the hash of the English it was
+    // made from, so a save that changes nothing leaves it current. (Before the
+    // course had a hash, this was approximated by comparing three fields.)
+    await courses.saveCourse(editor, {
+      courseId,
+      meta: {},
+      translation: { locale: "en", title: "Unchanged Source" },
+    });
+
+    const es = await db.courseTranslation.findFirstOrThrow({
+      where: { courseId, locale: "es" },
+      select: { translationStatus: true },
+    });
+    expect(es.translationStatus).toBe("TRANSLATED");
+  });
+
+  it("flags a person's translation when only the English SEO text changed", async () => {
     const { courseId } = await makeCourse({ title: "Seo Only Source" });
     await withSpanish(courseId, "Solo SEO");
 
-    // CourseTranslation has no sourceHash column, so freshness is decided by
-    // comparing against the row being overwritten. Without that comparison
-    // every save would mark siblings stale and the queue would cry wolf.
+    // The SEO title and description are translated like every other field
+    // now, so a person's Spanish ones are stale when the English moves on.
     await courses.saveCourse(editor, {
       courseId,
       meta: {},
@@ -1262,7 +1284,29 @@ describe("the OUTDATED sweep", () => {
       where: { courseId, locale: "es" },
       select: { translationStatus: true },
     });
-    expect(es.translationStatus).toBe("TRANSLATED");
+    expect(es.translationStatus).toBe("OUTDATED");
+  });
+
+  it("never turns a machine translation OUTDATED: the job refreshes it", async () => {
+    const { courseId } = await makeCourse({ title: "Machine Sibling" });
+    await withSpanish(courseId, "Máquina");
+    await db.courseTranslation.updateMany({
+      where: { courseId, locale: "es" },
+      data: { translationStatus: "MACHINE_TRANSLATED" },
+    });
+
+    await courses.saveCourse(editor, {
+      courseId,
+      meta: {},
+      translation: { locale: "en", title: "Machine Sibling Revised" },
+    });
+
+    const es = await db.courseTranslation.findFirstOrThrow({
+      where: { courseId, locale: "es" },
+      select: { translationStatus: true },
+    });
+    // OUTDATED is a person's state, and indexable (ADR-159 #2).
+    expect(es.translationStatus).toBe("MACHINE_TRANSLATED");
   });
 
   it("does not flip siblings when a NON-source locale is saved", async () => {

@@ -94,6 +94,8 @@ export function DeliveryLogTable({
   const status = params.get("status") ?? "";
   const template = params.get("template") ?? "";
   const query = params.get("q") ?? "";
+  // ADR-171: an announcement's detail page links here with its id.
+  const campaign = params.get("campaign") ?? "";
 
   const statusLabel = React.useCallback(
     (value: string) =>
@@ -205,11 +207,13 @@ export function DeliveryLogTable({
         onValueChange={(value) => setParams({ template: value, cursor: null })}
         options={[{ value: "", label: labels.allTemplates }, ...templates]}
       />
-      {(status || template || query) && (
+      {(status || template || query || campaign) && (
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => setParams({ status: null, template: null, q: null, cursor: null })}
+          onClick={() =>
+            setParams({ status: null, template: null, q: null, campaign: null, cursor: null })
+          }
         >
           {labels.clear}
         </Button>

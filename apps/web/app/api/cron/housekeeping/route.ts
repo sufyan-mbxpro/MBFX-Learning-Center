@@ -1,6 +1,12 @@
-import { createHash, timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
-import { purgeAiUsage, purgeEmailDeliveries, purgeExpiredPending } from "@repo/core";
+import {
+  purgeAiUsage,
+  purgeAnnouncementRecipients,
+  purgeEmailDeliveries,
+  purgeExpiredPending,
+  purgeTranslationRows,
+} from "@repo/core";
+import { cronAuthFailure } from "../_lib/cron-auth.ts";
 
 // Retention sweeps (ADR-078 #10, ADR-080 #1, ADR-097 #7) — `publish-due`'s
 // sibling, and deliberately its near-copy: the same shared-secret shape, the same
@@ -19,6 +25,16 @@ import { purgeAiUsage, purgeEmailDeliveries, purgeExpiredPending } from "@repo/c
 // are kept forever, which is what lets spend history outlive the retention
 // window and keeps a twelve-month chart from scanning a year of raw rows.
 //
+// ADR-162 #10 adds the fourth: finished translation jobs after 7 days and
+// per-request `TranslateUsage` rows after 90 — the latter carry `userId` for an
+// editor's prefill, the same PII-on-a-clock as `AiUsage`. The monthly totals
+// (`TranslateUsagePeriod`) carry no person and are kept.
+//
+// ADR-171 adds the fifth: an announcement's recipient rows 90 days after the
+// campaign finished — a list of addresses, on the delivery log's clock. The
+// campaign and its counters stay, and so does every suppression: deleting a
+// suppression would re-enrol someone who asked to stop.
+//
 // **Auth is a shared secret, not `requirePermission()`** — there is no
 // subject, and inventing a system user to satisfy security.md #1 would put a
 // fictional actor in the audit trail. Neither sweep audits: both delete rows
@@ -32,44 +48,32 @@ import { purgeAiUsage, purgeEmailDeliveries, purgeExpiredPending } from "@repo/c
 // request headers is dynamic already. architecture.md #12 bars the sibling
 // `export const revalidate` for the same reason.
 
-function unauthorized(): NextResponse {
-  return NextResponse.json(
-    { error: "unauthorized" },
-    { status: 401, headers: { "cache-control": "no-store" } },
-  );
-}
-
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  const secret = process.env.CRON_SECRET;
-
-  // An absent secret FAILS CLOSED. Here that means retention does not run,
-  // which is the safe direction: the alternative is letting an unauthenticated
-  // caller delete rows.
-  if (!secret) {
-    return NextResponse.json(
-      { error: "not_configured" },
-      { status: 503, headers: { "cache-control": "no-store" } },
-    );
-  }
-
-  const header = request.headers.get("authorization") ?? "";
-  const presented = header.startsWith("Bearer ") ? header.slice(7) : "";
-
-  // Digests, not the strings: `timingSafeEqual` THROWS on a length mismatch,
-  // so comparing raw secrets of different lengths would leak the length
-  // through timing. Digests are always 32 bytes.
-  const digest = (v: string) => createHash("sha256").update(v).digest();
-  if (!timingSafeEqual(digest(presented), digest(secret))) return unauthorized();
+  // The shared bearer check (`_lib/cron-auth.ts`): 503 with no secret, 401
+  // for anything but the right token.
+  const refused = cronAuthFailure(request);
+  if (refused) return refused;
 
   const now = new Date();
-  const [pendingSubscribers, deliveries, aiUsage] = await Promise.all([
-    purgeExpiredPending(now),
-    purgeEmailDeliveries(now),
-    purgeAiUsage(),
-  ]);
+  const [pendingSubscribers, deliveries, aiUsage, translation, announcementRecipients] =
+    await Promise.all([
+      purgeExpiredPending(now),
+      purgeEmailDeliveries(now),
+      purgeAiUsage(),
+      purgeTranslationRows(now),
+      purgeAnnouncementRecipients(now),
+    ]);
 
   return NextResponse.json(
-    { sweptAt: now.toISOString(), pendingSubscribers, deliveries, aiUsage },
+    {
+      sweptAt: now.toISOString(),
+      pendingSubscribers,
+      deliveries,
+      aiUsage,
+      translationJobs: translation.jobs,
+      translateUsage: translation.usage,
+      announcementRecipients,
+    },
     { headers: { "cache-control": "no-store" } },
   );
 }

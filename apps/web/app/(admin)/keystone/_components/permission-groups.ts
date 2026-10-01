@@ -23,6 +23,15 @@ export function permissionGroupDescription(t: TranslateHas, groupName: string): 
   return t.has(`permissionGroupDesc.${groupName}`) ? t(`permissionGroupDesc.${groupName}`) : null;
 }
 
+// The sidebar's own heading keys (admin-shell.tsx), so a card sits under the
+// same words its screen does (ADR-177).
+const SECTION_LABEL_KEYS: Record<PermissionGroup["section"], string> = {
+  learning: "navLearning",
+  content: "navContent",
+  people: "navPeople",
+  system: "navSystem",
+};
+
 /** `loadRoleMatrix()`'s groups, resolved for the screen. Order is preserved. */
 export function permissionGroupViews(
   t: TranslateHas,
@@ -32,5 +41,6 @@ export function permissionGroupViews(
     ...group,
     label: permissionGroupLabel(t, group.groupName),
     description: permissionGroupDescription(t, group.groupName),
+    sectionLabel: t(SECTION_LABEL_KEYS[group.section]),
   }));
 }

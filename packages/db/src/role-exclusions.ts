@@ -38,6 +38,13 @@ export const SUPER_ADMIN_ONLY_PERMISSIONS = [
   // `ai.use`) stay with `admin`, which is why the AI screens split by
   // permission instead of hiding whole.
   "ai.providers.manage",
+  // ADR-160: the Google Cloud Translation key. Its endpoint is fixed in code,
+  // so unlike the AI key it cannot redirect content anywhere; what is left is
+  // SPEND — a misused key translates at the site's cost, and a backfill of a
+  // whole language is thousands of requests. The monthly budget beside it is
+  // the ceiling, and whoever can raise the ceiling holds the key. Viewing
+  // usage (`translations.view`) and editing translations stay with `admin`.
+  "translations.provider.manage",
 ] as const;
 
 export type SuperAdminOnlyPermission = (typeof SUPER_ADMIN_ONLY_PERMISSIONS)[number];

@@ -200,6 +200,44 @@ describe("hreflang goes through alternatesFor", () => {
   });
 });
 
+describe("a page that exists in every locale says so", () => {
+  // Phase 6 (Arabic): only the homepage declared hreflang, so `/support` and
+  // `/ar/support` — both in the sitemap, both self-canonical — were two pages
+  // a search engine had no reason to pair. The coded routes the sitemap lists
+  // for EVERY served locale now carry `staticPageAlternates`.
+  const STATIC_ROUTES = [
+    "support",
+    "sitemap",
+    "tools",
+    "tools/live-rates",
+    "tools/market-news",
+    "tools/volatility",
+    "economic-calendar",
+    "learn",
+    "learn/[track]",
+    "learn/[track]/quizzes",
+    "learn/[track]/videos",
+    "learn/[track]/glossary",
+    "glossary",
+    "glossary/topics",
+  ];
+
+  it.each(STATIC_ROUTES)("%s", (route) => {
+    expect(code(resolve(APP, "(public)/[locale]", route, "page.tsx"))).toContain(
+      "staticPageAlternates(",
+    );
+  });
+
+  it("and so do a listing's first page, a tool and a video topic", () => {
+    expect(code(resolve(APP, "_lib/seo.ts"))).toMatch(
+      /listingMetadata[\s\S]*staticPageAlternates\(/,
+    );
+    for (const route of ["tools/[tool]/page.tsx", "learn/[track]/videos/[topic]/page.tsx"]) {
+      expect(code(resolve(APP, "(public)/[locale]", route))).toContain("alternatesFor(");
+    }
+  });
+});
+
 describe("a canonical carries the locale", () => {
   // `canonical: ROUTE_PATHS.tools` pointed `/es/tools` at the English page the
   // day a second locale went live. Every path helper here is locale-less.

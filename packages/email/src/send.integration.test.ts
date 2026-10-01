@@ -7,7 +7,7 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { MariaDbContainer, type StartedMariaDbContainer } from "@testcontainers/mariadb";
 import { GenericContainer, Wait, type StartedTestContainer } from "testcontainers";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { db as DbClient } from "@repo/db";
 import type * as SendModule from "./send.ts";
 
@@ -278,6 +278,108 @@ describe("sendTemplatedEmail", () => {
       variables: { "expires.minutes": "30" },
     });
     expect(result.status).toBe("FAILED");
+    expect(await inbox()).toHaveLength(0);
+  });
+});
+
+describe("createSendSession (ADR-171)", () => {
+  async function seedAnnouncementTemplate() {
+    await db.emailTemplate.create({
+      data: {
+        key: "announcement.course",
+        isActive: true,
+        translations: {
+          create: {
+            locale: "en",
+            subject: "New course: {{course.title}}",
+            mode: "RICH",
+            bodyHtml:
+              '<p>{{course.title}}</p><p><a href="{{course.url}}">Start</a></p>' +
+              '<p><a href="{{unsubscribe.url}}">Stop</a></p>',
+          },
+        },
+      },
+    });
+  }
+
+  const variables = (to: string) => ({
+    "course.title": "Forex Basics",
+    "course.summary": "",
+    "course.level": "Beginner",
+    "course.lessonCount": "12",
+    "course.url": "https://example.com/learn/forex/forex-basics",
+    "course.coverUrl": "https://example.com/email/track-forex.png",
+    "campaign.message": "",
+    "unsubscribe.url": `https://example.com/email/unsubscribe?t=${to}`,
+  });
+
+  it("sends a batch through one template load, tagging every row with the campaign", async () => {
+    await setSetting("email.enabled", true);
+    await seedAnnouncementTemplate();
+    await useSmtp();
+
+    const loads = vi.spyOn(db.emailTemplate, "findUnique");
+    const session = await send.createSendSession("announcement.course", { pool: true });
+    const results = [];
+    for (const to of ["a@example.com", "b@example.com", "c@example.com"]) {
+      results.push(
+        await session.send({
+          to,
+          variables: variables(to),
+          campaignId: "campaign-1",
+          subject: "Our newest course: {{course.title}}",
+          unsubscribe: {
+            url: `https://example.com/email/unsubscribe?t=${to}`,
+            oneClickUrl: `https://example.com/api/email/unsubscribe?t=${to}`,
+            label: "Unsubscribe",
+          },
+        }),
+      );
+    }
+    session.close();
+
+    expect(loads).toHaveBeenCalledTimes(1);
+    loads.mockRestore();
+    expect(results.map((result) => result.status)).toEqual(["SENT", "SENT", "SENT"]);
+
+    const rows = await db.emailDelivery.findMany({ where: { campaignId: "campaign-1" } });
+    expect(rows).toHaveLength(3);
+
+    const messages = await inbox();
+    expect(messages).toHaveLength(3);
+    // The campaign's own subject replaced the template's, variables included.
+    expect(new Set(messages.map((message) => message.Subject))).toEqual(
+      new Set(["Our newest course: Forex Basics"]),
+    );
+  });
+
+  it("classifies an unreachable server as transient, so the runner retries it", async () => {
+    await setSetting("email.enabled", true);
+    await seedAnnouncementTemplate();
+    await db.emailTransport.create({
+      data: { id: "default", driver: "SMTP", host: "127.0.0.1", port: 1, security: "NONE" },
+    });
+
+    const session = await send.createSendSession("announcement.course");
+    const result = await session.send({ to: "a@example.com", variables: variables("a") });
+    session.close();
+    expect(result.status).toBe("FAILED");
+    expect(result.failure).toBe("transient");
+  });
+
+  it("reports a render failure as render, not as a transport problem", async () => {
+    await setSetting("email.enabled", true);
+    await seedAnnouncementTemplate();
+    await useSmtp();
+
+    const session = await send.createSendSession("announcement.course");
+    const result = await session.send({
+      to: "a@example.com",
+      variables: { ...variables("a"), "course.url": "javascript:alert(1)" },
+    });
+    session.close();
+    expect(result.status).toBe("FAILED");
+    expect(result.failure).toBe("render");
     expect(await inbox()).toHaveLength(0);
   });
 });

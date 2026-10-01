@@ -42,7 +42,9 @@ import { formatDate } from "@repo/utils";
 // info, employment status, role update (via the linked user account),
 // password reset, and offboarding. IDOR discipline: scoped load, 404 when
 // absent.
-export default async function EmployeeDetailPage({ params }: PageProps<"/keystone/employees/[id]">) {
+export default async function EmployeeDetailPage({
+  params,
+}: PageProps<"/keystone/employees/[id]">) {
   const subject = await requirePermission("employees.view");
   const { id } = await params;
 
@@ -54,6 +56,7 @@ export default async function EmployeeDetailPage({ params }: PageProps<"/keyston
   if (!employee) notFound();
 
   const canUpdate = can(subject, "employees.update");
+  const canOffboard = can(subject, "employees.delete");
   const canAssign = can(subject, "permissions.assign");
   const canResetPassword = can(subject, "users.password.reset");
 
@@ -162,7 +165,7 @@ export default async function EmployeeDetailPage({ params }: PageProps<"/keyston
               }}
             />
           )}
-          {canEdit && (
+          {canOffboard && employee.status !== "TERMINATED" && (
             <OffboardButton
               employeeId={employee.id}
               label={t("offboard")}

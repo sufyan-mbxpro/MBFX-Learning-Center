@@ -1,7 +1,8 @@
 import { getTranslations } from "next-intl/server";
-import { listEmailTemplates } from "@repo/core";
+import { listEmailDesigns, listEmailTemplates } from "@repo/core";
 import { getActiveLocales } from "@repo/i18n";
 import { can, requirePermission } from "@repo/rbac";
+import { EmailDesignsTable } from "./designs-table.tsx";
 import { EmailTemplatesTable, type EmailTemplatesTableLabels } from "./templates-table.tsx";
 import { formatDateTime } from "@repo/utils";
 
@@ -16,7 +17,13 @@ export default async function EmailTemplatesPage() {
   const subject = await requirePermission("email.templates.view");
   const t = await getTranslations("admin");
   const locales = await getActiveLocales();
-  const rows = await listEmailTemplates(locales.map((locale) => locale.code));
+  const [rows, designs] = await Promise.all([
+    listEmailTemplates(locales.map((locale) => locale.code)),
+    // ADR-172 #3: the starting points for a custom email, on the same screen
+    // as the emails the system sends — but a separate table, because they are
+    // a different thing: nothing sends a design.
+    listEmailDesigns(subject, { includeArchived: true }),
+  ]);
 
   const labels: EmailTemplatesTableLabels = {
     search: t("email.searchTemplates"),
@@ -59,22 +66,47 @@ export default async function EmailTemplatesPage() {
   };
 
   return (
-    <>
-      <p className="text-sm text-muted-foreground">{t("email.templatesDescription")}</p>
-      <EmailTemplatesTable
-        rows={rows.map((row) => ({
-          key: row.key,
-          audience: row.audience,
-          critical: row.critical,
-          isActive: row.isActive,
-          subject: row.subject,
-          locales: row.locales,
-          updatedAtLabel: row.updatedAt ? formatDateTime(row.updatedAt) : null,
-          updatedAtSort: row.updatedAt?.getTime() ?? 0,
-        }))}
-        canUpdate={can(subject, "email.templates.update")}
-        labels={labels}
-      />
-    </>
+    <div className="flex flex-col gap-8">
+      <section className="flex flex-col gap-3" aria-labelledby="system-emails-heading">
+        <h2 id="system-emails-heading" className="text-lg font-semibold">
+          {t("email.systemTitle")}
+        </h2>
+        <p className="text-sm text-muted-foreground">{t("email.templatesDescription")}</p>
+        <EmailTemplatesTable
+          rows={rows.map((row) => ({
+            key: row.key,
+            audience: row.audience,
+            critical: row.critical,
+            isActive: row.isActive,
+            subject: row.subject,
+            locales: row.locales,
+            updatedAtLabel: row.updatedAt ? formatDateTime(row.updatedAt) : null,
+            updatedAtSort: row.updatedAt?.getTime() ?? 0,
+          }))}
+          canUpdate={can(subject, "email.templates.update")}
+          labels={labels}
+        />
+      </section>
+
+      <section className="flex flex-col gap-3" aria-labelledby="email-designs-heading">
+        <h2 id="email-designs-heading" className="text-lg font-semibold">
+          {t("email.designs.title")}
+        </h2>
+        <p className="text-sm text-muted-foreground">{t("email.designs.description")}</p>
+        <EmailDesignsTable
+          rows={designs.map((design) => ({
+            id: design.id,
+            name: design.name,
+            description: design.description,
+            mode: design.mode,
+            archived: design.archivedAt !== null,
+            updatedLabel: formatDateTime(design.updatedAt),
+            updatedSort: design.updatedAt.getTime(),
+            updatedByName: design.updatedByName,
+          }))}
+          canUpdate={can(subject, "email.templates.update")}
+        />
+      </section>
+    </div>
   );
 }

@@ -48,6 +48,8 @@ export default async function MediaPage() {
             news: t("mediaCategory.news"),
             learn: t("mediaCategory.learn"),
             brand: t("mediaCategory.brand"),
+            promo: t("mediaCategory.promo"),
+            email: t("mediaCategory.email"),
             general: t("mediaCategory.general"),
           },
           loading: t("loading"),

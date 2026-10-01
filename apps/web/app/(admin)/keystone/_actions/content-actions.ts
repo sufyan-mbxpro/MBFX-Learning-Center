@@ -12,6 +12,7 @@ import { createGlossaryTermSchema, saveGlossaryTermSchema } from "@repo/contract
 import type { SaveGlossaryTermInput } from "@repo/contracts";
 import { requirePermission } from "@repo/rbac";
 import { parseScheduledFor } from "./scheduled-for.ts";
+import { translateSoon } from "./translate-soon.ts";
 
 const id = z.string().min(1);
 
@@ -37,6 +38,7 @@ export async function saveGlossaryTermAction(input: unknown): Promise<void> {
   const subject = await requirePermission("glossary.update");
   const parsed: SaveGlossaryTermInput = saveGlossaryTermSchema.parse(input);
   await saveGlossaryTerm(subject, parsed);
+  translateSoon("glossary_term", parsed.termId);
 }
 
 export async function transitionGlossaryAction(
@@ -57,11 +59,13 @@ export async function transitionGlossaryAction(
     status,
     parseScheduledFor(scheduledForIso),
   );
+  translateSoon("glossary_term", termId);
 }
 
 export async function deleteGlossaryTermAction(termId: string, deleted: boolean): Promise<void> {
   const subject = await requirePermission("glossary.delete");
   await setGlossaryTermDeleted(subject, id.parse(termId), z.boolean().parse(deleted));
+  if (!deleted) translateSoon("glossary_term", termId);
 }
 
 // `glossary.create`, not `glossary.update`: a duplicate mints a new term, and
@@ -69,5 +73,7 @@ export async function deleteGlossaryTermAction(termId: string, deleted: boolean)
 // `duplicateLessonAction` and `duplicateQuizAction` already draw).
 export async function duplicateGlossaryTermAction(termId: string): Promise<string> {
   const subject = await requirePermission("glossary.create");
-  return duplicateGlossaryTerm(subject, id.parse(termId));
+  const copyId = await duplicateGlossaryTerm(subject, id.parse(termId));
+  translateSoon("glossary_term", copyId);
+  return copyId;
 }

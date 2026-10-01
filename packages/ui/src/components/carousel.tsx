@@ -16,16 +16,15 @@
 //   that jump to a slide. Every one of those is an enhancement over a
 //   surface that already works without it.
 //
-// No autoplay BY DEFAULT. An auto-advancing carousel needs a pause control to
-// satisfy WCAG 2.2.2, it fights the reduced-motion guarantee the rest of this
+// No autoplay BY DEFAULT. An auto-advancing carousel fights the reduced-motion guarantee the rest of this
 // file makes, and it moves content out from under the pointer. The peek of
 // the next card is the affordance on a shelf.
 //
 // `autoplay` is an OPT-IN for a set read one item at a time (the home page's
 // testimonials, changes-37, ADR-121 §4), and it carries every one of those
-// three objections as a guard rather than as a caveat: it renders a visible
-// pause button, it never starts under `prefers-reduced-motion`, and it holds
-// still while the pointer is over the carousel, while focus is inside it,
+// objections as a guard rather than as a caveat: it has no pause button
+// (owner, changes-56), it never starts under `prefers-reduced-motion`, and it
+// holds still while the pointer is over the carousel, while focus is inside it,
 // while it is off screen and while the tab is hidden. It scrolls the TRACK
 // only — `scrollIntoView` from a timer would scroll the page too whenever the
 // band is part-way out of view, which is a page that moves on its own.
@@ -34,7 +33,7 @@
 // `inline` is a LOGICAL axis — it needs no `[dir]` branch. The arithmetic
 // alternative (`scrollLeft += width`) would need one, and worse: the sign
 // and origin of `scrollLeft` in RTL is the classic cross-engine trap.
-import { ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Children } from "react";
 
@@ -94,12 +93,12 @@ function Carousel({
   /**
    * Advance on a timer (changes-37, ADR-121 §4). Off unless given.
    *
-   * An object of strings and a number rather than a boolean, because turning
-   * it on is what obliges a pause button, and the button's two names have to
-   * come from the caller's catalog. Setting it also makes the carousel LOOP:
-   * a timer that stops dead on the last slide is a timer that ran once.
+   * There is no pause button (owner, changes-56): the timer holds while the
+   * pointer is over the carousel or focus is inside it. Setting it also makes
+   * the carousel LOOP: a timer that stops dead on the last slide is a timer
+   * that ran once.
    */
-  autoplay?: { interval?: number; pauseLabel: string; playLabel: string };
+  autoplay?: { interval?: number };
   /**
    * Previous/next arrows over the track's two edges, shown while the pointer
    * is over the carousel or focus is inside it (changes-37). Additive to
@@ -162,8 +161,8 @@ function Carousel({
   const palette = CONTROL_TONE[tone];
   const inverted = tone === "inverted";
 
-  const trackRef = useRef<HTMLUListElement>(null);
-  const itemsRef = useRef<(HTMLLIElement | null)[]>([]);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const itemsRef = useRef<(HTMLDivElement | null)[]>([]);
   const [visible, setVisible] = useState<readonly number[]>([]);
 
   // One observer rooted ON the track, so "visible" means "inside the
@@ -176,7 +175,7 @@ function Carousel({
     // controls stay usable rather than the component rendering dead.
     if (!track || typeof IntersectionObserver === "undefined") return;
 
-    const items = itemsRef.current.filter((el): el is HTMLLIElement => el !== null);
+    const items = itemsRef.current.filter((el): el is HTMLDivElement => el !== null);
     if (items.length === 0) return;
 
     const seen = new Set<number>();
@@ -223,7 +222,6 @@ function Carousel({
   // ── Autoplay (opt-in, ADR-121 §4) ───────────────────────────────────────
   const loop = autoplay !== undefined;
   const regionRef = useRef<HTMLDivElement>(null);
-  const [userPaused, setUserPaused] = useState(false);
   const [hovering, setHovering] = useState(false);
   const [focusWithin, setFocusWithin] = useState(false);
   const [inView, setInView] = useState(false);
@@ -260,7 +258,6 @@ function Carousel({
   const playing =
     loop &&
     count > 1 &&
-    !userPaused &&
     !reducedMotion &&
     !hovering &&
     !focusWithin &&
@@ -334,7 +331,7 @@ function Carousel({
       {/* `relative` for the hover arrows, and `flex grow flex-col` so the
           track below still takes a caller-given height (see its own `grow`). */}
       <div className="relative flex grow flex-col">
-        <ul
+        <div
           ref={trackRef}
           tabIndex={0}
           // A region that changes on its own is announced politely only when a
@@ -350,8 +347,12 @@ function Carousel({
           // existing track to nothing.
           className="carousel-track -mx-2 flex grow snap-x snap-mandatory gap-5 overflow-x-auto scroll-ps-2 px-2 py-2 focus-visible:rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
+          {/* DIVs, not a list: a slide is `role="group"` (the APG carousel
+              pattern), which REPLACES an `<li>`'s listitem role and left the
+              `<ul>` holding no items — a serious axe violation on every page
+              with a carousel, found by the Phase 6 RTL smoke suite. */}
           {slides.map((slide, index) => (
-            <li
+            <div
               // Slide order is fixed by the destination registry and never
               // reorders, so the index is a stable identity here.
               key={index}
@@ -365,9 +366,9 @@ function Carousel({
               className={cn("shrink-0 snap-start", itemClassName)}
             >
               {slide}
-            </li>
+            </div>
           ))}
-        </ul>
+        </div>
 
         {hoverArrows && count > 1 && (
           // Over the track's two edges, vertically centred. Invisible at rest and
@@ -482,26 +483,6 @@ function Carousel({
                 </li>
               ))}
             </ul>
-          )}
-
-          {/* WCAG 2.2.2: content that moves on its own for more than five
-              seconds needs a way to stop it that does not depend on keeping a
-              pointer parked over it. It names the state it will CHANGE TO,
-              the way a media player's button does. */}
-          {autoplay && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label={userPaused ? autoplay.playLabel : autoplay.pauseLabel}
-              onClick={() => setUserPaused((paused) => !paused)}
-              className={cn(
-                "text-muted-foreground",
-                inverted && "text-secondary-foreground/70 hover:text-secondary-foreground",
-              )}
-            >
-              {userPaused ? <Play aria-hidden /> : <Pause aria-hidden />}
-            </Button>
           )}
         </div>
       )}

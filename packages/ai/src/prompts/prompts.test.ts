@@ -293,6 +293,29 @@ describe("translation", () => {
     expect(built.system).toContain("English");
     expect(built.system).toContain("Arabic");
   });
+
+  it("refines a draft rather than starting over (ADR-160 #7)", () => {
+    const built = buildPrompt("translation", {
+      sourceLocale: "en",
+      targetLocale: "ar",
+      fields: { title: "Minimum deposit $10", body: "Read the guide" },
+      drafts: { title: "الحد الأدنى للإيداع 10$" },
+    });
+    expect(built.system).toContain("correct the draft against the source");
+    expect(built.messages[0]!.content).toContain("draft: title");
+    expect(built.messages[0]!.content).not.toContain("draft: body");
+  });
+
+  it("ignores a draft for a field it does not send, or a blank one", () => {
+    const built = buildPrompt("translation", {
+      sourceLocale: "en",
+      targetLocale: "es",
+      fields: { title: "Hello", slug: "hello" },
+      drafts: { slug: "hola", body: "Cuerpo", title: "  " },
+    });
+    expect(built.messages[0]!.content).not.toContain("draft:");
+    expect(built.system).not.toContain("correct the draft");
+  });
 });
 
 describe("summarization", () => {

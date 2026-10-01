@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { localizedPath, titleTemplate, titleFrom } from "../../../_lib/seo.ts";
+import { titleTemplate, titleFrom, staticPageAlternates } from "../../../_lib/seo.ts";
 import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { getFeaturedVideoTopics, getLearnIndex } from "@repo/core";
@@ -50,7 +50,7 @@ export async function generateMetadata({
   return {
     title: titleFrom(template, t("meta.indexTitle")),
     description: t("meta.indexDescription"),
-    alternates: { canonical: localizedPath(locale, ROUTE_PATHS.learn) },
+    alternates: await staticPageAlternates(locale, ROUTE_PATHS.learn),
   };
 }
 

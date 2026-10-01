@@ -73,6 +73,8 @@ const ADMIN_PAGES = [
   "/keystone/articles/categories",
   "/keystone/articles/tags",
   `/keystone/articles/${PLACEHOLDER_ID}`,
+  // ADR-167 — the list; `new` and `[id]` render under the same (admin) gate.
+  "/keystone/promotions",
   "/keystone/design-system",
   "/keystone/employees",
   `/keystone/employees/${PLACEHOLDER_ID}`,
@@ -91,6 +93,8 @@ const ADMIN_PAGES = [
   "/keystone/media",
   "/keystone/navigation",
   "/keystone/newsletter",
+  // ADR-171: announcement emails. The parent carries the nested screens.
+  "/keystone/announcements",
   "/keystone/profile",
   "/keystone/roles",
   "/keystone/settings",
@@ -99,6 +103,8 @@ const ADMIN_PAGES = [
   "/keystone/settings/email/newsletter",
   "/keystone/settings/email/log",
   "/keystone/settings/email/templates",
+  // ADR-172: the email design editor, outside the tab layout like a template's.
+  "/keystone/settings/email/designs/new",
   "/keystone/settings/social",
   "/keystone/social",
   "/keystone/theme",
@@ -223,14 +229,22 @@ test.describe("a learner session cannot reach the admin portal", () => {
 
   for (const path of ADMIN_PAGES) {
     test(`${path} turns the learner away`, async () => {
-      await page.goto(path);
+      const response = await page.goto(path);
 
-      // Not "some status code": the learner must not END UP on an admin page.
-      // `goto` follows the redirect, so the final URL is the assertion — a 200
-      // here would be a 200 for the admin shell.
-      await expect
-        .poll(() => new URL(page.url()).pathname, { timeout: 15_000 })
-        .not.toMatch(/^\/keystone\//);
+      // The refusal is a 404 AT THE ADDRESS since ADR-146: the `(admin)`
+      // layout calls `notFound()` for a non-STAFF subject rather than
+      // redirecting, because a redirect names the staff entry point to whoever
+      // asked. This asserted a redirect away from /keystone and failed on its
+      // first path when that changed — and, the file being serial, took every
+      // other probe down with it, so the launch gate ran nothing.
+      //
+      // Either refusal is accepted: a 404, or landing somewhere outside the
+      // portal. What is never accepted is a 2xx that stays on /keystone.
+      const pathname = new URL(page.url()).pathname;
+      expect(
+        response?.status() === 404 || !/^\/keystone\//.test(pathname),
+        `${path} answered ${response?.status()} at ${pathname}`,
+      ).toBe(true);
 
       // And nothing of the portal rendered on the way. `AdminShell`'s primary
       // navigation is the tell.

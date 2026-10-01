@@ -46,11 +46,10 @@ export class PurgePermissionError extends Error {
 /** The key a purge needs: the same `*.delete` the soft delete needs. */
 const DELETE_PERMISSION: Record<Exclude<PurgeableEntity, "article">, string> = {
   course: "courses.delete",
-  // Quizzes and videos publish and delete on the LESSON keys (ADR-058,
-  // ADR-068) — there is no `quizzes.*` or `videos.*` group.
   lesson: "lessons.delete",
-  quiz: "lessons.delete",
-  video: "lessons.delete",
+  // Their own keys since ADR-177 (they borrowed `lessons.delete` before).
+  quiz: "quizzes.delete",
+  video: "videos.delete",
   glossary: "glossary.delete",
 };
 

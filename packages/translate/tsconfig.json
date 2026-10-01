@@ -1,0 +1,11 @@
+{
+  "extends": "@repo/typescript-config/base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": ".",
+    // TypeScript 6 defaults `types` to []: say so rather than rely on a test
+    // file's vitest import pulling Node's types in.
+    "types": ["node"]
+  },
+  "include": ["src", "scripts"]
+}

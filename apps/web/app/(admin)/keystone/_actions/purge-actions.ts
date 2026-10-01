@@ -20,7 +20,10 @@ export async function purgeContentAction(entity: string, id: string): Promise<vo
         ? await requirePermission("glossary.delete")
         : input.entity === "article"
           ? await requireAnyPermission(["analysis.delete", "news.manage"])
-          : // Lessons, quizzes and videos share the lesson keys (ADR-058/068).
-            await requirePermission("lessons.delete");
+          : input.entity === "quiz"
+            ? await requirePermission("quizzes.delete")
+            : input.entity === "video"
+              ? await requirePermission("videos.delete")
+              : await requirePermission("lessons.delete");
   await purgeContent(subject, input.entity, input.id);
 }

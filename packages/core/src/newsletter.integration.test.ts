@@ -33,7 +33,12 @@ let service: typeof NewsletterModule;
 let actor: Awaited<ReturnType<typeof makeActor>>;
 
 /** Every send this suite provokes, so the confirm URL can be inspected. */
-const sent: { key: string; to: string; variables: Record<string, string> }[] = [];
+const sent: {
+  key: string;
+  to: string;
+  variables: Record<string, string>;
+  unsubscribe?: { url: string; oneClickUrl?: string } | undefined;
+}[] = [];
 
 // `@repo/email` is faked at the MODULE edge, and only there: this suite is
 // about the database, and the sending transport is the network edge testing.md
@@ -47,8 +52,14 @@ vi.mock("@repo/email", () => ({
     key: string;
     to: string;
     variables?: Record<string, string>;
+    unsubscribe?: { url: string; oneClickUrl?: string };
   }) => {
-    sent.push({ key: input.key, to: input.to, variables: input.variables ?? {} });
+    sent.push({
+      key: input.key,
+      to: input.to,
+      variables: input.variables ?? {},
+      unsubscribe: input.unsubscribe,
+    });
     return { status: "SENT" as const, deliveryId: "test" };
   },
 }));
@@ -202,6 +213,18 @@ describe("confirm is single-use and expiring (ADR-080 #2)", () => {
     const url = sent[1]!.variables["unsubscribe.url"]!;
     expect(url).toContain("/newsletter/unsubscribe?token=");
     expect(await service.unsubscribe(tokenFrom(url))).toBe("unsubscribed");
+  });
+
+  it("points List-Unsubscribe at the one-click HANDLER, not the page (changes-54 §9.3)", async () => {
+    await service.subscribe({ email: EMAIL, locale: "en", source: "footer" });
+    await service.confirmSubscription(tokenFrom(sent[0]!.variables["confirm.url"]!));
+
+    const links = sent[1]!.unsubscribe;
+    // The footer link is the page; the header is the POST route. They were
+    // the same URL, so every mail client's one-click posted to a page.
+    expect(links?.url).toContain("/newsletter/unsubscribe?token=");
+    expect(links?.oneClickUrl).toContain("/api/newsletter/unsubscribe?token=");
+    expect(tokenFrom(links!.oneClickUrl!)).toBe(tokenFrom(links!.url));
   });
 });
 
@@ -454,6 +477,12 @@ describe("newsletterLink is a PUBLIC link in the subscriber's locale", () => {
     );
     expect(service.newsletterLink("unsubscribe", "abc", "ar", origins)).toBe(
       "https://example.test/ar/newsletter/unsubscribe?token=abc",
+    );
+  });
+
+  it("builds the one-click handler URL with no locale segment", () => {
+    expect(service.newsletterOneClickUrl("a b", { site: "https://example.test/" })).toBe(
+      "https://example.test/api/newsletter/unsubscribe?token=a%20b",
     );
   });
 

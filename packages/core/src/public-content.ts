@@ -9,7 +9,13 @@ import { pickTranslation, type LocaleFallbackInfo } from "@repo/i18n";
 import { htmlLead } from "@repo/utils";
 import { scheduledVisibilityOr } from "./content.ts";
 import { loadLocaleMeta } from "./locale-meta.ts";
-import { advertisedAlternates, applyReadingLocale, type ReadingView } from "./reading-languages.ts";
+import {
+  INDEXABLE_TRANSLATION_STATUSES,
+  advertisedAlternates,
+  applyReadingLocale,
+  isIndexableTranslation,
+  type ReadingView,
+} from "./reading-languages.ts";
 
 export interface GlossaryListEntry {
   termId: string;
@@ -155,6 +161,8 @@ export interface GlossaryTermView extends ReadingView {
   seoDescription: string | null;
   /** Every locale that has a translation, for hreflang alternates. */
   alternates: { locale: string; slug: string }[];
+  /** The words at this URL are machine-written, not yet saved by a person (ADR-159 #2). */
+  noIndex: boolean;
 }
 
 /**
@@ -210,6 +218,8 @@ export async function loadGlossaryTermBySlug(
   );
 
   const alternates = advertisedAlternates(term.translations, ctx.defaultLocale);
+  // ADR-159 #2: the row this URL names decides whether the page is indexed.
+  const noIndex = !isIndexableTranslation(translation, ctx.defaultLocale);
 
   // Resolved through the same fallback chain the body uses: a topic name in
   // the wrong language on an RTL page is the bug ADR-007 exists to prevent,
@@ -248,6 +258,7 @@ export async function loadGlossaryTermBySlug(
       seoTitle: null,
       seoDescription: null,
       alternates,
+      noIndex,
       ...reading,
     };
   }
@@ -267,6 +278,7 @@ export async function loadGlossaryTermBySlug(
     seoTitle: picked.seoTitle,
     seoDescription: picked.seoDescription,
     alternates,
+    noIndex,
     ...reading,
   };
 }
@@ -318,8 +330,17 @@ export async function getRedirect(fromPath: string): Promise<string | null> {
 export async function loadGlossarySitemapEntries(): Promise<
   { locale: string; slug: string; updatedAt: Date }[]
 > {
+  // ADR-159 #2: a translation is listed once a person has saved it; the
+  // default locale's row is the source and always listed.
+  const { defaultLocale } = await localeContext();
   const rows = await db.glossaryTermTranslation.findMany({
-    where: { glossaryTerm: publicGlossaryTermWhere() },
+    where: {
+      glossaryTerm: publicGlossaryTermWhere(),
+      OR: [
+        { locale: defaultLocale },
+        { translationStatus: { in: [...INDEXABLE_TRANSLATION_STATUSES] } },
+      ],
+    },
     select: { locale: true, slug: true, updatedAt: true },
   });
   return rows;

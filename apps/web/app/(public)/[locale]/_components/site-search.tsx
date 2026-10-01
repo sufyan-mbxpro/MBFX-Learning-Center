@@ -232,18 +232,22 @@ export function SiteSearch({
         size="icon"
         aria-label={labels.trigger}
         onClick={() => setOpen(true)}
-        className="md:hidden"
+        className="md:hidden xl:inline-flex 2xl:hidden"
       >
         <SearchIcon aria-hidden className="size-4" />
       </Button>
       {/* Above `md` the trigger says what the shortcut is, which is the only
           way a reader learns it exists. Below it, the icon alone — the row is
-          already carrying a hamburger, a logo and two auth entry points. */}
+          already carrying a hamburger, a logo and two auth entry points.
+          Between `xl` and `2xl` the full desktop nav shares the row, and a
+          224px box pushed the end cluster off a 1280px screen once a second
+          language added the switcher (Phase 6 RTL smoke; Arabic labels run
+          wider still) — so the icon returns for that band. */}
       <Button
         variant="outline"
         size="sm"
         onClick={() => setOpen(true)}
-        className="hidden w-48 justify-start gap-2 text-muted-foreground md:inline-flex lg:w-56"
+        className="hidden w-48 justify-start gap-2 text-muted-foreground md:inline-flex lg:w-56 xl:hidden 2xl:inline-flex"
       >
         <SearchIcon aria-hidden className="size-4" />
         <span className="flex-1 truncate text-start text-sm font-normal">{labels.trigger}</span>

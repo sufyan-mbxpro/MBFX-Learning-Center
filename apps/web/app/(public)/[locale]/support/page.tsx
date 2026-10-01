@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { ReviewsBand } from "../_components/reviews-band.tsx";
-import { jsonLd, localizedPath, titleTemplate, titleFrom } from "../../../_lib/seo.ts";
+import { jsonLd, titleTemplate, titleFrom, staticPageAlternates } from "../../../_lib/seo.ts";
 import {
   ArrowRight,
   BookOpen,
@@ -28,7 +28,8 @@ import { SectionHeading } from "@repo/ui/components/section-heading";
 import {
   SUPPORT_CHANNELS,
   SUPPORT_CONTACT,
-  SUPPORT_FAQ,
+  SUPPORT_FAQ_FIGURES,
+  SUPPORT_FAQ_KEYS,
   type SupportChannel,
 } from "./_content/support-facts.ts";
 import { SupportBackdrop } from "./_components/support-backdrop.tsx";
@@ -57,7 +58,7 @@ import { SupportForm } from "./_components/support-form.tsx";
 //   - no `SUPPORT_CHANNELS` ⇒ no channel band;
 //   - no `site.supportEmail` (Settings → General, ADR-131) ⇒ no Email Support
 //     card AND no form, because both of them are that one address;
-//   - no `SUPPORT_FAQ` ⇒ `FaqPanel` renders nothing on its own;
+//   - no `SUPPORT_FAQ_KEYS` ⇒ `FaqPanel` renders nothing on its own;
 //   - a "More ways to get help" card whose section is flagged off renders as
 //     a plain card rather than a link to a 404 (changes-11 D25's rule).
 
@@ -121,7 +122,7 @@ export async function generateMetadata({
   return {
     title: titleFrom(template, t("meta.title")),
     description: t("meta.description"),
-    alternates: { canonical: localizedPath(locale, ROUTE_PATHS.support) },
+    alternates: await staticPageAlternates(locale, ROUTE_PATHS.support),
     // No `robots` key at all — a present one replaces the root layout's
     // site-wide directive rather than inheriting it (code-style.md #26).
   };
@@ -143,6 +144,12 @@ export default async function SupportPage({ params }: PageProps<"/[locale]/suppo
     getCaptchaClient(),
   ]);
   const supportEmail = supportEmailSetting ?? "";
+
+  // ADR-159 #6: the words from the catalog, the figures from the facts file.
+  const faq = SUPPORT_FAQ_KEYS.map((key) => ({
+    question: t(`faq.items.${key}.question`),
+    answer: t(`faq.items.${key}.answer`, SUPPORT_FAQ_FIGURES[key]),
+  }));
 
   // The compose window opens ADDRESSED and with a subject line already in it,
   // so "Send Email" leaves the reader one thing to type: their question.
@@ -247,14 +254,14 @@ export default async function SupportPage({ params }: PageProps<"/[locale]/suppo
         {/* `FAQPage` for the same list the panel draws, and only when it
             draws one — markup for questions a reader cannot see is the
             pattern search engines penalise. */}
-        {SUPPORT_FAQ.length > 0 && (
+        {faq.length > 0 && (
           <script
             type="application/ld+json"
             dangerouslySetInnerHTML={{
               __html: jsonLd({
                 "@context": "https://schema.org",
                 "@type": "FAQPage",
-                mainEntity: SUPPORT_FAQ.map((item) => ({
+                mainEntity: faq.map((item) => ({
                   "@type": "Question",
                   name: item.question,
                   acceptedAnswer: { "@type": "Answer", text: item.answer },
@@ -264,7 +271,7 @@ export default async function SupportPage({ params }: PageProps<"/[locale]/suppo
           />
         )}
         <Container size="narrow">
-          <FaqPanel title={t("faq.title")} lead={t("faq.lead")} items={SUPPORT_FAQ} format="text" />
+          <FaqPanel title={t("faq.title")} lead={t("faq.lead")} items={faq} format="text" />
         </Container>
       </Section>
 

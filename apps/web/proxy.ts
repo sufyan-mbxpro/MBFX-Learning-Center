@@ -1,10 +1,13 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getCookieCache, getSessionCookie } from "better-auth/cookies";
 import createMiddleware from "next-intl/middleware";
 import { isReservedFirstSegment } from "@repo/contracts";
 import { routing } from "@repo/i18n/routing";
 
 const intl = createMiddleware(routing);
+
+/** next-intl's cookie for a reader's chosen language (its default name). */
+const LOCALE_COOKIE = "NEXT_LOCALE";
 
 /**
  * The staff portal's prefix (changes-52, ADR-151; ADR-146 for the sign-in).
@@ -201,6 +204,67 @@ function splitLocale(pathname: string): { locale: string; prefix: string; rest: 
   return { locale: routing.defaultLocale, prefix: "", rest: segments };
 }
 
+/** The served languages, as `/api/locales` last answered, for a minute. */
+let servedCache: { codes: readonly string[]; until: number } | null = null;
+
+async function servedLocales(request: NextRequest): Promise<readonly string[] | null> {
+  if (servedCache && servedCache.until > Date.now()) return servedCache.codes;
+  try {
+    const response = await fetch(new URL("/api/locales", request.nextUrl.origin), {
+      signal: AbortSignal.timeout(3000),
+    });
+    if (!response.ok) return null;
+    const { locales } = (await response.json()) as { locales?: unknown };
+    if (!Array.isArray(locales)) return null;
+    const codes = locales.filter((code): code is string => typeof code === "string");
+    servedCache = { codes, until: Date.now() + 60_000 };
+    return codes;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * next-intl for an address with NO locale prefix (ADR-178 #7). Its
+ * browser-language detection (the `Accept-Language` header, then the
+ * `NEXT_LOCALE` cookie) redirects to any code it can ROUTE, and it can route
+ * every supported language, live or not — so a reader whose browser prefers a
+ * language that is switched off was sent to a 404. When the redirect points at
+ * a language the site does not serve, the request is answered as the default
+ * language instead, and the stale cookie is dropped. The served list is asked
+ * for only on such a redirect, so an ordinary request costs nothing extra; if
+ * the answer cannot be had, next-intl's redirect stands, which is the old
+ * behaviour.
+ */
+async function intlServed(request: NextRequest): Promise<NextResponse> {
+  const response = intl(request);
+  const location = response.headers.get("location");
+  if (!location) return response;
+  const target = new URL(location, request.url).pathname.split("/").filter(Boolean)[0];
+  if (
+    !target ||
+    target === routing.defaultLocale ||
+    !(routing.locales as readonly string[]).includes(target)
+  ) {
+    return response;
+  }
+  const served = await servedLocales(request);
+  if (served === null || served.includes(target)) return response;
+
+  const headers = new Headers(request.headers);
+  headers.set("accept-language", routing.defaultLocale);
+  const cookies = request.cookies
+    .getAll()
+    .filter((cookie) => cookie.name !== LOCALE_COOKIE)
+    .map((cookie) => `${cookie.name}=${cookie.value}`)
+    .join("; ");
+  if (cookies) headers.set("cookie", cookies);
+  else headers.delete("cookie");
+  const fallback = intl(new NextRequest(request.url, { headers }));
+  fallback.cookies.delete(LOCALE_COOKIE);
+  return fallback;
+}
+
 function notFound(request: NextRequest, surface: "admin" | "public") {
   return applySecurityHeaders(
     NextResponse.rewrite(new URL(NOT_FOUND_PATH, request.url)),
@@ -308,7 +372,8 @@ export async function proxy(request: NextRequest) {
   }
 
   const recaptcha = rest.length === 1 && RECAPTCHA_PUBLIC_PAGES.has(first ?? "");
-  return applySecurityHeaders(intl(request), "public", null, false, recaptcha);
+  const response = prefix === "" ? await intlServed(request) : intl(request);
+  return applySecurityHeaders(response, "public", null, false, recaptcha);
 }
 
 /**

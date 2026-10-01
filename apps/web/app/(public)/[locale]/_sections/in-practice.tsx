@@ -181,11 +181,7 @@ export async function InPractice({ locale }: SectionProps) {
                   itemClassName="w-full"
                   controls="dots"
                   hoverArrows
-                  autoplay={{
-                    interval: 6000,
-                    pauseLabel: t("practiceQuotesPause"),
-                    playLabel: t("practiceQuotesPlay"),
-                  }}
+                  autoplay={{ interval: 6000 }}
                   slideLabels={testimonials.map((testimonial) => testimonial.name)}
                 >
                   {testimonials.map((testimonial) => (
@@ -260,7 +256,7 @@ export async function InPractice({ locale }: SectionProps) {
                           <Icon aria-hidden className="size-4.5" />
                         </span>
                         <span className="min-w-0 flex-1 truncate text-sm font-medium transition-colors duration-(--duration-base) group-hover/tool:text-primary-interactive">
-                          {tool.title}
+                          {tool.title ?? tTools(`names.${tool.key}`)}
                         </span>
                         <ArrowRight
                           aria-hidden

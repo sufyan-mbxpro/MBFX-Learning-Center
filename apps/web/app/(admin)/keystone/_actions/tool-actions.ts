@@ -14,6 +14,7 @@ import { reorderTools, saveTool, setToolEnabled } from "@repo/core";
 import { requirePermission } from "@repo/rbac";
 import { revalidateTag } from "next/cache";
 import { z } from "zod";
+import { translateSoon } from "./translate-soon.ts";
 
 const key = z.string().min(1).max(40);
 
@@ -34,8 +35,9 @@ function invalidate(): void {
 export async function saveToolAction(input: unknown): Promise<void> {
   const subject = await requirePermission("tools.update");
   const parsed = saveToolSchema.parse(input);
-  await saveTool(subject, parsed);
+  const toolId = await saveTool(subject, parsed);
   invalidate();
+  translateSoon("tool", toolId);
 }
 
 export async function setToolEnabledAction(toolKey: string, isEnabled: boolean): Promise<void> {

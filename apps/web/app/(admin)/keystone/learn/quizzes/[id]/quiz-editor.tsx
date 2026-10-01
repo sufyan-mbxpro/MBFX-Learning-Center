@@ -171,7 +171,7 @@ export function QuizEditor({
   defaultLocale: string;
   /** Present exactly when `initial.locale` is not the default locale. */
   source?: QuizTranslationSource;
-  /** Holds `lessons.publish` (ADR-058 #8). The service re-checks it. */
+  /** Holds `quizzes.publish` (ADR-177). The service re-checks it. */
   canPublish: boolean;
   canUpdate: boolean;
   statusLabels: ContentStatusLabels;

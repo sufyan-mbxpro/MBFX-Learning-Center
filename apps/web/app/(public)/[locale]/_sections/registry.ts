@@ -25,6 +25,7 @@ import { LatestAnalysis } from "./latest-analysis.tsx";
 import { LatestNews } from "./latest-news.tsx";
 import { LearningPaths } from "./learning-paths.tsx";
 import { Newsletter } from "./newsletter.tsx";
+import { Promotions } from "./promotions.tsx";
 import { PopularTools } from "./popular-tools.tsx";
 import { Quotes } from "./quotes.tsx";
 import { Testimonials } from "./testimonials.tsx";
@@ -66,6 +67,10 @@ export const SECTION_COMPONENTS: Partial<
   trust_strip: TrustStrip,
   facts: Facts,
   testimonials: Testimonials,
+  // ADR-167 (changes-52 P4). Live promotions with "show in the home band".
+  // One shape, so no HOME_SECTION_VARIANTS entry (the `connect` precedent), and
+  // it renders NOTHING while none is live — seeded enabled for that reason.
+  promotions: Promotions,
 };
 
 /**

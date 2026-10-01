@@ -118,6 +118,100 @@ describe("loadSetting — typed reads + defaults", () => {
   });
 });
 
+describe("loadLocalizedSetting — translatable settings (ADR-165 #4)", () => {
+  async function seedKnown(key: string, value: unknown, groupName = "layout") {
+    await db.setting.deleteMany({ where: { key } });
+    return db.setting.create({
+      data: { key, groupName, value: value as never, type: "JSON", label: key, isPublic: true },
+    });
+  }
+
+  it("lays a locale's words over the English and keeps the switch and URL from English", async () => {
+    const row = await seedKnown("header.cta", {
+      enabled: true,
+      label: "Get Started",
+      url: "/sign-up",
+    });
+    await db.settingTranslation.create({
+      data: {
+        settingId: row.id,
+        locale: "es",
+        // A stored row that tries to carry a URL: the reader ignores it.
+        value: { label: "Empezar", url: "https://evil.example" },
+      },
+    });
+
+    expect(await settings.loadLocalizedSetting("header.cta", "es")).toEqual({
+      enabled: true,
+      label: "Empezar",
+      url: "/sign-up",
+    });
+    // Another locale, and the default one, read the English.
+    expect(await settings.loadLocalizedSetting("header.cta", "ar")).toEqual({
+      enabled: true,
+      label: "Get Started",
+      url: "/sign-up",
+    });
+    expect((await settings.loadLocalizedSetting("header.cta", "en"))?.label).toBe("Get Started");
+  });
+
+  it("serves a machine row, and falls back to English for a blank or malformed one", async () => {
+    const row = await seedKnown("site.description", "Free forex education.", "general");
+    await db.settingTranslation.create({
+      data: {
+        settingId: row.id,
+        locale: "es",
+        value: { value: "Educación forex gratuita." },
+        translationStatus: "MACHINE_TRANSLATED",
+      },
+    });
+    await db.settingTranslation.create({
+      data: { settingId: row.id, locale: "ar", value: { value: "   " } },
+    });
+    await db.settingTranslation.create({
+      data: { settingId: row.id, locale: "ur", value: { value: 7 } },
+    });
+
+    expect(await settings.loadLocalizedSetting("site.description", "es")).toBe(
+      "Educación forex gratuita.",
+    );
+    expect(await settings.loadLocalizedSetting("site.description", "ar")).toBe(
+      "Free forex education.",
+    );
+    expect(await settings.loadLocalizedSetting("site.description", "ur")).toBe(
+      "Free forex education.",
+    );
+  });
+
+  it("returns null for a key that was never seeded, and deletes translations with their setting", async () => {
+    await db.setting.deleteMany({ where: { key: "header.topBar" } });
+    expect(await settings.loadLocalizedSetting("header.topBar", "es")).toBeNull();
+
+    const row = await seedKnown("header.topBar", {
+      enabled: true,
+      phone: "",
+      promoText: "Open an account",
+      promoUrl: "/sign-up",
+    });
+    await db.settingTranslation.create({
+      data: { settingId: row.id, locale: "es", value: { promoText: "Abre una cuenta" } },
+    });
+    await db.setting.delete({ where: { id: row.id } });
+    expect(await db.settingTranslation.count({ where: { settingId: row.id } })).toBe(0);
+  });
+
+  it("getLocalizedSetting caches under the key's own group tag (next/cache mocked — ADR-004)", async () => {
+    await seedKnown("header.announcementBar", { enabled: true, text: "Hello", dismissible: true });
+    const cacheTag = vi.fn();
+    vi.doMock("next/cache", () => ({ cacheTag, cacheLife: vi.fn(), revalidateTag: vi.fn() }));
+    vi.resetModules();
+    const fresh = await import("./index.ts");
+
+    expect((await fresh.getLocalizedSetting("header.announcementBar", "es"))?.text).toBe("Hello");
+    expect(cacheTag).toHaveBeenCalledWith("settings:layout");
+  });
+});
+
 describe("isPublic leak test", () => {
   it("loadPublicSettings excludes a non-public row for the same group — the query itself scopes it out, not a post-hoc filter", async () => {
     const group = `group-${Date.now()}`;

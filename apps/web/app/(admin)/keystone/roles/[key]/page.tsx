@@ -110,6 +110,8 @@ export default async function RoleDetailPage({ params }: PageProps<"/keystone/ro
               selectAll: t("selectAllGroup"),
               search: t("searchPermissions"),
               enabledOf: t("enabledOf"),
+              unused: t("permissionUnused"),
+              unusedHint: t("permissionUnusedHint"),
             }}
           />
         </AdminSection>

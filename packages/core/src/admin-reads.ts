@@ -600,10 +600,8 @@ const CONTENT_MODELS: ContentModel[] = [
       }),
   },
   {
-    // Quizzes publish on the `lessons.*` keys (ADR-058 #6 — the second
-    // refusal to add a permission group), so they gate on the same key.
     entity: "quizzes",
-    permission: "lessons.view",
+    permission: "quizzes.view",
     groupByStatus: async () => {
       const rows = await db.quiz.groupBy({
         by: ["status"],
@@ -644,10 +642,8 @@ const CONTENT_MODELS: ContentModel[] = [
       }),
   },
   {
-    // Videos publish on `lessons.*` too (ADR-068, following the quizzes
-    // precedent) — same key, deliberately.
     entity: "videos",
-    permission: "lessons.view",
+    permission: "videos.view",
     groupByStatus: async () => {
       const rows = await db.videoTopic.groupBy({
         by: ["status"],

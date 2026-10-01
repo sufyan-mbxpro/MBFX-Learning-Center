@@ -13,6 +13,7 @@
 import { getTranslations } from "next-intl/server";
 import { getAiAvailability } from "@repo/ai";
 import type { AiFillModule } from "@repo/contracts";
+import { getAuthoringLocales } from "@repo/i18n";
 import { routing } from "@repo/i18n/routing";
 import { can, canAny, type Subject } from "@repo/rbac";
 
@@ -75,6 +76,8 @@ export async function loadEditorAi(
   const [tAi, t] = await Promise.all([getTranslations("admin.ai"), getTranslations("admin")]);
   const tAiKey = (key: string) => tAi(key as "assistantMenu");
   const common = (key: string) => t(key as "cancel");
+  // Every language row, live or not (ADR-178 #6).
+  const languages = (await getAuthoringLocales()).map((locale) => locale.code);
 
   return {
     ...(assistantOn
@@ -82,7 +85,7 @@ export async function loadEditorAi(
           assistant: {
             // The panel shape on every editor; each editor adds its own
             // `locale`, which is state this server read cannot see.
-            config: { entity, panel: true, languages: [...routing.locales] },
+            config: { entity, panel: true, languages },
             labels: aiAssistantLabels(tAiKey),
           },
         }
@@ -134,8 +137,9 @@ export async function loadWritingAssistant(
   const availability = await getAiAvailability();
   if (availability.features.writing_assistant !== true) return undefined;
   const tAi = await getTranslations("admin.ai");
+  const languages = (await getAuthoringLocales()).map((locale) => locale.code);
   return {
-    config: { entity, panel: true, languages: [...routing.locales] },
+    config: { entity, panel: true, languages },
     labels: aiAssistantLabels((key: string) => tAi(key as "assistantMenu")),
   };
 }

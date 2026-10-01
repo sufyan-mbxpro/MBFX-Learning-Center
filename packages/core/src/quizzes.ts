@@ -27,7 +27,6 @@ import {
   type Prisma,
   type QuestionType,
 } from "@repo/db";
-import { computeSourceHash } from "@repo/i18n";
 import { pickTranslation, type LocaleFallbackInfo } from "@repo/i18n";
 import type { Subject } from "@repo/rbac";
 import type {
@@ -61,6 +60,13 @@ import { publicQuizWhere } from "./quiz-links.ts";
 import { recomputeCourseCompletion } from "./progress.ts";
 import { syncReferences } from "./cms/references.ts";
 import { recordAudit } from "./index.ts";
+import {
+  hashQuizQuestionSource,
+  hashQuizSource,
+  loadQuizQuestionSource,
+  loadQuizSource,
+} from "./quiz-source.ts";
+import { afterSourceSave, enqueueEntityTranslations } from "./translation-queue.ts";
 
 /**
  * `Quiz.track` is a plain column validated by @repo/contracts, not by a FK
@@ -466,8 +472,46 @@ export async function createQuiz(actor: Subject, input: CreateQuizInput): Promis
     entityId: quiz.id,
     changes: { after: { title: input.title } },
   });
+  await enqueueEntityTranslations("quiz", quiz.id);
   revalidateTag("content", { expire: 0 });
   return quiz.id;
+}
+
+/** The quiz and every question: each is its own translatable row. */
+async function enqueueQuizTranslations(quizId: string): Promise<void> {
+  await enqueueEntityTranslations("quiz", quizId);
+  const questions = await db.quizQuestion.findMany({ where: { quizId }, select: { id: true } });
+  for (const question of questions) await enqueueEntityTranslations("quiz_question", question.id);
+}
+
+/**
+ * After an English save (ADR-161 #3): store each English row's hash, flag a
+ * person's stale translations OUTDATED, and enqueue — the quiz and every
+ * question, since an edit can touch any of them.
+ */
+async function afterQuizSourceChange(quizId: string, defaultLocale: string): Promise<void> {
+  const quiz = await loadQuizSource(db, quizId, defaultLocale);
+  const quizHash = quiz ? hashQuizSource(quiz) : null;
+  if (quizHash) {
+    await db.quizTranslation.updateMany({
+      where: { quizId, locale: defaultLocale },
+      data: { sourceHash: quizHash },
+    });
+  }
+  await afterSourceSave("quiz", quizId, quizHash, defaultLocale);
+
+  const questions = await db.quizQuestion.findMany({ where: { quizId }, select: { id: true } });
+  for (const { id } of questions) {
+    const source = await loadQuizQuestionSource(db, id, defaultLocale);
+    const hash = source ? hashQuizQuestionSource(source) : null;
+    if (hash) {
+      await db.quizQuestionTranslation.updateMany({
+        where: { questionId: id, locale: defaultLocale },
+        data: { sourceHash: hash },
+      });
+    }
+    await afterSourceSave("quiz_question", id, hash, defaultLocale);
+  }
 }
 
 /**
@@ -520,15 +564,28 @@ export async function saveQuiz(actor: Subject, input: QuizInput): Promise<void> 
 
   if (!isSource) await assertSameStructure(input, defaultLocale);
 
-  const sourceHash = isSource
-    ? computeSourceHash(`${input.translation.title}${input.translation.description ?? ""}`)
-    : undefined;
+  // Phase 5 (ADR-161): a person's translation records the hash of the
+  // English it was made from — the quiz's AND each question's, since each is
+  // its own translatable row. The English rows' hashes are read back after
+  // the write, below.
+  const quizFrom = isSource
+    ? null
+    : await loadQuizSource(db, input.quizId, defaultLocale).then((s) =>
+        s ? hashQuizSource(s) : null,
+      );
+  const questionFrom = new Map<string, string | null>();
+  if (!isSource) {
+    for (const question of input.questions) {
+      const source = await loadQuizQuestionSource(db, question.id!, defaultLocale);
+      questionFrom.set(question.id!, source ? hashQuizQuestionSource(source) : null);
+    }
+  }
 
   const fields = {
     title: input.translation.title,
     slug,
     description: input.translation.description ?? null,
-    ...(sourceHash === undefined ? {} : { sourceHash }),
+    ...(isSource ? {} : { sourceHash: quizFrom }),
     translationStatus: TranslationStatus.TRANSLATED,
   };
 
@@ -589,6 +646,10 @@ export async function saveQuiz(actor: Subject, input: QuizInput): Promise<void> 
         prompt: question.prompt,
         options: question.options as Prisma.InputJsonValue,
         explanations: (question.explanations ?? []) as Prisma.InputJsonValue,
+        // A person's save; without the status, saving over a machine row
+        // left it MACHINE_TRANSLATED.
+        translationStatus: TranslationStatus.TRANSLATED,
+        ...(isSource ? {} : { sourceHash: questionFrom.get(questionId) ?? null }),
       };
       await tx.quizQuestionTranslation.upsert({
         where: { questionId_locale: { questionId, locale } },
@@ -616,6 +677,7 @@ export async function saveQuiz(actor: Subject, input: QuizInput): Promise<void> 
     entityId: input.quizId,
     changes: { after: { locale, questions: input.questions.length } },
   });
+  if (isSource) await afterQuizSourceChange(input.quizId, defaultLocale);
   revalidateTag("content", { expire: 0 });
 }
 
@@ -659,6 +721,7 @@ export async function setQuizDeleted(
     entityType: "quizzes",
     entityId: quizId,
   });
+  if (!deleted) await enqueueQuizTranslations(quizId);
   revalidateTag("content", { expire: 0 });
 }
 
@@ -766,6 +829,7 @@ export async function duplicateQuiz(actor: Subject, quizId: string): Promise<str
     entityId: copy.id,
     changes: { after: { sourceQuizId: quizId } },
   });
+  await enqueueQuizTranslations(copy.id);
   revalidateTag("content", { expire: 0 });
   return copy.id;
 }
