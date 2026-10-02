@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { EmailOff } from "../_components/email-off.tsx";
+import { EmailOff } from "../../../_components/email-off.tsx";
 import { ReviewsBand } from "../_components/reviews-band.tsx";
 import { jsonLd, titleTemplate, titleFrom, staticPageAlternates } from "../../../_lib/seo.ts";
 import {

@@ -94,7 +94,13 @@ log "Restarting"
 if [ -n "${RESTART_CMD:-}" ]; then
   eval "$RESTART_CMD"
 elif command -v pm2 >/dev/null 2>&1 && pm2 describe "$SERVICE" >/dev/null 2>&1; then
-  pm2 reload "$SERVICE"
+  # --update-env, or pm2 keeps the environment the process was FIRST started
+  # with — including a NEXT_DEPLOYMENT_ID from some earlier deploy. Pages
+  # rendered at request time then link every chunk under that stale id while
+  # the build's prerendered pages use the new one: the edge cached a 404 for
+  # one such stylesheet URL and the client's skew check fails against the
+  # stale id (2026-10-02, live: `?dpl=202610011833` beside `?dpl=6eb79e8`).
+  pm2 reload "$SERVICE" --update-env
 elif systemctl cat "$SERVICE.service" >/dev/null 2>&1; then
   sudo systemctl restart "$SERVICE"
 else

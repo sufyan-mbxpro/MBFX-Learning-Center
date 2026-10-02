@@ -40,7 +40,7 @@ import { Link } from "@repo/i18n/navigation";
 import { getLocalizedSetting, getSetting, isFeatureVisible } from "@repo/settings";
 import { BrandLogo } from "@repo/ui/components/brand-logo";
 import { SocialLinkIcon } from "./social-link-icon.tsx";
-import { EmailOff } from "./email-off.tsx";
+import { EmailOff } from "../../../_components/email-off.tsx";
 import { Container } from "@repo/ui/components/container";
 import { Reveal } from "@repo/ui/components/reveal";
 import { NavLink } from "./nav-link.tsx";

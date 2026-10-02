@@ -442,5 +442,8 @@ makes the build refuse on the mismatch. Two consequences worth knowing: the id
 is part of the `"use cache"` key, so every deploy starts those caches cold
 (a fresh build does that anyway), and the running process does not have the
 variable unless you pass it at restart (`pm2 reload mbx --update-env` with it
-exported), which costs only the `x-nextjs-deployment-id` skew header — the
-asset URLs are baked into the build either way.
+exported). **A STALE value is worse than none** (2026-10-02): pages rendered at
+request time link their CSS and JS under the RUNTIME id, so a process still
+carrying an older deploy's id serves `?dpl=<old>` asset URLs beside the build's
+`?dpl=<new>` ones, the edge caches a 404 for one of them, and the skew check
+fails. `scripts/deploy.sh` reloads with `--update-env` for this reason.

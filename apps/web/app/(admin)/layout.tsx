@@ -16,6 +16,7 @@ import { TwoFactorRequiredScreen } from "./keystone/_components/two-factor-requi
 import { faviconIcons } from "../_lib/favicon.ts";
 import { loadSiteTimeZone } from "../_lib/site-time-zone.ts";
 import { SiteTimeZone } from "../_components/site-time-zone.tsx";
+import { EmailOff } from "../_components/email-off.tsx";
 import "@repo/ui/globals.css";
 
 // Root layout for the ADMIN surface — one of two root layouts in this app
@@ -125,23 +126,29 @@ export default async function AdminRootLayout({ children }: LayoutProps<"/">) {
           nonce={nonce}
           dangerouslySetInnerHTML={{ __html: buildThemeStyleSheet(withAdminTypeface(theme)) }}
         />
-        <NextIntlClientProvider messages={messages} timeZone={timeZone}>
-          <SiteTimeZone value={timeZone} />
-          <ThemeProvider storageKey={ADMIN_THEME_STORAGE_KEY}>
-            {twoFactorPending ? (
-              <TwoFactorRequiredScreen userId={subject.id} />
-            ) : (
-              <AdminShell
-                subject={subject!}
-                userName={userName}
-                email={profile?.email ?? ""}
-                image={profile?.image ?? null}
-              >
-                {children}
-              </AdminShell>
-            )}
-          </ThemeProvider>
-        </NextIntlClientProvider>
+        {/* Every admin screen prints addresses (the account menu, users,
+            settings). Cloudflare's obfuscation rewrote them into markup React
+            did not render and injected a decoder our CSP blocks, so the whole
+            surface opts out rather than one link at a time. */}
+        <EmailOff>
+          <NextIntlClientProvider messages={messages} timeZone={timeZone}>
+            <SiteTimeZone value={timeZone} />
+            <ThemeProvider storageKey={ADMIN_THEME_STORAGE_KEY}>
+              {twoFactorPending ? (
+                <TwoFactorRequiredScreen userId={subject.id} />
+              ) : (
+                <AdminShell
+                  subject={subject!}
+                  userName={userName}
+                  email={profile?.email ?? ""}
+                  image={profile?.image ?? null}
+                >
+                  {children}
+                </AdminShell>
+              )}
+            </ThemeProvider>
+          </NextIntlClientProvider>
+        </EmailOff>
       </body>
     </html>
   );

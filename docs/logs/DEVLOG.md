@@ -27572,3 +27572,25 @@ rewrites; check the live HTML for `__cf_email__` after deploy.
 
 **Tests.** `tsc` and ESLint clean on the touched files;
 `support-page.test.ts` 38/38.
+
+## 2026-10-02 — Module 14: a stale runtime deployment id, and the admin opts out of email obfuscation
+
+**Shipped.** The live homepage linked its CSS and JS under
+`?dpl=202610011833` (an id from a 1 October deploy) while the same page's
+image URLs and every build-prerendered page used `?dpl=6eb79e8`. Pages
+rendered at request time take the id from the RUNNING process, and
+`deploy.sh` reloaded pm2 without `--update-env`, so the process kept the
+environment it was first started with. The edge then cached a 404 for one of
+those stale-id stylesheet URLs (`cf-cache-status: HIT`, 200 from origin).
+`deploy.sh` now reloads with `--update-env`; `docs/ops/deploy.md` says a stale
+id is worse than none. Separately, `/keystone/settings/general` still loaded
+Cloudflare's email decoder (blocked by our CSP): the admin header prints the
+signed-in user's address on every screen. `EmailOff` moved to
+`app/_components/` (the admin may not import from the public tree) and wraps
+the whole admin body.
+
+**Decisions.** No ADR. The running process must be restarted with the new
+environment on the server, and the edge purged, before the live site changes.
+
+**Tests.** `tsc` and ESLint clean on the touched files; `support-page.test.ts`
+38/38.
