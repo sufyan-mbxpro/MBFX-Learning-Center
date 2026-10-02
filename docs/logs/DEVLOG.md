@@ -27617,3 +27617,45 @@ old release serves, so they must stay backward compatible.
 **Tests.** `bash -n` clean locally and on the live host's bash; the
 build-id fallback and stylesheet extraction were run read-only against the
 live release. Not yet run end to end.
+
+## 2026-10-02 — Module 06/11: the seeders write a complete Arabic site
+
+**Shipped.** Every seeded piece of public content now has its Arabic row,
+written `create`-only beside the English. `pnpm db:seed` adds the glossary
+(6 topics, 54 terms), both demo quizzes (9 questions), both video categories
+and six topics (link labels included), all eleven tool pages (highlights and
+FAQ), the three promotions, the six corpus articles `seed-articles-ar.ts` had
+left English-only plus the featured sample, and four translatable settings.
+`pnpm seed:live` gains an Arabic step (`seed-live/arabic.ts` +
+`content-ar.ts`): its four courses (8 sections, 16 lessons, cheat-sheet
+labels), two quizzes (20 questions) and six video topics. The English
+glossary, quiz and video corpora moved out of `seed.ts` into
+`seed-glossary.ts` / `seed-quizzes.ts` / `seed-videos.ts` unchanged, so the
+test can compare against them.
+
+**Decisions.** No ADR. The two `legal` settings are human-only (ADR-165 #6);
+they are seeded `NEEDS_REVIEW`, which satisfies the activation gate and puts
+them in the Review tab for the owner's sign-off. Quiz questions match by
+position and are skipped if the English option count no longer agrees, so an
+index can never point at the wrong answer. The `seed:live` step writes rows
+directly instead of through `saveCourse`/`saveLesson`, which would rewrite the
+English side's attachments and questions; it keeps the sanitizer. Every Arabic
+write skips an existing row, so a re-seed on live never overwrites an edit.
+
+**Tests.** `arabic-seed.test.ts` 137/137 (coverage, markup, hrefs, option
+counts, highlight glyphs, length limits); `@repo/db` unit suite 172/172.
+`tsc` and ESLint clean on both packages. Seeded the local database twice: the
+first run created every row, the second created none; the `seed:live` Arabic
+step likewise (4 / 16 / 2 / 6, then zeros).
+
+## 2026-10-03 — Module 06: `seed:live` writes the Arabic settings too
+
+**Shipped.** `seed-live/arabic.ts` now calls `seedArabicSettings`, so the live
+seeder writes the same four Arabic setting rows the main seed does
+(`site.description`, the two `legal` lines, `header.cta`). `@repo/db` exports
+`./seed-settings-ar` so the words are imported, not copied.
+
+**Decisions.** No ADR. `create`-only, like every other Arabic write.
+
+**Tests.** `arabic-seed.test.ts` 137/137; `@repo/core` `tsc` clean;
+`check:phantom-deps` OK.

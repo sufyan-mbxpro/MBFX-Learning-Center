@@ -82,6 +82,7 @@ import {
   VIDEO_TOPICS,
   type ImageName,
 } from "./content.ts";
+import { seedArabicLiveContent } from "./arabic.ts";
 import { isFileRef, type DefaultsFile } from "./defaults-file.ts";
 import { DEFAULTS_FILE, MEDIA_DIR, loadRootEnv, pinUploadsRoot } from "./env.ts";
 import { buildCheatSheetPdf } from "./pdf.ts";
@@ -954,6 +955,14 @@ async function main(): Promise<void> {
   await seedCourses(actor, locale);
   await seedQuizzes(actor, locale);
   await seedVideoTopics(actor, locale);
+
+  // Arabic (ADR-166): the words for everything above, create-only.
+  const arabic = await seedArabicLiveContent(locale);
+  console.log(
+    `  arabic: ${arabic.courses} course(s), ${arabic.lessons} lesson(s), ` +
+      `${arabic.quizzes} quiz(zes), ${arabic.videoTopics} video topic(s), ` +
+      `${arabic.settings} setting(s) created`,
+  );
 
   console.log("Pictures where missing:");
   await fillCourseCovers(actor, locale);

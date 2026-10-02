@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./seed-settings-ar": "./prisma/seed-settings-ar.ts"
   },
   "scripts": {
     "lint": "eslint src prisma prisma.config.ts",
