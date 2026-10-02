@@ -11,40 +11,24 @@ import { articleSearchScore, articleSearchTerms } from "./article-search.ts";
 import { ARTICLE, RELATED, loadRelationTargets } from "./content-relations.ts";
 import {
   advertisedAlternates,
-  applyReadingLocale,
+  contentLanguage,
   INDEXABLE_TRANSLATION_STATUSES,
   isIndexableTranslation,
-  type LocaleMeta,
-  type ReadingLanguage,
-} from "./reading-languages.ts";
+  type ContentLanguageView,
+} from "./translation-indexing.ts";
 
 interface LocaleContext {
   locales: LocaleFallbackInfo[];
   defaultLocale: string;
-  /** Every seeded locale, active or not, in display order (ADR-127). */
-  known: LocaleMeta[];
 }
 
 async function localeContext(): Promise<LocaleContext> {
   const locales = await db.locale.findMany({
-    select: {
-      code: true,
-      fallbackCode: true,
-      isDefault: true,
-      nativeName: true,
-      direction: true,
-      sortOrder: true,
-    },
+    select: { code: true, fallbackCode: true, isDefault: true },
   });
   return {
     locales: locales.map((l) => ({ code: l.code, fallbackCode: l.fallbackCode })),
     defaultLocale: locales.find((l) => l.isDefault)?.code ?? "en",
-    known: locales.map((l) => ({
-      code: l.code,
-      nativeName: l.nativeName,
-      direction: l.direction,
-      sortOrder: l.sortOrder,
-    })),
   };
 }
 
@@ -433,7 +417,7 @@ export async function getCategoryDigests(
   return loadCategoryDigests(locale, options);
 }
 
-export interface ArticleView {
+export interface ArticleView extends ContentLanguageView {
   articleId: string;
   kind: ArticleKind;
   locale: string;
@@ -476,26 +460,9 @@ export interface ArticleView {
   relatedCount: number;
   faqItems: { question: string; answer: string }[];
   alternates: { locale: string; slug: string }[];
-  /**
-   * ADR-127. The languages a reader may switch the article's own words into,
-   * including the one on screen. Fewer than two ⇒ no menu.
-   */
-  readingLanguages: ReadingLanguage[];
-  /**
-   * The reading locale actually applied, or null when the page shows its
-   * ordinary translation. Null for an unknown, unreadable or same-as-shown
-   * `lang` — those are ignored, never a 404 (ADR-127 #5).
-   */
-  readingLocale: string | null;
-  /** Direction of the translation on screen, for the content wrapper's `dir`. */
-  contentDirection: "ltr" | "rtl";
 }
 
-export async function loadArticleBySlug(
-  locale: string,
-  slug: string,
-  readingLocale?: string,
-): Promise<ArticleView | null> {
+export async function loadArticleBySlug(locale: string, slug: string): Promise<ArticleView | null> {
   const now = new Date();
   const ctx = await localeContext();
   const translation = await db.articleTranslation.findFirst({
@@ -526,22 +493,7 @@ export async function loadArticleBySlug(
   if (!translation) return null;
 
   const article = translation.article;
-  const fallbackPick = pickTranslation(
-    article.translations,
-    locale,
-    ctx.defaultLocale,
-    ctx.locales,
-  );
-  // ADR-127: a reader-chosen language REPLACES the fallback pick, but only with
-  // a translation a human saved. Anything else leaves the page as it was.
-  const reading = applyReadingLocale(
-    article.translations,
-    fallbackPick,
-    readingLocale,
-    ctx.known,
-    locale,
-  );
-  const { picked, readingLanguages, contentDirection } = reading;
+  const picked = pickTranslation(article.translations, locale, ctx.defaultLocale, ctx.locales);
   const alternates = advertisedAlternates(article.translations, ctx.defaultLocale);
   const categoryTranslation = pickTranslation(
     article.category.translations,
@@ -599,9 +551,7 @@ export async function loadArticleBySlug(
       relatedCount: article.relatedCount,
       faqItems: [],
       alternates,
-      readingLanguages,
-      readingLocale: null,
-      contentDirection: "ltr",
+      ...contentLanguage(locale),
     };
   }
 
@@ -649,21 +599,15 @@ export async function loadArticleBySlug(
     relatedCount: article.relatedCount,
     faqItems: picked.faqItems.map((f) => ({ question: f.question, answer: f.answer })),
     alternates,
-    readingLanguages,
-    readingLocale: reading.readingLocale,
-    contentDirection,
+    ...contentLanguage(picked.locale),
   };
 }
 
-export async function getArticleBySlug(
-  locale: string,
-  slug: string,
-  readingLocale?: string,
-): Promise<ArticleView | null> {
+export async function getArticleBySlug(locale: string, slug: string): Promise<ArticleView | null> {
   "use cache";
   cacheTag("content");
   cacheLife({ revalidate: 300 });
-  return loadArticleBySlug(locale, slug, readingLocale);
+  return loadArticleBySlug(locale, slug);
 }
 
 /**

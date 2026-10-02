@@ -1,6 +1,7 @@
 import { getTranslations } from "next-intl/server";
 import { loadArticleTagsAdmin } from "@repo/core";
 import { getAuthoringLocales } from "@repo/i18n";
+import { routing } from "@repo/i18n/routing";
 import { requireAnyPermission } from "@repo/rbac";
 import { TagsManager } from "./tag-controls.tsx";
 
@@ -47,7 +48,11 @@ export default async function ArticleTagsPage() {
   return (
     <TagsManager
       tags={tags}
-      locales={locales.map((l) => ({ code: l.code, label: `${l.name} (${l.nativeName})` }))}
+      locales={locales.map((l) => ({
+        code: l.code,
+        label: `${l.name} (${l.nativeName})`,
+        isDefault: l.code === routing.defaultLocale,
+      }))}
       labels={labels}
     />
   );

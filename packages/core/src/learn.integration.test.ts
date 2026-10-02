@@ -933,8 +933,8 @@ describe("lesson detail", () => {
     expect(view!.previous).not.toBeNull();
   });
 
-  // ADR-127: a course and a lesson read in another language.
-  it("reads a course and a lesson by ?lang= — a machine lesson too (ADR-159) — never moving their address", async () => {
+  // ADR-159: a course and a lesson in another language, a machine lesson noindex.
+  it("serves a course and a lesson in Spanish — a machine lesson noindex until saved (ADR-159)", async () => {
     const { courseId, lessonId, slug } = await makeCourse();
     const lessonSlug = (
       await db.lessonTranslation.findFirstOrThrow({
@@ -963,35 +963,28 @@ describe("lesson detail", () => {
       },
     });
 
-    const course = await publicCourses.loadCourseBySlug("en", slug, "es");
+    const course = await publicCourses.loadCourseBySlug("es", `${slug}-es`);
     expect(course?.title).toBe("Curso en español");
-    expect(course?.slug).toBe(slug);
-    expect(course?.readingLocale).toBe("es");
-    expect(course?.readingLanguages.map((l) => [l.locale, l.slug])).toEqual([
-      ["en", slug],
-      ["es", `${slug}-es`],
-    ]);
-    // The curriculum is navigation, and stays in the page's locale.
-    expect(course?.sections[0]?.lessons[0]?.slug).toBe(lessonSlug);
+    expect(course?.slug).toBe(`${slug}-es`);
+    expect(course?.contentLocale).toBe("es");
+    expect(course?.contentDirection).toBe("ltr");
 
-    // The lesson's Spanish is a machine translation: readable since ADR-159
-    // #1, at the same address, and never advertised as an alternate (#2).
-    const machine = await publicCourses.loadLessonBySlug("en", slug, lessonSlug, "es");
-    expect(machine?.readingLocale).toBe("es");
+    // The lesson's Spanish is a machine translation: served at its own URL
+    // (ADR-159 #1), noindex, and never advertised as an alternate (#2).
+    const machine = await publicCourses.loadLessonBySlug("es", `${slug}-es`, `${lessonSlug}-es`);
     expect(machine?.content).toBe("<p>Cuerpo</p>");
-    expect(machine?.slug).toBe(lessonSlug);
+    expect(machine?.contentLocale).toBe("es");
+    expect(machine?.noIndex).toBe(true);
     expect(machine?.alternates.map((a) => a.locale)).toEqual(["en"]);
-    expect(machine?.courseAlternates.map((a) => a.locale).sort()).toEqual(["en", "es"]);
 
     await db.lessonTranslation.update({
       where: { lessonId_locale: { lessonId, locale: "es" } },
       data: { translationStatus: "TRANSLATED" },
     });
-    const lesson = await publicCourses.loadLessonBySlug("en", slug, lessonSlug, "es");
+    const lesson = await publicCourses.loadLessonBySlug("es", `${slug}-es`, `${lessonSlug}-es`);
     expect(lesson?.title).toBe("Lección");
-    expect(lesson?.content).toBe("<p>Cuerpo</p>");
-    expect(lesson?.slug).toBe(lessonSlug);
-    expect(lesson?.contentLocale).toBe("es");
+    expect(lesson?.noIndex).toBe(false);
+    expect(lesson?.alternates.map((a) => a.locale).sort()).toEqual(["en", "es"]);
   });
 
   // changes-29 B3 reaches the course and lesson editors: an untouched AI
@@ -1324,5 +1317,128 @@ describe("the OUTDATED sweep", () => {
       select: { translationStatus: true },
     });
     expect(es.translationStatus).toBe("TRANSLATED");
+  });
+});
+
+// ─── One slug for every language (ADR-181) ───────────────────
+
+describe("one slug for every language (ADR-181)", () => {
+  async function englishLessonSlug(lessonId: string): Promise<string> {
+    return (
+      await db.lessonTranslation.findFirstOrThrow({
+        where: { lessonId, locale: "en" },
+        select: { slug: true },
+      })
+    ).slug;
+  }
+
+  async function saveSpanishLesson(lessonId: string, slug?: string): Promise<void> {
+    await lessons.saveLesson(editor, {
+      lessonId,
+      meta: {},
+      translation: {
+        locale: "es",
+        title: "Lección compartida",
+        ...(slug ? { slug } : {}),
+        content: "<p>Cuerpo.</p>",
+      },
+      attachments: [],
+    });
+  }
+
+  it("ignores a slug submitted on a non-default course or lesson save", async () => {
+    const { courseId, lessonId, slug } = await makeCourse({ title: "Shared Slug Course" });
+
+    await courses.saveCourse(editor, {
+      courseId,
+      meta: {},
+      translation: { locale: "es", title: "Curso compartido", slug: "curso-propio" },
+    });
+    await saveSpanishLesson(lessonId, "leccion-propia");
+
+    const es = await db.courseTranslation.findFirstOrThrow({
+      where: { courseId, locale: "es" },
+      select: { slug: true },
+    });
+    expect(es.slug).toBe(slug);
+    const esLesson = await db.lessonTranslation.findFirstOrThrow({
+      where: { lessonId, locale: "es" },
+      select: { slug: true },
+    });
+    expect(esLesson.slug).toBe(await englishLessonSlug(lessonId));
+  });
+
+  it("moves every language on an English course rename and redirects each one, lessons included", async () => {
+    const { courseId, lessonId, slug } = await makeCourse({ title: "Renamed Everywhere" });
+    await courses.saveCourse(editor, {
+      courseId,
+      meta: {},
+      translation: { locale: "es", title: "Renombrado" },
+    });
+    await saveSpanishLesson(lessonId);
+    const lessonSlug = await englishLessonSlug(lessonId);
+    // A row written before ADR-181 can still hold a slug of its own; the
+    // rename must redirect from THAT address, not from the English one.
+    await db.courseTranslation.update({
+      where: { courseId_locale: { courseId, locale: "es" } },
+      data: { slug: `${slug}-viejo` },
+    });
+
+    await courses.saveCourse(editor, {
+      courseId,
+      meta: {},
+      translation: { locale: "en", title: "Renamed Everywhere", slug: "adr181-course-renamed" },
+    });
+
+    const es = await db.courseTranslation.findFirstOrThrow({
+      where: { courseId, locale: "es" },
+      select: { slug: true },
+    });
+    expect(es.slug).toBe("adr181-course-renamed");
+
+    const course = await db.redirect.findUnique({
+      where: { fromPath: `/es/learn/forex/${slug}-viejo` },
+    });
+    expect(course?.toPath).toBe("/es/learn/forex/adr181-course-renamed");
+    const lesson = await db.redirect.findUnique({
+      where: { fromPath: `/es/learn/forex/${slug}-viejo/${lessonSlug}` },
+    });
+    expect(lesson?.toPath).toBe(`/es/learn/forex/adr181-course-renamed/${lessonSlug}`);
+    // The English redirect is unchanged.
+    const english = await db.redirect.findUnique({ where: { fromPath: `/learn/forex/${slug}` } });
+    expect(english?.toPath).toBe("/learn/forex/adr181-course-renamed");
+  });
+
+  it("moves every language on an English lesson rename and redirects under that locale's course", async () => {
+    const { courseId, lessonId, slug } = await makeCourse({ title: "Lesson Moves Everywhere" });
+    await courses.saveCourse(editor, {
+      courseId,
+      meta: {},
+      translation: { locale: "es", title: "Lección se mueve" },
+    });
+    await saveSpanishLesson(lessonId);
+    const before = await englishLessonSlug(lessonId);
+
+    await lessons.saveLesson(editor, {
+      lessonId,
+      meta: {},
+      translation: {
+        locale: "en",
+        title: "Moved Lesson",
+        slug: "adr181-lesson-renamed",
+        content: "<p>Body.</p>",
+      },
+      attachments: [],
+    });
+
+    const esLesson = await db.lessonTranslation.findFirstOrThrow({
+      where: { lessonId, locale: "es" },
+      select: { slug: true },
+    });
+    expect(esLesson.slug).toBe("adr181-lesson-renamed");
+    const redirect = await db.redirect.findUnique({
+      where: { fromPath: `/es/learn/forex/${slug}/${before}` },
+    });
+    expect(redirect?.toPath).toBe(`/es/learn/forex/${slug}/adr181-lesson-renamed`);
   });
 });

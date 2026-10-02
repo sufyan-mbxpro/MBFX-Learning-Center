@@ -30,6 +30,7 @@ import {
   type EmailBodyMode,
 } from "@repo/contracts";
 import type { AnnouncementUserOption, AudienceSummary } from "@repo/core";
+import { zonedInputToIso } from "@repo/utils";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { ConfirmDialog } from "@repo/ui/components/confirm-dialog";
@@ -112,11 +113,8 @@ const useHydrated = () =>
     () => false,
   );
 
-function localToIso(local: string): string {
-  if (!local) return "";
-  const date = new Date(local);
-  return Number.isNaN(date.getTime()) ? "" : date.toISOString();
-}
+// ADR-182: the picker's wall clock is the SITE's timezone, not the editor's browser.
+const localToIso = (local: string): string => zonedInputToIso(local);
 
 function isEmpty(words: Words): boolean {
   return words.subject.trim() === "" && words.bodyHtml.trim() === "";

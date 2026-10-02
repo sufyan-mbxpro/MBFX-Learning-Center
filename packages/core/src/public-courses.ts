@@ -24,14 +24,13 @@ import {
 import { COURSE, RECOMMENDED, loadRelationTargets } from "./content-relations.ts";
 import { scheduledVisibilityOr } from "./content.ts";
 import { loadQuizLinks } from "./quiz-links.ts";
-import { loadLocaleMeta } from "./locale-meta.ts";
 import {
   INDEXABLE_TRANSLATION_STATUSES,
   advertisedAlternates,
-  applyReadingLocale,
+  contentLanguage,
   isIndexableTranslation,
-  type ReadingView,
-} from "./reading-languages.ts";
+  type ContentLanguageView,
+} from "./translation-indexing.ts";
 import { translatedLabel } from "./learn-source.ts";
 
 interface LocaleContext {
@@ -157,7 +156,7 @@ export interface LocaleAlternate {
   slug: string;
 }
 
-export interface CourseView extends CourseCardView, ReadingView {
+export interface CourseView extends CourseCardView, ContentLanguageView {
   description: string | null;
   seoTitle: string | null;
   seoDescription: string | null;
@@ -189,7 +188,7 @@ export interface LessonAttachmentView {
   size: number;
 }
 
-export interface LessonView extends ReadingView {
+export interface LessonView extends ContentLanguageView {
   id: string;
   courseId: string;
   /** The course's track: the lesson URL's first segment (ADR-065 §1). */
@@ -240,11 +239,6 @@ export interface LessonView extends ReadingView {
   /** Lesson slugs per locale. The COURSE slug also varies by locale, so the
    * page pairs these with the course alternates when it builds hreflang. */
   alternates: LocaleAlternate[];
-  /**
-   * The COURSE's slug in every locale it has one: a reading-language option
-   * for a served locale needs both halves of the lesson URL (ADR-127 #3).
-   */
-  courseAlternates: LocaleAlternate[];
   previous: { slug: string; title: string } | null;
   next: { slug: string; title: string } | null;
 }
@@ -422,15 +416,8 @@ export async function getLearnIndex(locale: string): Promise<TrackGroup[]> {
 
 // ─── Course detail ───────────────────────────────────────────
 
-export async function loadCourseBySlug(
-  locale: string,
-  slug: string,
-  readingLocale?: string,
-): Promise<CourseView | null> {
-  const [{ locales, defaultLocale }, known] = await Promise.all([
-    localeContext(),
-    loadLocaleMeta(),
-  ]);
+export async function loadCourseBySlug(locale: string, slug: string): Promise<CourseView | null> {
+  const { locales, defaultLocale } = await localeContext();
 
   // Resolve by the slug in ANY locale, then re-pick the translation for the
   // requested one: a reader arriving on the English slug of a course they will
@@ -499,15 +486,6 @@ export async function loadCourseBySlug(
 
   const t = pickTranslation(course.translations, locale, defaultLocale, locales);
   if (!t) return null;
-  // ADR-127: `?lang=` swaps the course's own WORDS; `t` still owns the address.
-  const { picked, ...reading } = applyReadingLocale(
-    course.translations,
-    t,
-    readingLocale,
-    known,
-    locale,
-  );
-  const words = picked ?? t;
 
   const [coverUrls, quizLinks] = await Promise.all([
     resolveAssetUrls([course.coverAssetId]),
@@ -518,12 +496,12 @@ export async function loadCourseBySlug(
     id: course.id,
     track: course.track,
     slug: t.slug,
-    title: words.title,
-    summary: words.summary,
-    description: words.description,
-    seoTitle: words.seoTitle,
-    seoDescription: words.seoDescription,
-    ...reading,
+    title: t.title,
+    summary: t.summary,
+    description: t.description,
+    seoTitle: t.seoTitle,
+    seoDescription: t.seoDescription,
+    ...contentLanguage(t.locale),
     difficulty: course.difficulty,
     estimatedHours: course.estimatedHours,
     lessonCount: course.lessonCount,
@@ -539,20 +517,16 @@ export async function loadCourseBySlug(
     noIndex: !isIndexableTranslation(t, defaultLocale),
     sections: buildSections(course.sections, locale, defaultLocale, locales),
     finalQuiz: course.finalQuizId ? (quizLinks.get(course.finalQuizId) ?? null) : null,
-    faq: readCourseFaq(words.faq),
+    faq: readCourseFaq(t.faq),
     ...cardFlags(course),
   };
 }
 
-export async function getCourseBySlug(
-  locale: string,
-  slug: string,
-  readingLocale?: string,
-): Promise<CourseView | null> {
+export async function getCourseBySlug(locale: string, slug: string): Promise<CourseView | null> {
   "use cache";
   cacheTag("content");
   cacheLife({ revalidate: 300 });
-  return loadCourseBySlug(locale, slug, readingLocale);
+  return loadCourseBySlug(locale, slug);
 }
 
 // ─── Lesson detail ───────────────────────────────────────────
@@ -561,12 +535,8 @@ export async function loadLessonBySlug(
   locale: string,
   courseSlug: string,
   lessonSlug: string,
-  readingLocale?: string,
 ): Promise<LessonView | null> {
-  const [{ locales, defaultLocale }, known] = await Promise.all([
-    localeContext(),
-    loadLocaleMeta(),
-  ]);
+  const { locales, defaultLocale } = await localeContext();
 
   const match = await db.lessonTranslation.findFirst({
     where: {
@@ -626,7 +596,7 @@ export async function loadLessonBySlug(
               // quiz in a single `loadQuizLinks` call.
               finalQuizId: true,
               translations: {
-                select: { locale: true, title: true, slug: true, translationStatus: true },
+                select: { locale: true, title: true, slug: true },
               },
             },
           },
@@ -638,16 +608,6 @@ export async function loadLessonBySlug(
 
   const t = pickTranslation(lesson.translations, locale, defaultLocale, locales);
   if (!t) return null;
-  // ADR-127: the lesson's own words only. The course and section titles are
-  // the page's navigation and stay in the interface locale.
-  const { picked, ...reading } = applyReadingLocale(
-    lesson.translations,
-    t,
-    readingLocale,
-    known,
-    locale,
-  );
-  const words = picked ?? t;
 
   const courseT = pickTranslation(
     lesson.section.course.translations,
@@ -694,11 +654,11 @@ export async function loadLessonBySlug(
     sectionId: lesson.sectionId,
     sectionTitle: sectionT?.title ?? "",
     slug: t.slug,
-    title: words.title,
-    summary: words.summary,
-    content: words.content,
-    learningObjectives: Array.isArray(words.learningObjectives)
-      ? (words.learningObjectives as unknown[]).filter((o): o is string => typeof o === "string")
+    title: t.title,
+    summary: t.summary,
+    content: t.content,
+    learningObjectives: Array.isArray(t.learningObjectives)
+      ? (t.learningObjectives as unknown[]).filter((o): o is string => typeof o === "string")
       : [],
     estimatedMinutes: lesson.estimatedMinutes,
     videoUrl: lesson.videoUrl,
@@ -729,9 +689,9 @@ export async function loadLessonBySlug(
           // ADR-161 #8: the label in the words' locale, keyed by its English
           // text; the English text when there is no entry.
           label:
-            words.locale === defaultLocale
+            t.locale === defaultLocale
               ? attachment.label
-              : translatedLabel(attachment.label, words.attachmentLabels),
+              : translatedLabel(attachment.label, t.attachmentLabels),
           fileName: asset.fileName,
           url: asset.url,
           mimeType: asset.mimeType,
@@ -739,15 +699,14 @@ export async function loadLessonBySlug(
         },
       ];
     }),
-    seoTitle: words.seoTitle,
-    seoDescription: words.seoDescription,
-    ...reading,
+    seoTitle: t.seoTitle,
+    seoDescription: t.seoDescription,
+    ...contentLanguage(t.locale),
     updatedAt: lesson.updatedAt,
     // ADR-159 #2: machine-written words at the locale URL are served but not
-    // indexed. `t` is the address's row; a `?lang=` view is noindex anyway.
+    // indexed.
     noIndex: !isIndexableTranslation(t, defaultLocale),
     alternates: advertisedAlternates(lesson.translations, defaultLocale),
-    courseAlternates: advertisedAlternates(lesson.section.course.translations, defaultLocale),
     previous,
     next,
   };
@@ -803,12 +762,11 @@ export async function getLessonBySlug(
   locale: string,
   courseSlug: string,
   lessonSlug: string,
-  readingLocale?: string,
 ): Promise<LessonView | null> {
   "use cache";
   cacheTag("content");
   cacheLife({ revalidate: 300 });
-  return loadLessonBySlug(locale, courseSlug, lessonSlug, readingLocale);
+  return loadLessonBySlug(locale, courseSlug, lessonSlug);
 }
 
 // ─── Recommendations (ADR-055 — ContentRelation reuse) ───────

@@ -73,7 +73,7 @@ import {
 } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
 import { Switch } from "@repo/ui/components/switch";
-import { htmlToBlockText } from "@repo/utils";
+import { htmlToBlockText, toZonedInput, zonedInputToIso } from "@repo/utils";
 import {
   duplicatePromotionAction,
   savePromotionAction,
@@ -85,7 +85,6 @@ import {
 import { AiFieldMenu, AiFillButton, type AiFillPatch } from "../../_components/ai-fill.tsx";
 import { AdminCombobox } from "../../_components/combobox.tsx";
 import { EditorSection, Field } from "../../_components/editor/editor-section.tsx";
-import { toLocalInput } from "../../_components/editor/schedule-field.tsx";
 import { richTextLabels } from "../../_components/editor-labels.ts";
 import {
   GoogleTranslateButton,
@@ -174,12 +173,8 @@ const useHydrated = () =>
     () => false,
   );
 
-/** "" stays "", anything else becomes the instant the local time names. */
-function localToIso(local: string): string {
-  if (!local) return "";
-  const date = new Date(local);
-  return Number.isNaN(date.getTime()) ? "" : date.toISOString();
-}
+/** "" stays "", anything else becomes the instant the wall clock names in the SITE's timezone (ADR-182). */
+const localToIso = (local: string): string => zonedInputToIso(local);
 
 const nullIfBlank = (value: string) => (value.trim() === "" ? null : value.trim());
 
@@ -393,7 +388,7 @@ export function PromotionEditor({
   ) => (
     <Field label={label} required={required} error={error(path)}>
       <DateTimePicker
-        value={hydrated && value ? toLocalInput(new Date(value)) : ""}
+        value={hydrated && value ? toZonedInput(value) : ""}
         onChange={(local) => onChange(localToIso(local))}
         disabled={!editable}
         labels={pickerLabels}

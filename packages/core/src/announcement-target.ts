@@ -11,7 +11,7 @@ import { catalogMessage } from "@repo/i18n";
 import { ContentStatus, FeatureVisibility, db, type TranslationStatus } from "@repo/db";
 import { coursePath } from "./content.ts";
 import { publicCourseWhere } from "./public-courses.ts";
-import { isIndexableTranslation } from "./reading-languages.ts";
+import { isIndexableTranslation } from "./translation-indexing.ts";
 
 export type TargetAvailability = "live" | "scheduled" | "unavailable";
 

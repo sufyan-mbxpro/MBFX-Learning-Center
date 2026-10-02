@@ -226,7 +226,6 @@
       "title": "Sitemap",
       "lead": "Every section of the site, in one list. Built from the same navigation the footer uses, so nothing here can point at a page that has been taken down."
     },
-    "readingLanguage": "Read this in another language",
     "reviews": {
       "title": "Share Your MBFX Experience",
       "lead": "Your feedback helps us improve and helps other traders make informed decisions. It only takes a minute.",
@@ -1427,7 +1426,9 @@
       "site": {
         "contactEmail": "Messages sent through the contact form on the Support page are delivered to this address.",
         "supportEmail": "Shown to readers on the Support page and in the footer. The contact form sends here only when no contact email is set.",
-        "name": "Your brand name. Shown in the header and footer, in every page title, in link previews, and to Google as the site name."
+        "name": "Your brand name. Shown in the header and footer, in every page title, in link previews, and to Google as the site name.",
+        "defaultLocale": "Public site only: a visitor who has not picked a language opens the site in this one, and the language menu still lets them switch. The admin portal always stays in English. Only switched-on languages are listed.",
+        "defaultTimezone": "Every date and time on the whole site, the public pages and this admin portal, is shown in this timezone. Times you type when scheduling are read in it too."
       },
       "seo": {
         "titleTemplate": "How page titles are built. %s is the page's own title and %site% is the site name from General, so \"%s | %site%\" gives \"Pip Calculator | Your Site\". The home page shows the site name alone.",
@@ -4279,6 +4280,11 @@
       "sourceFailed": "The HTML could not be loaded.",
       "lightNote": "Every email is sent in light mode. Header, footer and unsubscribe link are added automatically.",
       "darkNote": "Dark mode is an approximation: each mail app applies its own dark theme to the light email."
+    },
+    "sharedSlug": {
+      "hint": "Shared by every language. Change it on the English tab.",
+      "pending": "Shared by every language and set on the English tab. Until the English version is saved, this title is used.",
+      "urlLabel": "Public URL"
     }
   },
   "glossary": {

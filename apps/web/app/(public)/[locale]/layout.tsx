@@ -22,6 +22,8 @@ import { VisitorCta } from "./_components/visitor-cta.tsx";
 import { SiteHeader } from "./_components/header.tsx";
 import { faviconIcons } from "../../_lib/favicon.ts";
 import { siteUrl } from "../../_lib/site-url.ts";
+import { loadSiteTimeZone } from "../../_lib/site-time-zone.ts";
+import { SiteTimeZone } from "../../_components/site-time-zone.tsx";
 import { ThemeProvider } from "@repo/ui/components/theme-provider";
 import { ThemeScript } from "@repo/ui/components/theme-script";
 import "@repo/ui/globals.css";
@@ -141,12 +143,14 @@ export default async function PublicRootLayout({ children, params }: LayoutProps
   // for these static routes, invalidated by an admin theme save. The style
   // element id is frozen API — Module 14's CSP nonce attaches to
   // #brand-tokens by name (security.md #14).
-  const [theme, pageLoader, t] = await Promise.all([
+  const [theme, pageLoader, t, timeZone] = await Promise.all([
     getActiveTheme("web"),
     // ADR-018 rule 4d — the preloader's kill switch. A missing row (a
     // database seeded before Phase 3) reads as null and stays off.
     getSetting("layout.pageLoader"),
     getTranslations({ locale, namespace: "nav" }),
+    // ADR-182: dates print in the site's timezone, not the server's or the reader's.
+    loadSiteTimeZone(),
   ]);
 
   return (
@@ -160,10 +164,7 @@ export default async function PublicRootLayout({ children, params }: LayoutProps
       {/* suppressHydrationWarning: browser extensions (e.g. ColorZilla's
           cz-shortcut-listen) inject body attributes before React hydrates —
           same rationale as this <html>'s suppression above. */}
-      <body
-        className="flex min-h-full flex-col"
-        suppressHydrationWarning
-      >
+      <body className="flex min-h-full flex-col" suppressHydrationWarning>
         {/* ADR-064: the pre-paint mode guard, server-rendered so the browser
             actually executes it. No nonce here — this layout is cached (ADR-004)
             and has no request to read one from. */}
@@ -175,7 +176,8 @@ export default async function PublicRootLayout({ children, params }: LayoutProps
           id="brand-tokens"
           dangerouslySetInnerHTML={{ __html: buildThemeStyleSheet(theme) }}
         />
-        <NextIntlClientProvider messages={messages}>
+        <NextIntlClientProvider messages={messages} timeZone={timeZone}>
+          <SiteTimeZone value={timeZone} />
           <ThemeProvider>
             {/* ADR-018: SiteLoader renders nothing during SSR and only
                 appears post-hydration, so it can never delay first paint.

@@ -10,6 +10,8 @@ import { ThemeScript } from "@repo/ui/components/theme-script";
 import { ADMIN_THEME_STORAGE_KEY } from "@repo/ui/lib/theme-mode";
 import "@repo/ui/globals.css";
 import { faviconIcons } from "../_lib/favicon.ts";
+import { loadSiteTimeZone } from "../_lib/site-time-zone.ts";
+import { SiteTimeZone } from "../_components/site-time-zone.tsx";
 
 // Root layout for the STAFF SIGN-IN surface — the third root layout in this
 // app, and the reason ADR-052 needed a route group of its own.
@@ -50,6 +52,8 @@ export default async function AdminAuthRootLayout({ children }: LayoutProps<"/">
   // Admin surface is en-only by design (ADR-043 #2) — no [locale] segment
   // here, so the request config falls back to the default locale.
   const messages = await getMessages();
+  // ADR-182: the site's timezone, as on every other surface.
+  const timeZone = await loadSiteTimeZone();
   const nonce = (await headers()).get("x-nonce") ?? undefined;
 
   return (
@@ -68,7 +72,8 @@ export default async function AdminAuthRootLayout({ children }: LayoutProps<"/">
           nonce={nonce}
           dangerouslySetInnerHTML={{ __html: buildThemeStyleSheet(withAdminTypeface(theme)) }}
         />
-        <NextIntlClientProvider messages={messages}>
+        <NextIntlClientProvider messages={messages} timeZone={timeZone}>
+          <SiteTimeZone value={timeZone} />
           <ThemeProvider storageKey={ADMIN_THEME_STORAGE_KEY}>{children}</ThemeProvider>
         </NextIntlClientProvider>
       </body>

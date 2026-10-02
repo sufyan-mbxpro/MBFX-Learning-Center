@@ -860,7 +860,7 @@ describe("authoring", () => {
   });
 });
 
-// ─── Translation (ADR-127 applied to quizzes) ────────────────
+// ─── Translation ─────────────────────────────────────────────
 
 describe("a quiz in another language", () => {
   async function arabicLocale() {
@@ -937,57 +937,112 @@ describe("a quiz in another language", () => {
     expect(english!.questions).toHaveLength(2);
   });
 
-  it("reads in Arabic through ?lang=, RTL, and never shows a half-translated quiz", async () => {
+  it("serves the Arabic words on the Arabic page, RTL, with no answer in the payload", async () => {
     await arabicLocale();
     const { quizId } = await makeQuiz();
     await quizzes.saveQuiz(editor, await arabicInput(quizId));
-    const slug = (await db.quizTranslation.findFirstOrThrow({ where: { quizId, locale: "en" } }))
+    const slug = (await db.quizTranslation.findFirstOrThrow({ where: { quizId, locale: "ar" } }))
       .slug;
 
-    const view = await quizzes.loadQuizBySlug("en", slug, "ar");
-    expect(view!.readingLocale).toBe("ar");
+    const view = await quizzes.loadQuizBySlug("ar", slug);
+    expect(view!.contentLocale).toBe("ar");
     expect(view!.contentDirection).toBe("rtl");
     expect(view!.title).toBe("اختبار");
     expect(view!.questions[0]!.prompt).toBe("سؤال 0");
-    expect(view!.slug).toBe(slug);
-    expect(view!.readingLanguages.map((l) => l.locale)).toEqual(["en", "ar"]);
     expect(JSON.stringify(view)).not.toContain("correctAnswer");
 
-    // A question added in English afterwards has no Arabic words: Arabic stops
-    // being offered rather than mixing languages mid-quiz.
+    const english = await quizzes.loadQuizBySlug("en", slug);
+    expect(english!.contentDirection).toBe("ltr");
+    expect(english!.title).not.toBe("اختبار");
+  });
+});
+
+// ─── One slug for every language (ADR-181) ───────────────────
+
+describe("one slug for every language (ADR-181)", () => {
+  async function arabicLocale() {
+    await db.locale.upsert({
+      where: { code: "ar" },
+      update: {},
+      create: {
+        code: "ar",
+        name: "Arabic",
+        nativeName: "العربية",
+        direction: "RTL",
+        isDefault: false,
+        isActive: false,
+        sortOrder: 3,
+      },
+    });
+  }
+
+  async function saveArabic(quizId: string, slug?: string): Promise<void> {
+    const detail = await quizzes.getQuizAdmin(quizId, "en");
+    await quizzes.saveQuiz(editor, {
+      quizId,
+      meta: {},
+      translation: { locale: "ar", title: "اختبار مشترك", ...(slug ? { slug } : {}) },
+      questions: detail!.questions.map((question, index) => ({
+        id: question.id,
+        type: question.type,
+        sortOrder: index,
+        points: question.points,
+        prompt: `سؤال ${index}`,
+        options: question.options.map((_, o) => `خيار ${o}`),
+        explanations: [],
+        correctAnswer: question.correctAnswer,
+      })),
+    });
+  }
+
+  async function slugOf(quizId: string, locale: string): Promise<string> {
+    return (await db.quizTranslation.findFirstOrThrow({ where: { quizId, locale } })).slug;
+  }
+
+  it("ignores a slug submitted on a non-default save", async () => {
+    await arabicLocale();
+    const { quizId } = await makeQuiz();
+
+    await saveArabic(quizId, "slug-of-its-own");
+
+    expect(await slugOf(quizId, "ar")).toBe(await slugOf(quizId, "en"));
+  });
+
+  it("moves every language on an English rename and redirects each one", async () => {
+    await arabicLocale();
+    const { quizId } = await makeQuiz();
+    await saveArabic(quizId);
+    const before = await slugOf(quizId, "en");
     const english = await quizzes.getQuizAdmin(quizId, "en");
+
     await quizzes.saveQuiz(editor, {
       quizId,
       meta: {},
       translation: {
         locale: "en",
         title: english!.translations.find((tr) => tr.locale === "en")!.title,
+        slug: "adr181-quiz-renamed",
       },
-      questions: [
-        ...english!.questions.map((question, index) => ({
-          id: question.id,
-          type: question.type,
-          sortOrder: index,
-          points: question.points,
-          prompt: question.prompt,
-          options: question.options,
-          explanations: question.explanations,
-          correctAnswer: question.correctAnswer,
-        })),
-        {
-          type: "SINGLE_CHOICE" as const,
-          sortOrder: 2,
-          points: 1,
-          prompt: "New",
-          options: ["x", "y"],
-          explanations: [],
-          correctAnswer: 0,
-        },
-      ],
+      questions: english!.questions.map((question, index) => ({
+        id: question.id,
+        type: question.type,
+        sortOrder: index,
+        points: question.points,
+        prompt: question.prompt,
+        options: question.options,
+        explanations: question.explanations,
+        correctAnswer: question.correctAnswer,
+      })),
     });
-    const after = await quizzes.loadQuizBySlug("en", slug, "ar");
-    expect(after!.readingLocale).toBeNull();
-    expect(after!.title).not.toBe("اختبار");
-    expect(after!.readingLanguages.map((l) => l.locale)).toEqual(["en"]);
+
+    expect(await slugOf(quizId, "ar")).toBe("adr181-quiz-renamed");
+    const arabic = await db.redirect.findUnique({
+      where: { fromPath: `/ar/learn/forex/quizzes/${before}` },
+    });
+    expect(arabic?.toPath).toBe("/ar/learn/forex/quizzes/adr181-quiz-renamed");
+    const own = await db.redirect.findUnique({
+      where: { fromPath: `/learn/forex/quizzes/${before}` },
+    });
+    expect(own?.toPath).toBe("/learn/forex/quizzes/adr181-quiz-renamed");
   });
 });

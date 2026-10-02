@@ -11,6 +11,7 @@ import {
   listFromFields,
   mergeTranslationPatch,
   textFields,
+  withoutSlug,
 } from "./machine-translation.ts";
 
 interface Draft {
@@ -53,6 +54,16 @@ describe("textFields", () => {
       title: "T",
     });
     expect(textFields<Draft>(undefined, FIELDS)).toEqual({});
+  });
+
+  it("never returns the slug, even when a caller names it (ADR-181)", () => {
+    expect(textFields(draft({ title: "T", slug: "s" }), ["title", "slug"])).toEqual({ title: "T" });
+  });
+});
+
+describe("withoutSlug", () => {
+  it("drops the slug a machine must never write into another language's tab (ADR-181)", () => {
+    expect(withoutSlug({ title: "T", slug: "s", body: "B" })).toEqual({ title: "T", body: "B" });
   });
 });
 

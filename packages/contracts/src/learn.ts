@@ -278,8 +278,8 @@ export const courseTranslationSchema = z
     /**
      * This locale's text came from AI and has not been edited since (changes-29
      * B3, as `saveArticleTranslationSchema` has it). The save writes
-     * `MACHINE_TRANSLATED` instead of `TRANSLATED`, which keeps it off the public
-     * reading-language menu (ADR-127 #2) until a human's Save promotes it.
+     * `MACHINE_TRANSLATED` instead of `TRANSLATED`, which keeps it out of search
+     * indexes and hreflang (ADR-159 #2) until a human's Save promotes it.
      */
     machineTranslated: z.boolean().optional(),
   })
@@ -406,8 +406,8 @@ export const lessonTranslationSchema = z.object({
   /**
    * This locale's text came from AI and has not been edited since (changes-29
    * B3, as `saveArticleTranslationSchema` has it). The save writes
-   * `MACHINE_TRANSLATED` instead of `TRANSLATED`, which keeps it off the public
-   * reading-language menu (ADR-127 #2) until a human's Save promotes it.
+   * `MACHINE_TRANSLATED` instead of `TRANSLATED`, which keeps it out of search
+   * indexes and hreflang (ADR-159 #2) until a human's Save promotes it.
    */
   machineTranslated: z.boolean().optional(),
 });

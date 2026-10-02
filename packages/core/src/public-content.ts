@@ -8,14 +8,13 @@ import { db } from "@repo/db";
 import { pickTranslation, type LocaleFallbackInfo } from "@repo/i18n";
 import { htmlLead } from "@repo/utils";
 import { scheduledVisibilityOr } from "./content.ts";
-import { loadLocaleMeta } from "./locale-meta.ts";
 import {
   INDEXABLE_TRANSLATION_STATUSES,
   advertisedAlternates,
-  applyReadingLocale,
+  contentLanguage,
   isIndexableTranslation,
-  type ReadingView,
-} from "./reading-languages.ts";
+  type ContentLanguageView,
+} from "./translation-indexing.ts";
 
 export interface GlossaryListEntry {
   termId: string;
@@ -137,7 +136,7 @@ export async function getPublishedGlossary(locale: string): Promise<GlossaryList
   return loadPublishedGlossary(locale);
 }
 
-export interface GlossaryTermView extends ReadingView {
+export interface GlossaryTermView extends ContentLanguageView {
   termId: string;
   locale: string;
   requestedLocaleMissing: boolean;
@@ -178,9 +177,8 @@ export interface GlossaryTermView extends ReadingView {
 export async function loadGlossaryTermBySlug(
   locale: string,
   slug: string,
-  readingLocale?: string,
 ): Promise<GlossaryTermView | null> {
-  const [ctx, known] = await Promise.all([localeContext(), loadLocaleMeta()]);
+  const ctx = await localeContext();
   const translation = await db.glossaryTermTranslation.findFirst({
     where: {
       slug,
@@ -206,16 +204,7 @@ export async function loadGlossaryTermBySlug(
   if (!translation) return null;
 
   const term = translation.glossaryTerm;
-  const fallbackPick = pickTranslation(term.translations, locale, ctx.defaultLocale, ctx.locales);
-  // ADR-127: a human-saved translation the reader chose replaces the pick.
-  // The slug below stays the fallback's, so a reading view never moves address.
-  const { picked, ...reading } = applyReadingLocale(
-    term.translations,
-    fallbackPick,
-    readingLocale,
-    known,
-    locale,
-  );
+  const picked = pickTranslation(term.translations, locale, ctx.defaultLocale, ctx.locales);
 
   const alternates = advertisedAlternates(term.translations, ctx.defaultLocale);
   // ADR-159 #2: the row this URL names decides whether the page is indexed.
@@ -259,7 +248,7 @@ export async function loadGlossaryTermBySlug(
       seoDescription: null,
       alternates,
       noIndex,
-      ...reading,
+      ...contentLanguage(locale),
     };
   }
 
@@ -268,7 +257,7 @@ export async function loadGlossaryTermBySlug(
     locale: picked.locale,
     requestedLocaleMissing: false,
     term: picked.term,
-    slug: fallbackPick?.slug ?? translation.slug,
+    slug: picked.slug,
     simpleExplanation: picked.simpleExplanation,
     detailedExplanation: picked.detailedExplanation,
     advancedExplanation: picked.advancedExplanation,
@@ -279,7 +268,7 @@ export async function loadGlossaryTermBySlug(
     seoDescription: picked.seoDescription,
     alternates,
     noIndex,
-    ...reading,
+    ...contentLanguage(picked.locale),
   };
 }
 
@@ -303,12 +292,11 @@ function readPublicFaq(value: unknown): { question: string; answer: string }[] {
 export async function getGlossaryTermBySlug(
   locale: string,
   slug: string,
-  readingLocale?: string,
 ): Promise<GlossaryTermView | null> {
   "use cache";
   cacheTag("content");
   cacheLife({ revalidate: 300 });
-  return loadGlossaryTermBySlug(locale, slug, readingLocale);
+  return loadGlossaryTermBySlug(locale, slug);
 }
 
 /** Old-slug handling: the Redirect rows content.ts writes on slug changes. Returns the target path or null. */

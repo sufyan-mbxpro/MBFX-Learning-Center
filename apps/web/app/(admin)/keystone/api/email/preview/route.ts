@@ -13,7 +13,7 @@ import {
 } from "@repo/core";
 import { requireAnyPermission, requirePermission } from "@repo/rbac";
 import { siteUrl } from "../../../../../_lib/site-url";
-import { previewImagesFromViewer } from "./preview-images";
+import { previewImagesFromViewer, viewerOrigin } from "./preview-images";
 
 // The email preview, isolated (ADR-078 #8).
 //
@@ -202,7 +202,7 @@ async function readInput(request: Request): Promise<unknown> {
 }
 
 function previewResponse(request: Request, html: string): Response {
-  return new Response(previewImagesFromViewer(html, siteUrl(), new URL(request.url).origin), {
+  return new Response(previewImagesFromViewer(html, siteUrl(), viewerOrigin(request)), {
     status: 200,
     headers: previewHeaders(request),
   });
@@ -214,7 +214,7 @@ function previewHeaders(request: Request): Headers {
   // opaque origin, so `'self'` would match nothing — and on a plain-http
   // install (every dev machine) `https:` does not cover it either, which is
   // how the logo was missing from the preview while a real send had it.
-  const origin = new URL(request.url).origin;
+  const origin = viewerOrigin(request);
   return new Headers({
     "Content-Type": "text/html; charset=utf-8",
     "Content-Security-Policy": `sandbox; default-src 'none'; img-src https: data: ${origin}; style-src 'unsafe-inline'`,

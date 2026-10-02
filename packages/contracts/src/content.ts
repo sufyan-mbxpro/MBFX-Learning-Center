@@ -232,21 +232,6 @@ export const publicArticleSearchSchema = z.object({
 });
 export type PublicArticleSearchInput = z.infer<typeof publicArticleSearchSchema>;
 
-// ─── Reading language (ADR-127) ───────────────────────────────
-//
-// `?lang=` on a public detail page: the language the item's OWN words are read
-// in, independent of the interface locale. Shaped like a locale code and
-// nothing more — whether a translation exists is the loader's question, and an
-// unusable value is ignored rather than rejected, so callers `safeParse`.
-export const readingLanguageSearchSchema = z.object({
-  lang: z
-    .string()
-    .trim()
-    .regex(/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$/)
-    .optional(),
-});
-export type ReadingLanguageSearchInput = z.infer<typeof readingLanguageSearchSchema>;
-
 /**
  * The closed class vocabulary the rich-text editor may emit (changes-10,
  * ADR-046). Mirrors the `.ed-*` rules in `@repo/ui`'s globals.css — that file

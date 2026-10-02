@@ -99,6 +99,7 @@ import { SeoAnalysis } from "../../_components/editor/seo-analysis.tsx";
 import { FaqPanel } from "../../_components/editor/faq-panel.tsx";
 import { RelatedPanel } from "./_panels/related-panel.tsx";
 import { liveHref, storedSlug } from "../../_lib/live-href.ts";
+import { SharedSlugField } from "../../_components/editor/slug-field.tsx";
 import { PublishPanel } from "./_panels/publish-panel.tsx";
 import { TaxonomyPanel } from "./_panels/taxonomy-panel.tsx";
 import {
@@ -332,15 +333,16 @@ export function ArticleEditor({
   const parsedVideo = videoUrl.trim() === "" ? null : parseVideoUrl(videoUrl);
   const videoInvalid = videoUrl.trim() !== "" && parsedVideo === null;
 
-  const derivedSlug = tr.slug || tr.title.toLowerCase().replaceAll(/[^a-z0-9]+/g, "-");
+  // ADR-181 #5: the slug is typed once, on the default locale's tab; every
+  // other tab shows that saved slug read-only and its save sends none.
+  const sharedSlug = locale !== defaultLocale;
+  const defaultSlug = storedSlug(article.translations, defaultLocale);
+  const derivedSlug =
+    (sharedSlug ? defaultSlug : tr.slug) || tr.title.toLowerCase().replaceAll(/[^a-z0-9]+/g, "-");
   const publicPath = `${locale === defaultLocale ? "" : `/${locale}`}/news/${derivedSlug}`;
   const postUrl = `${siteUrl}${publicPath}`;
   // The address a reader can open today, whichever locale is on screen.
-  const viewLiveHref = liveHref(
-    `/news/${storedSlug(article.translations, defaultLocale)}`,
-    locale,
-    defaultLocale,
-  );
+  const viewLiveHref = liveHref(`/news/${defaultSlug}`, locale, defaultLocale);
 
   const buildPayload = () =>
     ({
@@ -367,7 +369,7 @@ export function ArticleEditor({
         articleId: article.id,
         locale,
         title: tr.title,
-        slug: tr.slug || undefined,
+        slug: sharedSlug ? undefined : tr.slug || undefined,
         excerpt: tr.excerpt || null,
         body: tr.body || null,
         seoTitle: tr.seoTitle || null,
@@ -645,14 +647,24 @@ export function ArticleEditor({
             >
               <Input value={tr.title} onChange={(e) => setTr({ title: e.target.value })} />
             </Field>
-            <Field label={labels.slugLabel} error={form.error("translation.slug")}>
-              <Input
-                value={tr.slug}
-                placeholder={derivedSlug}
+            {sharedSlug ? (
+              <SharedSlugField
+                label={labels.slugLabel}
+                value={defaultSlug}
+                source={tr.title}
+                error={form.error("translation.slug")}
                 className="font-mono text-xs"
-                onChange={(e) => setTr({ slug: e.target.value })}
               />
-            </Field>
+            ) : (
+              <Field label={labels.slugLabel} error={form.error("translation.slug")}>
+                <Input
+                  value={tr.slug}
+                  placeholder={derivedSlug}
+                  className="font-mono text-xs"
+                  onChange={(e) => setTr({ slug: e.target.value })}
+                />
+              </Field>
+            )}
             <div className="flex min-w-0 flex-col gap-1">
               <span className="text-sm font-medium">{labels.postUrl}</span>
               {/* ADR-044 #6: `<code>` is not used for admin chrome. This is a

@@ -237,4 +237,34 @@ describe("glossary topics", () => {
         .sort(),
     ).toEqual(["en", "es"]);
   });
+
+  it("a translation keeps the English slug; an English rename moves it with a 301 (ADR-181)", async () => {
+    const topicId = await topics.createGlossaryTopic(ctx.editor, "Order types adr181");
+    const enSlug = (
+      await ctx.db.glossaryTopicTranslation.findFirstOrThrow({ where: { topicId, locale: "en" } })
+    ).slug;
+    await topics.saveGlossaryTopic(ctx.editor, {
+      topicId,
+      locale: "es",
+      name: "Tipos de orden",
+      slug: "tipos-de-orden",
+    });
+    const es = () =>
+      ctx.db.glossaryTopicTranslation.findFirstOrThrow({ where: { topicId, locale: "es" } });
+    expect((await es()).slug).toBe(enSlug);
+
+    await topics.saveGlossaryTopic(ctx.editor, {
+      topicId,
+      locale: "en",
+      name: "Order types adr181",
+      slug: `${enSlug}-v2`,
+    });
+    expect((await es()).slug).toBe(`${enSlug}-v2`);
+    await expect(
+      ctx.db.redirect.findUniqueOrThrow({ where: { fromPath: `/es/glossary/topics/${enSlug}` } }),
+    ).resolves.toMatchObject({ toPath: `/es/glossary/topics/${enSlug}-v2`, statusCode: 301 });
+    await expect(
+      ctx.db.redirect.findUniqueOrThrow({ where: { fromPath: `/glossary/topics/${enSlug}` } }),
+    ).resolves.toMatchObject({ toPath: `/glossary/topics/${enSlug}-v2` });
+  });
 });

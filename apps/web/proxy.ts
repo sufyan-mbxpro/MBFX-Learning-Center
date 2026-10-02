@@ -204,24 +204,73 @@ function splitLocale(pathname: string): { locale: string; prefix: string; rest: 
   return { locale: routing.defaultLocale, prefix: "", rest: segments };
 }
 
-/** The served languages, as `/api/locales` last answered, for a minute. */
-let servedCache: { codes: readonly string[]; until: number } | null = null;
+/** The served languages and the admin's default, as `/api/locales` last answered, for a minute. */
+let servedCache: { codes: readonly string[]; defaultLocale: string | null; until: number } | null =
+  null;
 
-async function servedLocales(request: NextRequest): Promise<readonly string[] | null> {
-  if (servedCache && servedCache.until > Date.now()) return servedCache.codes;
+async function localeConfig(
+  request: NextRequest,
+): Promise<{ codes: readonly string[]; defaultLocale: string | null } | null> {
+  if (servedCache && servedCache.until > Date.now()) return servedCache;
   try {
     const response = await fetch(new URL("/api/locales", request.nextUrl.origin), {
       signal: AbortSignal.timeout(3000),
     });
     if (!response.ok) return null;
-    const { locales } = (await response.json()) as { locales?: unknown };
+    const { locales, defaultLocale } = (await response.json()) as {
+      locales?: unknown;
+      defaultLocale?: unknown;
+    };
     if (!Array.isArray(locales)) return null;
     const codes = locales.filter((code): code is string => typeof code === "string");
-    servedCache = { codes, until: Date.now() + 60_000 };
-    return codes;
+    servedCache = {
+      codes,
+      defaultLocale: typeof defaultLocale === "string" ? defaultLocale : null,
+      until: Date.now() + 60_000,
+    };
+    return servedCache;
   } catch {
     return null;
   }
+}
+
+async function servedLocales(request: NextRequest): Promise<readonly string[] | null> {
+  return (await localeConfig(request))?.codes ?? null;
+}
+
+/**
+ * Settings → General → Default language (ADR-182), for the PUBLIC site only.
+ *
+ * `routing.defaultLocale` stays `en`: it is static, it is the language with no
+ * URL prefix, and it owns every shared slug (ADR-181), so the admin's choice
+ * cannot move it. What the choice decides is where a visitor who has NOT
+ * chosen a language lands — an unprefixed address is sent to the same page
+ * under the chosen prefix (`/news` → `/ar/news`). A visitor who has chosen
+ * (the `NEXT_LOCALE` cookie the language switcher writes) is never moved, and
+ * the admin's choice outranks the browser's `Accept-Language`, or a site set to
+ * Arabic would still open in English for nearly everyone. Only a page view is
+ * moved: a POST or a Server Action must reach the address it was sent to.
+ *
+ * `null` = let next-intl decide as before: the setting is English, it names a
+ * language the site does not serve, or the answer could not be had.
+ */
+async function adminDefaultRedirect(request: NextRequest): Promise<NextResponse | null> {
+  if (request.method !== "GET" && request.method !== "HEAD") return null;
+  if (request.headers.has("next-action")) return null;
+  if (request.cookies.has(LOCALE_COOKIE)) return null;
+  const preferred = (await localeConfig(request))?.defaultLocale;
+  if (
+    !preferred ||
+    preferred === routing.defaultLocale ||
+    !(routing.locales as readonly string[]).includes(preferred)
+  ) {
+    return null;
+  }
+  const target = request.nextUrl.clone();
+  target.pathname = `/${preferred}${target.pathname === "/" ? "" : target.pathname}`;
+  // 307: temporary — the setting can change back, and a browser must not
+  // remember the hop.
+  return NextResponse.redirect(target, 307);
 }
 
 /**
@@ -369,6 +418,11 @@ export async function proxy(request: NextRequest) {
     const signIn = new URL(`${prefix}/sign-in`, request.url);
     signIn.searchParams.set("redirect", pathname);
     return applySecurityHeaders(NextResponse.redirect(signIn), "public", null);
+  }
+
+  if (prefix === "") {
+    const preferred = await adminDefaultRedirect(request);
+    if (preferred) return applySecurityHeaders(preferred, "public", null);
   }
 
   const recaptcha = rest.length === 1 && RECAPTCHA_PUBLIC_PAGES.has(first ?? "");

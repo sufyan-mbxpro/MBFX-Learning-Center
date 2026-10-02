@@ -158,6 +158,8 @@ export function TopicEditor({
     [locale, topic.defaultLocale],
   );
   const defaultSlug = storedSlug(topic.translations, topic.defaultLocale);
+  // ADR-181 #5: a slug is typed once, on the default locale's tab.
+  const sharedSlug = locale !== topic.defaultLocale;
   const viewLiveHref = liveHref(`/glossary/topics/${defaultSlug}`, locale, topic.defaultLocale);
 
   // Exactly what the action receives, checked by the schema it parses with
@@ -168,7 +170,9 @@ export function TopicEditor({
     translation: {
       locale,
       name: draft.name.trim(),
-      slug: draft.slug.trim() === "" ? undefined : draft.slug.trim(),
+      // ADR-181 #2: only the default locale's tab sends a slug; the service
+      // copies it onto every other language.
+      slug: sharedSlug || draft.slug.trim() === "" ? undefined : draft.slug.trim(),
       description: draft.description.trim() === "" ? null : draft.description,
       seoTitle: draft.seoTitle.trim() === "" ? null : draft.seoTitle.trim(),
       seoDescription: draft.seoDescription.trim() === "" ? null : draft.seoDescription.trim(),
@@ -317,7 +321,8 @@ export function TopicEditor({
             </Field>
 
             <SlugField
-              value={draft.slug}
+              value={sharedSlug ? defaultSlug : draft.slug}
+              locked={sharedSlug}
               source={draft.name}
               previewPath={previewPath}
               disabled={!canUpdate}

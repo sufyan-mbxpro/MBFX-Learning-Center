@@ -379,6 +379,20 @@ function DesignActions({ row, canUpdate }: { row: GalleryDesign; canUpdate: bool
   );
 }
 
+function DesignMeta({ row }: { row: GalleryDesign }) {
+  const t = useTranslations("admin");
+  const edited = row.updatedByName
+    ? t("email.gallery.editedBy", { when: row.updatedLabel, name: row.updatedByName })
+    : t("email.gallery.edited", { when: row.updatedLabel });
+  const line = row.description ? `${edited} · ${row.description}` : edited;
+
+  return (
+    <p className="truncate text-xs text-muted-foreground" title={line}>
+      {line}
+    </p>
+  );
+}
+
 function DesignCard({ row, canUpdate }: { row: GalleryDesign; canUpdate: boolean }) {
   const t = useTranslations("admin");
   const [viewing, setViewing] = React.useState(false);
@@ -393,26 +407,20 @@ function DesignCard({ row, canUpdate }: { row: GalleryDesign; canUpdate: boolean
       />
       <div className="flex flex-1 flex-col gap-3 border-t p-4">
         <div className="flex items-start justify-between gap-2">
-          <div className="flex min-w-0 flex-col gap-0.5">
-            <Link
-              href={`${DESIGN_PATH}/${row.id}`}
-              className="truncate font-medium hover:underline"
-            >
-              {row.name}
-            </Link>
-            <span className="text-xs text-muted-foreground">
-              {row.updatedByName
-                ? t("email.gallery.editedBy", { when: row.updatedLabel, name: row.updatedByName })
-                : t("email.gallery.edited", { when: row.updatedLabel })}
-            </span>
-          </div>
+          <Link
+            href={`${DESIGN_PATH}/${row.id}`}
+            className="min-w-0 truncate font-medium hover:underline"
+          >
+            {row.name}
+          </Link>
           <Badge variant={row.mode === "HTML" ? "warning" : "info"}>
             {row.mode === "HTML" ? t("email.designs.modeHtml") : t("email.designs.modeRich")}
           </Badge>
         </div>
-        {row.description && (
-          <p className="line-clamp-2 text-sm text-muted-foreground">{row.description}</p>
-        )}
+        {/* One line: when, who and what. A narrow card wrapped the three into
+            seven lines; the title attribute keeps the clipped tail readable. */}
+        <DesignMeta row={row} />
+
         {row.archived && (
           <StatusBadge tone="neutral" appearance="tonal">
             {t("email.designs.archivedBadge")}

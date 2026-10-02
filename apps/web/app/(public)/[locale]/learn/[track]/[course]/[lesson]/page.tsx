@@ -13,7 +13,6 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { Download, ExternalLink, FileText, Target } from "lucide-react";
 import { getCourseBySlug, getLessonBySlug, getRedirect, lessonPath } from "@repo/core";
 import { isLearnTrack, learnTrackPath, LEARN_TRACKS } from "@repo/contracts";
-import { getServableLocales } from "@repo/i18n";
 import { Link } from "@repo/i18n/navigation";
 import { routing } from "@repo/i18n/routing";
 import { isFeatureVisible } from "@repo/settings";
@@ -37,8 +36,6 @@ import { LessonProgressActions } from "../../../_components/lesson-progress-acti
 import { ProgressProvider } from "../../../_components/progress-provider.tsx";
 import { practiceCtaFor } from "../../../_content/practice-cta.ts";
 import { VideoFacade } from "../../../../_components/video-facade.tsx";
-import { ReadingLanguageMenu } from "../../../../_components/reading-language-menu.tsx";
-import { readingLanguageOptions, readingLocaleFrom } from "../../../../_lib/reading-language.ts";
 import { INTERACTIVE_CARD } from "@repo/ui/lib/surfaces";
 import { decodeParams } from "../../../../_lib/route-params.ts";
 
@@ -57,13 +54,11 @@ import { decodeParams } from "../../../../_lib/route-params.ts";
 // also returns the view, so the page costs one progress request in total.
 export async function generateMetadata({
   params,
-  searchParams,
 }: PageProps<"/[locale]/learn/[track]/[course]/[lesson]">): Promise<Metadata> {
   const { locale, track, course: courseSlug, lesson: lessonSlug } = decodeParams(await params);
   setRequestLocale(locale);
-  const readingLocale = readingLocaleFrom(await searchParams);
   const [view, template] = await Promise.all([
-    getLessonBySlug(locale, courseSlug, lessonSlug, readingLocale),
+    getLessonBySlug(locale, courseSlug, lessonSlug),
     titleTemplate(),
   ]);
   if (!view) return {};
@@ -99,10 +94,9 @@ export async function generateMetadata({
     title: titleFrom(template, view.seoTitle?.trim() || view.title),
     ...descriptionFrom(view.seoDescription, view.summary),
     alternates: await alternatesFor({ canonical: ownPath, languages }),
-    // ADR-127 #4: a `?lang=` reading view is never indexed. A conditional
-    // SPREAD, never `robots: undefined` (ADR-090).
-    // ADR-159 #2: machine-written words at their own URL are not indexed either.
-    ...(view.readingLocale || view.noIndex ? { robots: { index: false, follow: true } } : {}),
+    // ADR-159 #2: machine-written words at their own URL are not indexed. A
+    // conditional SPREAD, never `robots: undefined` (ADR-090).
+    ...(view.noIndex ? { robots: { index: false, follow: true } } : {}),
     ...(await shareMetadata({
       locale,
       siteName: brand,
@@ -118,7 +112,6 @@ export async function generateMetadata({
 
 export default async function LessonPage({
   params,
-  searchParams,
 }: PageProps<"/[locale]/learn/[track]/[course]/[lesson]">) {
   const { locale, track, course: courseSlug, lesson: lessonSlug } = decodeParams(await params);
   setRequestLocale(locale);
@@ -126,8 +119,7 @@ export default async function LessonPage({
 
   if (!(await isFeatureVisible("courses", null))) notFound();
 
-  const readingLocale = readingLocaleFrom(await searchParams);
-  const view = await getLessonBySlug(locale, courseSlug, lessonSlug, readingLocale);
+  const view = await getLessonBySlug(locale, courseSlug, lessonSlug);
   if (!view) {
     // Old address? `saveLesson` wrote a 301 when the lesson slug changed, and
     // `saveCourse` wrote one PER LESSON when the course slug or its TRACK did
@@ -143,29 +135,10 @@ export default async function LessonPage({
   // (ADR-065 §1). A course that genuinely moved left a redirect row above.
   if (view.courseTrack !== track) notFound();
 
-  const [t, tPublic, course, servableLocales] = await Promise.all([
+  const [t, course] = await Promise.all([
     getTranslations({ locale, namespace: "learn" }),
-    getTranslations({ locale, namespace: "public" }),
     getCourseBySlug(locale, view.courseSlug),
-    getServableLocales(),
   ]);
-
-  // ADR-127: the lesson's own words only. A served locale's option needs that
-  // locale's COURSE slug too; without one it stays a reading view here.
-  const courseSlugByLocale = new Map(view.courseAlternates.map((alt) => [alt.locale, alt.slug]));
-  const readingOptions = readingLanguageOptions({
-    languages: view.readingLanguages,
-    contentLocale: view.contentLocale,
-    interfaceLocale: locale,
-    servable: servableLocales,
-    currentPath: `${learnTrackPath(track)}/${view.courseSlug}/${view.slug}`,
-    pathFor: (language) => {
-      const localisedCourse = courseSlugByLocale.get(language.locale);
-      return localisedCourse
-        ? `${learnTrackPath(track)}/${localisedCourse}/${language.slug}`
-        : null;
-    },
-  });
 
   const video = view.videoUrl ? parseVideoUrl(view.videoUrl) : null;
 
@@ -270,7 +243,7 @@ export default async function LessonPage({
                 </span>
               </div>
 
-              {/* `lang`/`dir` follow the TRANSLATION on screen (ADR-127 #1). */}
+              {/* `lang`/`dir` follow the TRANSLATION on screen. */}
               <h1
                 lang={view.contentLocale}
                 dir={view.contentDirection}
@@ -288,12 +261,6 @@ export default async function LessonPage({
                     newTabLabel={t("external.opensInNewTab")}
                   />
                 )}
-                <div className="ms-auto">
-                  <ReadingLanguageMenu
-                    options={readingOptions}
-                    label={tPublic("readingLanguage")}
-                  />
-                </div>
               </div>
               {view.summary && (
                 <p

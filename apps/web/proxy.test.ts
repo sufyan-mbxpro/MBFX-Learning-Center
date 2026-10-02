@@ -9,7 +9,7 @@
 // themselves for the one claim that can't be observed through `proxy()`
 // alone — that /admin and /api are excluded from next-intl's own pattern.
 import { NextRequest } from "next/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { proxy, config } from "./proxy.ts";
 
 // The proxy asks `/api/public-path` whether an unowned address answers
@@ -64,6 +64,93 @@ describe("proxy — locale routing (public surface)", () => {
     expect(response.status).not.toBe(308);
     const location = response.headers.get("location");
     if (location) expect(new URL(location).pathname).toBe("/es/about");
+  });
+});
+
+describe("proxy — the admin's default language, public site only (ADR-182)", () => {
+  // `/api/locales` is cached for a minute inside the proxy. Each test runs on
+  // a fake clock two minutes after the last, so no answer outlives its test,
+  // and the clock sits in the PAST so nothing cached survives into the real
+  // clock the other suites run on.
+  let tick = 0;
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(Date.UTC(2000, 0, 1) + (tick += 1) * 120_000);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  function serving(defaultLocale: string | null, locales = ["en", "ar"]) {
+    fetchMock.mockImplementation(async (url) =>
+      new URL(String(url)).pathname === "/api/locales"
+        ? Response.json({ locales, defaultLocale })
+        : Response.json({ kind: "page" }),
+    );
+  }
+  afterEach(() => fetchMock.mockImplementation(async () => Response.json(await lookup())));
+
+  function location(response: Response): string | null {
+    const target = response.headers.get("location");
+    if (!target) return null;
+    const url = new URL(target);
+    return `${url.pathname}${url.search}`;
+  }
+
+  it("sends a visitor who has not chosen a language to the admin's default, same page", async () => {
+    serving("ar");
+    const home = await proxy(requestFor("/"));
+    expect(home.status).toBe(307);
+    expect(location(home)).toBe("/ar");
+
+    const page = await proxy(requestFor("/news/some-article?page=2"));
+    expect(page.status).toBe(307);
+    expect(location(page)).toBe("/ar/news/some-article?page=2");
+  });
+
+  it("outranks the browser's Accept-Language", async () => {
+    serving("ar");
+    const request = requestFor("/news");
+    request.headers.set("accept-language", "en-US,en;q=0.9");
+    expect(location(await proxy(request))).toBe("/ar/news");
+  });
+
+  it("never moves a visitor who chose a language with the switcher", async () => {
+    serving("ar");
+    const response = await proxy(requestFor("/news", "NEXT_LOCALE=en"));
+    expect(location(response)).not.toBe("/ar/news");
+  });
+
+  it("leaves an address that already names a language alone", async () => {
+    serving("ar");
+    const response = await proxy(requestFor("/es/news"));
+    expect(location(response) ?? "").not.toMatch(/^\/ar/);
+  });
+
+  it("does nothing when the default is English, unserved, or unknown", async () => {
+    serving("en");
+    expect((await proxy(requestFor("/news"))).status).not.toBe(307);
+    vi.setSystemTime(Date.now() + 120_000);
+    serving(null);
+    expect((await proxy(requestFor("/news"))).status).not.toBe(307);
+    vi.setSystemTime(Date.now() + 120_000);
+    // The route answers null for an unserved choice; a code next-intl cannot
+    // route is refused here too.
+    serving("xx", ["en", "xx"]);
+    expect((await proxy(requestFor("/news"))).status).not.toBe(307);
+  });
+
+  it("never redirects a form post or a Server Action", async () => {
+    serving("ar");
+    const post = new NextRequest(new URL("/support", "http://localhost:3000"), { method: "POST" });
+    expect(location(await proxy(post))).not.toBe("/ar/support");
+    const action = requestFor("/support");
+    action.headers.set("next-action", "abc");
+    expect(location(await proxy(action))).not.toBe("/ar/support");
+  });
+
+  it("never touches the admin portal", async () => {
+    serving("ar");
+    const response = await proxy(requestFor("/keystone"));
+    expect(location(response)).toBeNull();
   });
 });
 
@@ -254,7 +341,10 @@ describe("proxy — real 404s on the public surface (changes-49, ADR-146)", () =
     fetchMock.mockClear();
     await proxy(requestFor("/news/some-article"));
     await proxy(requestFor("/learn/forex"));
-    expect(fetchMock).not.toHaveBeenCalled();
+    // `/api/locales` may be asked (ADR-182's default language); the page
+    // resolver must not be.
+    const asked = fetchMock.mock.calls.map(([url]) => new URL(String(url)).pathname);
+    expect(asked).not.toContain("/api/public-path");
   });
 
   it.each(["/foo.txt/news", "/admin.json", "/es/foo.txt"])(

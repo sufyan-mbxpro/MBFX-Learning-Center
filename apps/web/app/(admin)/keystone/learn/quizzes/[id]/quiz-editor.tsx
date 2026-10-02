@@ -363,7 +363,12 @@ export function QuizEditor({
       translation: {
         locale: state.locale,
         title: state.title,
-        slug: state.slug.trim() === "" ? undefined : state.slug.trim(),
+        // ADR-181 #2: only the default locale sends a slug; every other
+        // language takes a copy of it on the server.
+        slug:
+          state.locale !== defaultLocale || state.slug.trim() === ""
+            ? undefined
+            : state.slug.trim(),
         description: state.description.trim() === "" ? null : state.description.trim(),
       },
       questions: state.questions.map((question, index) => ({

@@ -6,7 +6,7 @@
 // what the AI returned. Any edit to a translatable field clears it, so the
 // save writes `MACHINE_TRANSLATED` only for untouched AI text, and a human's
 // edit is the review that promotes it (ADR-097 #4). A machine translation stays
-// off the public reading-language menu until then (ADR-127 #2).
+// out of search indexes and hreflang until then (ADR-159 #2).
 
 export interface MachineTranslatable {
   machineTranslated?: boolean;
@@ -32,8 +32,24 @@ export function mergeTranslationPatch<T extends MachineTranslatable>(
 }
 
 /**
- * The source draft's non-empty string fields, by name. Never `slug`: a slug
- * change writes a redirect and stays a human decision.
+ * Field names a machine never writes, whatever a caller passes. `slug`: one
+ * slug is shared by every language and typed on the default locale's tab
+ * (ADR-181), so a translated slug has nowhere to go — the service ignores a
+ * slug sent for any other locale, and a prefilled one would only make the
+ * form disagree with what is saved.
+ */
+const NEVER_MACHINE_WRITTEN: ReadonlySet<string> = new Set(["slug"]);
+
+/** `fields` without the names a machine never writes (`slug`). */
+export function withoutSlug(fields: Readonly<Record<string, string>>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(fields).filter(([name]) => !NEVER_MACHINE_WRITTEN.has(name)),
+  );
+}
+
+/**
+ * The source draft's non-empty string fields, by name. Never `slug`: one slug
+ * is shared by every language (ADR-181), so it is never translated.
  */
 export function textFields<T>(
   draft: T | undefined,
@@ -42,6 +58,7 @@ export function textFields<T>(
   const fields: Record<string, string> = {};
   if (!draft) return fields;
   for (const name of names) {
+    if (NEVER_MACHINE_WRITTEN.has(name)) continue;
     const value = draft[name];
     if (typeof value === "string" && value.trim()) fields[name] = value;
   }

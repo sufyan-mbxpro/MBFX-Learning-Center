@@ -21,7 +21,7 @@ export function ListingHeader({
   crumbs,
 }: {
   title: string;
-  /** ADR-127: the title's own language, when it differs from the page's. */
+  /** The title's own language, when it differs from the page's (a fallback translation). */
   titleLang?: string;
   titleDir?: "ltr" | "rtl";
   intro?: string;

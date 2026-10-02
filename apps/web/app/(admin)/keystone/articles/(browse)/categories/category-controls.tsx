@@ -32,6 +32,7 @@ import {
   updateArticleCategoryAction,
 } from "../../../_actions/article-actions.ts";
 import { AdminCombobox } from "../../../_components/combobox.tsx";
+import { SharedSlugField } from "../../../_components/editor/slug-field.tsx";
 import { RowSwitch } from "../../../_components/row-switch.tsx";
 import { useClientTable } from "../../../_hooks/use-client-table.ts";
 import { useFieldErrors } from "../../../_hooks/use-field-errors.ts";
@@ -61,6 +62,13 @@ export interface CategoryRow {
 export interface LocaleOption {
   code: string;
   label: string;
+  /** The default locale — the one whose tab owns the slug (ADR-181). */
+  isDefault?: boolean;
+}
+
+/** The default locale's code: the flagged option, else the first. */
+export function defaultLocaleOf(locales: readonly LocaleOption[]): string {
+  return (locales.find((l) => l.isDefault) ?? locales[0])?.code ?? "en";
 }
 
 export interface CategoryLabels {
@@ -124,8 +132,12 @@ function CategoryEditDialog({
   labels: CategoryLabels;
 }) {
   const { run, pending } = useServerAction();
-  const defaultLocale = locales[0]?.code ?? "en";
+  const defaultLocale = defaultLocaleOf(locales);
   const [locale, setLocale] = useState(defaultLocale);
+  // ADR-181 #5: the slug is typed once, on the default locale; every other
+  // locale shows that one read-only and sends none.
+  const sharedSlug = locale !== defaultLocale;
+  const defaultSlug = category?.translations.find((t) => t.locale === defaultLocale)?.slug ?? "";
   const [form, setForm] = useState<CategoryTranslationRow>(
     category?.translations.find((t) => t.locale === defaultLocale) ??
       EMPTY_TRANSLATION(defaultLocale),
@@ -144,7 +156,7 @@ function CategoryEditDialog({
         categoryId: category.id,
         locale,
         name: form.name.trim(),
-        slug: form.slug || undefined,
+        slug: sharedSlug ? undefined : form.slug || undefined,
         description: form.description || null,
         seoTitle: form.seoTitle || null,
         seoDescription: form.seoDescription || null,
@@ -205,14 +217,24 @@ function CategoryEditDialog({
           </Field>
           {category && (
             <>
-              <Field invalid={fields.invalid("slug")}>
-                <FieldLabel>{labels.slug}</FieldLabel>
-                <Input
-                  value={form.slug}
-                  onChange={(e) => setForm((f) => ({ ...f, slug: e.target.value }))}
+              {sharedSlug ? (
+                <SharedSlugField
+                  label={labels.slug}
+                  value={defaultSlug}
+                  source={form.name}
+                  previewPath={(slug) => `/${locale}/news/category/${slug}`}
+                  error={fields.error("slug")}
                 />
-                <FieldError>{fields.error("slug")}</FieldError>
-              </Field>
+              ) : (
+                <Field invalid={fields.invalid("slug")}>
+                  <FieldLabel>{labels.slug}</FieldLabel>
+                  <Input
+                    value={form.slug}
+                    onChange={(e) => setForm((f) => ({ ...f, slug: e.target.value }))}
+                  />
+                  <FieldError>{fields.error("slug")}</FieldError>
+                </Field>
+              )}
               <Field invalid={fields.invalid("description")}>
                 <FieldLabel>{labels.description}</FieldLabel>
                 <Textarea

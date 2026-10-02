@@ -45,6 +45,7 @@ import {
   StatusBadge,
   statusTone,
 } from "../../../_components/status-badge.tsx";
+import { zonedInputToIso } from "@repo/utils";
 import { useFieldErrors } from "../../../_hooks/use-field-errors.ts";
 import { useServerAction } from "../../../_hooks/use-server-action.ts";
 import { EditorSection } from "../../../_components/editor/editor-section.tsx";
@@ -138,7 +139,8 @@ export function PublishPanel({
   const savesFirst = (to: string) => to === "PUBLISHED" || to === "SCHEDULED";
 
   const transition = (to: string) => {
-    const scheduledForIso = to === "SCHEDULED" ? new Date(scheduleFor).toISOString() : undefined;
+    // ADR-182: the field's wall clock is the site's timezone.
+    const scheduledForIso = to === "SCHEDULED" ? zonedInputToIso(scheduleFor) : undefined;
     return run(() =>
       savesFirst(to)
         ? submitForm(to as "PUBLISHED" | "SCHEDULED", scheduledForIso)

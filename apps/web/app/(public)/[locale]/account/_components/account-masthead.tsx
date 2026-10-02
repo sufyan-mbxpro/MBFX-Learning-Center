@@ -30,7 +30,7 @@ import { Badge } from "@repo/ui/components/badge";
 import { Container } from "@repo/ui/components/container";
 import { ProgressBar } from "@repo/ui/components/progress-bar";
 import { Section } from "@repo/ui/components/section";
-import { DATE_FORMAT_OPTIONS } from "@repo/utils";
+import { DATE_FORMAT_OPTIONS, getSiteTimeZone } from "@repo/utils";
 import { SessionSync } from "./session-sync.tsx";
 
 /** Which card fills each missing item — the `id` each `AccountCard` is given, plus `-card`. */
@@ -56,7 +56,11 @@ export async function AccountMasthead({
     getTranslations({ locale, namespace: "account" }),
     getFormatter({ locale }),
   ]);
-  const since = format.dateTime(new Date(profile.createdAt), DATE_FORMAT_OPTIONS);
+  const since = format.dateTime(new Date(profile.createdAt), {
+    ...DATE_FORMAT_OPTIONS,
+    // ADR-182: the site's timezone.
+    timeZone: getSiteTimeZone(),
+  });
   const completeness = profileCompleteness(profile);
 
   return (

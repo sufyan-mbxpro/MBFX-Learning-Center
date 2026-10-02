@@ -228,33 +228,19 @@ Public: `app/(public)/[locale]/learn/[track]/videos/**` — the index, `categori
 - Demo seed rows carry a body and no video, except one per track. A video URL
   is a factual claim (`_content/home-videos.ts`); the seed does not invent one.
 
-## Reading language (ADR-127 applied beyond articles, 2026-09-17)
+## One slug for every language (ADR-181, 2026-10-02)
 
-Courses, lessons, video topics, glossary terms and quizzes take `?lang=` exactly as an
-article does. Adding it to a sixth detail page is four steps, and
-`apps/web/app/(public)/[locale]/_lib/reading-language.test.ts` names the one
-you forget (add the page to its `PAGES` map):
-
-1. **Loader.** Select `translationStatus`, take an optional `readingLocale`
-   (part of the `"use cache"` key), and run the ordinary fallback pick through
-   `applyReadingLocale` (`@repo/core` `reading-languages.ts`). Take WORDS from
-   its `picked`, and keep the fallback pick for everything that is ADDRESS —
-   the slug, and so the canonical and every link — so a reading view never
-   moves URL. The view `extends ReadingView`. Locale names come from
-   `loadLocaleMeta()`, which reads inactive locales too.
-2. **Page and metadata.** Both call `readingLocaleFrom(await searchParams)`
-   (`[locale]/_lib/reading-language.ts`), and the metadata spreads
-   `robots: { index: false }` when `view.readingLocale` is set.
-3. **Menu.** `readingLanguageOptions({ …, pathFor })` builds the hrefs; `pathFor`
-   returns null when a language has no address of its own. A lesson is the
-   example: a served locale needs that locale's COURSE slug too
-   (`LessonView.courseAlternates`), and without one the option stays a
-   `?lang=` view.
-4. **Markup.** `lang={view.contentLocale} dir={view.contentDirection}` goes on
-   the item's own words ONLY — never on a wrapper that also holds interface
-   headings. The glossary heading is the worked example: `termHeading` is
-   `<word>{term}</word> definition`, so only the term carries the translation's
-   `lang`.
+ADR-127's `?lang=` reading views and `ReadingLanguageMenu` are DELETED on every
+detail page; the header switcher is the only language control. The default
+locale's row owns the slug of every course, lesson, quiz, glossary term and
+topic, video topic and category; other rows hold a copy (`shared-slug.ts`:
+`sharedSlugFor` on a non-default save, which ignores the submitted slug;
+`propagateSharedSlug` on an English rename, which then writes one 301 per
+moved locale through the module's path builder). Import `shared-slug.ts` AFTER
+the `./index.ts` barrel or `translation-engine.ts` crashes on load order. The
+admin shows the slug read-only on a non-English tab (`SlugField locked`), and
+machine prefill never sends `slug`. `lang`/`dir` on an item's own words come
+from `contentLanguage(locale)` (`translation-indexing.ts`).
 
 **Where a translation comes from.** The four editors have B3's "Translate from
 English" beside the locale switcher (`TranslationControls`, rule in
@@ -269,8 +255,8 @@ in its `setDraft`, and `<TranslationControls>`.
 active, so `getActiveLocales()` gave the video topic, glossary term, glossary
 topic and article taxonomy screens a list of one, and their switchers
 (`locales.length > 1`) never rendered. "View live" goes through
-`_lib/live-href.ts`: the default locale's page plus `?lang=`, because `/es/…`
-404s until `es` is activated. `_lib/live-href.test.ts` guards both.
+`_lib/live-href.ts`: `/<locale><path>` (ADR-181), which 404s until that
+locale is switched on. `_lib/live-href.test.ts` guards both.
 
 **Quizzes translate; only the default locale SHAPES them (2026-09-17).** The
 quiz editor's language is `?locale=` in the admin URL, because another
@@ -283,11 +269,6 @@ quiz is readable in a language only when EVERY question has its words there, so
 a question added in English later withdraws that language instead of mixing
 languages mid-quiz. The runner takes the words' locale, which also picks the
 explanations at submit. No machine translation for quizzes yet.
-
-What stays in the interface locale on purpose: the curriculum, the lesson
-rail and pager, the breadcrumb trail's parents, section titles. They are
-navigation, and a `?lang=` choice does not follow the reader onto the next
-page — that would be a sticky reading preference, which is its own decision.
 
 ## Featured / Active / Premium on learning content (ADR-139, 2026-09-18)
 

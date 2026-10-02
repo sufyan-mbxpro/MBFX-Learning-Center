@@ -33,7 +33,12 @@ import {
 } from "./content.ts";
 import { recordAudit } from "./index.ts";
 import { hashCourseSource, loadCourseSource } from "./learn-source.ts";
-import { afterSourceSave, enqueueEntityTranslations } from "./translation-queue.ts";
+import { propagateSharedSlug, sharedSlugFor, type SlugMove } from "./shared-slug.ts";
+import {
+  afterSourceSave,
+  enqueueEntityTranslations,
+  TRANSLATION_TABLES,
+} from "./translation-queue.ts";
 
 // ─── Errors ──────────────────────────────────────────────────
 
@@ -263,7 +268,6 @@ export async function saveCourse(actor: Subject, input: CourseInput): Promise<vo
 
   const defaultLocale = await defaultLocaleCode();
   const isSource = input.translation.locale === defaultLocale;
-  const slug = resolveCourseSlug(input.translation.title, input.translation.slug);
 
   const description = input.translation.description
     ? sanitizeRichText(input.translation.description)
@@ -298,7 +302,6 @@ export async function saveCourse(actor: Subject, input: CourseInput): Promise<vo
 
   const fields = {
     title: input.translation.title,
-    slug,
     summary: input.translation.summary ?? null,
     description,
     seoTitle: input.translation.seoTitle ?? null,
@@ -315,19 +318,43 @@ export async function saveCourse(actor: Subject, input: CourseInput): Promise<vo
       : TranslationStatus.TRANSLATED,
   };
 
-  await db.$transaction(async (tx) => {
+  const { slug, moves } = await db.$transaction(async (tx) => {
     await tx.course.update({
       where: { id: input.courseId },
       data: courseMetaData(input.meta),
     });
 
+    // ADR-181: the English row owns the slug. A non-default save takes a copy
+    // of it and ignores what was submitted; only with no English row yet is
+    // there nothing to copy, and the old derivation applies.
+    const slug = isSource
+      ? resolveCourseSlug(input.translation.title, input.translation.slug)
+      : ((await sharedSlugFor(
+          tx,
+          TRANSLATION_TABLES.course,
+          input.courseId,
+          input.translation.locale,
+          defaultLocale,
+        )) ?? resolveCourseSlug(input.translation.title, input.translation.slug));
+
     await tx.courseTranslation.upsert({
       where: {
         courseId_locale: { courseId: input.courseId, locale: input.translation.locale },
       },
-      update: fields,
-      create: { courseId: input.courseId, locale: input.translation.locale, ...fields },
+      update: { ...fields, slug },
+      create: { courseId: input.courseId, locale: input.translation.locale, ...fields, slug },
     });
+
+    // An English rename moves every language with it (ADR-181 #3).
+    const moves = isSource
+      ? await propagateSharedSlug(
+          tx,
+          TRANSLATION_TABLES.course,
+          input.courseId,
+          defaultLocale,
+          slug,
+        )
+      : [];
 
     if (input.recommendations !== undefined) {
       await setCourseRecommendations(tx, input.courseId, input.recommendations);
@@ -346,10 +373,12 @@ export async function saveCourse(actor: Subject, input: CourseInput): Promise<vo
           : [],
       );
     }
+    return { slug, moves };
   });
 
   await finishCourseSave(actor, input, {
     slug,
+    moves,
     previousSlug: existing?.slug ?? null,
     previousTrack,
     track: input.meta.track ?? previousTrack,
@@ -369,6 +398,7 @@ export async function saveCourse(actor: Subject, input: CourseInput): Promise<vo
 
 interface FinishCourseSave {
   slug: string;
+  moves: SlugMove[];
   previousSlug: string | null;
   previousTrack: string | null;
   track: string | null;
@@ -381,38 +411,32 @@ async function finishCourseSave(
   input: CourseInput,
   prepared: FinishCourseSave,
 ): Promise<void> {
-  const { slug, previousSlug, previousTrack, track, isSource, defaultLocale } = prepared;
+  const { slug, moves, previousSlug, previousTrack, track, isSource, defaultLocale } = prepared;
   const locale = input.translation.locale;
 
-  // A course's URL is /learn/<track>/<slug> (ADR-065 §1). EITHER half moving
-  // it is a rename as far as a bookmark is concerned, so both are handled by
-  // one branch rather than two that would have to stay in step.
-  const movedFrom =
-    previousSlug && previousTrack && track && (previousSlug !== slug || previousTrack !== track)
-      ? { slug: previousSlug, track: previousTrack }
-      : null;
+  await redirectCourseAddress(actor.id, input.courseId, locale, defaultLocale, {
+    previousSlug,
+    previousTrack,
+    slug,
+    track,
+  });
 
-  if (movedFrom && track) {
-    await createSlugRedirect(
-      coursePath(locale, defaultLocale, movedFrom.track, movedFrom.slug),
-      coursePath(locale, defaultLocale, track, slug),
-      actor.id,
-    );
-
-    // A lesson URL embeds its track and its course slug, so moving a course
-    // moves every lesson under it. Without this loop a rename 404s every
-    // bookmarked and indexed lesson while the course itself redirects fine —
-    // the failure is invisible from the course page you just renamed.
-    const lessons = await db.lessonTranslation.findMany({
-      where: { locale, lesson: { section: { courseId: input.courseId } } },
-      select: { slug: true },
+  // ADR-181 #3: an English save moves every other language's address too —
+  // its slug when the English one was renamed, its track when the school
+  // changed — so each sibling gets the same redirects the English row did.
+  if (isSource) {
+    const moved = new Map(moves.map((move) => [move.locale, move]));
+    const siblings = await db.courseTranslation.findMany({
+      where: { courseId: input.courseId, locale: { not: defaultLocale } },
+      select: { locale: true, slug: true },
     });
-    for (const lesson of lessons) {
-      await createSlugRedirect(
-        lessonPath(locale, defaultLocale, movedFrom.track, movedFrom.slug, lesson.slug),
-        lessonPath(locale, defaultLocale, track, slug, lesson.slug),
-        actor.id,
-      );
+    for (const sibling of siblings) {
+      await redirectCourseAddress(actor.id, input.courseId, sibling.locale, defaultLocale, {
+        previousSlug: moved.get(sibling.locale)?.previous ?? sibling.slug,
+        previousTrack,
+        slug: sibling.slug,
+        track,
+      });
     }
   }
 
@@ -431,6 +455,51 @@ async function finishCourseSave(
       });
     }
     await afterSourceSave("course", input.courseId, hash, defaultLocale);
+  }
+}
+
+/**
+ * One locale's course address moving, and every lesson under it. A course's
+ * URL is /learn/<track>/<slug> (ADR-065 §1); EITHER half moving it is a rename
+ * as far as a bookmark is concerned, so both are handled by one branch rather
+ * than two that would have to stay in step.
+ */
+async function redirectCourseAddress(
+  actorId: string,
+  courseId: string,
+  locale: string,
+  defaultLocale: string,
+  address: {
+    previousSlug: string | null;
+    previousTrack: string | null;
+    slug: string;
+    track: string | null;
+  },
+): Promise<void> {
+  const { previousSlug, previousTrack, slug, track } = address;
+  if (!previousSlug || !previousTrack || !track) return;
+  if (previousSlug === slug && previousTrack === track) return;
+
+  await createSlugRedirect(
+    coursePath(locale, defaultLocale, previousTrack, previousSlug),
+    coursePath(locale, defaultLocale, track, slug),
+    actorId,
+  );
+
+  // A lesson URL embeds its track and its course slug, so moving a course
+  // moves every lesson under it. Without this loop a rename 404s every
+  // bookmarked and indexed lesson while the course itself redirects fine —
+  // the failure is invisible from the course page you just renamed.
+  const lessons = await db.lessonTranslation.findMany({
+    where: { locale, lesson: { section: { courseId } } },
+    select: { slug: true },
+  });
+  for (const lesson of lessons) {
+    await createSlugRedirect(
+      lessonPath(locale, defaultLocale, previousTrack, previousSlug, lesson.slug),
+      lessonPath(locale, defaultLocale, track, slug, lesson.slug),
+      actorId,
+    );
   }
 }
 

@@ -51,9 +51,8 @@ import {
   slugify,
   transitionContentStatus,
 } from "./content.ts";
-import { loadLocaleMeta } from "./locale-meta.ts";
 import { publicLessonWhere } from "./public-courses.ts";
-import { applyReadingLocale, type ReadingView } from "./reading-languages.ts";
+import { contentLanguage, type ContentLanguageView } from "./translation-indexing.ts";
 // `publicQuizWhere` lives in a leaf module so the content loaders can read it
 // without closing a cycle back through this file (ADR-084 #1).
 import { publicQuizWhere } from "./quiz-links.ts";
@@ -66,7 +65,12 @@ import {
   loadQuizQuestionSource,
   loadQuizSource,
 } from "./quiz-source.ts";
-import { afterSourceSave, enqueueEntityTranslations } from "./translation-queue.ts";
+import { propagateSharedSlug, sharedSlugFor } from "./shared-slug.ts";
+import {
+  afterSourceSave,
+  enqueueEntityTranslations,
+  TRANSLATION_TABLES,
+} from "./translation-queue.ts";
 
 /**
  * `Quiz.track` is a plain column validated by @repo/contracts, not by a FK
@@ -533,11 +537,16 @@ export async function saveQuiz(actor: Subject, input: QuizInput): Promise<void> 
   const locale = input.translation.locale;
   const isSource = locale === defaultLocale;
 
-  const slug = await uniqueQuizSlug(
-    locale,
-    slugify(input.translation.slug?.trim() || input.translation.title),
-    input.quizId,
-  );
+  // The old derivation: from the submitted slug or the title, suffixed until
+  // free. Since ADR-181 it names the ENGLISH row's slug, or a non-default row
+  // whose quiz has no English row yet.
+  const derivedSlug = () =>
+    uniqueQuizSlug(
+      locale,
+      slugify(input.translation.slug?.trim() || input.translation.title),
+      input.quizId,
+    );
+  const sourceSlug = isSource ? await derivedSlug() : null;
   const existing = await db.quizTranslation.findUnique({
     where: { quizId_locale: { quizId: input.quizId, locale } },
     select: { slug: true },
@@ -583,13 +592,12 @@ export async function saveQuiz(actor: Subject, input: QuizInput): Promise<void> 
 
   const fields = {
     title: input.translation.title,
-    slug,
     description: input.translation.description ?? null,
     ...(isSource ? {} : { sourceHash: quizFrom }),
     translationStatus: TranslationStatus.TRANSLATED,
   };
 
-  await db.$transaction(async (tx) => {
+  const { slug, moves } = await db.$transaction(async (tx) => {
     await tx.quiz.update({ where: { id: input.quizId }, data: meta });
 
     // ADR-132 — the cover is a ContentReference so deleteMedia()'s in-use
@@ -604,11 +612,21 @@ export async function saveQuiz(actor: Subject, input: QuizInput): Promise<void> 
           : [],
       );
     }
+    // ADR-181: a non-default row copies the English slug and ignores the
+    // submitted one; with no English row yet there is nothing to copy.
+    const slug =
+      sourceSlug ??
+      (await sharedSlugFor(tx, TRANSLATION_TABLES.quiz, input.quizId, locale, defaultLocale)) ??
+      (await derivedSlug());
     await tx.quizTranslation.upsert({
       where: { quizId_locale: { quizId: input.quizId, locale } },
-      update: fields,
-      create: { quizId: input.quizId, locale, ...fields },
+      update: { ...fields, slug },
+      create: { quizId: input.quizId, locale, ...fields, slug },
     });
+    // An English rename moves every language with it (ADR-181 #3).
+    const moves = isSource
+      ? await propagateSharedSlug(tx, TRANSLATION_TABLES.quiz, input.quizId, defaultLocale, slug)
+      : [];
 
     // A translation save writes WORDS only: the question rows (type, order,
     // points, correct answer) belong to the default locale, and
@@ -657,15 +675,35 @@ export async function saveQuiz(actor: Subject, input: QuizInput): Promise<void> 
         create: { questionId, locale, ...translation },
       });
     }
+    return { slug, moves };
   });
 
   // Outside the transaction, matching saveLesson: a failed redirect write has
-  // never rolled back a saved translation.
+  // never rolled back a saved translation. An English save moves every other
+  // language's address too — its slug on a rename, its track on a change of
+  // school — so each sibling gets the redirect the English row did (ADR-181).
   const track = input.meta.track ?? previousTrack;
-  if (existing && previousTrack && track && (existing.slug !== slug || previousTrack !== track)) {
+  const addresses = existing ? [{ locale, previous: existing.slug, next: slug }] : [];
+  if (isSource) {
+    const moved = new Map(moves.map((move) => [move.locale, move]));
+    const siblings = await db.quizTranslation.findMany({
+      where: { quizId: input.quizId, locale: { not: defaultLocale } },
+      select: { locale: true, slug: true },
+    });
+    for (const sibling of siblings) {
+      addresses.push({
+        locale: sibling.locale,
+        previous: moved.get(sibling.locale)?.previous ?? sibling.slug,
+        next: sibling.slug,
+      });
+    }
+  }
+  for (const address of addresses) {
+    if (!previousTrack || !track) break;
+    if (address.previous === address.next && previousTrack === track) continue;
     await createSlugRedirect(
-      quizPath(locale, defaultLocale, previousTrack, existing.slug),
-      quizPath(locale, defaultLocale, track, slug),
+      quizPath(address.locale, defaultLocale, previousTrack, address.previous),
+      quizPath(address.locale, defaultLocale, track, address.next),
       actor.id,
     );
   }
@@ -756,6 +794,7 @@ export async function duplicateQuiz(actor: Subject, quizId: string): Promise<str
   // Resolved BEFORE the transaction: `uniqueQuizSlug` polls the table in a
   // loop, and holding a write transaction open across that is how a slow
   // duplicate turns into a lock-wait timeout for every other editor.
+  const { defaultLocale } = await localeContext();
   const slugs = new Map<string, string>();
   for (const t of source.translations) {
     slugs.set(t.locale, await uniqueQuizSlug(t.locale, `${t.slug}-copy`, ""));
@@ -819,6 +858,13 @@ export async function duplicateQuiz(actor: Subject, quizId: string): Promise<str
       ]);
     }
 
+    // The copy's languages share its English slug, as every quiz's do
+    // (ADR-181) — suffixing each locale on its own can leave them apart.
+    const sourceSlug = slugs.get(defaultLocale);
+    if (sourceSlug) {
+      await propagateSharedSlug(tx, TRANSLATION_TABLES.quiz, created.id, defaultLocale, sourceSlug);
+    }
+
     return created;
   });
 
@@ -858,15 +904,8 @@ export async function setQuizStatus(
  * progress is (ADR-056 #1). Which means this page stays static even though
  * what happens on it does not.
  */
-export async function loadQuizBySlug(
-  locale: string,
-  slug: string,
-  readingLocale?: string,
-): Promise<PublicQuizView | null> {
-  const [{ locales, defaultLocale }, known] = await Promise.all([
-    localeContext(),
-    loadLocaleMeta(),
-  ]);
+export async function loadQuizBySlug(locale: string, slug: string): Promise<PublicQuizView | null> {
+  const { locales, defaultLocale } = await localeContext();
 
   const match = await db.quizTranslation.findFirst({
     where: { slug, quiz: publicQuizWhere() },
@@ -912,25 +951,8 @@ export async function loadQuizBySlug(
   const t = pickTranslation(quiz.translations, locale, defaultLocale, locales);
   if (!t) return null;
 
-  // ADR-127 on a quiz. A language is offered only when EVERY question has its
-  // words too: a reader who chose Arabic must not meet an English question
-  // halfway through, and a question added in English after the translation was
-  // saved is exactly that. The fallback pick stays listed as the way back.
-  const complete = quiz.translations.filter(
-    (tr) =>
-      tr.locale === t.locale ||
-      quiz.questions.every((question) =>
-        question.translations.some((qt) => qt.locale === tr.locale),
-      ),
-  );
-  const { picked, ...reading } = applyReadingLocale(complete, t, readingLocale, known, locale);
-  const words = picked ?? t;
-  const questionLocale = reading.readingLocale ?? locale;
-
   const questions = quiz.questions.flatMap((question) => {
-    const qt = reading.readingLocale
-      ? (question.translations.find((row) => row.locale === reading.readingLocale) ?? null)
-      : pickTranslation(question.translations, questionLocale, defaultLocale, locales);
+    const qt = pickTranslation(question.translations, locale, defaultLocale, locales);
     if (!qt) return [];
     const options = parseStringArray(qt.options);
     // A question with fewer than two options is unanswerable. Dropped rather
@@ -954,8 +976,8 @@ export async function loadQuizBySlug(
   return {
     id: quiz.id,
     slug: t.slug,
-    title: words.title,
-    description: words.description,
+    title: t.title,
+    description: t.description,
     track,
     category: quiz.category,
     passingScore: quiz.passingScore,
@@ -966,22 +988,18 @@ export async function loadQuizBySlug(
     totalPoints: questions.reduce((sum, question) => sum + question.points, 0),
     questions,
     updatedAt: quiz.updatedAt.toISOString(),
-    ...reading,
+    ...contentLanguage(t.locale),
   };
 }
 
-/** A quiz as its public page reads it: the contract view plus ADR-127's reading fields. */
-export type PublicQuizView = QuizView & ReadingView;
+/** A quiz as its public page reads it: the contract view plus its words' language. */
+export type PublicQuizView = QuizView & ContentLanguageView;
 
-export async function getQuizBySlug(
-  locale: string,
-  slug: string,
-  readingLocale?: string,
-): Promise<PublicQuizView | null> {
+export async function getQuizBySlug(locale: string, slug: string): Promise<PublicQuizView | null> {
   "use cache";
   cacheTag("content");
   cacheLife({ revalidate: 300 });
-  return loadQuizBySlug(locale, slug, readingLocale);
+  return loadQuizBySlug(locale, slug);
 }
 
 /**

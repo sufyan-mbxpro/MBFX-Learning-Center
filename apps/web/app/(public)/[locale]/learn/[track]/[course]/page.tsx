@@ -20,7 +20,6 @@ import {
   resolveRecommendations,
 } from "@repo/core";
 import { isLearnTrack, learnTrackPath, LEARN_TRACKS, type LearnTrackKey } from "@repo/contracts";
-import { getServableLocales } from "@repo/i18n";
 import { Link } from "@repo/i18n/navigation";
 import { routing } from "@repo/i18n/routing";
 import { isFeatureVisible } from "@repo/settings";
@@ -46,8 +45,6 @@ import { CourseProgressBar, CourseStartCta } from "../../_components/course-prog
 import { ProgressProvider } from "../../_components/progress-provider.tsx";
 import { TrackProgressBand } from "../../_components/track-progress-band.tsx";
 import { CourseJsonLd } from "../../_components/course-json-ld.tsx";
-import { ReadingLanguageMenu } from "../../../_components/reading-language-menu.tsx";
-import { readingLanguageOptions, readingLocaleFrom } from "../../../_lib/reading-language.ts";
 import { INTERACTIVE_CARD } from "@repo/ui/lib/surfaces";
 import { decodeParams } from "../../../_lib/route-params.ts";
 
@@ -65,13 +62,11 @@ import { decodeParams } from "../../../_lib/route-params.ts";
 // call `useProgress()` are client components.
 export async function generateMetadata({
   params,
-  searchParams,
 }: PageProps<"/[locale]/learn/[track]/[course]">): Promise<Metadata> {
   const { locale, course: courseSlug } = decodeParams(await params);
   setRequestLocale(locale);
-  const readingLocale = readingLocaleFrom(await searchParams);
   const [view, template, brand] = await Promise.all([
-    getCourseBySlug(locale, courseSlug, readingLocale),
+    getCourseBySlug(locale, courseSlug),
     titleTemplate(),
     siteName(),
   ]);
@@ -88,10 +83,9 @@ export async function generateMetadata({
         href: coursePath(alt.locale, routing.defaultLocale, view.track, alt.slug),
       })),
     }),
-    // ADR-127 #4: a `?lang=` reading view is never indexed. A conditional
-    // SPREAD, never `robots: undefined` (ADR-090).
-    // ADR-159 #2: machine-written words at their own URL are not indexed either.
-    ...(view.readingLocale || view.noIndex ? { robots: { index: false, follow: true } } : {}),
+    // ADR-159 #2: machine-written words at their own URL are not indexed. A
+    // conditional SPREAD, never `robots: undefined` (ADR-090).
+    ...(view.noIndex ? { robots: { index: false, follow: true } } : {}),
     ...(await shareMetadata({
       locale,
       siteName: brand,
@@ -105,7 +99,6 @@ export async function generateMetadata({
 
 export default async function CoursePage({
   params,
-  searchParams,
 }: PageProps<"/[locale]/learn/[track]/[course]">) {
   const { locale, track, course: courseSlug } = decodeParams(await params);
   setRequestLocale(locale);
@@ -113,8 +106,7 @@ export default async function CoursePage({
 
   if (!(await isFeatureVisible("courses", null))) notFound();
 
-  const readingLocale = readingLocaleFrom(await searchParams);
-  const view = await getCourseBySlug(locale, courseSlug, readingLocale);
+  const view = await getCourseBySlug(locale, courseSlug);
   if (!view) {
     // Old address? `saveCourse` wrote a 301 row when the slug OR the track
     // changed (ADR-065 §1), keyed on the full path — so the lookup uses the
@@ -135,24 +127,11 @@ export default async function CoursePage({
   // uses, so the right rail costs this page nothing beyond a cache hit that
   // `/learn` has usually already warmed — and the rail can never disagree with
   // the shelf about what is published, because it IS the shelf's data.
-  const [t, tPublic, recommendations, groups, servableLocales] = await Promise.all([
+  const [t, recommendations, groups] = await Promise.all([
     getTranslations({ locale, namespace: "learn" }),
-    getTranslations({ locale, namespace: "public" }),
     resolveRecommendations(locale, view.id, view.track, 3),
     getLearnIndex(locale),
-    getServableLocales(),
   ]);
-
-  // ADR-127: the course's own words can be read in another language. The
-  // curriculum below stays in the page's locale: it is navigation.
-  const readingOptions = readingLanguageOptions({
-    languages: view.readingLanguages,
-    contentLocale: view.contentLocale,
-    interfaceLocale: locale,
-    servable: servableLocales,
-    currentPath: `${learnTrackPath(track)}/${view.slug}`,
-    pathFor: (language) => `${learnTrackPath(track)}/${language.slug}`,
-  });
 
   const difficulties = difficultyLabels(t);
 
@@ -324,15 +303,8 @@ export default async function CoursePage({
                     newTabLabel={t("external.opensInNewTab")}
                   />
                 )}
-                {/* ADR-127: closes the badge row at its inline end. */}
-                <div className="ms-auto">
-                  <ReadingLanguageMenu
-                    options={readingOptions}
-                    label={tPublic("readingLanguage")}
-                  />
-                </div>
               </div>
-              {/* `lang`/`dir` follow the TRANSLATION on screen (ADR-127 #1). */}
+              {/* `lang`/`dir` follow the TRANSLATION on screen. */}
               <h1
                 lang={view.contentLocale}
                 dir={view.contentDirection}

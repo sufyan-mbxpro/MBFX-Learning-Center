@@ -24,7 +24,6 @@ import {
   type ArticleView,
 } from "@repo/core";
 import { formatDate, parseVideoUrl } from "@repo/utils";
-import { getServableLocales } from "@repo/i18n";
 import { LOCALE_DIRECTION, routing } from "@repo/i18n/routing";
 import { Link } from "@repo/i18n/navigation";
 import { getSetting, isFeatureVisible } from "@repo/settings";
@@ -40,9 +39,7 @@ import { RichText } from "@repo/ui/components/rich-text";
 import { ListingHeader } from "../_components/listing-header.tsx";
 import { ReadBeacon } from "../_components/read-beacon.tsx";
 import { ShareRow } from "../_components/share-row.tsx";
-import { ReadingLanguageMenu } from "../../_components/reading-language-menu.tsx";
 import { canOptimizeImage } from "../../_lib/image-optimizer.ts";
-import { readingLanguageOptions, readingLocaleFrom } from "../../_lib/reading-language.ts";
 import { VideoFacade } from "../../_components/video-facade.tsx";
 import { CHIP_LINK } from "@repo/ui/lib/surfaces";
 import { decodeParams } from "../../_lib/route-params.ts";
@@ -53,13 +50,11 @@ function featureKeyFor(view: ArticleView): "news" | "analysis" {
 
 export async function generateMetadata({
   params,
-  searchParams,
 }: PageProps<"/[locale]/news/[slug]">): Promise<Metadata> {
   const { locale, slug } = decodeParams(await params);
   setRequestLocale(locale);
-  const readingLocale = readingLocaleFrom(await searchParams);
   const [view, template, brand] = await Promise.all([
-    getArticleBySlug(locale, slug, readingLocale),
+    getArticleBySlug(locale, slug),
     titleTemplate(),
     siteName(),
   ]);
@@ -79,11 +74,10 @@ export async function generateMetadata({
     title: titleFrom(template, view.seoTitle?.trim() || view.title),
     ...descriptionFrom(view.seoDescription, view.excerpt),
     alternates: await alternatesFor({
-      // ADR-127 #4: a reading view points back at the article's own URL. An
-      // editor's canonical override wins otherwise, and the page's own URL is
-      // the default — a page with no canonical invites every `?utm_` variant
-      // to count as its own.
-      canonical: view.readingLocale ? ownPath : (view.canonicalUrl ?? ownPath),
+      // An editor's canonical override wins, and the page's own URL is the
+      // default — a page with no canonical invites every `?utm_` variant to
+      // count as its own.
+      canonical: view.canonicalUrl ?? ownPath,
       languages: view.alternates.map((alt) => ({
         locale: alt.locale,
         href: articlePath(alt.locale, routing.defaultLocale, alt.slug),
@@ -96,15 +90,9 @@ export async function generateMetadata({
     // merges parent and child metadata by iterating the child's PRESENT keys,
     // and `resolveRobots(undefined)` is null — so the key being there at all
     // erases the root layout's site-wide directive.
-    //
-    // ADR-127 #4: a `?lang=` reading view is never indexed — it is this
-    // article's words under another language's chrome, and a language that
-    // earns an index gets its own locale URL when it is activated.
-    ...(view.readingLocale
-      ? { robots: { index: false, follow: !view.noFollow } }
-      : view.noIndex || view.noFollow
-        ? { robots: { index: !view.noIndex, follow: !view.noFollow } }
-        : {}),
+    ...(view.noIndex || view.noFollow
+      ? { robots: { index: !view.noIndex, follow: !view.noFollow } }
+      : {}),
     ...(await shareMetadata({
       locale,
       siteName: brand,
@@ -121,15 +109,11 @@ export async function generateMetadata({
   };
 }
 
-export default async function ArticlePage({
-  params,
-  searchParams,
-}: PageProps<"/[locale]/news/[slug]">) {
+export default async function ArticlePage({ params }: PageProps<"/[locale]/news/[slug]">) {
   const { locale, slug } = decodeParams(await params);
   setRequestLocale(locale);
 
-  const readingLocale = readingLocaleFrom(await searchParams);
-  const view = await getArticleBySlug(locale, slug, readingLocale);
+  const view = await getArticleBySlug(locale, slug);
 
   if (!view) {
     // Another language's slug, e.g. the header switcher turning `/news/x` into
@@ -147,21 +131,12 @@ export default async function ArticlePage({
 
   // No risk disclaimer under the article any more (ADR-119, changes-36): the
   // owner took it off every page.
-  const [t, showAuthor, showReadingTime, relatedCount, servableLocales] = await Promise.all([
+  const [t, showAuthor, showReadingTime, relatedCount] = await Promise.all([
     getTranslations(),
     getSetting("articles.showAuthor"),
     getSetting("articles.showReadingTime"),
     getSetting("articles.relatedCount"),
-    getServableLocales(),
   ]);
-  const readingOptions = readingLanguageOptions({
-    languages: view.readingLanguages,
-    contentLocale: view.locale,
-    interfaceLocale: locale,
-    servable: servableLocales,
-    currentPath: `/news/${slug}`,
-    pathFor: (language) => `/news/${language.slug}`,
-  });
   // Same kind grouping as the listing pages (ADR-015 #11: analysis + trade
   // ideas share one feed) — the sidebar facets match whichever feed this
   // article belongs to, not just its own single kind.
@@ -310,19 +285,11 @@ export default async function ArticlePage({
                 {showReadingTime !== false && view.readingMinutes > 0 && (
                   <span>{t("news.minRead", { minutes: view.readingMinutes })}</span>
                 )}
-                {/* ADR-127: the reading-language menu closes the meta row, at
-                    its inline end, rather than taking a row of its own. */}
-                <div className="ms-auto">
-                  <ReadingLanguageMenu
-                    options={readingOptions}
-                    label={t("public.readingLanguage")}
-                  />
-                </div>
               </div>
             </Reveal>
 
-            {/* `lang`/`dir` follow the TRANSLATION on screen, not the page:
-                an Arabic reading view is RTL inside an LTR page (ADR-127 #1). */}
+            {/* `lang`/`dir` follow the TRANSLATION on screen, which is the
+                default locale's when the fallback chain supplied it. */}
             <Reveal variant="up" delay={120} lang={view.locale} dir={view.contentDirection}>
               {view.requestedLocaleMissing ? (
                 // ADR-007: an RTL locale with no translation gets the notice
@@ -335,7 +302,6 @@ export default async function ArticlePage({
               ) : (
                 <>
                   {view.locale !== locale &&
-                    !view.readingLocale &&
                     LOCALE_DIRECTION[locale as keyof typeof LOCALE_DIRECTION] === "ltr" && (
                       <p className="text-xs text-muted-foreground">({view.locale})</p>
                     )}

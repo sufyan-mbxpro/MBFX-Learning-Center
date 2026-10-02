@@ -27451,3 +27451,101 @@ dark previews share one band (ADR-179 #5), so they share one logo.
 fallbacks); `@repo/email` 157/157, `@repo/contracts` 650/650,
 `@repo/settings` 38/38, `@repo/db` 88/88; `tsc` clean on `@repo/email`.
 Migration applied to the local MariaDB.
+
+## 2026-10-02 — Modules 06/11/12/15: one slug for every language, one language switcher (ADR-181)
+
+**What shipped.** changes-60. Every translation's slug is now the default
+locale's: new `packages/core/src/shared-slug.ts` (`sharedSlugFor`,
+`propagateSharedSlug`) is applied in the save paths of articles (full save,
+quick edit, duplicate), article categories and tags, courses, lessons,
+quizzes, glossary terms and topics, video topics and video categories. A
+non-default save ignores a submitted slug; an English rename moves every
+other language in the same transaction and writes one 301 per moved locale
+through the module's own path builder. Admin editors show the slug read-only
+on a non-English tab (`SlugField locked` / `SharedSlugField`, three
+`admin.sharedSlug.*` keys), and Google/AI prefill never sends `slug`.
+Migration `20261002090000_shared_translation_slugs_adr181` normalised
+existing rows (locally: 3 articles in es/ar, 1 tag in ur) and wrote 301s from
+the old translated addresses. ADR-127's reading view is removed end to end:
+`ReadingLanguageMenu`, `?lang=`, `_lib/reading-language.ts`,
+`locale-meta.ts`, `readingLanguageSearchSchema`, `public.readingLanguage`
+(en, ar) and the loaders' `readingLocale` parameters.
+`reading-languages.ts` is renamed `translation-indexing.ts` (indexability
+rules stay) and gains `contentLanguage()` for the words' `lang`/`dir`.
+"View live" for a non-default locale is now `/<locale><path>`.
+
+**Decisions.** ADR-181 (supersedes ADR-127, amends ADR-161 #6). The slug
+column stays on each translation row so no public read changed; the rule is
+about writes. A collision with pre-ADR data falls back to the locale suffix
+rather than failing. The migration's `@def` is pinned to
+`utf8mb4_unicode_ci` because MariaDB 11.4's default collation is uca1400
+(error 1267 in Testcontainers). A glossary topic rename now writes 301s,
+which it never did before. `shared-slug.ts` must be imported after the
+`./index.ts` barrel (load order in `translation-engine.ts`).
+
+**Tests.** Testcontainers integration: articles 65/65; learn + quizzes
+104/104; content, glossary-translation, video-translation, videos 72/72;
+public-content 6/6; after the reading-view removal articles, learn,
+public-content, quizzes 175/175. Unit: core 240, contracts 634, i18n 41,
+web 3414 passed with 7 failures in files this change does not touch
+(`site-url.test.ts` ×5 — an ambient `NEXT_PUBLIC_SITE_URL` leaks in —
+`changes-50-fixes.test.ts`, `email-admin-conventions.test.ts`). `tsc` clean
+on core, contracts and web; ESLint clean on touched files;
+`check:catalog-completeness` OK. Migration applied to the local MariaDB:
+no non-default slug differs from its English row.
+
+## 2026-10-02 — Modules 05/06/09/12: the default language and timezone settings take effect (ADR-182)
+
+**What shipped.** A review of Settings → General → Language & region found
+all three settings read by nothing. Two are now wired.
+`site.defaultLocale`: `/api/locales` also returns `defaultLocale` (only when
+it is a served language), and `proxy.ts`'s new `adminDefaultRedirect` sends
+an unprefixed GET from a visitor with no `NEXT_LOCALE` cookie to the same
+page under that prefix (307). Public site only; the admin stays English.
+`site.defaultTimezone`: `@repo/utils` `date-format.ts` gains a site zone
+(`setSiteTimeZone`, `getSiteTimeZone`, `isValidTimeZone`) that
+`formatDate`/`formatDateTime` read, plus `toZonedInput`, `zonedInputToIso`
+and `zonedInputAtHour` for the picker's wall-clock string. The three root
+layouts load it (`app/_lib/site-time-zone.ts`), render `<SiteTimeZone>`
+(`app/_components/site-time-zone.tsx`) and pass it to
+`NextIntlClientProvider`; the account pages' server formatters, the live
+refresh clock, and every schedule field (content status panel, article
+publish panel, announcement + custom email editors, promotion editor,
+schedule presets) use it. Two `admin.settingDescriptions.site.*` lines say
+what each setting does, including "public site only" for the language.
+
+**Decisions.** ADR-182. `routing.defaultLocale` stays `en` (static prefix,
+slug owner under ADR-181). The admin's default outranks `Accept-Language`;
+the visitor's cookie outranks the admin. `site.defaultThemeMode` is left
+unwired: ADR-008 forbids admins setting the mode, so it needs its own call.
+
+**Tests.** `date-format.test.ts` +7 (site zone, DST round-trip, presets):
+utils 382/382. `proxy.test.ts` +7 for the redirect (cookie wins,
+Accept-Language loses, POST/Server Action untouched, unserved/English/null
+ignored, /keystone untouched); one existing test narrowed to
+`/api/public-path`: 66/66. Web 3422 passed, 7 failed, the same seven
+pre-existing failures the previous entry records (`site-url.test.ts` ×5,
+`changes-50-fixes`, `email-admin-conventions`). `tsc` clean on web; ESLint
+clean on touched files; `check:catalog-completeness` and
+`check:phantom-deps` OK.
+
+## 2026-10-02 — Module 17: the email preview's logo on the live site
+
+**Shipped.** The logo showed as a broken image in every email preview on
+`learn.mbxpro.com` (the template gallery included), while the file itself
+(`/brand/logo-dark.png`) served 200. The preview route rewrote each site
+image's host to `new URL(request.url).origin` so a tunnel or a second dev port
+would still load it, and behind Cloudflare and the reverse proxy that is the
+server's INTERNAL address. The new `viewerOrigin(request)`
+(`api/email/preview/preview-images.ts`) takes the browser's own `Origin`
+header (the preview is a form POST from the admin page), then
+`x-forwarded-host`/`-proto`, then `request.url`; the route's `img-src` reads
+the same value. Sent mail was never affected: only the preview rewrites.
+
+**Decisions.** No ADR. Every header value goes through `new URL(...).origin`
+and must be http(s), so a header cannot put anything but an origin into the
+CSP.
+
+**Tests.** `preview-images.test.ts` +3 (Origin wins, forwarded fallback,
+a hostile header falls back to the URL): 6/6. `tsc` and ESLint clean on the
+touched files.

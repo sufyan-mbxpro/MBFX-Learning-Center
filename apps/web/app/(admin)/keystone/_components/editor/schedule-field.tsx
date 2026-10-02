@@ -19,6 +19,7 @@ import { useTranslations } from "next-intl";
 import { Button } from "@repo/ui/components/button";
 import { DateTimePicker } from "@repo/ui/components/date-time-picker";
 import { Field, FieldError, FieldLabel } from "@repo/ui/components/field";
+import { toZonedInput, zonedInputAtHour } from "@repo/utils";
 
 export interface ScheduleFieldLabels {
   scheduleFor: string;
@@ -28,31 +29,25 @@ export interface ScheduleFieldLabels {
   presetClear: string;
 }
 
-/** `datetime-local` wants "YYYY-MM-DDTHH:mm" in LOCAL time, not an ISO string. */
-export function toLocalInput(date: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
 // Module scope, not the component body: these read the clock, and doing that
 // during render is exactly what react-hooks/purity forbids. They are only ever
-// CALLED from a click handler.
-function plusHour(): Date {
-  return new Date(Date.now() + 60 * 60 * 1000);
+// CALLED from a click handler. ADR-182: both are read in the SITE's timezone,
+// so "Tomorrow 9:00" is nine o'clock where the site says it is, not where the
+// editor happens to be sitting.
+function plusHour(): string {
+  return toZonedInput(new Date(Date.now() + 60 * 60 * 1000));
 }
 
-function atNineAmIn(days: number): Date {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  d.setHours(9, 0, 0, 0);
-  return d;
+function atNineAmIn(days: number): string {
+  return zonedInputAtHour(days, 9);
 }
 
 /**
- * `value` is the raw `datetime-local` string — local time, no zone. The
- * caller converts it to an instant at the boundary (`new Date(v).toISOString()`),
- * which is why there is no timezone picker here: the editor's own clock is the
- * zone, and ADR-071 lists a picker under "deliberately not built".
+ * `value` is the raw `datetime-local` string — a wall clock, no zone. The
+ * caller converts it to an instant at the boundary with `zonedInputToIso`
+ * (`@repo/utils`), which reads it in the site's timezone (ADR-182) — so there
+ * is still no timezone picker here; ADR-071 lists one under "deliberately not
+ * built".
  *
  * Presets are hours and days rather than minutes on purpose. Punctuality is
  * bounded by the readers' five-minute `cacheLife`, so offering a to-the-minute
@@ -76,7 +71,7 @@ export function ScheduleField({
   /** The inline message for this field, from the host's `useFieldErrors`. */
   error?: string;
 }) {
-  const preset = (fn: () => Date) => () => onChange(toLocalInput(fn()));
+  const preset = (fn: () => string) => () => onChange(fn());
   // The picker's own chrome, read here rather than threaded through the six
   // screens that build `labels` — the `AdminCombobox` arrangement, and the
   // reason those five keys are not in `ScheduleFieldLabels`.

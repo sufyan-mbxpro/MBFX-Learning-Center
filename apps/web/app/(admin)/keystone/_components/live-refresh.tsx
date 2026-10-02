@@ -18,6 +18,7 @@ import { useEffect, useSyncExternalStore, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@repo/ui/components/button";
+import { getSiteTimeZone } from "@repo/utils";
 
 const noopSubscribe = () => () => {};
 
@@ -40,7 +41,9 @@ export function LiveRefresh({
     () => true,
     () => false,
   );
-  const time = hydrated ? new Date(renderedAt).toLocaleTimeString() : null;
+  const time = hydrated
+    ? new Date(renderedAt).toLocaleTimeString(undefined, { timeZone: getSiteTimeZone() }) // ADR-182
+    : null;
 
   useEffect(() => {
     const refresh = () => {

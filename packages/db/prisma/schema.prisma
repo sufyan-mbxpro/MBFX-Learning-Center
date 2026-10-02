@@ -832,9 +832,9 @@ enum TranslationStatus {
   /// invented.
   ///
   /// ADR-159 (2026-09-26) replaced the rule this comment used to state:
-  /// machine translations ARE served to readers, on every read path, `?lang=`
-  /// included — but never INDEXED. `isIndexableTranslation` (@repo/core
-  /// `reading-languages.ts`) keeps them out of hreflang and the sitemap and
+  /// machine translations ARE served to readers, on every read path
+  /// — but never INDEXED. `isIndexableTranslation` (@repo/core
+  /// `translation-indexing.ts`) keeps them out of hreflang and the sitemap and
   /// sets the page's `noindex`, until a person's Save writes TRANSLATED. Only
   /// the translation job writes this member unattended (ADR-161 #2), and it
   /// never writes over any other status.

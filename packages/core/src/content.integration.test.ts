@@ -283,24 +283,65 @@ describe("glossary translation lifecycle — sourceHash OUTDATED flip on real ro
     expect(redirect.toPath).toBe("/glossary/spread-new");
     expect(redirect.statusCode).toBe(301);
 
-    // Non-default locale paths keep their prefix.
+  });
+
+  it("a non-default save ignores the submitted slug and copies the English one (ADR-181)", async () => {
+    const termId = await content.createGlossaryTerm(actor);
     await content.saveGlossaryTranslation(actor, {
       termId,
-      locale: "es",
-      term: "Spread",
-      slug: "diferencial",
+      locale: "en",
+      term: "Margin",
+      slug: "margin-adr181",
       simpleExplanation: "<p>x</p>",
     });
     await content.saveGlossaryTranslation(actor, {
       termId,
       locale: "es",
-      term: "Spread",
-      slug: "diferencial-v2",
+      term: "Margen",
+      slug: "margen",
       simpleExplanation: "<p>x</p>",
     });
+
+    const es = await db.glossaryTermTranslation.findUniqueOrThrow({
+      where: { termId_locale: { termId, locale: "es" } },
+    });
+    expect(es.slug).toBe("margin-adr181");
+    expect(await db.redirect.count({ where: { fromPath: "/es/glossary/margen" } })).toBe(0);
+  });
+
+  it("an English rename moves every language and writes a 301 per moved locale (ADR-181)", async () => {
+    const termId = await content.createGlossaryTerm(actor);
+    await content.saveGlossaryTranslation(actor, {
+      termId,
+      locale: "en",
+      term: "Leverage",
+      slug: "leverage-adr181",
+      simpleExplanation: "<p>x</p>",
+    });
+    await content.saveGlossaryTranslation(actor, {
+      termId,
+      locale: "es",
+      term: "Apalancamiento",
+      simpleExplanation: "<p>x</p>",
+    });
+    await content.saveGlossaryTranslation(actor, {
+      termId,
+      locale: "en",
+      term: "Leverage",
+      slug: "leverage-adr181-v2",
+      simpleExplanation: "<p>x</p>",
+    });
+
+    const es = await db.glossaryTermTranslation.findUniqueOrThrow({
+      where: { termId_locale: { termId, locale: "es" } },
+    });
+    expect(es.slug).toBe("leverage-adr181-v2");
     await expect(
-      db.redirect.findUniqueOrThrow({ where: { fromPath: "/es/glossary/diferencial" } }),
-    ).resolves.toMatchObject({ toPath: "/es/glossary/diferencial-v2" });
+      db.redirect.findUniqueOrThrow({ where: { fromPath: "/es/glossary/leverage-adr181" } }),
+    ).resolves.toMatchObject({ toPath: "/es/glossary/leverage-adr181-v2", statusCode: 301 });
+    await expect(
+      db.redirect.findUniqueOrThrow({ where: { fromPath: "/glossary/leverage-adr181" } }),
+    ).resolves.toMatchObject({ toPath: "/glossary/leverage-adr181-v2" });
   });
 });
 

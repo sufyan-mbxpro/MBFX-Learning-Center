@@ -33,7 +33,8 @@ import { RowSwitch } from "../../../_components/row-switch.tsx";
 import { useClientTable } from "../../../_hooks/use-client-table.ts";
 import { useFieldErrors } from "../../../_hooks/use-field-errors.ts";
 import { useServerAction } from "../../../_hooks/use-server-action.ts";
-import type { LocaleOption } from "../categories/category-controls.tsx";
+import { defaultLocaleOf, type LocaleOption } from "../categories/category-controls.tsx";
+import { SharedSlugField } from "../../../_components/editor/slug-field.tsx";
 import { HeaderActions } from "../../../_components/header-actions.tsx";
 
 export interface TagTranslationRow {
@@ -99,8 +100,12 @@ function TagEditDialog({
   labels: TagLabels;
 }) {
   const { run, pending } = useServerAction();
-  const defaultLocale = locales[0]?.code ?? "en";
+  const defaultLocale = defaultLocaleOf(locales);
   const [locale, setLocale] = useState(defaultLocale);
+  // ADR-181 #5: the slug is typed once, on the default locale; every other
+  // locale shows that one read-only and sends none.
+  const sharedSlug = locale !== defaultLocale;
+  const defaultSlug = tag?.translations.find((t) => t.locale === defaultLocale)?.slug ?? "";
   const [form, setForm] = useState<TagTranslationRow>(
     tag?.translations.find((t) => t.locale === defaultLocale) ?? EMPTY_TRANSLATION(defaultLocale),
   );
@@ -114,7 +119,12 @@ function TagEditDialog({
   // own schema: create sends the name alone, edit the translation.
   const createInput = { name: form.name.trim() };
   const saveInput = tag
-    ? { tagId: tag.id, locale, name: form.name.trim(), slug: form.slug || undefined }
+    ? {
+        tagId: tag.id,
+        locale,
+        name: form.name.trim(),
+        slug: sharedSlug ? undefined : form.slug || undefined,
+      }
     : null;
   const fields = useFieldErrors(
     saveInput ? saveArticleTagTranslationSchema : createArticleTagSchema,
@@ -169,16 +179,25 @@ function TagEditDialog({
             />
             <FieldError>{fields.error("name")}</FieldError>
           </Field>
-          {tag && (
-            <Field invalid={fields.invalid("slug")}>
-              <FieldLabel>{labels.slug}</FieldLabel>
-              <Input
-                value={form.slug}
-                onChange={(e) => setForm((f) => ({ ...f, slug: e.target.value }))}
+          {tag &&
+            (sharedSlug ? (
+              <SharedSlugField
+                label={labels.slug}
+                value={defaultSlug}
+                source={form.name}
+                previewPath={(slug) => `/${locale}/news/tag/${slug}`}
+                error={fields.error("slug")}
               />
-              <FieldError>{fields.error("slug")}</FieldError>
-            </Field>
-          )}
+            ) : (
+              <Field invalid={fields.invalid("slug")}>
+                <FieldLabel>{labels.slug}</FieldLabel>
+                <Input
+                  value={form.slug}
+                  onChange={(e) => setForm((f) => ({ ...f, slug: e.target.value }))}
+                />
+                <FieldError>{fields.error("slug")}</FieldError>
+              </Field>
+            ))}
         </FieldGroup>
         <DialogFooter>
           <Button variant="outline" onClick={() => changeOpen(false)} disabled={pending}>

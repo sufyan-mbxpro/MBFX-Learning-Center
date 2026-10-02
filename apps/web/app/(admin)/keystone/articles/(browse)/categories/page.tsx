@@ -1,6 +1,7 @@
 import { getTranslations } from "next-intl/server";
 import { loadArticleCategoriesAdmin } from "@repo/core";
 import { getAuthoringLocales } from "@repo/i18n";
+import { routing } from "@repo/i18n/routing";
 import { requireAnyPermission } from "@repo/rbac";
 import { CategoriesManager } from "./category-controls.tsx";
 
@@ -57,7 +58,11 @@ export default async function ArticleCategoriesPage() {
   return (
     <CategoriesManager
       categories={categories}
-      locales={locales.map((l) => ({ code: l.code, label: `${l.name} (${l.nativeName})` }))}
+      locales={locales.map((l) => ({
+        code: l.code,
+        label: `${l.name} (${l.nativeName})`,
+        isDefault: l.code === routing.defaultLocale,
+      }))}
       labels={labels}
     />
   );

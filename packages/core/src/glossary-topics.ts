@@ -15,7 +15,7 @@ import { pickTranslation, type LocaleFallbackInfo } from "@repo/i18n";
 import { htmlLead, htmlToText } from "@repo/utils";
 import type { Subject } from "@repo/rbac";
 import { syncReferences } from "./cms/references.ts";
-import { sanitizeRichText, slugify } from "./content.ts";
+import { createSlugRedirect, sanitizeRichText, slugify } from "./content.ts";
 // One-way edge: public-content.ts does not import this module, so the daily
 // rotation primitive is shared rather than duplicated (import-x/no-cycle).
 import { publicGlossaryTermWhere, termOfTheDayIndex } from "./public-content.ts";
@@ -24,9 +24,14 @@ import {
   INDEXABLE_TRANSLATION_STATUSES,
   advertisedAlternates,
   isIndexableTranslation,
-} from "./reading-languages.ts";
+} from "./translation-indexing.ts";
 import { hashGlossaryTopicSource, loadGlossaryTopicSource } from "./glossary-source.ts";
-import { afterSourceSave, enqueueEntityTranslations } from "./translation-queue.ts";
+import {
+  TRANSLATION_TABLES,
+  afterSourceSave,
+  enqueueEntityTranslations,
+} from "./translation-queue.ts";
+import { propagateSharedSlug, sharedSlugFor, type SlugMove } from "./shared-slug.ts";
 
 interface LocaleContext {
   locales: LocaleFallbackInfo[];
@@ -81,6 +86,12 @@ async function uniqueTopicSlug(locale: string, base: string, topicId: string): P
     slug = `${candidate}-${suffix}`;
     suffix += 1;
   }
+}
+
+/** Public path of a topic page — what a slug-change redirect points from and to. */
+function glossaryTopicPath(locale: string, defaultLocale: string, slug: string): string {
+  const prefix = locale === defaultLocale ? "" : `/${locale}`;
+  return `${prefix}/glossary/topics/${slug}`;
 }
 
 // ─── Admin ───────────────────────────────────────────────────
@@ -276,14 +287,24 @@ export async function duplicateGlossaryTopic(actor: Subject, topicId: string): P
 
   // After the row exists, because `uniqueTopicSlug` excludes a topic id and
   // there is no id to exclude until then. Sequential rather than parallel: two
-  // locales resolving at once could both settle on the same free slug.
+  // locales resolving at once could both settle on the same free slug. The
+  // English copy's slug is settled first and every language starts from it
+  // (ADR-181).
+  const { defaultLocale } = await localeContext();
+  const english = source.translations.find((t) => t.locale === defaultLocale);
+  const sharedBase = english
+    ? await uniqueTopicSlug(defaultLocale, `${english.slug}-copy`, copy.id)
+    : null;
   for (const t of source.translations) {
     await db.glossaryTopicTranslation.create({
       data: {
         topicId: copy.id,
         locale: t.locale,
         name: `${t.name} (copy)`,
-        slug: await uniqueTopicSlug(t.locale, `${t.slug}-copy`, copy.id),
+        slug:
+          t.locale === defaultLocale && sharedBase
+            ? sharedBase
+            : await uniqueTopicSlug(t.locale, sharedBase ?? `${t.slug}-copy`, copy.id),
         description: t.description,
         seoTitle: t.seoTitle,
         seoDescription: t.seoDescription,
@@ -355,11 +376,20 @@ export async function saveGlossaryTopic(actor: Subject, input: GlossaryTopicInpu
     : await loadGlossaryTopicSource(db, input.topicId, defaultLocale).then((s) =>
         s ? hashGlossaryTopicSource(s) : null,
       );
-  const slug = await uniqueTopicSlug(
+  // ADR-181: only the English row's typed slug counts; a translation copies
+  // it inside the transaction, and this derivation is its fallback when there
+  // is no English row to copy.
+  const typedSlug = await uniqueTopicSlug(
     input.locale,
     slugify(input.slug?.trim() || input.name),
     input.topicId,
   );
+  let slug = typedSlug;
+  let moves: SlugMove[] = [];
+  const existing = await db.glossaryTopicTranslation.findUnique({
+    where: { topicId_locale: { topicId: input.topicId, locale: input.locale } },
+    select: { slug: true },
+  });
 
   const meta: Prisma.GlossaryTopicUpdateInput = {};
   if (input.isActive !== undefined) meta.isActive = input.isActive;
@@ -370,7 +400,6 @@ export async function saveGlossaryTopic(actor: Subject, input: GlossaryTopicInpu
 
   const fields = {
     name: input.name,
-    slug,
     // security.md #8: sanitized server-side on save, regardless of what the
     // editor claims to have sent. This field became rich text in changes-18
     // PR 3; before that it was a plain caption and needed no gate.
@@ -395,12 +424,33 @@ export async function saveGlossaryTopic(actor: Subject, input: GlossaryTopicInpu
           : [],
       );
     }
+    const table = TRANSLATION_TABLES.glossary_topic;
+    if (!isSource) {
+      slug =
+        (await sharedSlugFor(tx, table, input.topicId, input.locale, defaultLocale)) ?? typedSlug;
+    }
     await tx.glossaryTopicTranslation.upsert({
       where: { topicId_locale: { topicId: input.topicId, locale: input.locale } },
-      update: fields,
-      create: { topicId: input.topicId, locale: input.locale, ...fields },
+      update: { ...fields, slug },
+      create: { topicId: input.topicId, locale: input.locale, ...fields, slug },
     });
+    if (isSource) moves = await propagateSharedSlug(tx, table, input.topicId, defaultLocale, slug);
   });
+
+  // Outside the transaction, as `saveGlossaryTerm` does: a failed redirect
+  // must not roll back a saved topic. One 301 for the row saved and one per
+  // language an English rename moved (ADR-181 #3).
+  const relocated: SlugMove[] =
+    existing && existing.slug !== slug
+      ? [{ locale: input.locale, previous: existing.slug, next: slug }, ...moves]
+      : moves;
+  for (const move of relocated) {
+    await createSlugRedirect(
+      glossaryTopicPath(move.locale, defaultLocale, move.previous),
+      glossaryTopicPath(move.locale, defaultLocale, move.next),
+      actor.id,
+    );
+  }
 
   await recordAudit({
     userId: actor.id,

@@ -88,6 +88,7 @@ import { useFieldErrors } from "../../_hooks/use-field-errors.ts";
 import { useServerAction } from "../../_hooks/use-server-action.ts";
 import type { EditorAi } from "../../_lib/editor-ai.ts";
 import { liveHref, storedSlug } from "../../_lib/live-href.ts";
+import { SharedSlugField } from "../../_components/editor/slug-field.tsx";
 import { TranslationControls } from "../../_components/editor/translation-controls.tsx";
 import {
   holdsHumanText,
@@ -282,12 +283,16 @@ export function GlossaryEditor({
   // the field, which is what the article editor does — filling it would turn
   // a derived value into a typed one, and then renaming the term would stop
   // moving the URL with it.
+  //
+  // ADR-181 #5: the slug is typed once, on the default locale's tab; every
+  // other tab shows that saved slug read-only and its save sends none.
+  const sharedSlug = locale !== defaultLocale;
+  const defaultSlug = storedSlug(term.translations, defaultLocale);
   const derivedSlug = useMemo(
-    () => draft.slug.trim() || slugify(draft.term),
-    [draft.slug, draft.term],
+    () => (sharedSlug ? defaultSlug : draft.slug.trim()) || slugify(draft.term),
+    [sharedSlug, defaultSlug, draft.slug, draft.term],
   );
   const publicPath = useMemo(() => `/${locale}/glossary/${derivedSlug}`, [locale, derivedSlug]);
-  const defaultSlug = storedSlug(term.translations, defaultLocale);
   const viewLiveHref = liveHref(`/glossary/${defaultSlug}`, locale, defaultLocale);
 
   // Exactly what the action receives — so the inline messages come from the
@@ -305,7 +310,7 @@ export function GlossaryEditor({
     translation: {
       locale,
       term: draft.term.trim(),
-      slug: draft.slug.trim() === "" ? undefined : draft.slug.trim(),
+      slug: sharedSlug || draft.slug.trim() === "" ? undefined : draft.slug.trim(),
       // changes-46 #1: the one body, and the three retired columns cleared —
       // their words are already in `details`, merged when the editor opened.
       simpleExplanation: draft.details,
@@ -495,19 +500,30 @@ export function GlossaryEditor({
               />
             </Field>
 
-            <Field
-              label={labels.slugLabel}
-              hint={`${labels.termUrl}: ${publicPath}`}
-              error={form.error("translation.slug")}
-            >
-              <Input
-                value={draft.slug}
-                placeholder={slugify(draft.term)}
+            {sharedSlug ? (
+              <SharedSlugField
+                label={labels.slugLabel}
+                value={defaultSlug}
+                source={draft.term}
+                previewPath={(slug) => `/${locale}/glossary/${slug}`}
+                error={form.error("translation.slug")}
                 className="font-mono text-xs"
-                disabled={!canUpdate}
-                onChange={(e) => setDraft({ slug: e.target.value })}
               />
-            </Field>
+            ) : (
+              <Field
+                label={labels.slugLabel}
+                hint={`${labels.termUrl}: ${publicPath}`}
+                error={form.error("translation.slug")}
+              >
+                <Input
+                  value={draft.slug}
+                  placeholder={slugify(draft.term)}
+                  className="font-mono text-xs"
+                  disabled={!canUpdate}
+                  onChange={(e) => setDraft({ slug: e.target.value })}
+                />
+              </Field>
+            )}
 
             {/* ONE body with the Visual / HTML tabs (changes-46 #1). Its first
                 paragraph is the definition every listing prints (`htmlLead`),

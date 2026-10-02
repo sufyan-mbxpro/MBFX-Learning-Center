@@ -13,7 +13,11 @@ import { can, type Subject } from "@repo/rbac";
 import { parseVideoUrl } from "@repo/utils";
 import { hashArticleSource, loadArticleSource } from "./article-source.ts";
 import { syncReferences } from "./cms/references.ts";
-import { afterSourceSave, enqueueEntityTranslations } from "./translation-queue.ts";
+import {
+  afterSourceSave,
+  enqueueEntityTranslations,
+  TRANSLATION_TABLES,
+} from "./translation-queue.ts";
 import {
   hashArticleCategorySource,
   hashArticleTagSource,
@@ -35,6 +39,9 @@ import type {
   UpdateArticleMetaInput,
 } from "@repo/contracts";
 import { recordAudit } from "./index.ts";
+// After the barrel: shared-slug reaches translation-engine, which must not be
+// the first module of the translation graph to evaluate (an init-order cycle).
+import { propagateSharedSlug, sharedSlugFor, type SlugMove } from "./shared-slug.ts";
 import {
   PublishPermissionError,
   ScheduleInPastError,
@@ -149,6 +156,22 @@ async function createSlugRedirect(
     update: { toPath, isActive: true },
     create: { fromPath, toPath, statusCode: 301, createdBy: actorId },
   });
+}
+
+/** ADR-181 #3: one 301 for each sibling locale an English rename moved. */
+async function redirectSlugMoves(
+  moves: SlugMove[],
+  pathFor: (locale: string, defaultLocale: string, slug: string) => string,
+  defaultLocale: string,
+  actorId: string,
+): Promise<void> {
+  for (const move of moves) {
+    await createSlugRedirect(
+      pathFor(move.locale, defaultLocale, move.previous),
+      pathFor(move.locale, defaultLocale, move.next),
+      actorId,
+    );
+  }
 }
 
 // ─── Article lifecycle ───────────────────────────────────────
@@ -282,8 +305,8 @@ export async function saveArticleTranslation(
 
   const defaultLocale = await defaultLocaleCode();
   const prepared = await prepareArticleTranslation(actor, input, defaultLocale);
-  await db.$transaction((tx) => applyArticleTranslation(tx, input, prepared));
-  await finishArticleTranslation(actor, input, prepared, defaultLocale);
+  const moves = await db.$transaction((tx) => applyArticleTranslation(tx, input, prepared));
+  await finishArticleTranslation(actor, input, prepared, defaultLocale, moves);
 
   const slug = prepared.slug;
   await recordAudit({
@@ -301,9 +324,10 @@ export async function saveArticleTranslation(
  * middle one inside a shared transaction (changes-07 §4.2):
  *
  *   prepare — reads and pure computation (sanitize, slug, hashes). No writes.
- *   apply   — every write, transactional.
+ *   apply   — every write, transactional; an English save also moves every
+ *             sibling's slug (ADR-181) and returns what moved.
  *   finish  — the after-effects that are deliberately NOT in the transaction:
- *             the 301 redirect row and the sibling-OUTDATED sweep.
+ *             the 301 redirect rows and the sibling-OUTDATED sweep.
  *
  * Keeping finish outside preserves the pre-existing behaviour exactly: a
  * failure to write a redirect has never rolled back a saved translation, and
@@ -324,8 +348,20 @@ async function prepareArticleTranslation(
   defaultLocale: string,
 ): Promise<PreparedTranslation> {
   const body = input.body ? sanitizeRichText(input.body) : null;
-  const slug = slugify(input.slug?.trim() || input.title);
   const isSource = input.locale === defaultLocale;
+  // ADR-181 #2: only the English tab names the slug. Another locale copies it
+  // and ignores what was submitted; with no English row yet there is nothing
+  // to copy, so the old derivation stands.
+  const derived = slugify(input.slug?.trim() || input.title);
+  const slug = isSource
+    ? derived
+    : ((await sharedSlugFor(
+        db,
+        TRANSLATION_TABLES.article,
+        input.articleId,
+        input.locale,
+        defaultLocale,
+      )) ?? derived);
 
   const existing = await db.articleTranslation.findUnique({
     where: { articleId_locale: { articleId: input.articleId, locale: input.locale } },
@@ -408,7 +444,7 @@ async function applyArticleTranslation(
   tx: Prisma.TransactionClient,
   input: SaveArticleTranslationInput,
   prepared: PreparedTranslation,
-): Promise<void> {
+): Promise<SlugMove[]> {
   const { locale: _locale, ...updateFields } = prepared.fields;
   const saved = await tx.articleTranslation.upsert({
     where: { articleId_locale: { articleId: input.articleId, locale: input.locale } },
@@ -439,6 +475,17 @@ async function applyArticleTranslation(
         : null,
     ].filter((r) => r !== null),
   );
+
+  // ADR-181 #3: an English rename moves every language in this transaction.
+  return prepared.isSource
+    ? propagateSharedSlug(
+        tx,
+        TRANSLATION_TABLES.article,
+        input.articleId,
+        input.locale,
+        prepared.slug,
+      )
+    : [];
 }
 
 async function finishArticleTranslation(
@@ -446,6 +493,7 @@ async function finishArticleTranslation(
   input: SaveArticleTranslationInput,
   prepared: PreparedTranslation,
   defaultLocale: string,
+  moves: SlugMove[],
 ): Promise<void> {
   if (prepared.previousSlug !== null && prepared.previousSlug !== prepared.slug) {
     await createSlugRedirect(
@@ -454,6 +502,7 @@ async function finishArticleTranslation(
       actor.id,
     );
   }
+  await redirectSlugMoves(moves, articlePath, defaultLocale, actor.id);
 
   if (prepared.isSource) await afterSourceChange(input.articleId, defaultLocale);
 }
@@ -552,12 +601,12 @@ export async function saveArticle(actor: Subject, input: SaveArticleInput): Prom
   const defaultLocale = await defaultLocaleCode();
   const prepared = await prepareArticleTranslation(actor, input.translation, defaultLocale);
 
-  await db.$transaction(async (tx) => {
+  const moves = await db.$transaction(async (tx) => {
     await applyArticleMeta(tx, input.articleId, input.meta);
-    await applyArticleTranslation(tx, input.translation, prepared);
+    return applyArticleTranslation(tx, input.translation, prepared);
   });
 
-  await finishArticleTranslation(actor, input.translation, prepared, defaultLocale);
+  await finishArticleTranslation(actor, input.translation, prepared, defaultLocale, moves);
 
   const { tagIds, relatedArticleIds, ...meta } = input.meta;
   await recordAudit({
@@ -636,7 +685,7 @@ export async function quickUpdateArticle(
       ? slugify(input.slug?.trim() || input.title || existing?.title || "")
       : undefined;
 
-  await db.$transaction(async (tx) => {
+  const moves = await db.$transaction(async (tx) => {
     const articleData = {
       ...(input.categoryId !== undefined ? { categoryId: input.categoryId } : {}),
       ...(input.isFeatured !== undefined ? { isFeatured: input.isFeatured } : {}),
@@ -653,6 +702,10 @@ export async function quickUpdateArticle(
         },
       });
     }
+    // ADR-181 #3: the English slug is every language's slug.
+    return existing && nextSlug !== undefined && nextSlug !== existing.slug
+      ? propagateSharedSlug(tx, TRANSLATION_TABLES.article, articleId, defaultLocale, nextSlug)
+      : [];
   });
 
   if (existing && nextSlug !== undefined && nextSlug !== existing.slug) {
@@ -662,6 +715,7 @@ export async function quickUpdateArticle(
       actor.id,
     );
   }
+  await redirectSlugMoves(moves, articlePath, defaultLocale, actor.id);
   // A title edited here is the English source changing: the same sweep and
   // enqueue a full save does. It used to skip both, leaving translations of
   // the old title marked current.
@@ -785,6 +839,13 @@ export async function duplicateArticle(actor: Subject, articleId: string): Promi
   });
   assertKindPermission(actor, source.kind, "create");
 
+  // ADR-181: every row of the copy carries the copy's English slug. The
+  // suffix is computed once, so no two rows can drift by a timestamp tick.
+  const defaultLocale = await defaultLocaleCode();
+  const suffix = `-copy-${Date.now().toString(36)}`;
+  const sharedSource = source.translations.find((t) => t.locale === defaultLocale)?.slug ?? null;
+  const copySlug = (own: string) => `${sharedSource ?? own}${suffix}`.slice(0, 255);
+
   const copy = await db.$transaction(async (tx) => {
     const created = await tx.article.create({
       data: {
@@ -803,7 +864,7 @@ export async function duplicateArticle(actor: Subject, articleId: string): Promi
             locale: t.locale,
             title: t.title,
             // Uniqueness without a lookup loop; editable before publish anyway.
-            slug: `${t.slug}-copy-${Date.now().toString(36)}`.slice(0, 255),
+            slug: copySlug(t.slug),
             excerpt: t.excerpt,
             body: t.body,
             seoTitle: t.seoTitle,
@@ -1212,11 +1273,21 @@ export async function saveArticleCategoryTranslation(
   input: SaveArticleCategoryTranslationInput,
 ): Promise<void> {
   const defaultLocale = await defaultLocaleCode();
-  const slug = slugify(input.slug?.trim() || input.name);
   const existing = await db.articleCategoryTranslation.findUnique({
     where: { categoryId_locale: { categoryId: input.categoryId, locale: input.locale } },
   });
   const isSource = input.locale === defaultLocale;
+  // ADR-181 #2: a non-English save copies the English slug, whatever was sent.
+  const derived = slugify(input.slug?.trim() || input.name);
+  const slug = isSource
+    ? derived
+    : ((await sharedSlugFor(
+        db,
+        TRANSLATION_TABLES.article_category,
+        input.categoryId,
+        input.locale,
+        defaultLocale,
+      )) ?? derived);
   // A person's save is TRANSLATED and records the English it was made from
   // (ADR-161); without the status, saving over a machine row left it machine.
   const translatedFrom = isSource
@@ -1233,10 +1304,22 @@ export async function saveArticleCategoryTranslation(
     translationStatus: TranslationStatus.TRANSLATED,
     ...(isSource ? {} : { sourceHash: translatedFrom }),
   };
-  await db.articleCategoryTranslation.upsert({
-    where: { categoryId_locale: { categoryId: input.categoryId, locale: input.locale } },
-    update: fields,
-    create: { categoryId: input.categoryId, locale: input.locale, ...fields },
+  const moves = await db.$transaction(async (tx) => {
+    await tx.articleCategoryTranslation.upsert({
+      where: { categoryId_locale: { categoryId: input.categoryId, locale: input.locale } },
+      update: fields,
+      create: { categoryId: input.categoryId, locale: input.locale, ...fields },
+    });
+    // ADR-181 #3: an English rename moves every language with it.
+    return isSource
+      ? propagateSharedSlug(
+          tx,
+          TRANSLATION_TABLES.article_category,
+          input.categoryId,
+          defaultLocale,
+          slug,
+        )
+      : [];
   });
   if (existing && existing.slug !== slug) {
     await createSlugRedirect(
@@ -1245,6 +1328,7 @@ export async function saveArticleCategoryTranslation(
       actor.id,
     );
   }
+  await redirectSlugMoves(moves, articleCategoryPath, defaultLocale, actor.id);
   await recordAudit({
     userId: actor.id,
     action: "articleCategories.saveTranslation",
@@ -1354,11 +1438,21 @@ export async function saveArticleTagTranslation(
   input: SaveArticleTagTranslationInput,
 ): Promise<void> {
   const defaultLocale = await defaultLocaleCode();
-  const slug = slugify(input.slug?.trim() || input.name);
   const existing = await db.articleTagTranslation.findUnique({
     where: { tagId_locale: { tagId: input.tagId, locale: input.locale } },
   });
   const isSource = input.locale === defaultLocale;
+  // ADR-181 #2: a non-English save copies the English slug, whatever was sent.
+  const derived = slugify(input.slug?.trim() || input.name);
+  const slug = isSource
+    ? derived
+    : ((await sharedSlugFor(
+        db,
+        TRANSLATION_TABLES.article_tag,
+        input.tagId,
+        input.locale,
+        defaultLocale,
+      )) ?? derived);
   const translatedFrom = isSource
     ? null
     : await loadArticleTagSource(db, input.tagId, defaultLocale).then((s) =>
@@ -1370,10 +1464,16 @@ export async function saveArticleTagTranslation(
     translationStatus: TranslationStatus.TRANSLATED,
     ...(isSource ? {} : { sourceHash: translatedFrom }),
   };
-  await db.articleTagTranslation.upsert({
-    where: { tagId_locale: { tagId: input.tagId, locale: input.locale } },
-    update: fields,
-    create: { tagId: input.tagId, locale: input.locale, ...fields },
+  const moves = await db.$transaction(async (tx) => {
+    await tx.articleTagTranslation.upsert({
+      where: { tagId_locale: { tagId: input.tagId, locale: input.locale } },
+      update: fields,
+      create: { tagId: input.tagId, locale: input.locale, ...fields },
+    });
+    // ADR-181 #3: an English rename moves every language with it.
+    return isSource
+      ? propagateSharedSlug(tx, TRANSLATION_TABLES.article_tag, input.tagId, defaultLocale, slug)
+      : [];
   });
   if (existing && existing.slug !== slug) {
     await createSlugRedirect(
@@ -1382,6 +1482,7 @@ export async function saveArticleTagTranslation(
       actor.id,
     );
   }
+  await redirectSlugMoves(moves, articleTagPath, defaultLocale, actor.id);
   await recordAudit({
     userId: actor.id,
     action: "articleTags.saveTranslation",

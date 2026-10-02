@@ -8,10 +8,8 @@ describe("liveHref", () => {
     expect(liveHref("/news/pips", "en", "en")).toBe("/news/pips");
   });
 
-  it("opens any other locale as a reading view on the default page, never /es/…", () => {
-    expect(liveHref("/learn/forex/videos/pips", "ar", "en")).toBe(
-      "/learn/forex/videos/pips?lang=ar",
-    );
+  it("opens any other locale at the shared slug under its own prefix (ADR-181)", () => {
+    expect(liveHref("/learn/forex/videos/pips", "ar", "en")).toBe("/ar/learn/forex/videos/pips");
   });
 });
 

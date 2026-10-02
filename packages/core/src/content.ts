@@ -15,10 +15,12 @@ import { can, type Subject } from "@repo/rbac";
 import { parseVideoEmbedUrl, slugify } from "@repo/utils";
 import { recordAudit } from "./index.ts";
 import {
+  TRANSLATION_TABLES,
   afterSourceSave,
   enqueueEntityTranslations,
   type TranslatableEntityType,
 } from "./translation-queue.ts";
+import { propagateSharedSlug, sharedSlugFor, type SlugMove } from "./shared-slug.ts";
 import { hashGlossaryTermSource, loadGlossaryTermSource } from "./glossary-source.ts";
 
 // ─── Status machine ──────────────────────────────────────────
@@ -604,7 +606,9 @@ export interface SaveGlossaryTermInput {
  *    sibling translation whose stored hash no longer matches → OUTDATED;
  *  - saving a NON-default locale stamps the current source hash and marks the
  *    row TRANSLATED;
- *  - a slug change writes a 301 Redirect row for the old public path.
+ *  - a slug change writes a 301 Redirect row for the old public path;
+ *  - the English row owns the slug (ADR-181): a non-default save ignores the
+ *    submitted one and copies it, and an English rename moves every sibling.
  *
  * The redirect is written AFTER the transaction commits, deliberately. It is a
  * separate aggregate, and a failed redirect upsert must not roll back a saved
@@ -622,10 +626,12 @@ export async function saveGlossaryTerm(
     "en";
 
   const clean = cleanGlossaryProse(translation);
-  const slug = slugify(translation.slug?.trim() || translation.term);
-  // D27: `/glossary/topics` is a real route, so a term cannot claim that slug.
-  if (isReservedGlossarySlug(slug)) throw new ReservedGlossarySlugError(slug);
   const isSource = translation.locale === defaultLocale;
+  // Only consulted for the English row, or a translation with no English to
+  // copy (ADR-181 #2); the final slug is settled inside the transaction.
+  const typedSlug = slugify(translation.slug?.trim() || translation.term);
+  let slug = typedSlug;
+  let moves: SlugMove[] = [];
 
   const existing = await db.glossaryTermTranslation.findUnique({
     where: { termId_locale: { termId, locale: translation.locale } },
@@ -640,7 +646,6 @@ export async function saveGlossaryTerm(
 
   const translationData = {
     term: translation.term,
-    slug,
     ...clean,
     // `faq` is `Json?`, and Prisma reads `undefined` as "leave this column
     // alone". An empty ARRAY is not the same thing: it is the honest
@@ -671,11 +676,20 @@ export async function saveGlossaryTerm(
       await tx.glossaryTerm.update({ where: { id: termId }, data: metaData });
     }
 
+    const table = TRANSLATION_TABLES.glossary_term;
+    if (!isSource) {
+      slug =
+        (await sharedSlugFor(tx, table, termId, translation.locale, defaultLocale)) ?? typedSlug;
+    }
+    // D27: `/glossary/topics` is a real route, so a term cannot claim that slug.
+    if (isReservedGlossarySlug(slug)) throw new ReservedGlossarySlugError(slug);
+
     await tx.glossaryTermTranslation.upsert({
       where: { termId_locale: { termId, locale: translation.locale } },
-      update: translationData,
-      create: { termId, locale: translation.locale, ...translationData },
+      update: { ...translationData, slug },
+      create: { termId, locale: translation.locale, ...translationData, slug },
     });
+    if (isSource) moves = await propagateSharedSlug(tx, table, termId, defaultLocale, slug);
   });
 
   // Source edit: a person's translation whose English moved on becomes
@@ -698,6 +712,14 @@ export async function saveGlossaryTerm(
     await createSlugRedirect(
       glossaryTermPath(translation.locale, defaultLocale, existing.slug),
       glossaryTermPath(translation.locale, defaultLocale, slug),
+      actor.id,
+    );
+  }
+  // ADR-181 #3: every language the English rename moved gets its own 301.
+  for (const move of moves) {
+    await createSlugRedirect(
+      glossaryTermPath(move.locale, defaultLocale, move.previous),
+      glossaryTermPath(move.locale, defaultLocale, move.next),
       actor.id,
     );
   }
@@ -813,9 +835,23 @@ export async function duplicateGlossaryTerm(actor: Subject, termId: string): Pro
 
   // Resolved before the transaction: the loop polls the table, and holding a
   // write transaction open across it blocks every other editor's save.
+  // ADR-181: the copy's English slug is the one every language carries, so
+  // it is settled first and the others start from it.
+  const defaultLocale =
+    (await db.locale.findFirst({ where: { isDefault: true }, select: { code: true } }))?.code ??
+    "en";
+  const english = source.translations.find((t) => t.locale === defaultLocale);
+  const sharedBase = english
+    ? await uniqueGlossarySlug(defaultLocale, `${english.slug}-copy`)
+    : null;
   const slugs = new Map<string, string>();
   for (const t of source.translations) {
-    slugs.set(t.locale, await uniqueGlossarySlug(t.locale, `${t.slug}-copy`));
+    slugs.set(
+      t.locale,
+      t.locale === defaultLocale && sharedBase
+        ? sharedBase
+        : await uniqueGlossarySlug(t.locale, sharedBase ?? `${t.slug}-copy`),
+    );
   }
 
   const copy = await db.glossaryTerm.create({

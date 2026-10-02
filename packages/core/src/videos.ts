@@ -60,14 +60,13 @@ import {
   videoTopicPath,
 } from "./content.ts";
 import { recordAudit } from "./index.ts";
-import { loadLocaleMeta } from "./locale-meta.ts";
 import {
   INDEXABLE_TRANSLATION_STATUSES,
-  applyReadingLocale,
   advertisedAlternates,
+  contentLanguage,
   isIndexableTranslation,
-  type ReadingView,
-} from "./reading-languages.ts";
+  type ContentLanguageView,
+} from "./translation-indexing.ts";
 import { translatedLabel } from "./learn-source.ts";
 import {
   hashVideoCategorySource,
@@ -75,7 +74,12 @@ import {
   loadVideoCategorySource,
   loadVideoTopicSource,
 } from "./video-source.ts";
-import { afterSourceSave, enqueueEntityTranslations } from "./translation-queue.ts";
+import {
+  TRANSLATION_TABLES,
+  afterSourceSave,
+  enqueueEntityTranslations,
+} from "./translation-queue.ts";
+import { propagateSharedSlug, sharedSlugFor, type SlugMove } from "./shared-slug.ts";
 
 interface LocaleContext {
   locales: LocaleFallbackInfo[];
@@ -519,11 +523,16 @@ export async function saveVideoTopic(actor: Subject, input: VideoTopicInput): Pr
   const locale = input.translation.locale;
   const isSource = locale === defaultLocale;
 
-  const slug = await uniqueTopicSlug(
+  // ADR-181: only the English row's typed slug counts; a translation copies
+  // it inside the transaction, and this derivation is its fallback when there
+  // is no English row to copy.
+  const typedSlug = await uniqueTopicSlug(
     locale,
     slugify(input.translation.slug?.trim() || input.translation.title),
     input.topicId,
   );
+  let slug = typedSlug;
+  let moves: SlugMove[] = [];
   const existing = await db.videoTopicTranslation.findUnique({
     where: { topicId_locale: { topicId: input.topicId, locale } },
     select: { slug: true },
@@ -565,7 +574,6 @@ export async function saveVideoTopic(actor: Subject, input: VideoTopicInput): Pr
 
   const fields = {
     title: input.translation.title,
-    slug,
     summary: input.translation.summary ?? null,
     content,
     seoTitle: input.translation.seoTitle ?? null,
@@ -581,11 +589,16 @@ export async function saveVideoTopic(actor: Subject, input: VideoTopicInput): Pr
 
   await db.$transaction(async (tx) => {
     await tx.videoTopic.update({ where: { id: input.topicId }, data: meta });
+    const table = TRANSLATION_TABLES.video_topic;
+    if (!isSource) {
+      slug = (await sharedSlugFor(tx, table, input.topicId, locale, defaultLocale)) ?? typedSlug;
+    }
     await tx.videoTopicTranslation.upsert({
       where: { topicId_locale: { topicId: input.topicId, locale } },
-      update: fields,
-      create: { topicId: input.topicId, locale, ...fields },
+      update: { ...fields, slug },
+      create: { topicId: input.topicId, locale, ...fields, slug },
     });
+    if (isSource) moves = await propagateSharedSlug(tx, table, input.topicId, defaultLocale, slug);
 
     const keptVideoIds = input.videos.flatMap((v) => (v.id ? [v.id] : []));
     await tx.videoTopicVideo.deleteMany({
@@ -658,6 +671,16 @@ export async function saveVideoTopic(actor: Subject, input: VideoTopicInput): Pr
       videoTopicPath(locale, defaultLocale, track, slug),
       actor.id,
     );
+  }
+  // ADR-181 #3: every language the English rename moved gets its own 301.
+  if (previousTrack && track) {
+    for (const move of moves) {
+      await createSlugRedirect(
+        videoTopicPath(move.locale, defaultLocale, previousTrack, move.previous),
+        videoTopicPath(move.locale, defaultLocale, track, move.next),
+        actor.id,
+      );
+    }
   }
 
   await recordAudit({
@@ -762,11 +785,14 @@ export async function saveVideoCategory(
       })
     ).id;
 
-  const slug = await uniqueCategorySlug(
+  // ADR-181: as `saveVideoTopic` — a translation copies the English slug.
+  const typedSlug = await uniqueCategorySlug(
     locale,
     slugify(input.translation.slug?.trim() || input.translation.name),
     categoryId,
   );
+  let slug = typedSlug;
+  let moves: SlugMove[] = [];
   const existing = await db.videoCategoryTranslation.findUnique({
     where: { categoryId_locale: { categoryId, locale } },
     select: { slug: true },
@@ -782,7 +808,6 @@ export async function saveVideoCategory(
       );
   const fields = {
     name: input.translation.name,
-    slug,
     description: input.translation.description ?? null,
     seoTitle: input.translation.seoTitle ?? null,
     seoDescription: input.translation.seoDescription ?? null,
@@ -799,29 +824,41 @@ export async function saveVideoCategory(
         await tx.videoCategory.update({ where: { id: categoryId }, data: meta });
       }
     }
+    const table = TRANSLATION_TABLES.video_category;
+    if (!isSource) {
+      slug = (await sharedSlugFor(tx, table, categoryId, locale, defaultLocale)) ?? typedSlug;
+    }
     await tx.videoCategoryTranslation.upsert({
       where: { categoryId_locale: { categoryId, locale } },
-      update: fields,
-      create: { categoryId, locale, ...fields },
+      update: { ...fields, slug },
+      create: { categoryId, locale, ...fields, slug },
     });
+    if (isSource) moves = await propagateSharedSlug(tx, table, categoryId, defaultLocale, slug);
   });
 
   // A category page lives under every track it has topics in, so a rename
   // relocates as many URLs as there are tracks. Writing one redirect per track
   // is the honest cost of ADR-068 §1's decision that a category is taxonomy
   // rather than address — the page exists at each of them.
-  if (existing && existing.slug !== slug) {
+  // ADR-181 #3: the languages an English rename moved relocate the same way.
+  const relocated: SlugMove[] =
+    existing && existing.slug !== slug
+      ? [{ locale, previous: existing.slug, next: slug }, ...moves]
+      : moves;
+  if (relocated.length > 0) {
     const tracks = await db.videoTopic.findMany({
       where: { categoryId, ...publicVideoWhere() },
       select: { track: true },
       distinct: ["track"],
     });
-    for (const { track } of tracks) {
-      await createSlugRedirect(
-        videoCategoryPath(locale, defaultLocale, track, existing.slug),
-        videoCategoryPath(locale, defaultLocale, track, slug),
-        actor.id,
-      );
+    for (const move of relocated) {
+      for (const { track } of tracks) {
+        await createSlugRedirect(
+          videoCategoryPath(move.locale, defaultLocale, track, move.previous),
+          videoCategoryPath(move.locale, defaultLocale, track, move.next),
+          actor.id,
+        );
+      }
     }
   }
 
@@ -989,13 +1026,9 @@ export async function loadVideoTopicBySlug(
   locale: string,
   track: string,
   slug: string,
-  readingLocale?: string,
 ): Promise<PublicVideoTopicView | null> {
   if (!trackKeyOf(track)) return null;
-  const [{ locales, defaultLocale }, known] = await Promise.all([
-    localeContext(),
-    loadLocaleMeta(),
-  ]);
+  const { locales, defaultLocale } = await localeContext();
 
   const match = await db.videoTopicTranslation.findFirst({
     where: { slug, topic: { ...publicVideoWhere(), track } },
@@ -1046,15 +1079,6 @@ export async function loadVideoTopicBySlug(
 
   const t = pickTranslation(row.translations, locale, defaultLocale, locales);
   if (!t) return null;
-  // ADR-127: `?lang=` swaps the topic's own words; `t` still owns the address.
-  const { picked, ...reading } = applyReadingLocale(
-    row.translations,
-    t,
-    readingLocale,
-    known,
-    locale,
-  );
-  const words = picked ?? t;
   const c = row.category
     ? pickTranslation(row.category.translations, locale, defaultLocale, locales)
     : null;
@@ -1067,9 +1091,9 @@ export async function loadVideoTopicBySlug(
   return {
     id: row.id,
     slug: t.slug,
-    title: words.title,
-    summary: words.summary,
-    content: words.content,
+    title: t.title,
+    summary: t.summary,
+    content: t.content,
     track: row.track,
     category: c ? { slug: c.slug, name: c.name } : null,
     coverUrl: row.coverAssetId ? (urls.get(row.coverAssetId) ?? null) : null,
@@ -1079,26 +1103,25 @@ export async function loadVideoTopicBySlug(
     }),
     links: row.links.flatMap((l) => {
       // ADR-161 #8: the label in the words' locale, keyed by its English text.
-      const label =
-        words.locale === defaultLocale ? l.label : translatedLabel(l.label, words.linkLabels);
+      const label = t.locale === defaultLocale ? l.label : translatedLabel(l.label, t.linkLabels);
       const resolved = resolveLink({ ...l, label: label ?? l.label });
       return resolved ? [resolved] : [];
     }),
-    seoTitle: words.seoTitle,
-    seoDescription: words.seoDescription,
+    seoTitle: t.seoTitle,
+    seoDescription: t.seoDescription,
     publishedAt: row.publishedAt,
     updatedAt: row.updatedAt,
     // ADR-159 #2: machine-written words at their own URL are served, not indexed.
     noIndex: !isIndexableTranslation(t, defaultLocale),
     // hreflang (ADR-164 #5): only translations a person approved.
     alternates: advertisedAlternates(row.translations, defaultLocale),
-    ...reading,
+    ...contentLanguage(t.locale),
   };
 }
 
-/** A topic as its public page reads it: the contract view plus ADR-127's reading fields. */
+/** A topic as its public page reads it: the contract view plus its words' language. */
 export type PublicVideoTopicView = VideoTopicView &
-  ReadingView & {
+  ContentLanguageView & {
     /** The words at this URL are machine-written, not yet saved by a person. */
     noIndex: boolean;
     /** Indexable translations, for hreflang (ADR-164 #5). */
@@ -1109,12 +1132,11 @@ export async function getVideoTopicBySlug(
   locale: string,
   track: string,
   slug: string,
-  readingLocale?: string,
 ): Promise<PublicVideoTopicView | null> {
   "use cache";
   cacheTag("content");
   cacheLife({ revalidate: 300 });
-  return loadVideoTopicBySlug(locale, track, slug, readingLocale);
+  return loadVideoTopicBySlug(locale, track, slug);
 }
 
 /**

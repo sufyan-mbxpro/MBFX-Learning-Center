@@ -88,6 +88,7 @@ import { useFieldErrors } from "../../../_hooks/use-field-errors.ts";
 import { useServerAction } from "../../../_hooks/use-server-action.ts";
 import type { EditorAi } from "../../../_lib/editor-ai.ts";
 import { liveHref, storedSlug } from "../../../_lib/live-href.ts";
+import { SharedSlugField } from "../../../_components/editor/slug-field.tsx";
 import { TranslationControls } from "../../../_components/editor/translation-controls.tsx";
 import {
   holdsHumanText,
@@ -281,6 +282,9 @@ export function LessonEditor({
     [locale, lesson.courseTrack, lesson.courseSlug, draft.slug],
   );
   const defaultSlug = storedSlug(lesson.translations, defaultLocale);
+  // ADR-181 #5: the slug is typed once, on the default locale's tab; every
+  // other tab shows that saved slug read-only and its save sends none.
+  const sharedSlug = locale !== defaultLocale;
   const viewLiveHref = liveHref(
     `/learn/${lesson.courseTrack}/${lesson.courseSlug}/${defaultSlug}`,
     locale,
@@ -307,7 +311,7 @@ export function LessonEditor({
     translation: {
       locale,
       title: draft.title.trim(),
-      slug: draft.slug.trim() === "" ? undefined : draft.slug.trim(),
+      slug: sharedSlug || draft.slug.trim() === "" ? undefined : draft.slug.trim(),
       summary: draft.summary.trim() === "" ? null : draft.summary.trim(),
       content: draft.content.trim() === "" ? null : draft.content,
       learningObjectives: cleanObjectives(draft.learningObjectives),
@@ -508,17 +512,29 @@ export function LessonEditor({
               />
             </Field>
 
-            <Field
-              label={labels.slugLabel}
-              hint={`${labels.lessonUrl}: ${publicPath}`}
-              error={form.error("translation.slug")}
-            >
-              <Input
-                value={draft.slug}
-                disabled={!canUpdate}
-                onChange={(e) => setDraft({ slug: e.target.value })}
+            {sharedSlug ? (
+              <SharedSlugField
+                label={labels.slugLabel}
+                value={defaultSlug}
+                source={draft.title}
+                previewPath={(slug) =>
+                  `/${locale}/learn/${lesson.courseTrack}/${lesson.courseSlug}/${slug}`
+                }
+                error={form.error("translation.slug")}
               />
-            </Field>
+            ) : (
+              <Field
+                label={labels.slugLabel}
+                hint={`${labels.lessonUrl}: ${publicPath}`}
+                error={form.error("translation.slug")}
+              >
+                <Input
+                  value={draft.slug}
+                  disabled={!canUpdate}
+                  onChange={(e) => setDraft({ slug: e.target.value })}
+                />
+              </Field>
+            )}
 
             <Field
               label={labels.summaryLabel}

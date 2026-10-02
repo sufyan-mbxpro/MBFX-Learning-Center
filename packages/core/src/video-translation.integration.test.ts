@@ -169,4 +169,57 @@ describe("video topics and categories", () => {
       ).translationStatus,
     ).toBe("TRANSLATED");
   });
+
+  it("a translation keeps the English slug; an English rename moves it with a 301 (ADR-181)", async () => {
+    const { topicId, categoryId, slug } = await publishedTopic();
+    await runner.drainTranslationQueue();
+    const categorySlug = (
+      await ctx.db.videoCategoryTranslation.findFirstOrThrow({ where: { categoryId, locale: "en" } })
+    ).slug;
+
+    await videos.saveVideoTopic(ctx.editor, {
+      topicId,
+      meta: {},
+      translation: { locale: "es", title: "Velas", slug: "velas" },
+      videos: [],
+      links: [{ label: "Practice quiz", path: "/learn/forex/quizzes" }],
+    });
+    await videos.saveVideoCategory(ctx.editor, {
+      categoryId,
+      translation: { locale: "es", name: "Gráficos", slug: "graficos" },
+    });
+    const esTopic = () =>
+      ctx.db.videoTopicTranslation.findFirstOrThrow({ where: { topicId, locale: "es" } });
+    const esCategory = () =>
+      ctx.db.videoCategoryTranslation.findFirstOrThrow({ where: { categoryId, locale: "es" } });
+    expect((await esTopic()).slug).toBe(slug);
+    expect((await esCategory()).slug).toBe(categorySlug);
+
+    await videos.saveVideoTopic(ctx.editor, {
+      topicId,
+      meta: {},
+      translation: { locale: "en", title: `Candles ${seq}`, slug: `${slug}-v2` },
+      videos: [],
+      links: [{ label: "Practice quiz", path: "/learn/forex/quizzes" }],
+    });
+    await videos.saveVideoCategory(ctx.editor, {
+      categoryId,
+      translation: { locale: "en", name: `Charting ${seq}`, slug: `${categorySlug}-v2` },
+    });
+
+    expect((await esTopic()).slug).toBe(`${slug}-v2`);
+    expect((await esCategory()).slug).toBe(`${categorySlug}-v2`);
+    await expect(
+      ctx.db.redirect.findUniqueOrThrow({
+        where: { fromPath: `/es/learn/forex/videos/${slug}` },
+      }),
+    ).resolves.toMatchObject({ toPath: `/es/learn/forex/videos/${slug}-v2`, statusCode: 301 });
+    await expect(
+      ctx.db.redirect.findUniqueOrThrow({
+        where: { fromPath: `/es/learn/forex/videos/categories/${categorySlug}` },
+      }),
+    ).resolves.toMatchObject({
+      toPath: `/es/learn/forex/videos/categories/${categorySlug}-v2`,
+    });
+  });
 });

@@ -22,6 +22,7 @@ import { ConfirmDialog } from "@repo/ui/components/confirm-dialog";
 import { Spinner } from "@repo/ui/components/spinner";
 import { toast } from "sonner";
 import { AiClientError, runAiJson } from "../_lib/ai-client.ts";
+import { withoutSlug } from "../_lib/machine-translation.ts";
 
 export interface AiTranslateLabels {
   /** "Translate from {source}" — the source locale is interpolated by the page. */
@@ -46,7 +47,7 @@ export function AiTranslateButton({
   sourceLocale,
   targetLocale,
   /** The SOURCE locale's text, field by field. Named fields, never a row. */
-  fields,
+  fields: offered,
   /**
    * The TARGET locale's current text for the same fields (ADR-160 #7). When
    * any is present the button refines it: correct sentences stay, errors are
@@ -69,6 +70,9 @@ export function AiTranslateButton({
 }) {
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  // ADR-181: a slug is shared by every language, so it is never sent and
+  // never written back, whatever a caller passed.
+  const fields = withoutSlug(offered);
   const usableDrafts = Object.fromEntries(
     Object.entries(drafts ?? {}).filter(([name, value]) => name in fields && value.trim() !== ""),
   );

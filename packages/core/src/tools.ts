@@ -31,7 +31,7 @@ import {
   type MixedRelation,
 } from "./content-relations.ts";
 import { recordAudit } from "./index.ts";
-import { INDEXABLE_TRANSLATION_STATUSES, isIndexableTranslation } from "./reading-languages.ts";
+import { INDEXABLE_TRANSLATION_STATUSES, isIndexableTranslation } from "./translation-indexing.ts";
 import { hashToolSource, loadToolSource } from "./tool-source.ts";
 import { afterSourceSave } from "./translation-queue.ts";
 import { publicArticleWhere } from "./public-articles.ts";

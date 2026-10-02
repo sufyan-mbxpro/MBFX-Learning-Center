@@ -24,6 +24,7 @@ import { Archive, CheckCheck, Rocket, Search, Send, Undo2 } from "lucide-react";
 import { Button } from "@repo/ui/components/button";
 import { ConfirmDialog } from "@repo/ui/components/confirm-dialog";
 import { CONTENT_STATUS_TONE, StatusBadge, statusTone } from "../status-badge.tsx";
+import { zonedInputToIso } from "@repo/utils";
 import { useServerAction } from "../../_hooks/use-server-action.ts";
 import { EditorSection } from "./editor-section.tsx";
 import { ScheduleField, type ScheduleFieldLabels } from "./schedule-field.tsx";
@@ -133,7 +134,8 @@ export function ContentStatusPanel({
       // instead of publishing immediately.
       await transitionTo(
         to,
-        to === "SCHEDULED" && scheduleFor ? new Date(scheduleFor).toISOString() : undefined,
+        // ADR-182: the field's wall clock is the site's timezone.
+        to === "SCHEDULED" && scheduleFor ? zonedInputToIso(scheduleFor) : undefined,
       );
     });
 

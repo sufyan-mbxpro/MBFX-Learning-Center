@@ -44,9 +44,9 @@ export function QuizRunner({
 }: {
   quiz: QuizView;
   /**
-   * The locale of the quiz's WORDS, which on a `?lang=` reading view is not the
-   * interface's (ADR-127). It picks the explanations' translation at submit and
-   * marks every question and option with its `lang`.
+   * The locale of the quiz's WORDS, which is the default locale's when the
+   * fallback chain supplied them. It picks the explanations' translation at
+   * submit and marks every question and option with its `lang`.
    */
   locale: string;
   direction?: "ltr" | "rtl";
@@ -326,7 +326,7 @@ function Result({
   quiz,
   onRetake,
 }: {
-  /** The quiz's own words' `lang`/`dir` (ADR-127), never the chrome's. */
+  /** The quiz's own words' `lang`/`dir`, never the chrome's. */
   words: { lang: string; dir: "ltr" | "rtl" };
   result: QuizResultView;
   quiz: QuizView;

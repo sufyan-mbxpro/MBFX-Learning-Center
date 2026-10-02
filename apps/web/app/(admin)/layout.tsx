@@ -14,6 +14,8 @@ import { ADMIN_THEME_STORAGE_KEY } from "@repo/ui/lib/theme-mode";
 import { AdminShell } from "./keystone/_components/admin-shell.tsx";
 import { TwoFactorRequiredScreen } from "./keystone/_components/two-factor-required.tsx";
 import { faviconIcons } from "../_lib/favicon.ts";
+import { loadSiteTimeZone } from "../_lib/site-time-zone.ts";
+import { SiteTimeZone } from "../_components/site-time-zone.tsx";
 import "@repo/ui/globals.css";
 
 // Root layout for the ADMIN surface — one of two root layouts in this app
@@ -87,6 +89,8 @@ export default async function AdminRootLayout({ children }: LayoutProps<"/">) {
   // Admin surface is en-only for now — no [locale] segment here, so the
   // request config falls back to the default locale by design.
   const messages = await getMessages();
+  // ADR-182: every date in the admin is read in the site's timezone.
+  const timeZone = await loadSiteTimeZone();
   // Fresh row (not the session snapshot) — the profile page edits these
   // fields and the topbar must reflect the write on refresh.
   const profile = await loadOwnProfile(session!.user.id);
@@ -121,7 +125,8 @@ export default async function AdminRootLayout({ children }: LayoutProps<"/">) {
           nonce={nonce}
           dangerouslySetInnerHTML={{ __html: buildThemeStyleSheet(withAdminTypeface(theme)) }}
         />
-        <NextIntlClientProvider messages={messages}>
+        <NextIntlClientProvider messages={messages} timeZone={timeZone}>
+          <SiteTimeZone value={timeZone} />
           <ThemeProvider storageKey={ADMIN_THEME_STORAGE_KEY}>
             {twoFactorPending ? (
               <TwoFactorRequiredScreen userId={subject.id} />

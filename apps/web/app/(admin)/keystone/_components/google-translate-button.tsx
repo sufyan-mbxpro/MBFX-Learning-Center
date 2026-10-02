@@ -18,6 +18,7 @@ import { ConfirmDialog } from "@repo/ui/components/confirm-dialog";
 import { Spinner } from "@repo/ui/components/spinner";
 import { toast } from "sonner";
 import { prefillTranslationAction } from "../_actions/translate-actions.ts";
+import { withoutSlug } from "../_lib/machine-translation.ts";
 
 export interface GoogleTranslateLabels {
   action: string;
@@ -59,13 +60,17 @@ export function GoogleTranslateButton({
   async function translate() {
     setBusy(true);
     setConfirming(false);
+    // ADR-181: a slug is shared by every language, so it is never sent and
+    // never written back, whatever a caller passed.
+    const sentTexts = withoutSlug(texts);
+    const sentHtml = withoutSlug(html);
     try {
       const result = await prefillTranslationAction({
         entity,
         sourceLocale,
         targetLocale,
-        texts,
-        html,
+        texts: sentTexts,
+        html: sentHtml,
       });
       if (!result.ok) {
         toast.error(`${labels.failed} — ${labels.reasons[result.reason] ?? result.reason}`);
@@ -74,7 +79,7 @@ export function GoogleTranslateButton({
       // Only the fields that were asked about; a blank answer never clears one.
       const applied: Record<string, string> = {};
       for (const [name, value] of Object.entries({ ...result.texts, ...result.html })) {
-        if ((name in texts || name in html) && value.trim()) applied[name] = value;
+        if ((name in sentTexts || name in sentHtml) && value.trim()) applied[name] = value;
       }
       onApply(applied);
       toast.success(labels.done);

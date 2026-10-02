@@ -33,7 +33,12 @@ import {
 } from "./content.ts";
 import { recordAudit } from "./index.ts";
 import { hashLessonSource, loadLessonSource } from "./learn-source.ts";
-import { afterSourceSave, enqueueEntityTranslations } from "./translation-queue.ts";
+import { propagateSharedSlug, sharedSlugFor } from "./shared-slug.ts";
+import {
+  afterSourceSave,
+  enqueueEntityTranslations,
+  TRANSLATION_TABLES,
+} from "./translation-queue.ts";
 
 // ─── Errors ──────────────────────────────────────────────────
 
@@ -307,11 +312,16 @@ export async function saveLesson(actor: Subject, input: LessonInput): Promise<vo
   const courseId = current.section.courseId;
 
   const content = input.translation.content ? sanitizeRichText(input.translation.content) : null;
-  const slug = await uniqueLessonSlug(
-    locale,
-    slugify(input.translation.slug?.trim() || input.translation.title),
-    input.lessonId,
-  );
+  // The old derivation: from the submitted slug or the title, suffixed until
+  // free. Since ADR-181 it names the ENGLISH row's slug, or a non-default row
+  // whose lesson has no English row yet.
+  const derivedSlug = () =>
+    uniqueLessonSlug(
+      locale,
+      slugify(input.translation.slug?.trim() || input.translation.title),
+      input.lessonId,
+    );
+  const sourceSlug = isSource ? await derivedSlug() : null;
 
   assertHasCapability({
     content,
@@ -358,7 +368,6 @@ export async function saveLesson(actor: Subject, input: LessonInput): Promise<vo
 
   const fields = {
     title: input.translation.title,
-    slug,
     summary: input.translation.summary ?? null,
     content,
     learningObjectives: (input.translation.learningObjectives ?? null) as Prisma.InputJsonValue,
@@ -373,14 +382,32 @@ export async function saveLesson(actor: Subject, input: LessonInput): Promise<vo
       : TranslationStatus.TRANSLATED,
   };
 
-  await db.$transaction(async (tx) => {
+  const { slug, moves } = await db.$transaction(async (tx) => {
     await tx.lesson.update({ where: { id: input.lessonId }, data: metaData });
+
+    // ADR-181: a non-default row copies the English slug and ignores the
+    // submitted one; with no English row yet there is nothing to copy.
+    const slug =
+      sourceSlug ??
+      (await sharedSlugFor(tx, TRANSLATION_TABLES.lesson, input.lessonId, locale, defaultLocale)) ??
+      (await derivedSlug());
 
     await tx.lessonTranslation.upsert({
       where: { lessonId_locale: { lessonId: input.lessonId, locale } },
-      update: fields,
-      create: { lessonId: input.lessonId, locale, ...fields },
+      update: { ...fields, slug },
+      create: { lessonId: input.lessonId, locale, ...fields, slug },
     });
+
+    // An English rename moves every language with it (ADR-181 #3).
+    const moves = isSource
+      ? await propagateSharedSlug(
+          tx,
+          TRANSLATION_TABLES.lesson,
+          input.lessonId,
+          defaultLocale,
+          slug,
+        )
+      : [];
 
     await replaceAttachments(tx, input.lessonId, input.attachments);
     await syncLessonMediaReferences(tx, input.lessonId);
@@ -389,16 +416,25 @@ export async function saveLesson(actor: Subject, input: LessonInput): Promise<vo
     // three things `Course.lessonCount` counts — so a save that gates a
     // lesson has to recount, exactly as a save that deletes one already did.
     await recomputeLessonCount(tx, courseId);
+    return { slug, moves };
   });
 
   // Outside the transaction, matching saveArticleTranslation's split: a
-  // failed redirect write has never rolled back a saved translation.
-  if (existing && existing.slug !== slug) {
-    const course = await courseAddressFor(courseId, locale);
+  // failed redirect write has never rolled back a saved translation. Each
+  // sibling an English rename moved gets its own, under that locale's course
+  // slug (ADR-181 #3).
+  const renamed = [
+    ...(existing && existing.slug !== slug
+      ? [{ locale, previous: existing.slug, next: slug }]
+      : []),
+    ...moves,
+  ];
+  for (const move of renamed) {
+    const course = await courseAddressFor(courseId, move.locale);
     if (course) {
       await createSlugRedirect(
-        lessonPath(locale, defaultLocale, course.track, course.slug, existing.slug),
-        lessonPath(locale, defaultLocale, course.track, course.slug, slug),
+        lessonPath(move.locale, defaultLocale, course.track, course.slug, move.previous),
+        lessonPath(move.locale, defaultLocale, course.track, course.slug, move.next),
         actor.id,
       );
     }
@@ -596,6 +632,7 @@ export async function duplicateLesson(actor: Subject, lessonId: string): Promise
     include: { translations: true, attachments: true },
   });
 
+  const defaultLocale = await defaultLocaleCode();
   const slugs = new Map<string, string>();
   for (const t of source.translations) {
     slugs.set(t.locale, await uniqueLessonSlug(t.locale, `${t.slug}-copy`));
@@ -647,6 +684,18 @@ export async function duplicateLesson(actor: Subject, lessonId: string): Promise
       select: { id: true },
     });
     await syncLessonMediaReferences(tx, created.id);
+    // The copy's languages share its English slug, as every lesson's do
+    // (ADR-181) — suffixing each locale on its own can leave them apart.
+    const sourceSlug = slugs.get(defaultLocale);
+    if (sourceSlug) {
+      await propagateSharedSlug(
+        tx,
+        TRANSLATION_TABLES.lesson,
+        created.id,
+        defaultLocale,
+        sourceSlug,
+      );
+    }
     return created;
   });
 

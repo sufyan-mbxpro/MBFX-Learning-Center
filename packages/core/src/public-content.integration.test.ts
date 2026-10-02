@@ -167,7 +167,6 @@ describe("loadGlossaryTermBySlug", () => {
   });
 });
 
-// ADR-127: a glossary term read in another language without changing the site's.
 // changes-29 B3 reaches the glossary term editor.
 describe("saveGlossaryTranslation machine flag", () => {
   it("saves an AI translation as MACHINE_TRANSLATED until a human saves it", async () => {
@@ -194,8 +193,8 @@ describe("saveGlossaryTranslation machine flag", () => {
   });
 });
 
-describe("loadGlossaryTermBySlug reading language", () => {
-  it("reads a translation by ?lang= (a machine one too, ADR-159), keeping the URL's slug", async () => {
+describe("loadGlossaryTermBySlug in another language", () => {
+  it("serves a translation at its own slug, RTL for Arabic, machine prose noindex (ADR-159)", async () => {
     const termId = await publishedTerm("Spread");
     const { slug } = await db.glossaryTermTranslation.findFirstOrThrow({
       where: { termId, locale: "en" },
@@ -222,25 +221,20 @@ describe("loadGlossaryTermBySlug reading language", () => {
       },
     });
 
-    const reading = await pub.loadGlossaryTermBySlug("en", slug, "ar");
-    expect(reading?.term).toBe("الفارق");
-    expect(reading?.slug).toBe(slug);
-    expect(reading?.readingLocale).toBe("ar");
-    expect(reading?.contentLocale).toBe("ar");
-    expect(reading?.contentDirection).toBe("rtl");
-    // ADR-159 #1: machine translations are readable on every path — one rule.
-    expect(reading?.readingLanguages.map((l) => l.locale)).toEqual(["en", "es", "ar"]);
-    const machine = await pub.loadGlossaryTermBySlug("en", slug, "es");
-    expect(machine?.term).toBe("Diferencial");
-    expect(machine?.readingLocale).toBe("es");
-    expect(machine?.slug).toBe(slug);
+    const arabic = await pub.loadGlossaryTermBySlug("ar", `${slug}-ar`);
+    expect(arabic?.term).toBe("الفارق");
+    expect(arabic?.contentLocale).toBe("ar");
+    expect(arabic?.contentDirection).toBe("rtl");
+    expect(arabic?.noIndex).toBe(false);
 
-    for (const lang of [undefined, "fr"]) {
-      const view = await pub.loadGlossaryTermBySlug("en", slug, lang);
-      expect(view?.term).toBe("Spread");
-      expect(view?.readingLocale).toBeNull();
-      expect(view?.contentDirection).toBe("ltr");
-    }
+    const machine = await pub.loadGlossaryTermBySlug("es", `${slug}-es`);
+    expect(machine?.term).toBe("Diferencial");
+    expect(machine?.noIndex).toBe(true);
+
+    const english = await pub.loadGlossaryTermBySlug("en", slug);
+    expect(english?.term).toBe("Spread");
+    expect(english?.contentDirection).toBe("ltr");
+    expect(english?.alternates.map((a) => a.locale).sort()).toEqual(["ar", "en"]);
   });
 });
 

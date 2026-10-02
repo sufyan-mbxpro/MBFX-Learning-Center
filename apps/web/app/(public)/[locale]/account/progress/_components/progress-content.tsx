@@ -47,7 +47,7 @@ import { courseCoverUrl, isGeneratedCover } from "../../../learn/_content/learn-
 import { AccountMasthead } from "../../_components/account-masthead.tsx";
 import { requireLearnerSession } from "../../_lib/learner-session.ts";
 import { PagedList } from "./paged-list.tsx";
-import { DATE_FORMAT_OPTIONS } from "@repo/utils";
+import { DATE_FORMAT_OPTIONS, getSiteTimeZone } from "@repo/utils";
 
 /**
  * One tone per band. The tile, the heading glyph and the summary figure of a
@@ -81,7 +81,12 @@ export async function ProgressContent({ locale }: { locale: string }) {
   if (!profile) redirect({ href: "/sign-in", locale });
   const { courses, quizAttempts, reads, lessonReads, summary } = activity;
 
-  const date = (iso: string) => format.dateTime(new Date(iso), DATE_FORMAT_OPTIONS);
+  const date = (iso: string) =>
+    format.dateTime(new Date(iso), {
+      ...DATE_FORMAT_OPTIONS,
+      // ADR-182: the site's timezone, like every other date on the site.
+      timeZone: getSiteTimeZone(),
+    });
   const percent = (value: number) => format.number(value / 100, { style: "percent" });
   const current = courses.find((course) => !course.isCompleted && course.resume) ?? null;
 

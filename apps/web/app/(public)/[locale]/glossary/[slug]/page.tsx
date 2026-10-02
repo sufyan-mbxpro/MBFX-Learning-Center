@@ -23,7 +23,6 @@ import {
 } from "@repo/core";
 import { ROUTE_PATHS } from "@repo/contracts";
 import { htmlLead } from "@repo/utils";
-import { getServableLocales } from "@repo/i18n";
 import { LOCALE_DIRECTION, routing } from "@repo/i18n/routing";
 import { Link } from "@repo/i18n/navigation";
 import { isFeatureVisible } from "@repo/settings";
@@ -38,9 +37,7 @@ import { Waypoints } from "lucide-react";
 import { GlossaryBackdrop } from "../_components/glossary-art.tsx";
 import { GlossaryFooterSearch } from "../_components/glossary-footer-search.tsx";
 import { GlossarySidebar } from "../_components/glossary-sidebar.tsx";
-import { ReadingLanguageMenu } from "../../_components/reading-language-menu.tsx";
 import { canOptimizeImage } from "../../_lib/image-optimizer.ts";
-import { readingLanguageOptions, readingLocaleFrom } from "../../_lib/reading-language.ts";
 import { CHIP_LINK } from "@repo/ui/lib/surfaces";
 import { decodeParams } from "../../_lib/route-params.ts";
 
@@ -66,13 +63,11 @@ const DIFFICULTY_TONE: Record<string, "success" | "warning" | "info"> = {
 
 export async function generateMetadata({
   params,
-  searchParams,
 }: PageProps<"/[locale]/glossary/[slug]">): Promise<Metadata> {
   const { locale, slug } = decodeParams(await params);
   setRequestLocale(locale);
-  const readingLocale = readingLocaleFrom(await searchParams);
   const [view, template, brand] = await Promise.all([
-    getGlossaryTermBySlug(locale, slug, readingLocale),
+    getGlossaryTermBySlug(locale, slug),
     titleTemplate(),
     siteName(),
   ]);
@@ -91,8 +86,6 @@ export async function generateMetadata({
     // never get one, and a term page with no meta description at all hands the
     // snippet to whatever the crawler picks.
     ...descriptionFrom(view.seoDescription, lead),
-    // ADR-127 #4: a `?lang=` reading view is never indexed, and its canonical
-    // is the term's own URL — which is every view's canonical.
     alternates: await alternatesFor({
       canonical,
       languages: view.alternates.map((alt) => ({
@@ -100,8 +93,8 @@ export async function generateMetadata({
         href: glossaryTermPath(alt.locale, routing.defaultLocale, alt.slug),
       })),
     }),
-    // ADR-159 #2: machine-written words at their own URL are not indexed either.
-    ...(view.readingLocale || view.noIndex ? { robots: { index: false, follow: true } } : {}),
+    // ADR-159 #2: machine-written words at their own URL are not indexed.
+    ...(view.noIndex ? { robots: { index: false, follow: true } } : {}),
     // changes-46 SEO check: the term page had no share card of its own, so
     // Open Graph fell through to the root layout's — no `og:url`, and a title
     // carrying the site template the other content pages leave off. The
@@ -135,7 +128,7 @@ function ProseSection({
 }: {
   heading: string;
   html: string | null;
-  /** The translation's, not the page's: the heading is interface, the body is not (ADR-127 #1). */
+  /** The translation's, not the page's: the heading is interface, the body is not. */
   lang: string;
   dir: "ltr" | "rtl";
 }) {
@@ -153,17 +146,13 @@ function ProseSection({
   );
 }
 
-export default async function GlossaryTermPage({
-  params,
-  searchParams,
-}: PageProps<"/[locale]/glossary/[slug]">) {
+export default async function GlossaryTermPage({ params }: PageProps<"/[locale]/glossary/[slug]">) {
   const { locale, slug } = decodeParams(await params);
   setRequestLocale(locale);
 
   if (!(await isFeatureVisible("glossary", null))) notFound();
 
-  const readingLocale = readingLocaleFrom(await searchParams);
-  const view = await getGlossaryTermBySlug(locale, slug, readingLocale);
+  const view = await getGlossaryTermBySlug(locale, slug);
 
   if (!view) {
     // Old slug? content.ts wrote a 301 row when it changed.
@@ -173,26 +162,14 @@ export default async function GlossaryTermPage({
   }
 
   // Loaded only after the term resolves — two wasted queries on a 404 otherwise.
-  const [t, notTranslated, tPublic, servableLocales, popular, related] = await Promise.all([
+  const [t, notTranslated, popular, related] = await Promise.all([
     getTranslations("glossary"),
     // Its own public namespace since ADR-007 — reused rather than duplicated
     // into glossary.*, so the notice reads identically on every surface.
     getTranslations("notTranslated"),
-    getTranslations("public"),
-    getServableLocales(),
     getPopularGlossaryTerms(locale),
     getRelatedGlossaryTerms(locale, view.termId),
   ]);
-
-  // ADR-127: the term's own words (name, explanations, FAQ) only.
-  const readingOptions = readingLanguageOptions({
-    languages: view.readingLanguages,
-    contentLocale: view.contentLocale,
-    interfaceLocale: locale,
-    servable: servableLocales,
-    currentPath: `${ROUTE_PATHS.glossary}/${view.slug}`,
-    pathFor: (language) => `${ROUTE_PATHS.glossary}/${language.slug}`,
-  });
 
   // `DefinedTerm` inside the site glossary's `DefinedTermSet`: the term, its
   // plain-language line and its own URL — all things the page prints.
@@ -268,7 +245,7 @@ export default async function GlossaryTermPage({
         }
         eyebrow={view.topicName ?? t("termEyebrow")}
         // The term is the TRANSLATION's word inside the interface's sentence,
-        // so it alone carries the translation's `lang`/`dir` (ADR-127 #1).
+        // so it alone carries the translation's `lang`/`dir`.
         title={t.rich("termHeading", {
           term: view.term,
           word: (chunks) => (
@@ -312,22 +289,15 @@ export default async function GlossaryTermPage({
                       {t(`difficulty.${view.difficulty}` as "difficulty.BEGINNER")}
                     </Badge>
                     {view.locale !== locale &&
-                      !view.readingLocale &&
                       LOCALE_DIRECTION[locale as keyof typeof LOCALE_DIRECTION] === "ltr" && (
                         <span className="text-xs text-muted-foreground">({view.locale})</span>
                       )}
-                    <div className="ms-auto">
-                      <ReadingLanguageMenu
-                        options={readingOptions}
-                        label={tPublic("readingLanguage")}
-                      />
-                    </div>
                   </div>
                 </Reveal>
 
                 <Reveal variant="up" delay={80}>
                   <div className="flex flex-col gap-8">
-                    {/* `lang`/`dir` follow the TRANSLATION on screen (ADR-127 #1). */}
+                    {/* `lang`/`dir` follow the TRANSLATION on screen. */}
                     <div
                       lang={view.contentLocale}
                       dir={view.contentDirection}

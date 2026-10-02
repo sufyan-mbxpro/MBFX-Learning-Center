@@ -66,7 +66,7 @@ export {
 } from "./translation-prefill.ts";
 export { hashArticleSource, loadArticleSource, type ArticleSource } from "./article-source.ts";
 export * from "./article-search.ts";
-export * from "./reading-languages.ts";
+export * from "./translation-indexing.ts";
 export * from "./courses.ts";
 export * from "./course-sections.ts";
 export * from "./lessons.ts";

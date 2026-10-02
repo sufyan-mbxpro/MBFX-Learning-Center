@@ -5,7 +5,7 @@
 // and "Translate from <default locale>".
 //
 // The status matters because it is what the public site reads: only a
-// translation a person saved appears in the reading-language menu (ADR-127 #2).
+// translation a person saved is indexed and listed in hreflang (ADR-159 #2).
 // A draft whose words are untouched AI output shows "Machine translated" before
 // it is saved, because that is what Save will write.
 import { AiTranslateButton } from "../ai-translate-button.tsx";

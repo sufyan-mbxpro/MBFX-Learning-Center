@@ -78,6 +78,7 @@ import { useFieldErrors } from "../../../_hooks/use-field-errors.ts";
 import { useServerAction } from "../../../_hooks/use-server-action.ts";
 import type { EditorAi } from "../../../_lib/editor-ai.ts";
 import { liveHref, storedSlug } from "../../../_lib/live-href.ts";
+import { SharedSlugField } from "../../../_components/editor/slug-field.tsx";
 import { TranslationControls } from "../../../_components/editor/translation-controls.tsx";
 import {
   holdsHumanText,
@@ -248,6 +249,9 @@ export function VideoEditor({
     [locale, track, draft.slug],
   );
   const defaultSlug = storedSlug(topic.translations, defaultLocale);
+  // ADR-181 #5: the slug is typed once, on the default locale's tab; every
+  // other tab shows that saved slug read-only and its save sends none.
+  const sharedSlug = locale !== defaultLocale;
   const viewLiveHref = liveHref(
     `/learn/${topic.track}/videos/${defaultSlug}`,
     locale,
@@ -267,7 +271,7 @@ export function VideoEditor({
     translation: {
       locale,
       title: draft.title.trim(),
-      slug: draft.slug.trim() === "" ? undefined : draft.slug.trim(),
+      slug: sharedSlug || draft.slug.trim() === "" ? undefined : draft.slug.trim(),
       summary: draft.summary.trim() === "" ? null : draft.summary.trim(),
       content: hasBody ? draft.content : null,
       seoTitle: draft.seoTitle.trim() === "" ? null : draft.seoTitle.trim(),
@@ -451,18 +455,29 @@ export function VideoEditor({
               />
             </Field>
 
-            <Field
-              id="video-slug"
-              label={labels.slugLabel}
-              hint={`${labels.topicUrl}: ${publicPath}`}
-              error={form.error("translation.slug")}
-            >
-              <Input
-                value={draft.slug}
-                disabled={!canUpdate}
-                onChange={(e) => setDraft({ slug: e.target.value })}
+            {sharedSlug ? (
+              <SharedSlugField
+                id="video-slug"
+                label={labels.slugLabel}
+                value={defaultSlug}
+                source={draft.title}
+                previewPath={(slug) => `/${locale}/learn/${track}/videos/${slug}`}
+                error={form.error("translation.slug")}
               />
-            </Field>
+            ) : (
+              <Field
+                id="video-slug"
+                label={labels.slugLabel}
+                hint={`${labels.topicUrl}: ${publicPath}`}
+                error={form.error("translation.slug")}
+              >
+                <Input
+                  value={draft.slug}
+                  disabled={!canUpdate}
+                  onChange={(e) => setDraft({ slug: e.target.value })}
+                />
+              </Field>
+            )}
 
             {/* Plain text, not rich: the summary renders inside a card and in
                 meta descriptions, both of which take a string. */}

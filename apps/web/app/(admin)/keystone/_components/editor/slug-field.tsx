@@ -20,9 +20,17 @@
 //
 // The preview is the real URL, not a fragment, because that is the question an
 // editor is actually asking when they look at this field.
+//
+// ADR-181 #5: a slug is typed ONCE, on the default locale's tab. Every other
+// tab shows the shared slug read-only (`locked`, or `SharedSlugField` for an
+// editor that renders its own slug input) — the services ignore a slug
+// submitted for a non-default locale, so an editable box there would be a
+// field that lies.
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { slugify } from "@repo/utils";
 import { Input } from "@repo/ui/components/input";
+import { cn } from "@repo/ui/lib/utils";
 import { Field } from "./editor-section.tsx";
 
 export interface SlugFieldLabels {
@@ -47,6 +55,7 @@ export function SlugField({
   labels,
   required,
   error,
+  locked,
 }: {
   /** Only when something outside the field needs the input's id. */
   id?: string;
@@ -57,6 +66,106 @@ export function SlugField({
   onChange: (next: string) => void;
   labels: SlugFieldLabels;
   /** ADR-077 — passed through to the section Field. */
+  required?: boolean;
+  error?: string;
+  /**
+   * ADR-181 #5 — a non-default locale's tab. `value` is then the SHARED slug
+   * (the default locale's saved row), shown read-only and never autofilled.
+   */
+  locked?: boolean;
+}) {
+  if (locked) {
+    return (
+      <SharedSlugField
+        id={id}
+        label={labels.label}
+        value={value}
+        source={source}
+        previewPath={previewPath}
+        error={error}
+      />
+    );
+  }
+  return (
+    <EditableSlugField
+      id={id}
+      value={value}
+      source={source}
+      previewPath={previewPath}
+      disabled={disabled}
+      onChange={onChange}
+      labels={labels}
+      required={required}
+      error={error}
+    />
+  );
+}
+
+/**
+ * The slug on a non-default locale's tab (ADR-181 #5): read-only, holding the
+ * default locale's saved slug, and saying where it is changed. `source` is this
+ * tab's title, used for the preview only while the item has no default-locale
+ * row yet — the one case where the service still derives a slug itself.
+ */
+export function SharedSlugField({
+  id,
+  label,
+  value,
+  source,
+  previewPath,
+  error,
+  className,
+}: {
+  id?: string;
+  label: string;
+  /** The default locale's saved slug; "" when it has no row yet. */
+  value: string;
+  source: string;
+  /** Omit where the screen shows no URL preview of its own. */
+  previewPath?: (slug: string) => string;
+  error?: string;
+  /** Extra classes for the input (e.g. the article editor's `font-mono`). */
+  className?: string;
+}) {
+  const t = useTranslations("admin.sharedSlug");
+  const shared = value.trim();
+  const shown = shared || slugify(source);
+  return (
+    <Field
+      id={id}
+      error={error}
+      label={label}
+      hint={
+        previewPath
+          ? `${shared ? t("hint") : t("pending")} ${t("urlLabel")}: ${previewPath(shown)}`
+          : shared
+            ? t("hint")
+            : t("pending")
+      }
+    >
+      <Input value={shown} readOnly className={cn("bg-muted", className)} />
+    </Field>
+  );
+}
+
+function EditableSlugField({
+  id,
+  value,
+  source,
+  previewPath,
+  disabled,
+  onChange,
+  labels,
+  required,
+  error,
+}: {
+  id?: string;
+  value: string;
+  source: string;
+  previewPath: (slug: string) => string;
+  disabled?: boolean;
+  onChange: (next: string) => void;
+  labels: SlugFieldLabels;
   required?: boolean;
   error?: string;
 }) {

@@ -39,7 +39,7 @@ import { DateTimePicker } from "@repo/ui/components/date-time-picker";
 import { Input } from "@repo/ui/components/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@repo/ui/components/tabs";
 import { Textarea } from "@repo/ui/components/textarea";
-import { formatDateTime } from "@repo/utils";
+import { formatDateTime, zonedInputToIso } from "@repo/utils";
 import {
   queueAnnouncementAction,
   saveAnnouncementDraftAction,
@@ -110,11 +110,8 @@ const useHydrated = () =>
     () => false,
   );
 
-function localToIso(local: string): string {
-  if (!local) return "";
-  const date = new Date(local);
-  return Number.isNaN(date.getTime()) ? "" : date.toISOString();
-}
+// ADR-182: the picker's wall clock is the SITE's timezone, not the editor's browser.
+const localToIso = (local: string): string => zonedInputToIso(local);
 
 export function AnnouncementEditor(props: AnnouncementEditorProps) {
   const t = useTranslations("admin.announcements");

@@ -502,8 +502,8 @@ describe("visibility rule (status × isActive × category × deletion)", () => {
     expect(await publicArticles.loadArticleBySlug("en", slugRow.slug)).toBeNull();
   });
 
-  // ADR-127: reading an article in another language without changing the site's.
-  it("reads a translation by ?lang= — a machine one too since ADR-159, never indexed", async () => {
+  // ADR-159: a machine translation is served at its own URL but never indexed.
+  it("serves a machine translation noindex and out of the alternates until a person saves it", async () => {
     const id = await publishedArticle();
     const { slug } = await db.articleTranslation.findUniqueOrThrow({
       where: { articleId_locale: { articleId: id, locale: "en" } },
@@ -517,19 +517,16 @@ describe("visibility rule (status × isActive × category × deletion)", () => {
       body: "<p>máquina</p>",
       machineTranslated: true,
     });
-    // ADR-159 #1: machine translations are served on every path, so ?lang=
-    // offers what /es already serves. #2: never indexable — not in the
-    // alternates, and the Spanish page itself is noindex.
-    const machine = await publicArticles.loadArticleBySlug("en", slug, "es");
-    expect(machine?.readingLocale).toBe("es");
-    expect(machine?.title).toBe("Traducido por máquina");
-    expect(machine?.readingLanguages.map((l) => l.locale)).toEqual(["en", "es"]);
-    expect(machine?.alternates.map((a) => a.locale)).toEqual(["en"]);
+    // #2: never indexable — not in the alternates, and the Spanish page is noindex.
+    const english = await publicArticles.loadArticleBySlug("en", slug);
+    expect(english?.alternates.map((a) => a.locale)).toEqual(["en"]);
     const machinePage = await db.articleTranslation.findUniqueOrThrow({
       where: { articleId_locale: { articleId: id, locale: "es" } },
       select: { slug: true },
     });
-    expect((await publicArticles.loadArticleBySlug("es", machinePage.slug))?.noIndex).toBe(true);
+    const machine = await publicArticles.loadArticleBySlug("es", machinePage.slug);
+    expect(machine?.title).toBe("Traducido por máquina");
+    expect(machine?.noIndex).toBe(true);
 
     // An editor's Save is the promotion (ADR-097): it makes it indexable.
     await articles.saveArticleTranslation(editor, {
@@ -538,23 +535,13 @@ describe("visibility rule (status × isActive × category × deletion)", () => {
       title: "Revisado por una persona",
       body: "<p>persona</p>",
     });
-    const reading = await publicArticles.loadArticleBySlug("en", slug, "es");
-    expect(reading?.locale).toBe("es");
-    expect(reading?.readingLocale).toBe("es");
-    expect(reading?.title).toBe("Revisado por una persona");
-    expect(reading?.body).toContain("persona");
-    expect(reading?.contentDirection).toBe("ltr");
-    expect(reading?.readingLanguages.map((l) => [l.locale, l.nativeName])).toEqual([
-      ["en", "English"],
-      ["es", "Español"],
-    ]);
-
-    // Without ?lang=, and with one that names nothing readable, the page is unchanged.
-    for (const lang of [undefined, "en", "ar"]) {
-      const view = await publicArticles.loadArticleBySlug("en", slug, lang);
-      expect(view?.locale).toBe("en");
-      expect(view?.readingLocale).toBeNull();
-    }
+    const saved = await publicArticles.loadArticleBySlug("es", machinePage.slug);
+    expect(saved?.locale).toBe("es");
+    expect(saved?.title).toBe("Revisado por una persona");
+    expect(saved?.noIndex).toBe(false);
+    expect(
+      (await publicArticles.loadArticleBySlug("en", slug))?.alternates.map((a) => a.locale).sort(),
+    ).toEqual(["en", "es"]);
   });
 
   // The header's language switcher swaps only the prefix: /news/x → /es/news/x.
@@ -573,11 +560,13 @@ describe("visibility rule (status × isActive × category × deletion)", () => {
       title: "Cómo calcular el margen",
       body: "<p>margen</p>",
     });
-    const { slug: esSlug } = await db.articleTranslation.findUniqueOrThrow({
+    // ADR-181 shares one slug, so the lookup now serves only links shared
+    // before the migration: put a row back in that legacy shape directly.
+    const esSlug = "como-calcular-el-margen";
+    await db.articleTranslation.update({
       where: { articleId_locale: { articleId: id, locale: "es" } },
-      select: { slug: true },
+      data: { slug: esSlug },
     });
-    expect(esSlug).not.toBe(enSlug);
     expect(await publicArticles.loadArticleBySlug("es", enSlug)).toBeNull();
     expect(await publicArticles.loadArticleSlugTarget("es", enSlug)).toBe(`/es/news/${esSlug}`);
     // And back the other way, to the unprefixed default-locale URL.
@@ -1301,5 +1290,179 @@ describe("quickUpdateArticle", () => {
     );
     const detail = await articles.loadArticleAdminDetail(id);
     expect(detail?.translations[0]?.title).toBe("Quick denied");
+  });
+});
+
+// ─── ADR-181: one slug for every language ────────────────────
+
+describe("shared slugs (ADR-181)", () => {
+  beforeAll(async () => {
+    await db.locale.create({
+      data: {
+        code: "ar",
+        name: "Arabic",
+        nativeName: "العربية",
+        direction: "RTL",
+        isActive: false,
+        sortOrder: 3,
+        fallbackCode: "en",
+      },
+    });
+  });
+
+  async function slugOf(articleId: string, locale: string): Promise<string> {
+    return (
+      await db.articleTranslation.findUniqueOrThrow({
+        where: { articleId_locale: { articleId, locale } },
+        select: { slug: true },
+      })
+    ).slug;
+  }
+
+  it("a non-default save ignores the submitted slug and takes the English one", async () => {
+    const id = await articles.createArticle(editor, { kind: "NEWS", categoryId: newsCategoryId });
+    await articles.saveArticleTranslation(editor, {
+      articleId: id,
+      locale: "en",
+      title: "Shared slug",
+      slug: "shared-slug-en",
+    });
+    await articles.saveArticleTranslation(editor, {
+      articleId: id,
+      locale: "ar",
+      title: "عنوان",
+      slug: "arabic-typed-slug",
+    });
+    expect(await slugOf(id, "ar")).toBe("shared-slug-en");
+
+    // Through saveArticle too — the editor's one path.
+    await articles.saveArticle(editor, {
+      articleId: id,
+      meta: {},
+      translation: { articleId: id, locale: "es", title: "Título", slug: "otro-slug" },
+    });
+    expect(await slugOf(id, "es")).toBe("shared-slug-en");
+  });
+
+  it("an English rename moves the Arabic row and writes /ar/news/old → /ar/news/new", async () => {
+    const id = await articles.createArticle(editor, { kind: "NEWS", categoryId: newsCategoryId });
+    await articles.saveArticleTranslation(editor, {
+      articleId: id,
+      locale: "en",
+      title: "Rename me",
+      slug: "adr181-old",
+    });
+    await articles.saveArticleTranslation(editor, {
+      articleId: id,
+      locale: "ar",
+      title: "أعد تسميتي",
+    });
+    expect(await slugOf(id, "ar")).toBe("adr181-old");
+
+    await articles.saveArticle(editor, {
+      articleId: id,
+      meta: {},
+      translation: { articleId: id, locale: "en", title: "Rename me", slug: "adr181-new" },
+    });
+    expect(await slugOf(id, "ar")).toBe("adr181-new");
+    const ar = await db.redirect.findUniqueOrThrow({ where: { fromPath: "/ar/news/adr181-old" } });
+    expect(ar).toMatchObject({ toPath: "/ar/news/adr181-new", statusCode: 301 });
+    const en = await db.redirect.findUniqueOrThrow({ where: { fromPath: "/news/adr181-old" } });
+    expect(en.toPath).toBe("/news/adr181-new");
+  });
+
+  it("a quick-edit rename moves every language too", async () => {
+    const id = await articles.createArticle(editor, { kind: "NEWS", categoryId: newsCategoryId });
+    await articles.saveArticleTranslation(editor, {
+      articleId: id,
+      locale: "en",
+      title: "Quick shared",
+      slug: "adr181-quick-old",
+    });
+    await articles.saveArticleTranslation(editor, { articleId: id, locale: "ar", title: "سريع" });
+    await articles.quickUpdateArticle(editor, id, { slug: "adr181-quick-new" });
+    expect(await slugOf(id, "ar")).toBe("adr181-quick-new");
+    const ar = await db.redirect.findUniqueOrThrow({
+      where: { fromPath: "/ar/news/adr181-quick-old" },
+    });
+    expect(ar.toPath).toBe("/ar/news/adr181-quick-new");
+  });
+
+  it("every row of a duplicate carries the copy's English slug", async () => {
+    const id = await articles.createArticle(editor, { kind: "NEWS", categoryId: newsCategoryId });
+    await articles.saveArticleTranslation(editor, {
+      articleId: id,
+      locale: "en",
+      title: "Dup shared",
+      slug: "adr181-dup",
+    });
+    await articles.saveArticleTranslation(editor, { articleId: id, locale: "ar", title: "نسخة" });
+    const copyId = await articles.duplicateArticle(editor, id);
+    const enCopy = await slugOf(copyId, "en");
+    expect(enCopy).toMatch(/^adr181-dup-copy-/);
+    expect(await slugOf(copyId, "ar")).toBe(enCopy);
+  });
+
+  it("a category's English rename moves the Arabic row; an Arabic save ignores its slug", async () => {
+    const categoryId = await articles.createArticleCategory(editor, {
+      name: "Shared Category",
+      slug: "adr181-cat-old",
+    });
+    await articles.saveArticleCategoryTranslation(editor, {
+      categoryId,
+      locale: "ar",
+      name: "فئة",
+      slug: "arabic-category",
+    });
+    const arSlug = async () =>
+      (
+        await db.articleCategoryTranslation.findUniqueOrThrow({
+          where: { categoryId_locale: { categoryId, locale: "ar" } },
+        })
+      ).slug;
+    expect(await arSlug()).toBe("adr181-cat-old");
+
+    await articles.saveArticleCategoryTranslation(editor, {
+      categoryId,
+      locale: "en",
+      name: "Shared Category",
+      slug: "adr181-cat-new",
+    });
+    expect(await arSlug()).toBe("adr181-cat-new");
+    const redirect = await db.redirect.findUniqueOrThrow({
+      where: { fromPath: "/ar/news/category/adr181-cat-old" },
+    });
+    expect(redirect.toPath).toBe("/ar/news/category/adr181-cat-new");
+  });
+
+  it("a tag's English rename moves the Arabic row and writes its redirect", async () => {
+    const tagId = await articles.createArticleTag(editor, {
+      name: "Shared Tag",
+      slug: "adr181-tag-old",
+    });
+    await articles.saveArticleTagTranslation(editor, {
+      tagId,
+      locale: "ar",
+      name: "وسم",
+      slug: "arabic-tag",
+    });
+    await articles.saveArticleTagTranslation(editor, {
+      tagId,
+      locale: "en",
+      name: "Shared Tag",
+      slug: "adr181-tag-new",
+    });
+    const ar = await db.articleTagTranslation.findUniqueOrThrow({
+      where: { tagId_locale: { tagId, locale: "ar" } },
+    });
+    expect(ar.slug).toBe("adr181-tag-new");
+    // The Arabic row held the shared slug, never what was typed on its tab.
+    const redirect = await db.redirect.findUniqueOrThrow({
+      where: { fromPath: "/ar/news/tag/adr181-tag-old" },
+    });
+    expect(redirect.toPath).toBe("/ar/news/tag/adr181-tag-new");
+    expect(await db.redirect.findUnique({ where: { fromPath: "/ar/news/tag/arabic-tag" } })).toBe(
+      null,
+    );
   });
 });
