@@ -27594,3 +27594,26 @@ environment on the server, and the edge purged, before the live site changes.
 
 **Tests.** `tsc` and ESLint clean on the touched files; `support-page.test.ts`
 38/38.
+
+## 2026-10-02 — Module 14: release-directory deploys
+
+**Shipped.** `scripts/deploy-release.sh`: each deploy is cloned into
+`~/releases/<stamp>-<sha>` (from a bare cache at `~/shared/repo.git`), built
+there with `.env` symlinked from `~/shared`, and swapped in by an atomic
+rename of the `~/htdocs/<site>` symlink, then `pm2 reload --update-env` with
+the release's own `NEXT_DEPLOYMENT_ID` (recorded in `.deployment-id`). The
+health check requires the homepage AND its linked stylesheet to answer 200
+under the new `?dpl=`, and a failed check switches back automatically;
+`--rollback` returns to the previous release without a build. `pm2 save`
+runs after a good deploy so a reboot does not resurrect a stale id. Keeps
+three releases. `docs/ops/deploy.md` §11 documents the layout. This closes
+the in-place build window behind the cached-404 outages of 2026-09-23 and
+2026-10-02. `scripts/deploy.sh` is kept for installs without the layout.
+
+**Decisions.** No ADR: §11 already described the release-directory swap as
+the zero-downtime path; this implements it. Migrations still apply while the
+old release serves, so they must stay backward compatible.
+
+**Tests.** `bash -n` clean locally and on the live host's bash; the
+build-id fallback and stylesheet extraction were run read-only against the
+live release. Not yet run end to end.

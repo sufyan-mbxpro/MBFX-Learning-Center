@@ -377,6 +377,47 @@ fresh directory. Migrations must stay backward compatible with the release
 still running while they apply. Keep one instance: `revalidateTag` and the
 in-process rate-limit fallback are per-process.
 
+**`scripts/deploy-release.sh` does exactly that, and is the one to use on the
+live host** (2026-10-02). It never writes to the directory the running server
+reads from:
+
+```
+~/htdocs/<site>           symlink → ~/releases/<current>   (pm2's cwd goes through it)
+~/releases/<stamp>-<sha>/ one checkout + node_modules + .next per deploy
+~/shared/.env             the environment, symlinked into every release
+~/shared/uploads          UPLOADS_DIR (absolute, outside the releases)
+~/shared/repo.git         bare cache of origin, created on the first run
+```
+
+```bash
+bash ~/htdocs/learn.mbxpro.com/scripts/deploy-release.sh             # deploy origin/main
+bash ~/htdocs/learn.mbxpro.com/scripts/deploy-release.sh --rollback  # previous release, no rebuild
+```
+
+It clones the branch into a new release, symlinks `.env`, then install →
+generate → migrate deploy → seed → build there while the old release keeps
+serving. Only a finished build is swapped in, by an atomic rename of the
+symlink, followed by `pm2 reload --update-env` with that release's
+`NEXT_DEPLOYMENT_ID`. It then checks that the homepage answers and that the
+stylesheet it links answers 200 under the new `?dpl=`; if either fails it
+switches back and reloads the previous release by itself. On success it runs
+`pm2 save` (or a reboot's `pm2 resurrect` restores an older deployment id),
+purges Cloudflare when `CF_API_TOKEN`/`CF_ZONE_ID` are set, and keeps the
+newest three releases (`KEEP=`). A failure before the switch leaves the live
+site untouched. It refuses to start without `~/shared/.env`, with
+`SEED_ADMIN_PASSWORD` set, with a relative `UPLOADS_DIR`, or when the live
+release's own `.env` differs from the shared one. The pm2 reload of a single
+fork-mode process is still a restart of a few seconds (nginx answers 502,
+which Cloudflare does not cache); what disappears is the build window.
+
+Two things it cannot fix: a migration still applies while the old release is
+serving (keep them backward compatible), and the `location /_next/static/`
+block in §6 is still worth adding — it must point at the symlink
+(`~/htdocs/<site>/apps/web/.next/static/`), never at a release directory.
+
+`scripts/deploy.sh` (in place, below) is kept for installs without the
+release layout.
+
 `scripts/deploy.sh` is that whole sequence in one command
 (`bash /srv/mbx/app/scripts/deploy.sh`), so the order cannot drift between
 whoever deploys. It refuses to run against a dirty checkout or an `.env` that
