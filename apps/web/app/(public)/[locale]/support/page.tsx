@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { EmailOff } from "../_components/email-off.tsx";
 import { ReviewsBand } from "../_components/reviews-band.tsx";
 import { jsonLd, titleTemplate, titleFrom, staticPageAlternates } from "../../../_lib/seo.ts";
 import {
@@ -225,19 +226,21 @@ export default async function SupportPage({ params }: PageProps<"/[locale]/suppo
                       inside `Button` would change every `render={<Link/>}` call
                       site on the public surface, which is its own change.
                     */}
-                    <Button
-                      variant="outline"
-                      className="mt-3 w-full"
-                      role="link"
-                      render={
-                        <a
-                          href={channel.href}
-                          {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-                        />
-                      }
-                    >
-                      {t(`channels.${channel.kind}.action`)}
-                    </Button>
+                    <EmailOff>
+                      <Button
+                        variant="outline"
+                        className="mt-3 w-full"
+                        role="link"
+                        render={
+                          <a
+                            href={channel.href}
+                            {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+                          />
+                        }
+                      >
+                        {t(`channels.${channel.kind}.action`)}
+                      </Button>
+                    </EmailOff>
                   </div>
                 );
               })}

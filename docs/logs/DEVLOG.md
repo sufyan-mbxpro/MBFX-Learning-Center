@@ -27549,3 +27549,26 @@ CSP.
 **Tests.** `preview-images.test.ts` +3 (Origin wins, forwarded fallback,
 a hostile header falls back to the URL): 6/6. `tsc` and ESLint clean on the
 touched files.
+
+## 2026-10-02 — Module 14: pinned chunk 404s and obfuscated emails, without the CDN
+
+**Shipped.** Two live faults on `learn.mbxpro.com`, fixed from the repo
+because Cloudflare's dashboard was out of reach. (1) Chunk and stylesheet
+404s: the origin served every file (200 with a cache-busting query) but the
+edge held a 404 with `cf-cache-status: HIT`, the 2026-09-23 class — the
+nginx `location /_next/static/` block is still not on the server (the 404s
+carry `x-nextjs-prerender`). `--asset-revision` bumped to `2026-10-02a` so
+the stylesheets get filenames the edge has never seen; a redeploy with a new
+`NEXT_DEPLOYMENT_ID` does the same for every `?dpl=` URL. (2) The footer
+and `/support` showed `[email protected]`: Cloudflare's Email Address
+Obfuscation rewrote the address and injected a decoder that our CSP blocks.
+The new `EmailOff` (`_components/email-off.tsx`) brackets both email links
+in `<!--email_off-->` markers, carried in hidden spans because React cannot
+render a comment.
+
+**Decisions.** No ADR. The CSP is not loosened (host allowlisting is
+ignored under `'strict-dynamic'`). Not verifiable locally — only the edge
+rewrites; check the live HTML for `__cf_email__` after deploy.
+
+**Tests.** `tsc` and ESLint clean on the touched files;
+`support-page.test.ts` 38/38.

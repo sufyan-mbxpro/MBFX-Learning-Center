@@ -40,6 +40,7 @@ import { Link } from "@repo/i18n/navigation";
 import { getLocalizedSetting, getSetting, isFeatureVisible } from "@repo/settings";
 import { BrandLogo } from "@repo/ui/components/brand-logo";
 import { SocialLinkIcon } from "./social-link-icon.tsx";
+import { EmailOff } from "./email-off.tsx";
 import { Container } from "@repo/ui/components/container";
 import { Reveal } from "@repo/ui/components/reveal";
 import { NavLink } from "./nav-link.tsx";
@@ -277,12 +278,14 @@ export async function SiteFooter({ locale }: { locale: string }) {
                     {supportEmail !== "" && (
                       <li className="flex items-center gap-3">
                         <Mail aria-hidden className="size-4 shrink-0 opacity-70" />
-                        <a
-                          href={`mailto:${supportEmail}`}
-                          className="underline-offset-4 hover:text-secondary-foreground hover:underline"
-                        >
-                          {supportEmail}
-                        </a>
+                        <EmailOff>
+                          <a
+                            href={`mailto:${supportEmail}`}
+                            className="underline-offset-4 hover:text-secondary-foreground hover:underline"
+                          >
+                            {supportEmail}
+                          </a>
+                        </EmailOff>
                       </li>
                     )}
                     {/* Call and Live Chat are two rows, not the reference's one
