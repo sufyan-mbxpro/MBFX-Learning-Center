@@ -68,8 +68,88 @@ export interface EmailShellInput {
   unsubscribeLine?: string | undefined;
 }
 
+/**
+ * The tones a badge may take (changes-61): the editor's own tone names, each
+ * resolved to a brand colour. `muted` is a surface, not a hue.
+ */
+export const EMAIL_BADGE_TONES = [
+  "primary",
+  "success",
+  "warning",
+  "info",
+  "danger",
+  "muted",
+] as const;
+
+/** Whichever of the two surface texts reads better on `ground`. */
+function inkOn(ground: string, surface: SurfacePalette): string {
+  return contrastRatio(surface.background, ground) >= contrastRatio(surface.textPrimary, ground)
+    ? surface.background
+    : surface.textPrimary;
+}
+
+function toneColour(tone: string, palette: EmailPalette): string | null {
+  const { brand, surface } = palette;
+  switch (tone) {
+    case "primary":
+      return brand.primary;
+    case "success":
+      return brand.success;
+    case "warning":
+      return brand.warning;
+    case "info":
+      return brand.info;
+    case "danger":
+      return brand.error;
+    case "muted":
+      return surface.surfaceMuted;
+    default:
+      return null;
+  }
+}
+
+/**
+ * The email BLOCK vocabulary (changes-61, ADR-184): a button, a panel, a
+ * verification code, an eyebrow, a headline and a badge. Like every other
+ * `ed-*` class these carry no colour of their own — each resolves against the
+ * active theme here, so a re-brand restyles every template at once — and the
+ * ink on a filled ground is whichever surface text reads on it, the rule the
+ * brand bands already follow.
+ */
+function blockStyle(className: string, palette: EmailPalette): string | null {
+  const { brand, surface } = palette;
+  switch (className) {
+    // A link drawn as a button. Padding on an inline-block `<a>` is the
+    // widely supported form; Outlook's Word engine drops the padding and
+    // keeps a coloured, bold link, which still reads as the action.
+    case "ed-btn":
+      return `display:inline-block;background-color:${brand.primary};color:${inkOn(brand.primary, surface)};padding:12px 28px;border-radius:8px;font-size:16px;line-height:20px;font-weight:700;text-decoration:none`;
+    case "ed-btn-secondary":
+      return `display:inline-block;background-color:${brand.secondary};color:${inkOn(brand.secondary, surface)};padding:12px 28px;border-radius:8px;font-size:16px;line-height:20px;font-weight:700;text-decoration:none`;
+    // A tinted box: a code, an offer, the facts of a change.
+    case "ed-panel":
+      return `background-color:${surface.surfaceMuted};border:1px solid ${surface.borderLight};border-radius:8px;padding:20px 24px`;
+    case "ed-code":
+      return `font-family:Consolas,'Courier New',monospace;font-size:32px;line-height:40px;letter-spacing:8px;font-weight:700;color:${surface.textPrimary};margin:8px 0`;
+    case "ed-eyebrow":
+      return `font-size:12px;line-height:16px;letter-spacing:1.5px;text-transform:uppercase;font-weight:700;color:${deriveTonalInk(brand.primary, surface.background)}`;
+    case "ed-title":
+      return `font-size:26px;line-height:32px;font-weight:800;color:${surface.textPrimary};margin:4px 0 16px`;
+    default:
+      break;
+  }
+  if (className.startsWith("ed-badge-")) {
+    const ground = toneColour(className.slice("ed-badge-".length), palette);
+    if (!ground) return null;
+    return `display:inline-block;background-color:${ground};color:${inkOn(ground, surface)};padding:4px 12px;border-radius:999px;font-size:13px;line-height:18px;font-weight:700`;
+  }
+  return null;
+}
+
 /** The `ed-*` vocabulary, as inline styles. */
 export function editorialStyle(className: string, palette: EmailPalette): string | null {
+  const block = blockStyle(className, palette);
+  if (block) return block;
   const { brand, surface } = palette;
   switch (className) {
     case "ed-tx-primary":
@@ -152,12 +232,16 @@ export function emailLinkColor(palette: EmailPalette): string {
  */
 export function inlineEditorialStyles(html: string, palette: EmailPalette): string {
   const linkStyle = `color:${emailLinkColor(palette)};text-decoration:underline`;
+  // The editor draws every table full width (`[&_table]:w-full`) and stores
+  // none, so a panel built from a one-cell table would otherwise shrink to
+  // its words in an inbox. `separate` so a cell's rounded corners survive.
+  const tableStyle = "width:100%;border-collapse:separate;border-spacing:0;margin:16px 0";
   return sanitizeEmailHtmlWith(html, "RICH", {
     "*": (tagName, attribs) => {
       const classes = attribs.class?.split(/\s+/).filter(Boolean) ?? [];
       // A link's colour comes FIRST, so a tone class or the author's own
       // style — both more specific intents — still wins.
-      const base = tagName === "a" ? [linkStyle] : [];
+      const base = tagName === "a" ? [linkStyle] : tagName === "table" ? [tableStyle] : [];
       if (classes.length === 0 && base.length === 0) return { tagName, attribs };
       const styles = [
         ...base,

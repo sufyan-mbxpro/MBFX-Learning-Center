@@ -46,9 +46,11 @@ describe("the impersonation doors", () => {
   });
 
   it("the admin plugin's own unaudited pair is switched off", () => {
-    expect(source("index.ts")).toContain(
-      'disabledPaths: ["/admin/impersonate-user", "/admin/stop-impersonating"]',
-    );
+    // The list grew with ADR-184's email-otp doors; these two must stay in it.
+    const list = /disabledPaths: \[([\s\S]*?)\]/.exec(source("index.ts"))?.[1] ?? "";
+    expect(list).toContain('"/admin/impersonate-user"');
+    expect(list).toContain('"/admin/stop-impersonating"');
+    expect(list).toContain("...DISABLED_EMAIL_OTP_PATHS");
   });
 
   it("an impersonation session lasts one hour", () => {

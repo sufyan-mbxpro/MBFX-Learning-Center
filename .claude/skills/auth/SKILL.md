@@ -98,3 +98,14 @@ round-trip → ACTIVE; lockout with backoff; reset single-use + expiry;
 the proxy AND with the proxy bypassed; impersonation audited. Proxy matcher
 unit tests via `next/experimental/testing/server`. E2E: credential +
 Google-mock flows on both surfaces.
+
+## Verification by code (ADR-184)
+
+Sign-up verifies with a six-digit code from the `email-otp` plugin
+(verification only: `disableSignUp`, hashed, 10 minutes, 5 attempts). It is
+NOT `overrideDefaultEmailVerification`: `sendVerificationEmail` sends a code
+when the address matches the stored one and keeps the link for a change of
+address (`verificationKind`, `email-code.ts`). Every other plugin endpoint is
+in `disabledPaths` (`DISABLED_EMAIL_OTP_PATHS`) and the send endpoint refuses
+any type but `email-verification`. `auth.welcome` goes out from
+`databaseHooks.user.create.after` for `/sign-up/email` only.

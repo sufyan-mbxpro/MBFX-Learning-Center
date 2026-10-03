@@ -10,10 +10,11 @@ import { AuthInputIcon } from "../../../_lib/auth-input-icon.tsx";
 import { useSearchParam } from "../../../_lib/use-search-param.ts";
 import { rememberSession } from "../../../_lib/session-hint.ts";
 import type { CaptchaClientConfig } from "@repo/contracts";
-import { captchaAnswered, useRecaptcha } from "../../../_lib/recaptcha.ts";
+import { captchaAnswered, resetCaptcha, useRecaptcha } from "../../../_lib/recaptcha.ts";
 import { RecaptchaCheckbox } from "../../../_lib/recaptcha-checkbox.tsx";
 import {
   isAdminPath,
+  navigateAway,
   resolveRedirect,
   signInWithPassword,
   signOutSilently,
@@ -104,6 +105,7 @@ export function SignInForm({
     // the admin surface it deliberately doesn't advertise.
     if (userType === "STAFF") {
       await signOutSilently();
+      resetCaptcha();
       setFailure("learnersOnly");
       return;
     }
@@ -111,8 +113,9 @@ export function SignInForm({
     // ADR-124 §3: the page we land on hides its subscribe bands at first
     // paint rather than after its own session read.
     rememberSession(true);
-    // Never into /keystone, whatever `?redirect=` says.
-    window.location.assign(resolveRedirect(homeHref, (path) => !isAdminPath(path)));
+    // Never into /keystone, whatever `?redirect=` says. Awaited so the button
+    // keeps its spinner until the next page replaces this one (changes-61).
+    await navigateAway(resolveRedirect(homeHref, (path) => !isAdminPath(path)));
   };
 
   const submitCode = (event: React.FormEvent) => {

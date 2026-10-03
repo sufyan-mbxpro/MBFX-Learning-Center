@@ -6,15 +6,16 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   isAdminPath,
   requestPasswordReset,
-  resendVerification,
   resetPassword,
   resolveRedirect,
+  sendVerificationCode,
   signInWithPassword,
   signOut,
   signOutSilently,
   signUpWithPassword,
   isTotpCode,
   TWO_FACTOR_CODE_MAX_LENGTH,
+  verifyEmailCode,
   verifyTwoFactorSignIn,
 } from "./credentials.ts";
 import { setRecaptchaSiteKey } from "./recaptcha.ts";
@@ -322,29 +323,41 @@ describe("resetPassword — three outcomes, because they need three screens", ()
   });
 });
 
-describe("resendVerification", () => {
-  it("carries the callbackURL the verification link returns to (ADR-079 #7)", async () => {
-    const fetchMock = mockFetch(jsonResponse(true, { status: true }));
-    await expect(resendVerification("a@b.c", "/sign-in?verified=1")).resolves.toBe(true);
+describe("verification by code (ADR-184)", () => {
+  it("asks the email-otp handler for an email-verification code", async () => {
+    const fetchMock = mockFetch(jsonResponse(true, { success: true }));
+    await expect(sendVerificationCode("a@b.c")).resolves.toBe(true);
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe("/api/auth/send-verification-email");
-    expect(JSON.parse(String(init.body))).toEqual({
-      email: "a@b.c",
-      callbackURL: "/sign-in?verified=1",
-    });
+    expect(url).toBe("/api/auth/email-otp/send-verification-otp");
+    expect(JSON.parse(String(init.body))).toEqual({ email: "a@b.c", type: "email-verification" });
   });
 
-  it("reports a refusal rather than claiming it sent", async () => {
+  it("a refused or failed send is false, never a throw", async () => {
     mockFetch(jsonResponse(false, {}));
-    await expect(resendVerification("a@b.c", "/x")).resolves.toBe(false);
-  });
-
-  it("a network failure is false, not a throw — the nudge must not break the header", async () => {
+    await expect(sendVerificationCode("a@b.c")).resolves.toBe(false);
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => Promise.reject(new Error("offline"))),
     );
-    await expect(resendVerification("a@b.c", "/x")).resolves.toBe(false);
+    await expect(sendVerificationCode("a@b.c")).resolves.toBe(false);
+  });
+
+  it("posts the code to verify-email", async () => {
+    const fetchMock = mockFetch(jsonResponse(true, { status: true }));
+    await expect(verifyEmailCode("a@b.c", "123456")).resolves.toEqual({ status: "ok" });
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("/api/auth/email-otp/verify-email");
+    expect(JSON.parse(String(init.body))).toEqual({ email: "a@b.c", otp: "123456" });
+  });
+
+  it.each([
+    ["INVALID_OTP", "invalid"],
+    ["OTP_EXPIRED", "expired"],
+    ["TOO_MANY_ATTEMPTS", "expired"],
+    ["SOMETHING_ELSE", "failed"],
+  ])("maps %s to %s", async (code, status) => {
+    mockFetch(jsonResponse(false, { code }));
+    await expect(verifyEmailCode("a@b.c", "000000")).resolves.toEqual({ status });
   });
 });
 

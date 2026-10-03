@@ -8,12 +8,13 @@ import { Input } from "@repo/ui/components/input";
 import { Label } from "@repo/ui/components/label";
 import { PasswordInput } from "@repo/ui/components/password-input";
 import { AuthInputIcon } from "../../../_lib/auth-input-icon.tsx";
-import { signUpWithPassword } from "../../../_lib/credentials.ts";
+import { navigateAway, signUpWithPassword } from "../../../_lib/credentials.ts";
 import type { CaptchaClientConfig } from "@repo/contracts";
 import { captchaAnswered, useRecaptcha } from "../../../_lib/recaptcha.ts";
 import { RecaptchaCheckbox } from "../../../_lib/recaptcha-checkbox.tsx";
 import { rememberSession } from "../../../_lib/session-hint.ts";
 import { optInToNewsletterAction } from "../_actions/newsletter-opt-in.ts";
+import { VerifyCodeForm } from "../_components/verify-code-form.tsx";
 
 type Failure = "taken" | "captcha" | "captchaRequired" | "failed";
 
@@ -63,6 +64,8 @@ export function SignUpForm({
   // ADR-124: unchecked by default, always. A pre-ticked box is not consent.
   const [newsletter, setNewsletter] = useState(false);
   const [failure, setFailure] = useState<Failure | null>(null);
+  // ADR-184: a created account moves on to the code its welcome mail carries.
+  const [step, setStep] = useState<"details" | "verify">("details");
   const [pending, startTransition] = useTransition();
   // ADR-156/158: register reCAPTCHA now, so its token is ready at submit.
   useRecaptcha(captcha);
@@ -86,8 +89,8 @@ export function SignUpForm({
       // Better Auth signs the new account in as part of sign-up, and
       // verification is deliberately NOT required to sign in (plan.md:
       // required to comment/access premium, not to read) — so the learner
-      // lands on the site already signed in, with a verification mail on
-      // its way and status PENDING_VERIFICATION until they use it.
+      // is already signed in, with a verification code on its way and status
+      // PENDING_VERIFICATION until they enter it.
       //
       // ADR-124: the opt-in runs now, against the session sign-up just set,
       // so the address it subscribes is the account's and nobody else's. A
@@ -97,11 +100,24 @@ export function SignUpForm({
         await optInToNewsletterAction({ locale }).catch(() => "failed");
       }
       rememberSession(true);
-      window.location.assign(homeHref);
+      // ADR-184: the verification code is already on its way, so the next
+      // screen asks for it rather than leaving the reader to find a link.
+      setStep("verify");
     });
   };
 
   const errorId = failure ? "signup-error" : undefined;
+
+  if (step === "verify") {
+    // Either way the reader leaves signed in; verifying only flips the badge.
+    return (
+      <VerifyCodeForm
+        email={email}
+        onVerified={() => navigateAway(homeHref)}
+        onSkip={() => navigateAway(homeHref)}
+      />
+    );
+  }
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-4">

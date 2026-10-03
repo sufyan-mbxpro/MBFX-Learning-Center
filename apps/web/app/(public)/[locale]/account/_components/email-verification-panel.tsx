@@ -4,10 +4,10 @@
 // ADR-155, changing the address.
 //
 // Verification never blocks anything (ADR-079 #7), so this card is where a
-// learner sees the state of their address and can ask for the link again —
-// the header menu's nudge, given room. It sends through `resendVerification`,
-// Better Auth's own rate-limited endpoint (security.md #13), exactly as the
-// menu does.
+// learner sees the state of their address and can ask for a code again —
+// the header menu's nudge, given room. Since ADR-184 that is a six-digit code
+// (`sendVerificationCode`, Better Auth's rate-limited email-otp endpoint,
+// security.md #13), entered right here in `VerifyCodeForm`.
 //
 // A change goes to Better Auth's `/change-email` from the browser
 // (`account-security.ts`). Nothing moves until the link mailed to the NEW
@@ -15,13 +15,14 @@
 // "saved".
 import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
-import { AtSign, Mail, MailCheck, MailWarning, Pencil, RotateCw, ShieldCheck } from "lucide-react";
+import { AtSign, Mail, MailCheck, MailWarning, Pencil, ShieldCheck } from "lucide-react";
 import { changeEmailFormSchema } from "@repo/contracts";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
-import { resendVerification } from "../../../../_lib/credentials.ts";
+import { navigateAway, sendVerificationCode } from "../../../../_lib/credentials.ts";
+import { VerifyCodeForm } from "../../_components/verify-code-form.tsx";
 import { changeEmail } from "../../../../_lib/account-security.ts";
 import { AccountCard } from "./account-card.tsx";
 import { NoticeLine } from "./profile-panel.tsx";
@@ -52,7 +53,7 @@ export function EmailVerificationPanel({
 
   const send = () =>
     startSend(async () => {
-      const ok = await resendVerification(email, callbackURL);
+      const ok = await sendVerificationCode(email);
       setState(ok ? "sent" : "failed");
     });
 
@@ -105,11 +106,13 @@ export function EmailVerificationPanel({
               <span className="text-muted-foreground">{t("sentDetail", { email })}</span>
             </span>
           </p>
-          <div>
-            <Button type="button" variant="ghost" size="sm" loading={sending} onClick={send}>
-              <RotateCw aria-hidden /> {t("resendAgain")}
-            </Button>
-          </div>
+          {/* `callbackURL` is this page with `?verified=1`, which draws the
+              "now verified" line once the code is accepted. */}
+          <VerifyCodeForm
+            email={email}
+            showHeading={false}
+            onVerified={() => navigateAway(callbackURL)}
+          />
         </div>
       ) : (
         <div className="flex flex-col gap-3">

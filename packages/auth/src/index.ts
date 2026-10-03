@@ -9,6 +9,7 @@ import { prismaAdapter } from "@better-auth/prisma-adapter";
 import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
 import { admin } from "better-auth/plugins/admin";
 import { twoFactor } from "better-auth/plugins/two-factor";
+import { emailOTP } from "better-auth/plugins/email-otp";
 import { bearer } from "better-auth/plugins/bearer";
 import { after } from "next/server";
 import { adminSessionTimeoutMs, MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from "@repo/contracts";
@@ -28,6 +29,12 @@ import { redisSecondaryStorage } from "./redis-secondary-storage.ts";
 import { notifyEmailVerified } from "./email-verified.ts";
 import { staffImpersonation, startImpersonation } from "./impersonation.ts";
 import { recaptchaGuard } from "./captcha.ts";
+import {
+  DISABLED_EMAIL_OTP_PATHS,
+  VERIFY_CODE_MINUTES,
+  isRefusedOtpRequest,
+  verificationKind,
+} from "./email-code.ts";
 
 // Public-write throttling (changes-11 PR 5.2/5.5). Re-exported here so a
 // route handler imports one package for "who is this" and "how often".
@@ -154,6 +161,47 @@ async function sendEmailChangedNotice(
   });
 }
 
+/** Verification codes mailed per address per hour — the per-account half (security.md #13). */
+const VERIFY_CODE_SENDS_PER_HOUR = 5;
+
+/**
+ * Mails a sign-up verification code (changes-61, ADR-184). The email-otp
+ * plugin generates and stores the code (hashed); this only addresses it. An
+ * address with no account gets nothing, and the caller cannot tell — the
+ * plugin answers the same either way.
+ */
+async function sendVerificationCodeEmail(email: string, otp: string): Promise<void> {
+  const limit = await rateLimit(
+    `email:verify-code:${email.toLowerCase()}`,
+    VERIFY_CODE_SENDS_PER_HOUR,
+    60 * 60,
+  );
+  if (!limit.ok) return;
+  const user = await db.user.findUnique({
+    where: { email },
+    select: { name: true, locale: true },
+  });
+  if (!user) return;
+  await sendTemplatedEmail({
+    key: "auth.verify_code",
+    to: email,
+    locale: user.locale ?? undefined,
+    recipientName: user.name,
+    variables: { "verify.code": otp, "expires.minutes": String(VERIFY_CODE_MINUTES) },
+  });
+}
+
+/** The registration email (changes-61) — sent once, when sign-up creates the account. */
+async function sendWelcomeEmail(user: MailUser): Promise<void> {
+  await sendTemplatedEmail({
+    key: "auth.welcome",
+    to: user.email,
+    locale: user.locale ?? undefined,
+    recipientName: user.name ?? undefined,
+    variables: {},
+  });
+}
+
 /** Change-email requests per account per hour (ADR-155 #3). */
 const CHANGE_EMAIL_LIMIT = 5;
 const CHANGE_EMAIL_WINDOW_SECONDS = 3600;
@@ -248,11 +296,32 @@ const authOptions: BetterAuthOptions = {
 
   emailVerification: {
     sendOnSignUp: true,
-    // The URL is Better Auth's own callback, which flips `emailVerified` and
-    // then redirects to the `callbackURL` the sign-up screen supplied. Nothing
-    // about it is surface-specific, so it is used as given.
+    // ADR-184: TWO senders behind this one hook. A sign-up (or a resend for
+    // the address the account already has) gets a six-digit CODE through the
+    // email-otp plugin. A change of address arrives here with the NEW address
+    // in `user.email` while the row still holds the old one; there is no
+    // account at the new address for a code to verify, so it keeps ADR-155's
+    // link — Better Auth's own callback, which flips `emailVerified` and
+    // redirects to the screen's `callbackURL`.
     sendVerificationEmail: async ({ user, url }) => {
       const mailUser = user as unknown as MailUser;
+      const stored = await db.user.findUnique({
+        where: { id: user.id },
+        select: { email: true },
+      });
+      if (verificationKind(stored?.email ?? null, user.email) === "code") {
+        // Through the plugin's own endpoint, so the code is generated and
+        // stored by the one thing that checks it; it calls back into
+        // `sendVerificationCodeEmail`. `Auth`'s portable type does not carry
+        // plugin endpoints, hence the cast.
+        const api = authInstance.api as unknown as {
+          sendVerificationOTP: (input: {
+            body: { email: string; type: "email-verification" };
+          }) => Promise<unknown>;
+        };
+        await api.sendVerificationOTP({ body: { email: user.email, type: "email-verification" } });
+        return;
+      }
       await sendTemplatedEmail({
         key: "auth.verify_email",
         to: user.email,
@@ -287,6 +356,9 @@ const authOptions: BetterAuthOptions = {
     customRules: {
       "/request-password-reset": { window: 600, max: 3 },
       "/send-verification-email": { window: 600, max: 3 },
+      // ADR-184: the plugin's defaults are 3 a minute; a code is a mail.
+      "/email-otp/send-verification-otp": { window: 600, max: 3 },
+      "/email-otp/verify-email": { window: 600, max: 10 },
       "/reset-password": { window: 600, max: 10 },
       // changes-49. Both were on Better Auth's built-in 3-per-10-seconds,
       // which is a burst limit, not a brute-force one: it allows 1,080
@@ -361,6 +433,14 @@ const authOptions: BetterAuthOptions = {
     // direction, so the write IS the event worth auditing. The endpoint path
     // tells an enable from a disable; see `twoFactorAuditAction`.
     user: {
+      // changes-61: the registration email, for a self-service sign-up only —
+      // an account staff create, or a seed, is not a registration.
+      create: {
+        after: async (user, context) => {
+          if (context?.path !== "/sign-up/email") return;
+          await sendWelcomeEmail(user as unknown as MailUser);
+        },
+      },
       update: {
         after: async (user, context) => {
           const action = twoFactorAuditAction(
@@ -426,6 +506,11 @@ const authOptions: BetterAuthOptions = {
     // themselves at /keystone/profile), and it is limited per account as well
     // as per IP. No session is left to the endpoint's own middleware (401).
     before: createAuthMiddleware(async (ctx) => {
+      // ADR-184: the email-otp plugin is here for ONE job, verifying an
+      // address. Its send endpoint also takes `sign-in` / `forget-password`
+      // types, which would mail a code nothing can use — a mail-bomb with a
+      // friendly face — so anything but `email-verification` is refused.
+      if (isRefusedOtpRequest(ctx.path, ctx.body)) throw new APIError("BAD_REQUEST");
       if (ctx.path !== "/change-email") return;
       const session = await getSessionFromCtx(ctx);
       if (!session) return;
@@ -482,13 +567,44 @@ const authOptions: BetterAuthOptions = {
     }),
   },
 
-  plugins: [admin(), twoFactor(), bearer(), staffImpersonation(), recaptchaGuard()],
+  plugins: [
+    admin(),
+    twoFactor(),
+    bearer(),
+    staffImpersonation(),
+    recaptchaGuard(),
+    // ADR-184: verification codes. NOT `overrideDefaultEmailVerification` —
+    // that would route a change of address through a code too, and the new
+    // address has no account to verify (see `sendVerificationEmail`).
+    // `disableSignUp`: a code never creates an account; sign-up stays the
+    // password form with its captcha and limits. Stored hashed, like every
+    // other token we keep.
+    emailOTP({
+      sendVerificationOTP: async ({ email, otp, type }) => {
+        if (type !== "email-verification") return;
+        await sendVerificationCodeEmail(email, otp);
+      },
+      expiresIn: VERIFY_CODE_MINUTES * 60,
+      allowedAttempts: 5,
+      disableSignUp: true,
+      storeOTP: "hashed",
+    }),
+  ],
 
   // ADR-142 §3: impersonation goes through `staffImpersonation` alone. The
   // admin plugin's own pair authorises against a `user.role` string this
   // project never writes, and its stop endpoint writes no audit row — so both
   // are switched off rather than left as a second, unaudited door.
-  disabledPaths: ["/admin/impersonate-user", "/admin/stop-impersonating"],
+  //
+  // ADR-184: the email-otp plugin's other doors — sign-in by code, password
+  // reset by code, change-email by code, and a bare code check — would each be
+  // a second, unaudited way past the password form, its lockout and its
+  // captcha. Only `send-verification-otp` and `verify-email` stay open.
+  disabledPaths: [
+    "/admin/impersonate-user",
+    "/admin/stop-impersonating",
+    ...DISABLED_EMAIL_OTP_PATHS,
+  ],
 };
 
 /**

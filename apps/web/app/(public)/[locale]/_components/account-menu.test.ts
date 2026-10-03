@@ -86,9 +86,10 @@ describe("ADR-125 — two account pages, and a profile change reaches the header
     expect(read("_components/auth-slot.tsx")).toContain("<Link href={ACCOUNT_PROGRESS_PATH}>");
   });
 
-  it("the profile page resends through the rate-limited helper, back to itself", () => {
+  it("the profile page sends a code through the rate-limited helper, back to itself", () => {
     const panel = read("account/_components/email-verification-panel.tsx");
-    expect(panel).toContain("resendVerification(email, callbackURL)");
+    expect(panel).toContain("sendVerificationCode(email)");
+    expect(panel).toContain("onVerified={() => navigateAway(callbackURL)}");
     expect(panel).not.toContain("/api/auth/send-verification-email");
     expect(panel).toMatch(/role="status"[\s\S]*?data-slot="verification-sent"/);
     expect(read("account/_components/profile-content.tsx")).toContain(

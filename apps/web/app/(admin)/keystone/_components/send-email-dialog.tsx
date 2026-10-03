@@ -239,6 +239,7 @@ export function SendEmailDialog({
               }
             >
               <RichTextEditor
+                emailBlocks
                 value={bodyHtml}
                 onChange={setBodyHtml}
                 labels={editorLabels}

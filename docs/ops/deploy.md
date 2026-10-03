@@ -120,7 +120,8 @@ pnpm seed:live    # the demo corpus, theme/brand/settings, provider keys
 
 **`pnpm db:seed`** is idempotent — every write is an upsert on a stable
 business key, and it is written to repair drift without clobbering admin
-edits. It creates the super-admin only when `SEED_ADMIN_PASSWORD` is set
+edits — setting values, system role names and grants, and social links are
+never overwritten (ADR-183), because every deploy re-runs it. It creates the super-admin only when `SEED_ADMIN_PASSWORD` is set
 (otherwise it logs `SKIPPED admin user`). **Caveat:** with
 `SEED_ADMIN_PASSWORD` set, a re-run RESETS that admin's password to it.
 
@@ -378,7 +379,8 @@ still running while they apply. Keep one instance: `revalidateTag` and the
 in-process rate-limit fallback are per-process.
 
 **`scripts/deploy-release.sh` does exactly that, and is the one to use on the
-live host** (2026-10-02). It never writes to the directory the running server
+live host** (2026-10-02). The step-by-step for learn.mbxpro.com — deploy,
+rollback, and the rules that keep live data safe — is `updating-live.md`. It never writes to the directory the running server
 reads from:
 
 ```
@@ -395,7 +397,8 @@ bash ~/htdocs/learn.mbxpro.com/scripts/deploy-release.sh --rollback  # previous 
 ```
 
 It clones the branch into a new release, symlinks `.env`, then install →
-generate → migrate deploy → seed → build there while the old release keeps
+generate → database dump (`~/backups/deploys`, newest ten kept) → migrate
+deploy → seed → build there while the old release keeps
 serving. Only a finished build is swapped in, by an atomic rename of the
 symlink, followed by `pm2 reload --update-env` with that release's
 `NEXT_DEPLOYMENT_ID`. It then checks that the homepage answers and that the

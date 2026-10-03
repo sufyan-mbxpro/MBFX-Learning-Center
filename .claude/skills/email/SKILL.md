@@ -20,7 +20,8 @@ packages/email/src/
 ├── unsubscribe-headers.ts # List-Unsubscribe: the header names the POST handler, not the page
 └── testing.ts     # memoryDriver(), not exported from "."
 
-packages/db/src/email-template-defaults.ts   # the starting CONTENT (seed + reset)
+packages/db/src/email-template-defaults.ts   # the starting CONTENT (seed + reset), + pre-changes-61 fingerprints
+packages/db/src/email-blocks.ts              # eyebrow/headline/button/panel/badge/codeBox markup (ADR-184)
 packages/core/src/email-admin.ts             # the ADMIN's door: transport, templates, log
 apps/web/app/(admin)/admin/settings/email/   # the four screens
 apps/web/app/(admin)/admin/api/email/preview # the isolated preview route
@@ -81,6 +82,13 @@ service; `@repo/email` stays the sending layer.
    would put the author's markup back on the ADMIN origin, and `srcDoc` would
    inherit the admin nonce CSP. It is the ONE entry in `proxy.ts`'s
    `ADMIN_FRAMABLE_PATHS`; every other /admin path stays `DENY`.
+   8b. **The email block vocabulary is theme-resolved and editor-kept** (ADR-184).
+   `ed-btn`, `ed-panel`, `ed-code`, `ed-eyebrow`, `ed-title`, `ed-badge-*` map
+   to inline styles in `layout.ts`; the editor keeps them only with
+   `RichTextEditor emailBlocks`, and they are NOT article classes. A seeded
+   body upgrades only while it still equals its fingerprint in
+   `EMAIL_TEMPLATE_PREVIOUS_DEFAULTS` / `EMAIL_TEMPLATES_AR_PREVIOUS`; add the
+   current bodies there before changing a default again.
 9. **Default CONTENT lives in `@repo/db`'s `EMAIL_TEMPLATE_DEFAULTS`**, not in
    `seed.ts`, because "Reset to default" writes the same five bodies the seed
    does. `check:email-templates` scans that file against the registry.

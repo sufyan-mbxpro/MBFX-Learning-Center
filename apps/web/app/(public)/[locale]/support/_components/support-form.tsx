@@ -54,7 +54,12 @@ import { Field, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
 import { Textarea } from "@repo/ui/components/textarea";
 import { sendSupportRequestAction, type SupportRequestState } from "../../_actions/support.ts";
-import { captchaAnswered, getCaptchaToken, useRecaptcha } from "../../../../_lib/recaptcha.ts";
+import {
+  captchaAnswered,
+  getCaptchaToken,
+  resetCaptcha,
+  useRecaptcha,
+} from "../../../../_lib/recaptcha.ts";
 import { RecaptchaCheckbox } from "../../../../_lib/recaptcha-checkbox.tsx";
 import { usePublicSession } from "../../_components/public-session.tsx";
 
@@ -134,6 +139,12 @@ export function SupportForm({
   // token does. No token (a blocker) still posts, and the action answers
   // `captcha`, so there is one refusal path and not two.
   useRecaptcha(captcha);
+  // The answer is single-use, so the box is cleared once the action has
+  // ANSWERED, sent or refused — not when the token is read, which unticked it
+  // while the message was still on its way (changes-61).
+  useEffect(() => {
+    if (state.status !== "idle") resetCaptcha();
+  }, [state]);
   const submitWithCaptcha = async (formData: FormData) => {
     const answered = captchaAnswered();
     setCaptchaMissing(!answered);

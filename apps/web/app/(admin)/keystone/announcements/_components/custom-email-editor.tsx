@@ -474,6 +474,7 @@ export function CustomEmailEditor(props: CustomEmailEditorProps) {
                 error={bodyError}
               >
                 <RichTextEditor
+                  emailBlocks
                   value={words.bodyHtml}
                   onChange={(html) => patch({ bodyHtml: html })}
                   labels={props.editorLabels}

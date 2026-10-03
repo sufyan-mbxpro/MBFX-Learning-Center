@@ -192,6 +192,7 @@ export function DesignEditor({ initial, canUpdate, editorLabels }: DesignEditorP
               }
             >
               <RichTextEditor
+                emailBlocks
                 value={bodyHtml}
                 onChange={setBodyHtml}
                 labels={editorLabels}

@@ -10,8 +10,14 @@ import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { hash } from "@node-rs/argon2";
 import type { PrismaClient } from "../src/generated/client/client.ts";
-import { EMAIL_DESIGN_DEFAULTS } from "../src/email-design-defaults.ts";
-import { EMAIL_TEMPLATE_DEFAULTS } from "../src/email-template-defaults.ts";
+import {
+  EMAIL_DESIGN_DEFAULTS,
+  EMAIL_DESIGN_PREVIOUS_BODIES,
+} from "../src/email-design-defaults.ts";
+import {
+  EMAIL_TEMPLATE_DEFAULTS,
+  EMAIL_TEMPLATE_PREVIOUS_DEFAULTS,
+} from "../src/email-template-defaults.ts";
 import { CONTENT_LIFECYCLE_GROUPS } from "../src/permission-groups.ts";
 import { isSuperAdminOnlyPermission } from "../src/role-exclusions.ts";
 import { TRANSLATABLE_SETTING_KEY_LIST } from "../src/translatable-settings.ts";
@@ -1129,9 +1135,12 @@ export async function seed(db: PrismaClient) {
 
   // Roles + their grants
   for (const role of ROLES) {
+    // Name and description are create-only: ADR-016 lets an admin rename a
+    // system role, and every deploy re-seeds (ADR-183). The level stays
+    // code-owned — no screen can change it.
     const record = await db.role.upsert({
       where: { key: role.key },
-      update: { name: role.name, description: role.description, level: role.level, isSystem: true },
+      update: { level: role.level, isSystem: true },
       create: {
         key: role.key,
         name: role.name,
@@ -1142,17 +1151,37 @@ export async function seed(db: PrismaClient) {
     });
 
     const keys = role.permissions === ALL ? allPermissions.map((p) => p.key) : role.permissions;
+    const known = keys.filter((k) => permissionId.has(k));
 
-    // Replace rather than merge: the seed file is the source of truth for
-    // system roles, so removing a permission here actually revokes it.
-    await db.rolePermission.deleteMany({ where: { roleId: record.id } });
+    // ADR-183: diff the code's grants against what the seed granted LAST time,
+    // never against the role's current grants — those include an admin's
+    // edits. A key the code newly grants is added, a key it stopped granting
+    // is revoked, and everything else on the role is left as the admin set it.
+    // An unledgered role (null) only gains what it is missing.
+    const ledger = Array.isArray(record.seededPermissions)
+      ? new Set(record.seededPermissions as string[])
+      : null;
+    const toGrant = ledger ? known.filter((k) => !ledger.has(k)) : known;
+    const toRevoke = ledger ? [...ledger].filter((k) => !known.includes(k)) : [];
+
+    if (toRevoke.length > 0) {
+      await db.rolePermission.deleteMany({
+        where: {
+          roleId: record.id,
+          permissionId: {
+            in: toRevoke.map((k) => permissionId.get(k)).filter((id): id is string => Boolean(id)),
+          },
+        },
+      });
+    }
     await db.rolePermission.createMany({
-      data: keys
-        .map((k) => permissionId.get(k))
-        .filter((id): id is string => Boolean(id))
-        .map((pid) => ({ roleId: record.id, permissionId: pid })),
+      data: toGrant.flatMap((k) => {
+        const pid = permissionId.get(k);
+        return pid ? [{ roleId: record.id, permissionId: pid }] : [];
+      }),
       skipDuplicates: true,
     });
+    await db.role.update({ where: { id: record.id }, data: { seededPermissions: known } });
   }
   console.log(`  roles: ${ROLES.length}`);
 
@@ -1378,6 +1407,25 @@ export async function seed(db: PrismaClient) {
         translationStatus: "TRANSLATED",
       },
     });
+    // changes-61 (ADR-184): a row still holding EXACTLY its pre-changes-61
+    // body has never been edited, so it takes the new design. Matched on the
+    // whole body, so an admin's wording is never overwritten (ADR-183).
+    const previous = EMAIL_TEMPLATE_PREVIOUS_DEFAULTS.find((row) => row.key === template.key);
+    if (previous) {
+      await db.emailTemplateTranslation.updateMany({
+        where: {
+          templateKey: template.key,
+          locale: "en",
+          mode: "RICH",
+          bodyHtml: previous.bodyHtml,
+        },
+        data: {
+          subject: template.subject,
+          preheader: template.preheader,
+          bodyHtml: template.bodyHtml,
+        },
+      });
+    }
   }
   console.log(`  email templates: ${EMAIL_TEMPLATE_DEFAULTS.length}`);
   // Arabic (ADR-166), create-only, after the English rows it translates.
@@ -1400,6 +1448,14 @@ export async function seed(db: PrismaClient) {
         createdById: "seed",
       },
     });
+    // changes-61: an unedited design takes the new body (see the defaults file).
+    const previousBody = EMAIL_DESIGN_PREVIOUS_BODIES[design.id];
+    if (previousBody) {
+      await db.emailDesign.updateMany({
+        where: { id: design.id, bodyHtml: previousBody },
+        data: { bodyHtml: design.bodyHtml },
+      });
+    }
   }
   console.log(`  email designs: ${EMAIL_DESIGN_DEFAULTS.length}`);
 
@@ -1407,7 +1463,9 @@ export async function seed(db: PrismaClient) {
   for (const link of SOCIAL_LINKS) {
     await db.socialLink.upsert({
       where: { platform: link.platform },
-      update: { url: link.url, handle: link.handle, label: link.label },
+      // Create-only: an admin edits these at Settings, and a deploy re-seeds
+      // (ADR-183).
+      update: {},
       create: { ...link, isActive: true, showInFooter: true, showInHeader: false },
     });
   }

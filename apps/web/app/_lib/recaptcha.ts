@@ -10,8 +10,11 @@
 //     is the notice, and a token is minted for one action at submit.
 //   - CHECKBOX (v2): "I'm not a robot" inside the form, drawn by
 //     `RecaptchaCheckbox`, which registers its widget here. The token is the
-//     widget's answer, read at submit and then reset, because an answer is
-//     single-use (ADR-158 #5).
+//     widget's answer, read at submit. An answer is single-use (ADR-158 #5),
+//     so the caller resets the box with `resetCaptcha()` once the request has
+//     FAILED — never at read time (changes-61): a reset at read unticked the
+//     box while a successful sign-in was still navigating away, so the reader
+//     watched the challenge come back on the way out.
 //
 // The script is loaded by the first form that mounts, not by the root layout,
 // so a page with no guarded form never contacts Google.
@@ -218,10 +221,24 @@ function readCheckbox(siteKey: string): CaptchaTokenResult {
   try {
     const token = api.getResponse(checkbox.widgetId);
     if (!token) return { ok: false, unchecked: true };
-    // Single-use: the next submit (after a wrong password, say) needs a new tick.
-    api.reset(checkbox.widgetId);
     return { ok: true, token };
   } catch {
     return { ok: false };
+  }
+}
+
+/**
+ * Clears a spent checkbox answer, so the next submit (after a wrong password,
+ * say) asks for a new tick. Call it when a guarded request comes back
+ * REFUSED; a request that succeeded navigates away or resets its own form,
+ * and resetting first is what made the box reappear during a sign-in's
+ * redirect. Score mode has nothing to clear.
+ */
+export function resetCaptcha(): void {
+  if (!checkbox || !window.grecaptcha) return;
+  try {
+    window.grecaptcha.reset(checkbox.widgetId);
+  } catch {
+    // A widget Google has already torn down has nothing to reset.
   }
 }

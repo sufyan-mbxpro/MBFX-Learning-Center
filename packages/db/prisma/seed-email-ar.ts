@@ -10,15 +10,28 @@
 // inbox, so it renders in English whatever the visitor reads the site in
 // (ADR-113, `audience: "staff"`).
 //
-// Every body uses exactly the variables and links its English source does —
-// `arabic-seed.test.ts` fails on a difference, because `check:email-templates`
-// reads only the English defaults and a typo here would reach an inbox as
-// literal braces.
+// Every body uses exactly the variables, links and markup outline its English
+// source does — `arabic-seed.test.ts` fails on a difference, because
+// `check:email-templates` reads only the English defaults and a typo here
+// would reach an inbox as literal braces. Since changes-61 both are built from
+// the same `email-blocks.ts` helpers, called in the same order.
 //
 // `create`-only, and `sourceHash` stays NULL (unknown, ADR-161 #4) like every
 // other seeded translation: the hash is computed in @repo/core, which this
-// package cannot import.
+// package cannot import. The one exception is the changes-61 upgrade: a row
+// still holding EXACTLY its pre-changes-61 body (`EMAIL_TEMPLATES_AR_PREVIOUS`)
+// is unedited, so it takes the new design; an edited row is left alone.
 import type { PrismaClient } from "../src/generated/client/client.ts";
+import {
+  badge,
+  button,
+  check,
+  codeBox,
+  eyebrow,
+  headline,
+  note,
+  panel,
+} from "../src/email-blocks.ts";
 
 export interface ArabicEmailTemplate {
   subject: string;
@@ -26,7 +39,169 @@ export interface ArabicEmailTemplate {
   bodyHtml: string;
 }
 
+const SIGNOFF = "<p>مع أطيب التحيات،<br><strong>فريق {{site.name}}</strong></p>";
+
 export const EMAIL_TEMPLATES_AR: Readonly<Record<string, ArabicEmailTemplate>> = {
+  "auth.welcome": {
+    subject: "مرحبًا بك في {{site.name}}",
+    preheader: "حسابك جاهز. إليك من أين تبدأ.",
+    bodyHtml:
+      eyebrow("أهلًا بك معنا") +
+      headline("حسابك جاهز") +
+      "<p>عزيزي <strong>{{recipient.name}}</strong>،</p>" +
+      "<p>شكرًا لتسجيلك في <strong>{{site.name}}</strong>. تم إنشاء حسابك " +
+      "للعنوان <strong>{{recipient.email}}</strong>.</p>" +
+      panel(
+        "<h3>ما يمكنك فعله الآن</h3>",
+        check("تابع دورات منظّمة في الفوركس والعملات المشفّرة، درسًا بعد درس"),
+        check("اختبر ما تعلّمته عبر اختبارات قصيرة"),
+        check("استخدم حاسبات التداول والتقويم الاقتصادي"),
+        "<p>" + badge("success", "تم إنشاء الحساب") + "</p>",
+      ) +
+      button("{{site.url}}", "ابدأ التعلّم") +
+      note("سنرسل إليك أيضًا رمزًا قصيرًا لتأكيد عنوان البريد الإلكتروني هذا.") +
+      SIGNOFF,
+  },
+  "auth.verify_code": {
+    subject: "رمز التحقق الخاص بك على {{site.name}}: {{verify.code}}",
+    preheader: "استخدم هذا الرمز لتأكيد بريدك الإلكتروني. صالح لمدة {{expires.minutes}} دقائق.",
+    bodyHtml:
+      eyebrow("التحقق من البريد الإلكتروني") +
+      headline("أكّد عنوان بريدك الإلكتروني") +
+      "<p>عزيزي <strong>{{recipient.name}}</strong>،</p>" +
+      "<p>يُرجى تأكيد عنوان بريدك الإلكتروني باستخدام الرمز أدناه:</p>" +
+      codeBox("رمز التحقق الخاص بك", "{{verify.code}}") +
+      note("هذا الرمز صالح لمدة <strong>{{expires.minutes}} دقائق</strong>.") +
+      "<p>إذا لم تُنشئ حسابًا على <strong>{{site.name}}</strong>، فيمكنك " +
+      "تجاهل هذه الرسالة.</p>" +
+      SIGNOFF,
+  },
+  "auth.password_reset": {
+    subject: "إعادة تعيين كلمة المرور",
+    preheader: "تنتهي صلاحية الرابط خلال {{expires.minutes}} دقيقة.",
+    bodyHtml:
+      eyebrow("أمان الحساب") +
+      headline("إعادة تعيين كلمة المرور") +
+      "<p>عزيزي <strong>{{recipient.name}}</strong>،</p>" +
+      "<p>طلب أحدهم إعادة تعيين كلمة المرور لحسابك على <strong>{{site.name}}</strong>. " +
+      "إذا كنت أنت من طلب ذلك، فاستخدم الزر أدناه. تنتهي صلاحية الرابط خلال " +
+      "<strong>{{expires.minutes}} دقيقة</strong>.</p>" +
+      button("{{reset.url}}", "إعادة تعيين كلمة المرور") +
+      panel(
+        "<p>" + badge("warning", "لست أنت؟") + "</p>",
+        "<p>إذا لم تطلب ذلك، فلم يتغيّر شيء ويمكنك تجاهل هذه الرسالة. " +
+          "تبقى كلمة المرور كما هي.</p>",
+      ) +
+      note("الزر لا يعمل؟ الصق هذا الرابط في متصفحك: {{reset.url}}") +
+      SIGNOFF,
+  },
+  "auth.verify_email": {
+    subject: "أكّد عنوان بريدك الإلكتروني",
+    preheader: "نقرة واحدة ويتأكّد حسابك على {{site.name}}.",
+    bodyHtml:
+      eyebrow("تأكيد العنوان") +
+      headline("أكّد عنوان البريد الإلكتروني هذا") +
+      "<p>عزيزي <strong>{{recipient.name}}</strong>،</p>" +
+      "<p>يُرجى تأكيد أن <strong>{{recipient.email}}</strong> هو العنوان الذي تريد " +
+      "استخدامه لحسابك على <strong>{{site.name}}</strong>:</p>" +
+      button("{{verify.url}}", "تأكيد بريدي الإلكتروني") +
+      note("الزر لا يعمل؟ الصق هذا الرابط في متصفحك: {{verify.url}}") +
+      "<p>إذا لم تطلب ذلك، فيمكنك تجاهل هذه الرسالة ولن يتغيّر شيء.</p>" +
+      SIGNOFF,
+  },
+  "auth.password_changed": {
+    subject: "تم تغيير كلمة المرور",
+    preheader: "تأكيد، تحسّبًا لأن لا تكون أنت من فعل ذلك.",
+    bodyHtml:
+      eyebrow("أمان الحساب") +
+      headline("تم تغيير كلمة المرور") +
+      "<p>عزيزي <strong>{{recipient.name}}</strong>،</p>" +
+      "<p>تم للتوّ تغيير كلمة المرور لحسابك على <strong>{{site.name}}</strong>.</p>" +
+      panel(
+        "<p>" + badge("success", "تم تحديث كلمة المرور") + "</p>",
+        "<p>تاريخ التغيير: <strong>{{changed.at}}</strong></p>",
+        "<p>تم تسجيل الخروج من جميع الجلسات.</p>",
+      ) +
+      "<p>إذا لم تكن أنت من فعل ذلك، فأعد تعيين كلمة المرور فورًا وتواصل معنا.</p>" +
+      button("{{site.url}}", "الانتقال إلى {{site.name}}") +
+      SIGNOFF,
+  },
+  "auth.email_changed": {
+    subject: "تم تغيير عنوان بريدك الإلكتروني",
+    preheader: "تأكيد، تحسّبًا لأن لا تكون أنت من فعل ذلك.",
+    bodyHtml:
+      eyebrow("أمان الحساب") +
+      headline("تم تغيير عنوان بريدك الإلكتروني") +
+      "<p>عزيزي <strong>{{recipient.name}}</strong>،</p>" +
+      "<p>تم تغيير عنوان البريد الإلكتروني لحسابك على <strong>{{site.name}}</strong>. " +
+      "لن يتلقى هذا العنوان بعد الآن رسائل تخص الحساب.</p>" +
+      panel(
+        "<p>" + badge("warning", "تنبيه أمني") + "</p>",
+        "<p>العنوان الجديد: <strong>{{email.new}}</strong></p>",
+        "<p>تاريخ التغيير: <strong>{{changed.at}}</strong></p>",
+      ) +
+      "<p>إذا لم تكن أنت من فعل ذلك، فتواصل معنا فورًا لنؤمّن حسابك.</p>" +
+      SIGNOFF,
+  },
+  "newsletter.confirm": {
+    subject: "أكّد اشتراكك في النشرة البريدية",
+    preheader: "نقرة واحدة لتبدأ في تلقّي تحديثات {{site.name}}.",
+    bodyHtml:
+      eyebrow("النشرة البريدية") +
+      headline("خطوة واحدة أخيرة") +
+      "<p>شكرًا لاشتراكك في نشرة <strong>{{site.name}}</strong> البريدية.</p>" +
+      "<p>أكّد الاشتراك لتبدأ في تلقّيها:</p>" +
+      button("{{confirm.url}}", "تأكيد اشتراكي") +
+      note("الزر لا يعمل؟ الصق هذا الرابط في متصفحك: {{confirm.url}}") +
+      "<p>إذا لم تشترك أنت، فتجاهل هذه الرسالة، فلن يحدث شيء دون " +
+      "هذا التأكيد.</p>" +
+      SIGNOFF,
+  },
+  "newsletter.welcome": {
+    subject: "تم اشتراكك",
+    preheader: "إليك ما يمكنك توقّعه من نشرة {{site.name}} البريدية.",
+    bodyHtml:
+      eyebrow("النشرة البريدية") +
+      headline("أنت الآن على القائمة") +
+      "<p>مرحبًا بك في نشرة <strong>{{site.name}}</strong> البريدية. إليك ما يمكنك توقّعه:</p>" +
+      panel(
+        check("ملاحظات عن الأسواق تشرح ما تحرّك ولماذا"),
+        check("دروس ودورات جديدة فور نشرها"),
+        check("تحليل معمّق لموضوع واحد بين حين وآخر"),
+        "<p>" + badge("success", "مشترك") + "</p>",
+      ) +
+      button("{{site.url}}", "زيارة {{site.name}}") +
+      note('يمكنك <a href="{{unsubscribe.url}}">إلغاء الاشتراك</a> في أي وقت.') +
+      SIGNOFF,
+  },
+  "announcement.course": {
+    subject: "دورة جديدة: {{course.title}}",
+    preheader: "{{course.summary}}",
+    bodyHtml:
+      '<p><a href="{{course.url}}"><img src="{{course.coverUrl}}" alt="{{course.title}}" ' +
+      'width="560" style="width:100%;max-width:560px;height:auto;border:0"></a></p>' +
+      eyebrow("دورة جديدة") +
+      headline("{{course.title}}") +
+      "<p>" +
+      badge("primary", "{{course.level}}") +
+      " " +
+      badge("muted", "الدروس: {{course.lessonCount}}") +
+      "</p>" +
+      "<p>{{course.summary}}</p>" +
+      "<p><strong>{{campaign.message}}</strong></p>" +
+      button("{{course.url}}", "ابدأ الدورة") +
+      note(
+        "تصلك هذه الرسالة لأن لديك حسابًا على {{site.name}} أو لأنك مشترك في " +
+          'نشرته البريدية. <a href="{{unsubscribe.url}}">إيقاف إعلانات الدورات</a>.',
+      ),
+  },
+};
+
+/**
+ * The Arabic bodies as they were seeded BEFORE changes-61, verbatim — a
+ * fingerprint of an unedited row, never edited itself.
+ */
+export const EMAIL_TEMPLATES_AR_PREVIOUS: Readonly<Record<string, ArabicEmailTemplate>> = {
   "auth.password_reset": {
     subject: "إعادة تعيين كلمة المرور",
     preheader: "تنتهي صلاحية الرابط خلال {{expires.minutes}} دقيقة.",
@@ -100,7 +275,11 @@ export const EMAIL_TEMPLATES_AR: Readonly<Record<string, ArabicEmailTemplate>> =
   },
 };
 
-/** Writes an Arabic row for every seeded template the map covers. */
+/**
+ * Writes an Arabic row for every seeded template the map covers, and moves an
+ * UNEDITED pre-changes-61 row onto the new design (see the file header).
+ * Returns how many rows were created; upgrades are not counted.
+ */
 export async function seedArabicEmailTemplates(db: PrismaClient): Promise<number> {
   let created = 0;
   for (const [templateKey, content] of Object.entries(EMAIL_TEMPLATES_AR)) {
@@ -113,7 +292,20 @@ export async function seedArabicEmailTemplates(db: PrismaClient): Promise<number
       where: { templateKey_locale: { templateKey, locale: "ar" } },
       select: { id: true },
     });
-    if (existing) continue;
+    if (existing) {
+      const previous = EMAIL_TEMPLATES_AR_PREVIOUS[templateKey];
+      if (previous) {
+        await db.emailTemplateTranslation.updateMany({
+          where: { templateKey, locale: "ar", mode: "RICH", bodyHtml: previous.bodyHtml },
+          data: {
+            subject: content.subject,
+            preheader: content.preheader,
+            bodyHtml: content.bodyHtml,
+          },
+        });
+      }
+      continue;
+    }
     await db.emailTemplateTranslation.create({
       data: {
         templateKey,

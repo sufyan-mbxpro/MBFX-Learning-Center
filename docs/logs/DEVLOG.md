@@ -27659,3 +27659,77 @@ seeder writes the same four Arabic setting rows the main seed does
 
 **Tests.** `arabic-seed.test.ts` 137/137; `@repo/core` `tsc` clean;
 `check:phantom-deps` OK.
+
+## 2026-10-03 — Module 14: a deploy keeps live data (ADR-183)
+
+**Shipped.** Checked the live host against the release-directory standard:
+`htdocs/learn.mbxpro.com` → `releases/<stamp>-<sha>`, `.env` and `uploads`
+in `shared/`, three releases kept, `--rollback` — it already followed it. Two
+gaps for a site whose data must survive every update: `deploy-release.sh` now
+dumps the database to `~/backups/deploys/<release>.sql.gz` before migrating
+(newest ten kept; the deploy stops if the dump fails), and `db:seed`, which
+runs on every deploy, no longer overwrites a system role's name, description
+or grants, or a social link's URL/handle/label. New runbook
+`docs/ops/updating-live.md`.
+
+**Decisions.** ADR-183. System-role grants are diffed against a new
+`Role.seededPermissions` ledger (migration
+`20261003090000_role_seed_ledger_adr183`, additive), so code can still add or
+revoke a grant while an admin's own changes stand.
+
+**Tests.** `db.integration.test.ts`: new "keeps an admin's edits to a system
+role and a social link across a re-seed" passes; 17/18 passed. The existing
+"identical row counts" test timed out at 180s — it also does on the
+unmodified seed (the Arabic corpora made two seeds slower), so its budget is
+raised to 300s. `@repo/db` `tsc` and ESLint clean; `bash -n` on the script.
+
+## 2026-10-03 — Module 04/17/07: verification by code, designed emails, quiet tab counts (changes-61, ADR-184)
+
+**Shipped.** (1) **Tab counts**: `TabsCount` (`@repo/ui` tabs) fills only the
+selected tab's count; the others are a muted chip. Used by the email template
+gallery and the campaigns status strip, the only two strips with counts.
+(2) **Smooth credential hand-off**: the reCAPTCHA box was reset the moment its
+token was read, so it reappeared unticked while a successful sign-in was still
+navigating, and the transition ended before `location.assign` landed, so the
+spinner stopped. `readCheckbox` no longer resets; `resetCaptcha()` runs on a
+refused request (and on the support form once its action answers), and the
+learner sign-in, staff sign-in and sign-up await the new `navigateAway()`,
+which holds the transition until the page is gone. (3) **Verification by
+code**: Better Auth's `email-otp` plugin, verification only; sign-up now shows
+a `VerifyCodeForm` step ("I'll do this later" keeps ADR-079 #7), and the
+account page sends a code and takes it in place. New templates
+`auth.verify_code` and `auth.welcome` (the registration email, sent on
+`/sign-up/email` only), English and Arabic. (4) **Template design**: an email
+block vocabulary (`ed-btn`, `ed-panel`, `ed-code`, `ed-eyebrow`, `ed-title`,
+`ed-badge-*`) in `@repo/email`'s layout, every seeded body rebuilt with it
+from `packages/db/src/email-blocks.ts` (bold variables, eyebrow + headline,
+tinted panels, buttons for links), and a new "Limited-time offer" design for
+promotions (image-28). The email editors keep the new classes on a Visual
+save (`RichTextEditor emailBlocks`). (5) **Gallery card**: a readable title
+(`admin.email.gallery.templateNames.*`) and the subject as its description
+replace the raw key; the Active badge is gone, the switch sits on the title
+row (it had overflowed into the next card), and a language chip is its code
+coloured by state, without "Current".
+
+**Live check (read-only).** Every template is on, and the audit log holds no
+`email.template.activate/deactivate` row ever, so the switch had not been used
+on live; the recent `auth.password_reset` deliveries were TEST sends, which
+skip the switch by design (invariant #6). A real send of an inactive template
+is SUPPRESSED "template is inactive" (`send.integration.test.ts`).
+
+**Decisions.** ADR-184: no `overrideDefaultEmailVerification` (it would route
+ADR-155's change-of-email mail through a code the new address cannot use);
+one hook with two senders chosen by `verificationKind`; every other email-otp
+door in `disabledPaths`; seeding stays create-only except a row still holding
+its exact pre-changes-61 body, which takes the new design.
+
+**Tests.** New: `email-code.test.ts` 12/12, `changes-61.test.ts` 7/7, layout
++11 (43/43), `credentials.test.ts` code helpers (link-resend tests removed with
+the helper). `@repo/contracts` email suites 87/87, `@repo/email` unit 134/134,
+`@repo/db` unit 176/176 (Arabic seed 141/141), `@repo/auth` unit 92/92,
+`@repo/ui` 508/508. Web 3431 passed, 7 failed: the same seven pre-existing
+failures (`site-url.test.ts` ×5, `changes-50-fixes`, `email-admin-conventions`).
+`tsc` clean on contracts, email, db, auth, ui and web; ESLint clean on every
+touched file; `check:email-templates` (10), `check:catalog-completeness` and
+`check:phantom-deps` OK. Not run: integration suites and the seed (Docker was
+not running), and the sign-up code step in a browser.

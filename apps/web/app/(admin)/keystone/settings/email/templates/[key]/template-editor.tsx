@@ -66,7 +66,6 @@ import {
   sendTestEmailAction,
 } from "../../../../_actions/email-actions.ts";
 
-
 export interface EmailTemplateEditorLabels {
   backToList: string;
   /** The static heading and its one line (ADR-140 §3). */
@@ -375,6 +374,7 @@ export function EmailTemplateEditor({
               error={form.error("bodyHtml")}
             >
               <RichTextEditor
+                emailBlocks
                 value={draft.bodyHtml}
                 onChange={(html) => patch({ bodyHtml: html })}
                 labels={editorLabels}

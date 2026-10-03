@@ -85,6 +85,27 @@ const SAMPLE_BASE = {
  * forget.
  */
 export const EMAIL_TEMPLATES = {
+  // changes-61: the welcome a new learner receives when their account is
+  // created. Globals only — the button goes to `{{site.url}}` — so nothing a
+  // caller passes can be wrong. Not `critical`: switching it off loses a
+  // greeting, not a flow.
+  "auth.welcome": {
+    audience: "public",
+    critical: false,
+    variables: [],
+    required: [],
+    sample: { ...SAMPLE_BASE },
+  },
+  // changes-61, ADR-184: sign-up verification by a six-digit CODE. The link
+  // (`auth.verify_email`) stays for confirming a NEW address after a change,
+  // where there is no account at that address yet for a code to verify.
+  "auth.verify_code": {
+    audience: "public",
+    critical: true,
+    variables: ["verify.code", "expires.minutes"],
+    required: ["verify.code"],
+    sample: { ...SAMPLE_BASE, "verify.code": "482913", "expires.minutes": "10" },
+  },
   "auth.password_reset": {
     audience: "any",
     critical: true,

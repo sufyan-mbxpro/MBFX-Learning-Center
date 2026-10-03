@@ -96,7 +96,52 @@ describe("seed idempotency", () => {
     // dominated by Argon2id hashing (deliberately slow) rather than by row
     // count. It measured ~80s here once changes-09 added the About menu, so
     // the default 60s budget was already marginal — this timeout buys room
-    // without weakening what the test asserts.
+    // without weakening what the test asserts. The Arabic corpora (2026-10)
+    // pushed it past 180s on the unmodified seed, hence 300s.
+  }, 300_000);
+
+  // ADR-183: every deploy re-seeds, so the seed must not undo an admin's
+  // edit to a system role (ADR-016) or a social link.
+  it("keeps an admin's edits to a system role and a social link across a re-seed", async () => {
+    await seed(db);
+    const role = await db.role.findUniqueOrThrow({ where: { key: "content_manager" } });
+    const grantedKeys = async () =>
+      (
+        await db.rolePermission.findMany({
+          where: { roleId: role.id },
+          select: { permission: { select: { key: true } } },
+        })
+      )
+        .map((row) => row.permission.key)
+        .sort();
+
+    const before = await grantedKeys();
+    const revoked = before[0]!;
+    const added = (await db.permission.findFirstOrThrow({ where: { key: { notIn: before } } })).key;
+    await db.rolePermission.deleteMany({
+      where: { roleId: role.id, permission: { key: revoked } },
+    });
+    await db.rolePermission.create({
+      data: {
+        roleId: role.id,
+        permissionId: (await db.permission.findUniqueOrThrow({ where: { key: added } })).id,
+      },
+    });
+    await db.role.update({ where: { id: role.id }, data: { name: "Editors" } });
+    await db.socialLink.update({
+      where: { platform: "instagram" },
+      data: { url: "https://www.instagram.com/edited" },
+    });
+
+    await seed(db);
+
+    const after = await grantedKeys();
+    expect(after).not.toContain(revoked);
+    expect(after).toContain(added);
+    expect((await db.role.findUniqueOrThrow({ where: { id: role.id } })).name).toBe("Editors");
+    expect((await db.socialLink.findUniqueOrThrow({ where: { platform: "instagram" } })).url).toBe(
+      "https://www.instagram.com/edited",
+    );
   }, 180_000);
 
   // STALE-TEST FIX (changes-07 PR 2). This asserted plan v2.2 PR 1.1's

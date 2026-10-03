@@ -23,7 +23,7 @@ import type {
   CampaignKind,
 } from "@repo/contracts";
 import { Badge } from "@repo/ui/components/badge";
-import { Tabs, TabsList, TabsTrigger } from "@repo/ui/components/tabs";
+import { Tabs, TabsCount, TabsList, TabsTrigger } from "@repo/ui/components/tabs";
 import { Button } from "@repo/ui/components/button";
 import { ConfirmDialog } from "@repo/ui/components/confirm-dialog";
 import { DataTable, type DataTableLabels } from "@repo/ui/components/data-table";
@@ -349,16 +349,12 @@ export function AnnouncementsTable({
         <TabsList aria-label={ta("filterStatus")}>
           <TabsTrigger value="">
             {ta("filterAllStatuses")}
-            <Badge variant="secondary" size="xs" className="tabular-nums">
-              {total}
-            </Badge>
+            <TabsCount>{total}</TabsCount>
           </TabsTrigger>
           {STATUSES.map((key) => (
             <TabsTrigger key={key} value={key}>
               {ta(`statusTabs.${key}`)}
-              <Badge variant="secondary" size="xs" className="tabular-nums">
-                {counts.get(key) ?? 0}
-              </Badge>
+              <TabsCount>{counts.get(key) ?? 0}</TabsCount>
             </TabsTrigger>
           ))}
         </TabsList>

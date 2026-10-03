@@ -91,6 +91,7 @@ import { MediaPickerDialog } from "./media-picker-dialog.tsx";
 import type { MediaCategory } from "@repo/contracts";
 import {
   EDITORIAL_EXTENSIONS,
+  EMAIL_EXTENSIONS,
   EDITOR_ALIGNMENTS,
   EDITOR_FONTS,
   EDITOR_SIZES,
@@ -237,6 +238,21 @@ function ToolbarMenu({
   );
 }
 
+// The canvas mirrors the public article body's typography, so what admins
+// see is what readers get. `break-words` + the scroll containers on pre/table
+// are what stop a pasted 400-character URL or a wide code block from widening
+// the whole page (changes-10 item 9) — the editor is inside a grid track, and
+// without these the track grows to fit the content and pushes the sidebar off
+// screen.
+const EDITOR_CANVAS =
+  "min-h-96 max-w-none px-3 py-2 text-sm leading-relaxed break-words outline-none [&_a]:text-primary-interactive [&_a]:underline-offset-4 [&_a:hover]:underline [&_blockquote]:border-s-2 [&_blockquote]:ps-4 [&_blockquote]:text-muted-foreground [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:font-mono [&_code]:text-sm [&_h2]:mt-4 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:mt-3 [&_h3]:text-lg [&_h3]:font-semibold [&_h4]:font-semibold [&_hr]:my-4 [&_img]:my-2 [&_img]:max-h-96 [&_img]:rounded-lg [&_ol]:list-decimal [&_ol]:ps-5 [&_p]:my-1.5 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:bg-muted [&_pre]:p-4 [&_ul]:list-disc [&_ul]:ps-5 [&_table]:my-3 [&_table]:w-full [&_table]:table-fixed [&_table]:border-collapse [&_td]:border [&_td]:p-2 [&_td]:align-top [&_th]:border [&_th]:bg-muted/50 [&_th]:p-2 [&_th]:text-start [&_.selectedCell]:bg-primary/10 [&_.is-editor-empty:first-child]:before:pointer-events-none [&_.is-editor-empty:first-child]:before:float-start [&_.is-editor-empty:first-child]:before:h-0 [&_.is-editor-empty:first-child]:before:text-muted-foreground [&_.is-editor-empty:first-child]:before:content-placeholder";
+
+// changes-61: an email body's block classes, drawn roughly as the message
+// draws them so an author can see which paragraph is the button or the code.
+// The preview remains the true render.
+const EMAIL_CANVAS =
+  "[&_.ed-panel]:bg-muted [&_.ed-panel]:p-4 [&_.ed-code]:font-mono [&_.ed-code]:text-2xl [&_.ed-code]:font-bold [&_.ed-code]:tracking-widest [&_.ed-eyebrow]:text-2xs [&_.ed-eyebrow]:font-bold [&_.ed-eyebrow]:tracking-caps [&_.ed-eyebrow]:text-primary-interactive [&_.ed-eyebrow]:uppercase [&_.ed-title]:text-2xl [&_.ed-title]:font-extrabold [&_a.ed-btn]:inline-block [&_a.ed-btn]:rounded-md [&_a.ed-btn]:bg-primary [&_a.ed-btn]:px-5 [&_a.ed-btn]:py-2 [&_a.ed-btn]:font-semibold [&_a.ed-btn]:text-primary-foreground [&_a.ed-btn]:no-underline";
+
 export function RichTextEditor({
   id,
   value,
@@ -253,6 +269,7 @@ export function RichTextEditor({
   mode: controlledMode,
   onModeChange,
   ai,
+  emailBlocks = false,
 }: {
   id?: string;
   /** Stored HTML (sanitized server-side on the last save). */
@@ -276,6 +293,12 @@ export function RichTextEditor({
    */
   mode?: "visual" | "html";
   onModeChange?: (mode: "visual" | "html") => void;
+  /**
+   * An EMAIL body (changes-61, ADR-184): keep the email block classes and
+   * badges a Visual save would otherwise drop, and draw them roughly as the
+   * message will. The preview is still the true render.
+   */
+  emailBlocks?: boolean;
   /**
    * The writing assistant (changes-29 B1), or nothing.
    *
@@ -343,19 +366,13 @@ export function RichTextEditor({
       // nothing after a reload are worse than no handles.
       TableKit.configure({ table: { resizable: false } }),
       ...EDITORIAL_EXTENSIONS,
+      ...(emailBlocks ? EMAIL_EXTENSIONS : []),
       Placeholder.configure({ placeholder: labels.placeholder }),
     ],
     content: value,
     editorProps: {
       attributes: {
-        // Mirrors the public article body's typography so what admins see
-        // is what readers get. `break-words` + the scroll containers on
-        // pre/table are what stop a pasted 400-character URL or a wide code
-        // block from widening the whole page (changes-10 item 9) — the
-        // editor is inside a grid track, and without these the track grows
-        // to fit the content and pushes the sidebar off screen.
-        class:
-          "min-h-96 max-w-none px-3 py-2 text-sm leading-relaxed break-words outline-none [&_a]:text-primary-interactive [&_a]:underline-offset-4 [&_a:hover]:underline [&_blockquote]:border-s-2 [&_blockquote]:ps-4 [&_blockquote]:text-muted-foreground [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:font-mono [&_code]:text-sm [&_h2]:mt-4 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:mt-3 [&_h3]:text-lg [&_h3]:font-semibold [&_h4]:font-semibold [&_hr]:my-4 [&_img]:my-2 [&_img]:max-h-96 [&_img]:rounded-lg [&_ol]:list-decimal [&_ol]:ps-5 [&_p]:my-1.5 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:bg-muted [&_pre]:p-4 [&_ul]:list-disc [&_ul]:ps-5 [&_table]:my-3 [&_table]:w-full [&_table]:table-fixed [&_table]:border-collapse [&_td]:border [&_td]:p-2 [&_td]:align-top [&_th]:border [&_th]:bg-muted/50 [&_th]:p-2 [&_th]:text-start [&_.selectedCell]:bg-primary/10 [&_.is-editor-empty:first-child]:before:pointer-events-none [&_.is-editor-empty:first-child]:before:float-start [&_.is-editor-empty:first-child]:before:h-0 [&_.is-editor-empty:first-child]:before:text-muted-foreground [&_.is-editor-empty:first-child]:before:content-placeholder",
+        class: emailBlocks ? `${EDITOR_CANVAS} ${EMAIL_CANVAS}` : EDITOR_CANVAS,
       },
     },
     onUpdate: ({ editor: e }) => emit(e.getHTML()),

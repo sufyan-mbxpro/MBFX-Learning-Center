@@ -44,7 +44,7 @@ import {
 import { Empty, EmptyDescription, EmptyMedia, EmptyTitle } from "@repo/ui/components/empty";
 import { SearchInput } from "@repo/ui/components/search-input";
 import { Switch } from "@repo/ui/components/switch";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@repo/ui/components/tabs";
+import { Tabs, TabsContent, TabsCount, TabsList, TabsTrigger } from "@repo/ui/components/tabs";
 import { humanizeKey } from "@repo/utils";
 import {
   duplicateEmailDesignAction,
@@ -122,7 +122,24 @@ function useAudienceLabel() {
 
 // ─── Templates ───────────────────────────────────────────────
 
-function ActiveSwitch({ row }: { row: GalleryTemplate }) {
+/**
+ * A template's readable name (changes-61): "Password reset", not
+ * `auth.password_reset`. A catalog string per key, with `humanizeKey()` on the
+ * last segment as the fallback for a key added without one (code-style #5).
+ */
+function useTemplateName() {
+  const t = useTranslations("admin.email.gallery");
+  return React.useCallback(
+    (key: string) => {
+      const path = `templateNames.${key}`;
+      if (t.has(path)) return t(path);
+      return humanizeKey(key.split(".").pop() ?? key);
+    },
+    [t],
+  );
+}
+
+function ActiveSwitch({ row, canUpdate }: { row: GalleryTemplate; canUpdate: boolean }) {
   const t = useTranslations("admin");
   const { run, pending } = useServerAction();
   const [confirming, setConfirming] = React.useState(false);
@@ -136,27 +153,39 @@ function ActiveSwitch({ row }: { row: GalleryTemplate }) {
 
   return (
     <>
+      {/* Shown to a reader without the key too, disabled: with the Active
+          badge gone (changes-61) the switch is where the state is read. */}
       <Switch
         aria-label={t("email.toggleActive")}
         checked={row.isActive}
-        disabled={pending}
+        disabled={pending || !canUpdate}
         onCheckedChange={() => setConfirming(true)}
+        className="shrink-0"
       />
-      <ConfirmDialog
-        open={confirming}
-        onOpenChange={setConfirming}
-        title={copy.title}
-        description={copy.body}
-        confirmLabel={t("confirm")}
-        cancelLabel={t("cancel")}
-        // Turning a template ON is not destructive; turning one off is.
-        destructive={!next}
-        onConfirm={() => run(() => setEmailTemplateActiveAction({ key: row.key, isActive: next }))}
-      />
+      {canUpdate && (
+        <ConfirmDialog
+          open={confirming}
+          onOpenChange={setConfirming}
+          title={copy.title}
+          description={copy.body}
+          confirmLabel={t("confirm")}
+          cancelLabel={t("cancel")}
+          // Turning a template ON is not destructive; turning one off is.
+          destructive={!next}
+          onConfirm={() =>
+            run(() => setEmailTemplateActiveAction({ key: row.key, isActive: next }))
+          }
+        />
+      )}
     </>
   );
 }
 
+/**
+ * Each language as its CODE alone, coloured by its state (changes-61): green
+ * when current, amber when outdated. The state word had been a second label
+ * on every chip; it stays for assistive technology and as the tooltip.
+ */
 function LocaleStates({ locales }: { locales: EmailTemplateLocaleState[] }) {
   const t = useTranslations("admin.email");
   const label: Record<EmailTranslationState, string> = {
@@ -168,12 +197,14 @@ function LocaleStates({ locales }: { locales: EmailTemplateLocaleState[] }) {
   return (
     <div className="flex flex-wrap gap-1">
       {locales.map((entry) => (
-        <StatusBadge key={entry.locale} tone={STATE_TONE[entry.state]} appearance="tonal">
-          {/* The locale code is how a translator names a catalog — the one
-              identifier that IS the display form (ADR-044 #5). */}
-          <span className="uppercase">{entry.locale}</span>
-          <span className="font-medium opacity-80">{label[entry.state]}</span>
-        </StatusBadge>
+        <span key={entry.locale} title={label[entry.state]}>
+          <StatusBadge tone={STATE_TONE[entry.state]} appearance="tonal">
+            {/* The locale code is how a translator names a catalog — the one
+                identifier that IS the display form (ADR-044 #5). */}
+            <span className="uppercase">{entry.locale}</span>
+            <span className="sr-only">{label[entry.state]}</span>
+          </StatusBadge>
+        </span>
       ))}
     </div>
   );
@@ -192,17 +223,19 @@ function TemplateCard({
 }) {
   const t = useTranslations("admin");
   const audienceLabel = useAudienceLabel();
+  const templateName = useTemplateName();
   const [viewing, setViewing] = React.useState(false);
   const [locale, setLocale] = React.useState(previewLocale);
   const hasContent = row.subject !== "";
   const fields: EmailPreviewFields = { key: row.key, locale };
+  const name = templateName(row.key);
 
   return (
-    <article className="flex flex-col overflow-hidden rounded-lg border bg-card shadow-xs transition-shadow hover:shadow-md">
+    <article className="flex min-w-0 flex-col overflow-hidden rounded-lg border bg-card shadow-xs transition-shadow hover:shadow-md">
       {hasContent ? (
         <EmailPreviewThumbnail
           fields={{ key: row.key, locale: previewLocale }}
-          label={t("emailPreview.thumbnailTitle", { name: row.subject })}
+          label={t("emailPreview.thumbnailTitle", { name })}
         />
       ) : (
         <div className="flex h-56 items-center justify-center bg-muted text-muted-foreground">
@@ -210,21 +243,22 @@ function TemplateCard({
         </div>
       )}
       <div className="flex flex-1 flex-col gap-3 border-t p-4">
-        <div className="flex items-start justify-between gap-2">
+        {/* Title and short description with the switch beside them
+            (changes-61). The switch had sat at the end of the button row,
+            where a narrow card pushed it over the next card's edge. */}
+        <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 flex-col gap-0.5">
             <Link
               href={`${TEMPLATE_PATH}/${row.key}`}
-              className="truncate font-medium hover:underline"
+              className="truncate font-semibold hover:underline"
             >
-              {row.subject || t("email.noContent")}
+              {name}
             </Link>
-            {/* The registry key, as a muted span rather than `<code>` —
-                code-style #6: admin chrome is one typeface. */}
-            <span className="truncate text-xs text-muted-foreground">{row.key}</span>
+            <span className="line-clamp-2 text-xs text-muted-foreground" title={row.subject}>
+              {row.subject || t("email.noContent")}
+            </span>
           </div>
-          <StatusBadge tone={row.isActive ? "success" : "neutral"} appearance="tonal">
-            {row.isActive ? t("email.gallery.active") : t("email.gallery.inactive")}
-          </StatusBadge>
+          <ActiveSwitch row={row} canUpdate={canUpdate} />
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5">
@@ -238,7 +272,7 @@ function TemplateCard({
           {t("email.columnUpdated")}: {row.updatedAtLabel ?? t("email.never")}
         </p>
 
-        <div className="mt-auto flex items-center gap-2 pt-1">
+        <div className="mt-auto flex flex-wrap items-center gap-2 pt-1">
           <Button
             type="button"
             variant="outline"
@@ -259,18 +293,13 @@ function TemplateCard({
               </Link>
             }
           />
-          {canUpdate && (
-            <div className="ms-auto">
-              <ActiveSwitch row={row} />
-            </div>
-          )}
         </div>
       </div>
 
       <EmailPreviewDialog
         open={viewing}
         onOpenChange={setViewing}
-        title={row.subject || row.key}
+        title={name}
         fields={fields}
         toolbarStart={
           locales.length > 1 ? (
@@ -484,6 +513,7 @@ export function TemplateGallery({
 }) {
   const t = useTranslations("admin");
   const categoryLabel = useCategoryLabel();
+  const templateName = useTemplateName();
   const [tab, setTab] = React.useState(DESIGNS_TAB);
   const [query, setQuery] = React.useState("");
   const [showArchived, setShowArchived] = React.useState<"active" | "all">("active");
@@ -519,16 +549,14 @@ export function TemplateGallery({
         <TabsList aria-label={t("email.gallery.tabsLabel")}>
           <TabsTrigger value={DESIGNS_TAB}>
             {t("email.gallery.designsTab")}
-            <Badge variant="secondary" size="xs" className="tabular-nums">
-              {designCount}
-            </Badge>
+            <TabsCount>{designCount}</TabsCount>
           </TabsTrigger>
           {categories.map((category) => (
             <TabsTrigger key={category} value={category}>
               {categoryLabel(category, "label")}
-              <Badge variant="secondary" size="xs" className="tabular-nums">
+              <TabsCount>
                 {templates.filter((row) => templateCategory(row.key) === category).length}
-              </Badge>
+              </TabsCount>
             </TabsTrigger>
           ))}
         </TabsList>
@@ -576,7 +604,9 @@ export function TemplateGallery({
 
       {categories.map((category) => {
         const rows = templates.filter(
-          (row) => templateCategory(row.key) === category && matches(`${row.key} ${row.subject}`),
+          (row) =>
+            templateCategory(row.key) === category &&
+            matches(`${templateName(row.key)} ${row.key} ${row.subject}`),
         );
         const description = categoryLabel(category, "description");
         return (

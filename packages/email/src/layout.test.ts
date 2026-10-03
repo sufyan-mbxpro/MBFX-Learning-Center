@@ -307,3 +307,56 @@ describe("absoluteUrl", () => {
     expect(absoluteUrl("/uploads/l.png", "")).toBeUndefined();
   });
 });
+
+describe("the email block vocabulary (changes-61, ADR-184)", () => {
+  const style = (name: string) => editorialStyle(name, palette) ?? "";
+  const ink = (css: string) => /(?:^|;)color:([^;]+)/.exec(css)?.[1] ?? "";
+  const ground = (css: string) => /background-color:([^;]+)/.exec(css)?.[1] ?? "";
+
+  it("draws a button on the brand primary with an ink that reads on it", () => {
+    const css = style("ed-btn");
+    expect(ground(css)).toBe(DEFAULT_BRAND.primary);
+    expect(css).toContain("text-decoration:none");
+    expect(contrastRatio(ink(css), DEFAULT_BRAND.primary)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("lets a button's own style beat the default link colour", () => {
+    const html = inlineEditorialStyles(
+      '<p><a class="ed-btn" href="https://x.test">Go</a></p>',
+      palette,
+    );
+    const css = /style="([^"]*)"/.exec(html)?.[1] ?? "";
+    // The link colour comes first, so the button's later declaration wins.
+    expect(css.lastIndexOf("color:")).toBeGreaterThan(css.indexOf("background-color:"));
+    expect(css.endsWith("text-decoration:none")).toBe(true);
+  });
+
+  it.each(["primary", "success", "warning", "info", "danger", "muted"])(
+    "gives a %s badge a readable ink on its own ground",
+    (tone) => {
+      const css = style(`ed-badge-${tone}`);
+      expect(ground(css)).not.toBe("");
+      expect(contrastRatio(ink(css), ground(css))).toBeGreaterThanOrEqual(3);
+    },
+  );
+
+  it("ignores a badge tone it does not know", () => {
+    expect(editorialStyle("ed-badge-neon", palette)).toBeNull();
+  });
+
+  it("styles the panel, the code, the eyebrow and the headline from the theme", () => {
+    expect(style("ed-panel")).toContain(DEFAULT_LIGHT_SURFACE.surfaceMuted);
+    expect(style("ed-code")).toContain("letter-spacing");
+    expect(style("ed-eyebrow")).toContain("text-transform:uppercase");
+    expect(style("ed-title")).toContain("font-weight:800");
+  });
+
+  it("draws every table full width, so a one-cell panel does not shrink to its words", () => {
+    const html = inlineEditorialStyles(
+      '<table><tbody><tr><td class="ed-panel"><p>Offer</p></td></tr></tbody></table>',
+      palette,
+    );
+    expect(html).toMatch(/<table style="width:100%/);
+    expect(html).toMatch(/<td class="ed-panel" style="background-color:/);
+  });
+});

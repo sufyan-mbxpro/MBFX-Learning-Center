@@ -9,10 +9,11 @@ import { PasswordInput } from "@repo/ui/components/password-input";
 import { AuthInputIcon } from "../../_lib/auth-input-icon.tsx";
 import { useSearchParam } from "../../_lib/use-search-param.ts";
 import type { CaptchaClientConfig } from "@repo/contracts";
-import { captchaAnswered, useRecaptcha } from "../../_lib/recaptcha.ts";
+import { captchaAnswered, resetCaptcha, useRecaptcha } from "../../_lib/recaptcha.ts";
 import { RecaptchaCheckbox } from "../../_lib/recaptcha-checkbox.tsx";
 import {
   isAdminPath,
+  navigateAway,
   resolveRedirect,
   signInWithPassword,
   signOutSilently,
@@ -101,6 +102,7 @@ export function AdminSignInForm({
     // send them on and let the server-side re-check decide.
     if (userType === "LEARNER") {
       await signOutSilently();
+      resetCaptcha();
       setStep("credentials");
       setFailure("notStaff");
       return;
@@ -108,7 +110,8 @@ export function AdminSignInForm({
 
     // Only ever into the portal — the gate put this path here, and a
     // `?redirect=` pointing anywhere else has no business on this form.
-    window.location.assign(resolveRedirect("/keystone/dashboard", isAdminPath));
+    // Awaited so the spinner holds until the dashboard replaces this page.
+    await navigateAway(resolveRedirect("/keystone/dashboard", isAdminPath));
   };
 
   const submitCode = (event: React.FormEvent) => {

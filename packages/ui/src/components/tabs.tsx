@@ -1,6 +1,7 @@
 "use client";
 
 import { Tabs as TabsPrimitive } from "@base-ui/react/tabs";
+import type * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "@repo/ui/lib/utils";
@@ -65,11 +66,35 @@ function TabsTrigger({ className, ...props }: TabsPrimitive.Tab.Props) {
     <TabsPrimitive.Tab
       data-slot="tabs-trigger"
       className={cn(
-        "relative inline-flex flex-1 items-center justify-center gap-1.5 rounded-sm px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-all outline-none group-data-vertical/tabs:w-full group-data-vertical/tabs:justify-start hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "group/tabs-trigger relative inline-flex flex-1 items-center justify-center gap-1.5 rounded-sm px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-all outline-none group-data-vertical/tabs:w-full group-data-vertical/tabs:justify-start hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         "data-active:bg-background data-active:text-foreground data-active:shadow-sm",
         // `line` only: an underline in the derived brand ink, hugging the
         // raised pill's inner edge.
         "after:absolute after:bg-primary-interactive after:opacity-0 after:transition-opacity group-data-horizontal/tabs:after:inset-x-1.5 group-data-horizontal/tabs:after:bottom-0.5 group-data-horizontal/tabs:after:h-0.5 group-data-vertical/tabs:after:inset-y-1.5 group-data-vertical/tabs:after:end-0.5 group-data-vertical/tabs:after:w-0.5 group-data-[variant=line]/tabs-list:data-active:after:opacity-100",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+/**
+ * The count a tab carries ("Account & security 4"). changes-61: every count
+ * in a strip was the same solid dark chip, so five equal marks competed with
+ * the one raised tab for attention. Only the ACTIVE tab's count is filled —
+ * the same `--secondary` pair the chip always had — and the others are a
+ * quiet muted chip in the tray's own ink, so the strip reads as one choice
+ * plus four options. The state comes from the trigger (`data-active` on the
+ * `group/tabs-trigger` above), so a call site cannot get it wrong.
+ */
+function TabsCount({ className, ...props }: React.ComponentProps<"span">) {
+  return (
+    <span
+      data-slot="tabs-count"
+      className={cn(
+        "inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-sm px-1.5 text-3xs leading-none font-semibold tabular-nums transition-colors",
+        "bg-background/70 text-muted-foreground",
+        "group-data-active/tabs-trigger:bg-secondary group-data-active/tabs-trigger:text-secondary-foreground",
         className,
       )}
       {...props}
@@ -90,4 +115,4 @@ function TabsContent({ className, ...props }: TabsPrimitive.Panel.Props) {
   );
 }
 
-export { Tabs, TabsList, TabsTrigger, TabsContent, tabsListVariants };
+export { Tabs, TabsList, TabsTrigger, TabsContent, TabsCount, tabsListVariants };

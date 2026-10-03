@@ -208,6 +208,31 @@ pnpm install --frozen-lockfile
 log "Generating the Prisma client"
 pnpm db:generate
 
+# A snapshot of the live database before anything writes to it — the one
+# thing --rollback cannot undo is a migration or a seed. The deploy stops if
+# the dump fails. Credentials come from DATABASE_URL (decoded by node, since a
+# password may be percent-encoded) and reach the dump through MYSQL_PWD, never
+# argv, where `ps` would show them.
+BACKUP_DIR="${BACKUP_DIR:-$HOME/backups/deploys}"
+KEEP_DUMPS="${KEEP_DUMPS:-10}"
+log "Backing up the database to $BACKUP_DIR"
+mkdir -p "$BACKUP_DIR"
+chmod 700 "$BACKUP_DIR"
+DUMP="$BACKUP_DIR/$(basename "$RELEASE").sql.gz"
+DB_PARTS="$(DATABASE_URL="$(env_value DATABASE_URL)" node -e '
+  const u = new URL(process.env.DATABASE_URL);
+  console.log([u.hostname, u.port || "3306", decodeURIComponent(u.username),
+    decodeURIComponent(u.password), u.pathname.slice(1)].join("\n"));
+')"
+{ read -r DB_HOST; read -r DB_PORT; read -r DB_USER; read -r DB_PASS; read -r DB_NAME; } <<< "$DB_PARTS"
+DUMP_BIN="$(command -v mariadb-dump || command -v mysqldump)" || die "Neither mariadb-dump nor mysqldump is installed."
+( umask 077
+  MYSQL_PWD="$DB_PASS" "$DUMP_BIN" --single-transaction --quick --routines --triggers \
+    -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" "$DB_NAME" | gzip > "$DUMP" )
+gzip -t "$DUMP" && [ "$(stat -c %s "$DUMP")" -gt 1024 ] || die "The database dump $DUMP is empty or corrupt."
+echo "Saved $DUMP ($(du -h "$DUMP" | cut -f1))"
+ls -1t "$BACKUP_DIR"/*.sql.gz 2>/dev/null | tail -n +"$((KEEP_DUMPS + 1))" | xargs -r rm -f --
+
 log "Applying committed migrations (the old release is still serving)"
 pnpm db:deploy
 

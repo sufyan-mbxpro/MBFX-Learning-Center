@@ -248,3 +248,55 @@ export const EDITORIAL_EXTENSIONS = [
   TextAlignClass,
   VideoEmbed,
 ];
+
+/**
+ * The email block vocabulary (changes-61, ADR-184): the classes `@repo/email`'s
+ * layout turns into a panel, a verification code, an eyebrow and a headline.
+ * One per block, on a paragraph, a heading or a table cell (a one-cell table
+ * is how an email draws a box — the editor has no other container).
+ *
+ * EMAIL editors only (`RichTextEditor emailBlocks`). These are not in
+ * `sanitizeRichText`'s EDITORIAL_CLASSES and must not be: an article does not
+ * render them, and the vocabulary test pins that list to the article editor.
+ * Without this attribute the editor dropped every one of them on the first
+ * Visual save, and a seeded template lost its design to an unrelated edit.
+ * A button is a link's own `class` (`ed-btn`), which Tiptap's Link keeps.
+ */
+export const EMAIL_BLOCK_CLASSES = ["ed-panel", "ed-code", "ed-eyebrow", "ed-title"] as const;
+export type EmailBlockClassName = (typeof EMAIL_BLOCK_CLASSES)[number];
+
+export const EmailBlockClass = Extension.create({
+  name: "emailBlockClass",
+  addGlobalAttributes() {
+    return [
+      {
+        types: ["paragraph", "heading", "tableCell", "tableHeader"],
+        attributes: {
+          emailBlock: {
+            default: null as EmailBlockClassName | null,
+            parseHTML: (element: HTMLElement): EmailBlockClassName | null =>
+              EMAIL_BLOCK_CLASSES.find((name) => element.classList.contains(name)) ?? null,
+            renderHTML: (attributes: Record<string, unknown>) => {
+              const value = attributes.emailBlock;
+              return typeof value === "string" &&
+                (EMAIL_BLOCK_CLASSES as readonly string[]).includes(value)
+                ? { class: value }
+                : {};
+            },
+          },
+        },
+      },
+    ];
+  },
+});
+
+/** A pill in an email. `<span class="ed-badge-success">` */
+export const BadgeTone = classMark({
+  name: "badgeTone",
+  tag: "span",
+  prefix: "ed-badge-",
+  values: EDITOR_TONES,
+});
+
+/** Added to `EDITORIAL_EXTENSIONS` by an email editor. */
+export const EMAIL_EXTENSIONS = [EmailBlockClass, BadgeTone];

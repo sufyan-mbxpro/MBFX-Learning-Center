@@ -9,7 +9,7 @@
 // (ADR-001 finding #4), so a server action wrapping the same logic would
 // quietly lose all three.
 import { CAPTCHA_ACTIONS, CAPTCHA_HEADER } from "@repo/contracts";
-import { getCaptchaToken } from "./recaptcha.ts";
+import { getCaptchaToken, resetCaptcha } from "./recaptcha.ts";
 import { rememberSession } from "./session-hint.ts";
 
 /**
@@ -71,8 +71,11 @@ export async function signInWithPassword(email: string, password: string): Promi
     twoFactorRedirect?: boolean;
     code?: string;
   } | null;
-  if (!response.ok)
+  if (!response.ok) {
+    // The answer was spent on a refused request: the next try needs a new tick.
+    resetCaptcha();
     return isCaptchaRefusal(body?.code) ? { status: "captcha" } : { status: "failed" };
+  }
   if (body?.twoFactorRedirect === true) return { status: "twoFactor" };
   const userType = body?.user?.userType;
   return {
@@ -177,6 +180,7 @@ export async function signUpWithPassword(input: {
     body: JSON.stringify(input),
   });
   if (response.ok) return { status: "ok" };
+  resetCaptcha();
 
   // Prefix match, not equality — measured against the running handler, not
   // read off a constant: Better Auth returns
@@ -187,6 +191,30 @@ export async function signUpWithPassword(input: {
   const body = (await response.json().catch(() => null)) as { code?: string } | null;
   if (isCaptchaRefusal(body?.code)) return { status: "captcha" };
   return body?.code?.startsWith("USER_ALREADY_EXISTS") ? { status: "taken" } : { status: "failed" };
+}
+
+/**
+ * Leaves for `url` and keeps the caller's transition PENDING until the
+ * browser has actually gone (changes-61). A credential form awaits this as
+ * its last step: resolving straight after `location.assign` ended the
+ * transition while the next page was still loading, so the button's spinner
+ * stopped and the form sat there looking finished — or failed — for the
+ * length of the navigation.
+ *
+ * The promise settles only if the page comes BACK from the back-forward
+ * cache, which restores this document exactly as it was left; the form is
+ * then usable again rather than frozen on a spinner.
+ */
+export function navigateAway(url: string): Promise<void> {
+  return new Promise((resolve) => {
+    const restored = (event: PageTransitionEvent) => {
+      if (!event.persisted) return;
+      window.removeEventListener("pageshow", restored);
+      resolve();
+    };
+    window.addEventListener("pageshow", restored);
+    window.location.assign(url);
+  });
 }
 
 /**
@@ -304,19 +332,49 @@ export async function resetPassword(
   return { status: "failed" };
 }
 
+// ─── Email verification by code (changes-61, ADR-184) ────────
+//
+// Sign-up mails a six-digit code instead of a link. Both calls go to Better
+// Auth's own `email-otp` handlers, for the reason at the top of this file:
+// the per-IP limits for these paths live there. The plugin's other doors
+// (sign-in by code, reset by code, change-email by code) are switched off in
+// `@repo/auth`, so these two are the whole surface.
+
 /**
- * Re-send the verification email (ADR-079 #7). Verification never blocks
- * sign-in, so this is a nudge the learner can act on, not a gate they are
- * stuck behind.
- *
- * `callbackURL` is where Better Auth's own verification callback sends the
- * browser once it has flipped `emailVerified` — a localized `/sign-in?verified=1`.
+ * Mail a fresh verification code. Resolves `true` when the request was
+ * accepted — which says nothing about whether the address has an account,
+ * because the handler answers the same either way.
  */
-export async function resendVerification(email: string, callbackURL: string): Promise<boolean> {
-  const response = await fetch("/api/auth/send-verification-email", {
+export async function sendVerificationCode(email: string): Promise<boolean> {
+  const response = await fetch("/api/auth/email-otp/send-verification-otp", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, callbackURL }),
+    body: JSON.stringify({ email, type: "email-verification" }),
   }).catch(() => null);
   return response?.ok ?? false;
+}
+
+export type VerifyCodeResult =
+  { status: "ok" } | { status: "invalid" } | { status: "expired" } | { status: "failed" };
+
+/**
+ * Check a code. `expired` covers both a code past its ten minutes and one
+ * that has used up its attempts: either way the reader needs a new code, not
+ * another try. Codes measured against the running handler (`INVALID_OTP`,
+ * `OTP_EXPIRED`, `TOO_MANY_ATTEMPTS`).
+ */
+export async function verifyEmailCode(email: string, code: string): Promise<VerifyCodeResult> {
+  const response = await fetch("/api/auth/email-otp/verify-email", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, otp: code }),
+  }).catch(() => null);
+  if (!response) return { status: "failed" };
+  if (response.ok) return { status: "ok" };
+  const body = (await response.json().catch(() => null)) as { code?: string } | null;
+  if (body?.code === "INVALID_OTP") return { status: "invalid" };
+  if (body?.code === "OTP_EXPIRED" || body?.code === "TOO_MANY_ATTEMPTS") {
+    return { status: "expired" };
+  }
+  return { status: "failed" };
 }

@@ -246,6 +246,11 @@ model Role {
   isSystem    Boolean  @default(false) // cannot be deleted
   level       Int      @default(0) // higher = more senior; guards escalation
   sortOrder   Int      @default(0)
+  // ADR-183: the permission keys the SEED last granted this system role. A
+  // deploy re-seeds, and diffing against this ledger is what lets it add a
+  // key the code newly grants (or revoke one it stopped granting) without
+  // undoing what an admin changed on the role since. Null on custom roles.
+  seededPermissions Json?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
